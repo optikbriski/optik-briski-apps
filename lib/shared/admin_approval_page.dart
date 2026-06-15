@@ -1,0 +1,828 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:barcode_widget/barcode_widget.dart';
+import 'liveness_camera_page.dart';
+
+class AdminApprovalPage extends StatefulWidget {
+  final String roleAdmin;
+  final String cabangAdmin;
+
+  const AdminApprovalPage({
+    super.key,
+    this.roleAdmin = '',
+    this.cabangAdmin = '',
+  });
+
+  @override
+  State<AdminApprovalPage> createState() => _AdminApprovalPageState();
+}
+
+class _AdminApprovalPageState extends State<AdminApprovalPage> {
+  final supabase = Supabase.instance.client;
+  List<dynamic> _listKaryawanAktif = [];
+  List<dynamic> _listKaryawanPending = [];
+  bool _isLoading = true;
+
+  // 🎯 FIX 1: Masukkan role admin_pusat agar bisa memantau seluruh cabang tanpa terkunci
+  bool get _isPusat =>
+      widget.cabangAdmin == 'PUSAT' ||
+      widget.roleAdmin == 'owner' ||
+      widget.roleAdmin == 'admin_pusat';
+
+  @override
+  void initState() {
+    super.initState();
+    _tarikDataKaryawan();
+  }
+
+  // 1. FUNGSI TARIK DATA
+  Future<void> _tarikDataKaryawan() async {
+    setState(() => _isLoading = true);
+    try {
+      var query = supabase.from('karyawan').select();
+
+      // 🎯 FIX 2: Mengubah filter dari 'cabang' ke 'toko_id' agar cocok dengan kode pendek database
+      if (!_isPusat && widget.cabangAdmin.isNotEmpty) {
+        query = query.eq('toko_id', widget.cabangAdmin);
+      }
+
+      final data = await query.order('created_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          _listKaryawanAktif =
+              data.where((e) => e['status_approval'] == 'Aktif').toList();
+
+          // 🎯 FIX 3: Meloloskan karyawan baru yang berstatus 'Menunggu OTP' agar langsung muncul di dashboard
+          _listKaryawanPending = data
+              .where((e) =>
+                  e['status_approval'] == 'Pending' ||
+                  e['status_approval'] == 'Menunggu OTP')
+              .toList();
+
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${'appr_err_umum'.tr()}$e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // 2. FUNGSI EKSEKUSI DATABASE
+  Future<void> _prosesPendaftaran(
+      String idKaryawan, String statusBaru, String nama) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text("appr_memproses".tr(args: [nama])),
+      backgroundColor: Colors.blueAccent,
+    ));
+
+    try {
+      await supabase
+          .from('karyawan')
+          .update({'status_approval': statusBaru}).eq('id', idKaryawan);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              statusBaru == 'Aktif'
+                  ? "appr_sukses_setuju".tr(args: [nama])
+                  : "appr_sukses_tolak".tr(args: [nama]),
+            ),
+            backgroundColor:
+                statusBaru == 'Aktif' ? Colors.green : Colors.redAccent,
+          ),
+        );
+        _tarikDataKaryawan();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${'appr_gagal'.tr()}$e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // WIDGET CARD KARYAWAN AKTIF
+  Widget _buildCardKaryawanAktif(Map<String, dynamic> k) {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: const CircleAvatar(
+          backgroundColor: Colors.greenAccent,
+          child: Icon(Icons.person, color: Colors.black),
+        ),
+        title: Text(
+          k['nama'] ?? '-',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        subtitle: Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}"),
+        trailing: IconButton(
+          icon:
+              const Icon(Icons.info_outline_rounded, color: Colors.blueAccent),
+          onPressed: () => _tampilkanDetailKaryawan(k), // TOMBOL DETAIL
+        ),
+      ),
+    );
+  }
+
+  // UI PREMIUM: POP-UP GABUNGAN (ID CARD KIRI, DETAIL KANAN)
+  void _tampilkanDetailKaryawan(Map<String, dynamic> data) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          width: 950,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.badge_rounded,
+                            color: Colors.blueAccent),
+                        const SizedBox(width: 10),
+                        Text(
+                          "appr_detail_title".tr(),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.redAccent),
+                      onPressed: () => Navigator.pop(context),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 25),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // KIRI: ID CARD VIRTUAL
+                      _buildVirtualIDCard(data),
+                      const SizedBox(width: 40),
+                      // KANAN: GRID DATA KARYAWAN
+                      SizedBox(
+                        width: 550,
+                        child: Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _buildDataSection(
+                                      "hr_data_pribadi".tr(), [
+                                    _buildInfoRow("profil_label_nik".tr(),
+                                        data['nik'] ?? '-'),
+                                    _buildInfoRow("appr_email".tr(),
+                                        data['email'] ?? '-'),
+                                    _buildInfoRow(
+                                        "appr_nomor_wa".tr(), data['wa'] ?? '-',
+                                        valColor: Colors.greenAccent),
+                                    _buildInfoRow("appr_gender".tr(),
+                                        data['gender'] ?? '-'),
+                                    _buildInfoRow(
+                                        "profil_label_umur".tr(),
+                                        "appr_tahun".tr(args: [
+                                          (data['umur'] ?? '-').toString()
+                                        ])),
+                                    _buildInfoRow("appr_alamat".tr(),
+                                        data['alamat_lengkap'] ?? '-'),
+                                  ]),
+                                ),
+                                const SizedBox(width: 30),
+                                Expanded(
+                                  child:
+                                      _buildDataSection("hr_kepegawaian".tr(), [
+                                    _buildInfoRow(
+                                        "appr_tgl_mulai".tr(),
+                                        data['tanggal_mulai'] != null
+                                            ? data['tanggal_mulai']
+                                                .toString()
+                                                .split('T')[0]
+                                            : '-'),
+                                    _isPusat
+                                        ? _buildInfoRow(
+                                            "appr_pin_absensi".tr(),
+                                            data['pin_absensi']?.toString() ??
+                                                '-',
+                                            valColor: Colors.redAccent)
+                                        : const SizedBox(),
+                                    _buildInfoRow("appr_status".tr(),
+                                        data['status_approval'] ?? '-',
+                                        valColor: Colors.greenAccent),
+                                  ]),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _buildDataSection(
+                                      "appr_data_payroll".tr(), [
+                                    _buildInfoRow("hr_reg_bank".tr(),
+                                        data['nama_bank'] ?? 'BCA'),
+                                    _buildInfoRow("appr_no_rekening".tr(),
+                                        data['no_rekening'] ?? '-',
+                                        valColor: Colors.blueAccent),
+                                  ]),
+                                ),
+                                const SizedBox(width: 30),
+                                Expanded(
+                                  child: _buildDataSection(
+                                      "hr_kontak_darurat".tr(), [
+                                    _buildInfoRow("appr_nama_kontak".tr(),
+                                        data['darurat_nama'] ?? '-'),
+                                    _isPusat
+                                        ? _buildInfoRow(
+                                            "hr_reg_wa_darurat".tr(),
+                                            data['darurat_wa'] ?? '-',
+                                            valColor: Colors.orangeAccent)
+                                        : const SizedBox(),
+                                  ]),
+                                ),
+                              ],
+                            )
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // WIDGET HELPER: ID CARD VIRTUAL (SISI KIRI)
+  Widget _buildVirtualIDCard(Map<String, dynamic> data) {
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2A32),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.amber.withOpacity(0.8), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.remove_red_eye, color: Colors.amber, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                "judul_aplikasi".tr(),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            "appr_id_card_pos".tr(),
+            style: const TextStyle(
+                color: Colors.white54, fontSize: 8, letterSpacing: 2),
+          ),
+          const SizedBox(height: 15),
+          const Divider(color: Colors.white12, thickness: 1),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.amber, width: 2),
+            ),
+            child: const CircleAvatar(
+              radius: 45,
+              backgroundColor: Colors.white10,
+              child: Icon(Icons.person, size: 50, color: Colors.white54),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            data['nama'] ?? '-',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                height: 1.2),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            (data['jabatan'] ?? 'default_karyawan'.tr())
+                .toString()
+                .toUpperCase(),
+            style: const TextStyle(
+                color: Colors.amber,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 1.5),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              "${'hr_cabang'.tr()} ${(data['cabang']?.toString().toUpperCase() ?? 'appr_pusat'.tr())}",
+              style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 30),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(10)),
+            child: SizedBox(
+              height: 100,
+              width: 100,
+              child: BarcodeWidget(
+                barcode: Barcode.qrCode(),
+                data: data['nik'] ?? '000000',
+                color: Colors.black,
+                drawText: false,
+              ),
+            ),
+          ),
+          const SizedBox(height: 15),
+          Text(
+            "appr_scan_barcode".tr(),
+            style: const TextStyle(
+                color: Colors.amber,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // WIDGET HELPER: PEMBUAT SECTION & BARIS DATA (SISI KANAN)
+  Widget _buildDataSection(String title, List<Widget> rows) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+              color: Colors.blueAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        const Divider(color: Colors.white12, thickness: 1),
+        const SizedBox(height: 10),
+        ...rows,
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value,
+      {Color valColor = Colors.white}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  color: valColor, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. POP-UP KONFIRMASI SETUJU
+  void _tampilkanDialogSetuju(String id, String nama) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          "appr_tanya_setuju".tr(),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Text(
+          "appr_desc_setuju".tr(args: [nama]),
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actionsPadding: const EdgeInsets.only(right: 16, bottom: 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("appr_btn_batal".tr(),
+                style: const TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            onPressed: () {
+              Navigator.pop(context);
+              _prosesPendaftaran(id, 'Aktif', nama);
+            },
+            child: Text(
+              "appr_btn_ya_setuju".tr(),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // 4. POP-UP KONFIRMASI TOLAK (PAKAI ALASAN)
+  void _tampilkanDialogTolak(String id, String nama) {
+    TextEditingController alasanCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          "appr_tanya_tolak".tr(),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "appr_desc_tolak".tr(args: [nama]),
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: alasanCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: "appr_hint_tolak".tr(),
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              maxLines: 3,
+            )
+          ],
+        ),
+        actionsPadding: const EdgeInsets.only(right: 16, bottom: 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("appr_btn_batal".tr(),
+                style: const TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
+            onPressed: () {
+              if (alasanCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text("appr_err_tolak".tr()),
+                  backgroundColor: Colors.orange,
+                ));
+                return;
+              }
+              Navigator.pop(context);
+              _prosesPendaftaran(
+                  id, 'Ditolak: ${alasanCtrl.text.trim()}', nama);
+            },
+            child: Text(
+              "appr_btn_tolak_kirim".tr(),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // 5. WIDGET CARD KARYAWAN PENDING (BUTUH VERIFIKASI)
+  Widget _buildCardKaryawanPending(Map<String, dynamic> k) {
+    final String id = k['id'] ?? '';
+    final String nama = k['nama'] ?? '-';
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.amber.withOpacity(0.3), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.amber,
+                  child:
+                      Icon(Icons.person_outline_rounded, color: Colors.black),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nama,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontSize: 16)),
+                      const SizedBox(height: 4),
+                      Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline_rounded,
+                      color: Colors.blueAccent),
+                  onPressed: () => _tampilkanDetailKaryawan(k), // TOMBOL DETAIL
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => _tampilkanDialogTolak(id, nama),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    // 🎯 BARIS 650 FIX: Pindahkan .tr() ke dalam bungkus Text
+                    label: Text("appr_btn_tolak".tr()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => _tampilkanDialogSetuju(id, nama),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    // 🎯 BARIS 665 FIX: Pindahkan .tr() ke dalam bungkus Text
+                    label: Text("appr_btn_setuju".tr()),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // WIDGET HELPER DARK MODE: EMPTY STATE (DATA KOSONG)
+  Widget _buildEmptyState(String message, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.02),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 60, color: Colors.white24),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            "appr_data_kosong".tr(),
+            style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white70),
+          ),
+          const SizedBox(height: 8),
+          Text(message,
+              style: const TextStyle(color: Colors.white38, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  // BUILD UTAMA (ANTARMUKA HALAMAN)
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF1E293B),
+          elevation: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "appr_title".tr(),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.white),
+              ),
+              Text(
+                _isPusat ? "appr_semua_cabang".tr() : widget.cabangAdmin,
+                style: const TextStyle(fontSize: 11, color: Colors.blueAccent),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: "appr_tooltip_refresh".tr(),
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+              onPressed: _tarikDataKaryawan,
+            )
+          ],
+          bottom: TabBar(
+            indicatorColor: Colors.blueAccent,
+            indicatorWeight: 3,
+            labelColor: Colors.blueAccent,
+            unselectedLabelColor: Colors.white54,
+            tabs: [
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.people_alt_rounded, size: 18),
+                    const SizedBox(width: 8),
+                    Text("appr_tab_aktif".tr()),
+                  ],
+                ),
+              ),
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.how_to_reg_rounded, size: 18),
+                    const SizedBox(width: 8),
+                    Text("appr_tab_verifikasi".tr()),
+                    if (_listKaryawanPending.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                            color: Colors.redAccent, shape: BoxShape.circle),
+                        child: Text(
+                          _listKaryawanPending.length.toString(),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      )
+                    ]
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.blueAccent))
+            : TabBarView(
+                children: [
+                  // TAB 1: KARYAWAN AKTIF
+                  _listKaryawanAktif.isEmpty
+                      ? _buildEmptyState(
+                          "appr_aktif_kosong".tr(), Icons.group_off_rounded)
+                      : RefreshIndicator(
+                          onRefresh: _tarikDataKaryawan,
+                          color: Colors.blueAccent,
+                          backgroundColor: const Color(0xFF1E293B),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _listKaryawanAktif.length,
+                            itemBuilder: (context, index) =>
+                                _buildCardKaryawanAktif(
+                                    _listKaryawanAktif[index]),
+                          ),
+                        ),
+
+                  // TAB 2: MENUNGGU VERIFIKASI (PENDING & MENUNGGU OTP)
+                  _listKaryawanPending.isEmpty
+                      ? _buildEmptyState(
+                          "appr_verifikasi_kosong".tr(), Icons.verified_rounded)
+                      : RefreshIndicator(
+                          onRefresh: _tarikDataKaryawan,
+                          color: Colors.blueAccent,
+                          backgroundColor: const Color(0xFF1E293B),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _listKaryawanPending.length,
+                            itemBuilder: (context, index) =>
+                                _buildCardKaryawanPending(
+                                    _listKaryawanPending[index]),
+                          ),
+                        ),
+                ],
+              ),
+      ),
+    );
+  }
+}
