@@ -1,7 +1,22 @@
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use, prefer_const_constructors, prefer_const_literals_to_create_immutables
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:intl/intl.dart';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:local_auth/local_auth.dart'; // Wajib ditambahkan
+import 'package:printing/printing.dart';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'package:local_auth/local_auth.dart';
 import 'main_karyawan.dart';
 import 'register_karyawan_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -78,10 +93,13 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage> {
           canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
 
       if (canAuthenticate) {
+        // ✅ REVISI PERUBAHAN API local_auth: gunakan AuthenticationOptions
         final bool didAuthenticate = await _localAuth.authenticate(
           localizedReason:
               'Pindai sidik jari / wajah Anda untuk masuk otomatis.',
-          biometricOnly: true,
+          options: const AuthenticationOptions(
+            biometricOnly: true,
+          ),
         );
 
         if (didAuthenticate) {

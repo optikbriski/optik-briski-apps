@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use, prefer_const_constructors, prefer_const_literals_to_create_immutables
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,7 +14,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:printing/printing.dart';
-import 'dart:convert'; // 🎯 WAJIB ADA DI PALING ATAS FILE
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart'; // Pastikan import ini ada
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -166,12 +169,15 @@ class SalesPage extends StatefulWidget {
 }
 
 class _SalesPageState extends State<SalesPage> {
+  // Letakkan di bawah variabel isLoading lo
+  CameraController? _silentCameraController;
   bool isScanningLocal = true;
   final MobileScannerController kameraLoginCtrl =
       MobileScannerController(facing: CameraFacing.front);
 
   // SESI TOKO & LACI KASIR (OPEN/CLOSE STORE)
   bool isStoreOpen = false;
+  bool isLoading = false;
   int modalAwal = 0;
   final TextEditingController modalAwalCtrl = TextEditingController();
   final TextEditingController uangFisikCloseCtrl = TextEditingController();
@@ -512,34 +518,40 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
-// ==========================================================================
-  // FUNGSI SCAN BARCODE: OTOMATIS MATI PAS SPREAD/NAVIGATOR POP
-  // ==========================================================================
-  Future<void> _scanBarcode() async {
-    // 1. Buat controller di dalam variabel lokal
-    final MobileScannerController kameraProdukCtrl =
-        MobileScannerController(facing: CameraFacing.front);
+// 1. Scanner Generik (Bisa dipakai produk maupun ID Karyawan) - FIX AUTO CLOSE
+  Future<String?> _scanBarcode(
+      {CameraFacing facing = CameraFacing.back}) async {
+    final MobileScannerController ctrl =
+        MobileScannerController(facing: facing);
+    bool hasPopped = false; // Kunci barikade agar tidak double pop
 
-    final result = await Navigator.push(
+    final String? result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
           appBar: AppBar(
-            title: Text("pos_scan_barcode_title".tr(),
-                style: const TextStyle(color: Colors.white)),
-            backgroundColor: Colors.transparent,
-            iconTheme: const IconThemeData(color: Colors.white),
-            centerTitle: true,
+            backgroundColor: const Color(0xFF1E293B),
+            title: const Text("Posisikan Barcode ID Karyawan",
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () {
+                if (!hasPopped) {
+                  hasPopped = true;
+                  Navigator.pop(context, null);
+                }
+              },
+            ),
           ),
           body: MobileScanner(
-            controller: kameraProdukCtrl, // 2. Gunakan controller lokal ini
+            controller: ctrl,
             onDetect: (capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              for (final barcode in barcodes) {
-                if (barcode.rawValue != null) {
-                  Navigator.pop(context, barcode.rawValue);
-                  break;
+              final barcodes = capture.barcodes;
+              if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                if (!hasPopped) {
+                  hasPopped = true;
+                  // Begitu barcode ke-detect, langsung tendang keluar dan kirim datanya
+                  Navigator.pop(context, barcodes.first.rawValue);
                 }
               }
             },
@@ -548,12 +560,104 @@ class _SalesPageState extends State<SalesPage> {
       ),
     );
 
-    // 3. KUNCI UTAMA: Pas keluar dari screen scan (sukses ataupun tekan tombol back), matikan paksa kameranya!
-    await kameraProdukCtrl.stop();
-    kameraProdukCtrl.dispose();
+    await ctrl.stop();
+    ctrl.dispose();
+    return result;
+  }
 
-    if (result != null) {
-      _cariProdukBySKU(result.toString());
+// 2. Silent Open Store (Triggered by Enter) - AUTO PHOTO -> AUTO OPEN SCANNER NIK
+  Future<void> _startSilentOpenStore() async {
+    setState(() => isLoading = true);
+    XFile? image;
+
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isNotEmpty) {
+        final frontCam = cameras.firstWhere(
+          (cam) => cam.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras.first,
+        );
+
+        _silentCameraController = CameraController(
+          frontCam,
+          ResolutionPreset.medium,
+          enableAudio: false,
+        );
+
+        await _silentCameraController!.initialize();
+        if (mounted) setState(() {});
+        await Future.delayed(const Duration(milliseconds: 500));
+        image = await _silentCameraController!.takePicture();
+      }
+    } catch (e) {
+      debugPrint("Gagal inisialisasi hardware auto-capture: $e");
+    } finally {
+      if (_silentCameraController != null) {
+        await _silentCameraController!.dispose();
+        _silentCameraController = null;
+      }
+    }
+
+    if (image == null) {
+      setState(() => isLoading = false);
+      _showSnack(
+          "❌ Gagal menjepret foto otomatis. Pastikan izin kamera browser aktif!",
+          Colors.red);
+      return;
+    }
+
+    try {
+      final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+
+      String photoUrl = "";
+      try {
+        final bytes = await image.readAsBytes();
+        final path =
+            "$tokoId/session_${DateTime.now().millisecondsSinceEpoch}.jpg";
+        await supabase.storage.from('session_photos').uploadBinary(path, bytes);
+        photoUrl = supabase.storage.from('session_photos').getPublicUrl(path);
+      } catch (storageError) {
+        debugPrint("Storage tertunda, gunakan fallback: $storageError");
+        photoUrl = "https://placeholder.co/600x400?text=No+Photo+Absen";
+      }
+
+      // 🎯 SINKRONISASI TOTAL: Langsung loncat ke scan barcode kamera depan untuk ID karyawan!
+      final String? nikKaryawan =
+          await _scanBarcode(facing: CameraFacing.front);
+
+      if (nikKaryawan == null || nikKaryawan.isEmpty) {
+        _showSnack("Sesi dibatalkan", Colors.red);
+        return;
+      }
+
+      final res = await supabase
+          .from('karyawan')
+          .select()
+          .eq('nik', nikKaryawan)
+          .maybeSingle();
+      if (res == null) {
+        _showSnack("❌ Karyawan tidak terdaftar!", Colors.red);
+        return;
+      }
+
+      await supabase.from('session_logs').insert({
+        'toko_id': tokoId,
+        'karyawan_id': nikKaryawan,
+        'photo_url': photoUrl,
+        'timestamp_open': DateTime.now().toIso8601String(),
+        'status': 'OPEN'
+      });
+
+      setState(() {
+        isStoreOpen = true;
+        activeCashier = res;
+        namaKasir = res['nama'];
+      });
+      _showSnack("✅ Toko Opened by: ${res['nama']}", Colors.green);
+    } catch (e) {
+      _showSnack("❌ Error Open Store: $e", Colors.red);
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -2056,7 +2160,8 @@ class _SalesPageState extends State<SalesPage> {
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                       vertical: 3.0),
-                                              child: Text("SISA TAGIHAN",
+                                              child: Text(
+                                                  "Sisa Piutang", // <-- Diubah jadi Sisa Piutang
                                                   style: TextStyle(
                                                       color: const Color(
                                                           0xFF0F172A),
@@ -2322,9 +2427,7 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
-// ==========================================================================
-// 👑 MESIN PDF NOTA SULTAN (JEPLAK 100% TABEL MEDIS MATRIKS SINKRON KASIR)
-// ==========================================================================
+// MESIN PDF 1: OTOMATIS SAAT KASIR CHECKOUT (JIPLAK MURNI 100% DARI MODAL PRATINJAU)
   Future<void> _generateAndSharePDF(
       Map<String, dynamic> sale, List<dynamic> items) async {
     try {
@@ -2338,7 +2441,6 @@ class _SalesPageState extends State<SalesPage> {
       int uangMukaDP = sale['dibayarkan'] ?? 0;
       int sisaTagihan = sale['sisa_tagihan'] ?? 0;
 
-      // Tarik data config layout dinamis agar alamat & phone sinkron ke PDF
       String cabangNota = sale['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
       var resConfig = await supabase
           .from('invoice_settings')
@@ -2353,147 +2455,210 @@ class _SalesPageState extends State<SalesPage> {
 
       final config = resConfig ??
           {
-            'shop_name': 'OPTIK B. RISKI',
-            'address': 'Alamat Toko Cabang $cabangNota',
-            'phone': '-',
+            'shop_name': 'OPTIK B. RISKI CIMAHI',
+            'address':
+                'Jl. Jend. H. Amir Machmud No.280a, Sukaraja, Kec. Cicendo, Kota Bandung, Jawa Barat 40522',
+            'phone': '082223417848',
+            'header_alignment': 'CENTER',
+            'font_size_header': 16,
+            'font_size_body': 12,
+            'show_qr_invoice': true,
             'footer_text': 'Terima kasih atas kepercayaan Anda.'
           };
+
+      final double fHeader = (config['font_size_header'] ?? 16).toDouble();
+      final double fBody = (config['font_size_body'] ?? 12).toDouble();
 
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a5,
-          margin: const pw.EdgeInsets.all(20),
+          margin: pw.EdgeInsets.all(20),
           build: (pw.Context context) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // 🏢 1. HEADER NOTA PDF (SINKRON)
-                pw.Center(
+                // 🏢 1. SECTION HEADER (SINKRON REVISI CENTERED)
+                pw.SizedBox(
+                  width: double.infinity,
                   child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
                       pw.Text(
-                          (config['shop_name'] ?? "OPTIK B. RISKI")
-                              .toString()
-                              .toUpperCase(),
-                          style: pw.TextStyle(
-                              fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                      pw.Text("CABANG $cabangNota",
-                          style: const pw.TextStyle(fontSize: 9)),
-                      pw.Text(config['address'] ?? '',
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.center),
+                        (config['shop_name'] ?? 'OPTIK B. RISKI')
+                            .toString()
+                            .toUpperCase(),
+                        style: pw.TextStyle(
+                            color: PdfColor.fromInt(0xFF0F172A),
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: fHeader - 2),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        config['address'] ?? '',
+                        style:
+                            pw.TextStyle(color: PdfColors.grey700, fontSize: 8),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        "Telp: ${config['phone'] ?? '-'}",
+                        style: pw.TextStyle(
+                            color: PdfColor.fromInt(0xFF263238),
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold),
+                      ),
                     ],
                   ),
                 ),
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 1),
-                pw.SizedBox(height: 5),
+                pw.SizedBox(height: 6),
+                pw.Column(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Divider(
+                        color: PdfColor.fromInt(0xFF000000),
+                        thickness: 1.5,
+                        height: 1),
+                    pw.SizedBox(height: 1.5),
+                    pw.Divider(
+                        color: PdfColor.fromInt(0xFFB0BEC5),
+                        thickness: 0.5,
+                        height: 1),
+                  ],
+                ),
+                pw.SizedBox(height: 8),
 
-                // 📋 2. METADATA TRANSAKSI & PELANGGAN
+                // 📋 2. METADATA & DATA PELANGGAN
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text(sale['no_invoice'] ?? '-',
-                            style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                        pw.SizedBox(height: 4),
                         pw.Text("PELANGGAN",
-                            style: const pw.TextStyle(
-                                fontSize: 7, color: PdfColors.grey600)),
-                        pw.Text(sale['nama_pelanggan'] ?? '-',
                             style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                                color: PdfColors.grey500,
+                                fontSize: fBody - 4,
+                                fontWeight: pw.FontWeight.bold)),
+                        pw.Text(
+                            (sale['nama_pelanggan'] ?? '-')
+                                .toString()
+                                .toUpperCase(),
+                            style: pw.TextStyle(
+                                color: PdfColor.fromInt(0xFF1E293B),
+                                fontSize: fBody - 2,
+                                fontWeight: pw.FontWeight.bold)),
                         pw.Text("WhatsApp: ${sale['no_wa'] ?? '-'}",
-                            style: const pw.TextStyle(fontSize: 9)),
+                            style: pw.TextStyle(
+                                color: PdfColors.grey700, fontSize: 9.5)),
+                        pw.Text("Alamat: ${sale['alamat'] ?? '-'}",
+                            style: pw.TextStyle(
+                                color: PdfColors.grey700, fontSize: 9.5)),
+                        pw.Text("Email: ${sale['email_pelanggan'] ?? '-'}",
+                            style: pw.TextStyle(
+                                color: PdfColors.grey700, fontSize: 9.5)),
                       ],
                     ),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
-                        pw.Text("STATUS: ${sisaTagihan > 0 ? 'DP' : 'LUNAS'}",
+                        pw.Text(sale['no_invoice'] ?? '-',
                             style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                        pw.SizedBox(height: 8),
+                                color: PdfColor.fromInt(0xFF0F172A),
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: fBody - 1)),
+                        pw.SizedBox(height: 4),
                         pw.Text(
-                            "Masuk: ${sale['created_at'].toString().split('T')[0]}",
-                            style: const pw.TextStyle(fontSize: 9)),
+                            "Masuk: ${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().year}",
+                            style: pw.TextStyle(
+                                color: PdfColors.grey700, fontSize: 9.5)),
+                        pw.SizedBox(height: 2),
                         pw.Text("Kasir: ${sale['nama_kasir'] ?? 'Staff'}",
-                            style: const pw.TextStyle(fontSize: 9)),
+                            style: pw.TextStyle(
+                                color: PdfColors.grey700,
+                                fontSize: 9.5,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 0.5),
-                pw.SizedBox(height: 5),
+                pw.SizedBox(height: 6),
+                pw.Divider(color: PdfColors.grey300, height: 1),
+                pw.SizedBox(height: 6),
 
-                // 👓 3. RINCIAN ITEM PESANAN
+                // 👓 3. SECTION RINCIAN BELANJA ITEM KASIR
                 pw.Text("RINCIAN ITEM PESANAN",
                     style: pw.TextStyle(
-                        fontSize: 8,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.grey700)),
+                        color: PdfColors.grey500,
+                        fontSize: 8.5,
+                        fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 4),
                 ...items.map((item) {
                   String rawName = item['nama_produk'] ?? '-';
                   if (rawName.toUpperCase().contains('LENSA') ||
                       rawName.toUpperCase().contains('PROGRESIF')) {
-                    final rxPrescription = RegExp(
-                        r'\s*\(\s*[-+\d./\s\w]*?(?:/|ADD)[-+\d./\s\w]*?\)');
-                    rawName = rawName.replaceAll(rxPrescription, '').trim();
+                    rawName = rawName
+                        .replaceAll(
+                            RegExp(
+                                r'\s*\(\s*[-+\d./\s\w]*?(?:/|ADD)[-+\d./\s\w]*?\)'),
+                            '')
+                        .trim();
                   }
                   return pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 4),
+                    padding: pw.EdgeInsets.symmetric(vertical: 4.0),
                     child: pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Expanded(
-                            child: pw.Text("• $rawName (x${item['qty'] ?? 1})",
-                                style: const pw.TextStyle(fontSize: 9))),
-                        pw.Text(formatRupiah(item['subtotal'] ?? 0),
+                          child: pw.Text("• $rawName (x${item['qty'] ?? 1})",
+                              style: pw.TextStyle(
+                                  color: PdfColor.fromInt(0xFF0F172A),
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold)),
+                        ),
+                        pw.SizedBox(width: 15),
+                        pw.Text(formatRupiah((item['subtotal'] ?? 0) as int),
                             style: pw.TextStyle(
-                                fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                                color: PdfColor.fromInt(0xFF0F172A),
+                                fontSize: 10,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   );
                 }),
 
-                // 👁️ 4. MATRIKS TABEL MEDIS REFRAKSI (PERSIS SAMA PREVIEW POPUP!)
+                // 📊 4. SECTION REFRAKSI KLINIS LENSA
                 if (hasLensa) ...[
-                  pw.SizedBox(height: 5),
-                  pw.Divider(thickness: 0.5),
-                  pw.SizedBox(height: 3),
-                  pw.Text("DETAIL DIAGNOSA REFRAKSI LENSA RIIL:",
-                      style: pw.TextStyle(
-                          fontSize: 8, fontWeight: pw.FontWeight.bold)),
                   pw.SizedBox(height: 4),
+                  pw.Divider(color: PdfColors.grey300, height: 1),
+                  pw.SizedBox(height: 6),
                   pw.Container(
+                    decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey400),
+                        borderRadius: pw.BorderRadius.circular(4)),
                     child: pw.Table(
-                      border: pw.TableBorder.all(
-                          color: PdfColors.grey400, width: 0.5),
+                      border: pw.TableBorder.all(color: PdfColors.grey300),
                       columnWidths: const {
                         0: pw.FlexColumnWidth(1.8),
                         1: pw.FlexColumnWidth(2),
                         2: pw.FlexColumnWidth(2),
                         3: pw.FlexColumnWidth(2),
-                        4: pw.FlexColumnWidth(2),
+                        4: pw.FlexColumnWidth(2)
                       },
                       children: [
                         pw.TableRow(
                           decoration:
-                              const pw.BoxDecoration(color: PdfColors.grey200),
+                              pw.BoxDecoration(color: PdfColors.grey100),
                           children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                               .map((txt) => pw.Padding(
-                                    padding: const pw.EdgeInsets.all(3),
-                                    child: pw.Text(txt,
-                                        style: pw.TextStyle(
-                                            fontSize: 7,
-                                            fontWeight: pw.FontWeight.bold),
-                                        textAlign: pw.TextAlign.center),
-                                  ))
+                                  padding: pw.EdgeInsets.symmetric(vertical: 3),
+                                  child: pw.Text(txt,
+                                      style: pw.TextStyle(
+                                          fontSize: 8,
+                                          fontWeight: pw.FontWeight.bold,
+                                          color: PdfColors.grey600),
+                                      textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
                         pw.TableRow(
@@ -2507,9 +2672,10 @@ class _SalesPageState extends State<SalesPage> {
                             addRCtrl.text
                           ]
                               .map((txt) => pw.Padding(
-                                  padding: const pw.EdgeInsets.all(3),
+                                  padding: pw.EdgeInsets.symmetric(vertical: 3),
                                   child: pw.Text(txt,
-                                      style: const pw.TextStyle(fontSize: 8),
+                                      style: pw.TextStyle(
+                                          fontSize: 9, color: PdfColors.black),
                                       textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
@@ -2524,80 +2690,140 @@ class _SalesPageState extends State<SalesPage> {
                             addLCtrl.text
                           ]
                               .map((txt) => pw.Padding(
-                                  padding: const pw.EdgeInsets.all(3),
+                                  padding: pw.EdgeInsets.symmetric(vertical: 3),
                                   child: pw.Text(txt,
-                                      style: const pw.TextStyle(fontSize: 8),
+                                      style: pw.TextStyle(
+                                          fontSize: 9, color: PdfColors.black),
                                       textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
                       ],
                     ),
                   ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                      "PD Pasien (R/L): ${pdRCtrl.text.isEmpty ? '-' : pdRCtrl.text}/${pdLCtrl.text.isEmpty ? '-' : pdLCtrl.text} mm",
-                      style: pw.TextStyle(
-                          fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  pw.Padding(
+                    padding: pw.EdgeInsets.only(top: 6, left: 4),
+                    child: pw.Text(
+                        "PD Pasien (R/L): ${pdRCtrl.text.isEmpty ? '0' : pdRCtrl.text} / ${pdLCtrl.text.isEmpty ? '0' : pdLCtrl.text} mm",
+                        style: pw.TextStyle(
+                            color: PdfColors.black,
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold)),
+                  ),
                 ],
 
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 1),
-                pw.SizedBox(height: 5),
+                pw.SizedBox(height: 4),
+                pw.Divider(color: PdfColors.black, thickness: 1),
+                pw.SizedBox(height: 6),
 
-                // 💰 5. SECTION SUMMARY FINANSIAL
+                // 💰 5. SECTION FINANSIAL SUMMARY
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Container(
-                      height: 50,
-                      width: 50,
-                      child: pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(),
-                          data: sale['no_invoice'] ?? 'EMPTY'),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        pw.Container(
+                          padding: pw.EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: pw.BoxDecoration(
+                              color: sisaTagihan > 0
+                                  ? PdfColor.fromInt(0xFFFFF3E0)
+                                  : PdfColor.fromInt(0xFFE6F4EA),
+                              borderRadius: pw.BorderRadius.circular(4),
+                              border: pw.Border.all(
+                                  color: sisaTagihan > 0
+                                      ? PdfColors.orange300
+                                      : PdfColor.fromInt(0xFF34A853))),
+                          child: pw.Text(sisaTagihan > 0 ? "DP" : "LUNAS",
+                              style: pw.TextStyle(
+                                  color: sisaTagihan > 0
+                                      ? PdfColors.orange900
+                                      : PdfColor.fromInt(0xFF137333),
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 8)),
+                        ),
+                        pw.SizedBox(height: 6),
+                        if (config['show_qr_invoice'] == true)
+                          pw.Container(
+                              height: 44,
+                              width: 44,
+                              child: pw.BarcodeWidget(
+                                  barcode: pw.Barcode.qrCode(),
+                                  data: sale['no_invoice'] ?? 'EMPTY',
+                                  padding: pw.EdgeInsets.zero)),
+                      ],
                     ),
                     pw.SizedBox(
-                      width: 180,
-                      child: pw.Column(
+                      width: 210,
+                      child: pw.Table(
+                        columnWidths: const {
+                          0: pw.FlexColumnWidth(1.4),
+                          1: pw.FlexColumnWidth(1.2)
+                        },
                         children: [
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
+                          pw.TableRow(
                             children: [
-                              pw.Text("Total Belanja",
-                                  style: const pw.TextStyle(fontSize: 8.5)),
-                              pw.Text(formatRupiah(totalHarga),
-                                  style: pw.TextStyle(
-                                      fontSize: 8.5,
-                                      fontWeight: pw.FontWeight.bold))
+                              pw.Padding(
+                                  padding:
+                                      pw.EdgeInsets.symmetric(vertical: 1.5),
+                                  child: pw.Text("TOTAL BELANJA",
+                                      style: pw.TextStyle(
+                                          color: PdfColors.grey700,
+                                          fontSize: fBody - 2,
+                                          fontWeight: pw.FontWeight.bold))),
+                              pw.Padding(
+                                  padding: const pw.EdgeInsets.symmetric(
+                                      vertical: 1.5),
+                                  child: pw.Text(formatRupiah(totalHarga),
+                                      style: pw.TextStyle(
+                                          color: PdfColors.black,
+                                          fontSize: fBody - 2,
+                                          fontWeight: pw.FontWeight.bold),
+                                      textAlign: pw.TextAlign.end)),
                             ],
                           ),
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
+                          pw.TableRow(
                             children: [
-                              pw.Text("Total Dibayar",
-                                  style: const pw.TextStyle(fontSize: 8.5)),
-                              pw.Text(formatRupiah(uangMukaDP),
-                                  style: const pw.TextStyle(fontSize: 8.5))
+                              pw.Padding(
+                                  padding:
+                                      pw.EdgeInsets.symmetric(vertical: 1.5),
+                                  child: pw.Text("UANG MUKA (DP)",
+                                      style: pw.TextStyle(
+                                          color: PdfColors.grey500,
+                                          fontSize: fBody - 3))),
+                              pw.Padding(
+                                  padding:
+                                      pw.EdgeInsets.symmetric(vertical: 1.5),
+                                  child: pw.Text(formatRupiah(uangMukaDP),
+                                      style: pw.TextStyle(
+                                          color: PdfColors.grey600,
+                                          fontSize: fBody - 3),
+                                      textAlign: pw.TextAlign.end)),
                             ],
                           ),
-                          pw.Divider(thickness: 0.5),
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
+                          pw.TableRow(
                             children: [
-                              pw.Text("Sisa Tagihan:",
-                                  style: pw.TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: pw.FontWeight.bold)),
-                              pw.Text(formatRupiah(sisaTagihan),
-                                  style: pw.TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: pw.FontWeight.bold,
-                                      color: sisaTagihan > 0
-                                          ? PdfColors.red
-                                          : PdfColors.green))
+                              pw.Padding(
+                                  padding:
+                                      pw.EdgeInsets.symmetric(vertical: 3.0),
+                                  child: pw.Text("SISA TAGIHAN",
+                                      style: pw.TextStyle(
+                                          color: PdfColor.fromInt(0xFF0F172A),
+                                          fontSize: fBody - 1,
+                                          fontWeight: pw.FontWeight.bold))),
+                              pw.Padding(
+                                  padding:
+                                      pw.EdgeInsets.symmetric(vertical: 3.0),
+                                  child: pw.Text(formatRupiah(sisaTagihan),
+                                      style: pw.TextStyle(
+                                          color: sisaTagihan > 0
+                                              ? PdfColors.red700
+                                              : PdfColor.fromInt(0xFF34A853),
+                                          fontSize: fBody - 1,
+                                          fontWeight: pw.FontWeight.bold),
+                                      textAlign: pw.TextAlign.end)),
                             ],
                           ),
                         ],
@@ -2605,14 +2831,16 @@ class _SalesPageState extends State<SalesPage> {
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 10),
-                pw.Divider(thickness: 0.5),
+                pw.Divider(color: PdfColors.grey300),
                 pw.SizedBox(height: 4),
-                pw.Text(
-                    config['footer_text'] ??
-                        'Terima kasih atas kepercayaan Anda.',
-                    style: const pw.TextStyle(fontSize: 8),
-                    textAlign: pw.TextAlign.left),
+
+                // 📝 6. FOOTER NOTICE
+                pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: pw.Text(config['footer_text'] ?? '',
+                      style: pw.TextStyle(
+                          color: PdfColors.grey600, fontSize: 8.5)),
+                ),
               ],
             );
           },
@@ -2632,7 +2860,6 @@ class _SalesPageState extends State<SalesPage> {
           'pdfBase64': pdfBase64,
         },
       );
-      debugPrint("Email nota otomatis komplit terkirim via Resend Sandbox!");
     } catch (e) {
       debugPrint("Gagal orkestrasi pencetakan PDF: $e");
     }
@@ -2673,120 +2900,135 @@ class _SalesPageState extends State<SalesPage> {
     axisOldLCtrl.text = "0";
   }
 
-// 🎯 KODE PEMULIHAN GERBANG 1: LAYAR INPUT MODAL AWAL (TEMPEL DI ATAS @override Widget build)
-  Widget _buildGatekeeperLayar() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(30.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.storefront_rounded,
-                  color: Colors.orangeAccent, size: 80),
-              const SizedBox(height: 20),
-              Text(
-                "pos_toko_tutup".tr(),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "pos_msg_modal".tr(),
-                style: const TextStyle(color: Colors.grey, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 30),
-              TextField(
-                controller: modalAwalCtrl,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(
-                    color: Colors.greenAccent, fontWeight: FontWeight.bold),
-                decoration: InputDecoration(
-                  labelText: "pos_hint_modal".tr(),
-                  prefixText: "Rp ",
-                  labelStyle: const TextStyle(color: Colors.grey),
-                ),
-              ),
-              const SizedBox(height: 25),
-              SizedBox(
-                width: MediaQuery.of(context).size.width,
-                height: 50,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orangeAccent),
-                  icon: const Icon(Icons.lock_open, color: Colors.black),
-                  label: Text(
-                    "pos_btn_open".tr(),
-                    style: const TextStyle(
-                        color: Colors.black, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () async {
-                    int inputModal = int.tryParse(modalAwalCtrl.text
-                            .replaceAll(RegExp(r'[^0-9]'), '')) ??
-                        0;
-                    if (inputModal <= 0) {
-                      _showSnack("pos_err_modal".tr(), Colors.red);
-                      return;
-                    }
-
-                    try {
-                      final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
-                      final todayStr =
-                          DateTime.now().toIso8601String().split('T')[0];
-
-                      // 🎯 SINKRONISASI LIVE: Detik ini juga daftarkan jurnal inisialisasi tanggal hari ini ke Buku Besar
-                      await supabase.from('finance_transactions').insert({
-                        'toko_id': tokoId,
-                        'tanggal_transaksi': todayStr,
-                        'jenis_transaksi': 'PEMASUKAN',
-                        'kategori': 'Modal Awal Sesi',
-                        'deskripsi':
-                            'Pembukaan Sesi Laci Kasir POS Baru. Input Modal Awal: ${formatRupiah(inputModal)}',
-                        'nominal': inputModal,
-                        'status_pembayaran': 'LUNAS',
-                        'metode_pembayaran': 'Tunai',
-                      });
-
-                      SharedPreferences prefs =
-                          await SharedPreferences.getInstance();
-                      await prefs.setBool('is_store_open_$tokoId', true);
-                      await prefs.setString('last_open_time_$tokoId',
-                          DateTime.now().toIso8601String());
-
-                      setState(() {
-                        modalAwal = inputModal;
-                        isStoreOpen = true;
-                        storeOpenTime = DateTime.now();
-                      });
-                    } catch (e) {
-                      _showSnack("Gagal memproses inisialisasi modal awal: $e",
-                          Colors.red);
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 🎯 KODE PENYELAMAT: TEMPEL TEPAT DI ATAS _buildBarcodeScannerLayar
   @override
   Widget build(BuildContext context) {
+// 1. Jika toko tutup, panggil layar yang baru
     if (!isStoreOpen) {
-      return _buildGatekeeperLayar(); // Gerbang 1: Input Modal Awal Harian
+      return _buildClosedStoreUI();
     }
-    if (!isPosUnlocked || activeCashier == null) {
-      return _buildBarcodeScannerLayar(); // Gerbang 2: Scan Barcode Kasir
-    }
-    return _buildSalesMainUI(); // Terminal Utama POS Kasir
+
+    // 2. Kalau sudah terbuka, cek apakah sudah login kasir
+    return isPosUnlocked && activeCashier != null
+        ? _buildSalesMainUI()
+        : _buildBarcodeScannerLayar();
+  }
+
+  Widget _buildClosedStoreUI() {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Konten Utama Layar Penutupan Toko
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+              ),
+            ),
+            child: Focus(
+              autofocus: true,
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.enter) {
+                  _startSilentOpenStore();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.storefront_rounded,
+                          color: Colors.orangeAccent, size: 80),
+                    ),
+                    const SizedBox(height: 32),
+                    const Text(
+                      "TOKO SAAT INI TUTUP",
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 4),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Sistem siap untuk dioperasikan",
+                      style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                          letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 48),
+                    SizedBox(
+                      width: 280,
+                      height: 60,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          elevation: 8,
+                          shadowColor: Colors.blueAccent.withOpacity(0.4),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        icon: isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.lock_open, color: Colors.white),
+                        label: Text(
+                          isLoading
+                              ? "MENGINISIALISASI..."
+                              : "MULAI SESI KASIR",
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              letterSpacing: 1),
+                        ),
+                        onPressed: isLoading ? null : _startSilentOpenStore,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      "Tekan ENTER untuk cepat",
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 🎯 TRIK AMAN: Render kamera secara invisible di koordinat minus luar layar (Off-Screen)
+          // Ini trik wajib di Chrome agar browser mau memproses takePicture() tanpa mendisplay video overlay ke user.
+          if (isLoading &&
+              _silentCameraController != null &&
+              _silentCameraController!.value.isInitialized)
+            Positioned(
+              left: -1000,
+              top: -1000,
+              child: SizedBox(
+                width: 10,
+                height: 10,
+                child: CameraPreview(_silentCameraController!),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
 // GERBANG 2: Layar Scan Barcode Kasir Penanggung Jawab (STERIL & AUTO-CLOSE CAMERA)
@@ -4690,7 +4932,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     }
   }
 
-  // MESIN SHARE PDF STRUK INVOICE (100% SEJAJAR DAN SINKRON SECARA VISUAL DENGAN DATABASE)
+// MESIN SHARE PDF STRUK INVOICE (JIPLAK MURNI 100% SAMA DENGAN PRATINJAU NOTA DAN DATABASE)
   Future<void> _generateDetailPagePDF(
       Map<String, dynamic> sale, List<dynamic> items) async {
     try {
@@ -4701,44 +4943,137 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           item['tipe_produk'].toString().toLowerCase().contains('lensa') ||
           item['nama_produk'].toString().toLowerCase().contains('lensa'));
 
-      // Tarik data string resep murni hasil enkripsi database penjualan terkait
       String detailResepDb = items.firstWhere(
               (e) => e['tipe_produk'] == 'Lensa',
               orElse: () => {'detail_resep': ''})['detail_resep'] ??
           '';
 
+      int totalHarga = sale['total_harga'] ?? 0;
+      int uangMukaDP = sale['dibayarkan'] ?? 0;
+      int sisaTagihan = sale['sisa_tagihan'] ?? 0;
+
+      final double fHeader = (config['font_size_header'] ?? 16).toDouble();
+      final double fBody = (config['font_size_body'] ?? 12).toDouble();
+      final isCenter = config['header_alignment'] == 'CENTER';
+
+      // 🏢 FIX LOGO: Menggunakan networkImage bawaan package printing
+      pw.ImageProvider? logoImage;
+      if (config['logo_url'] != null &&
+          config['logo_url'].toString().isNotEmpty) {
+        logoImage = await networkImage(config['logo_url'].toString());
+      }
+
+      // 🎯 SANITASI KARAKTER ILLEGAL (Pencegah kotak tofu silang rusak di PDF)
+      String cleanFooter = (config['footer_text'] ?? '')
+          .toString()
+          .replaceAll('•', '-')
+          .replaceAll('–', '-')
+          .replaceAll('—', '-');
+
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a5,
-          margin: const pw.EdgeInsets.all(20),
+          margin: pw.EdgeInsets.all(20),
           build: (pw.Context context) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // 🏢 1. HEADER NOTA PDF
-                pw.Center(
-                  child: pw.Column(
-                    children: [
-                      pw.Text(
-                          (config['shop_name'] ?? "OPTIK B. RISKI")
-                              .toString()
-                              .toUpperCase(),
-                          style: pw.TextStyle(
-                              fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                      pw.Text(
-                          "CABANG ${sale['toko_id']?.toString().toUpperCase() ?? 'PUSAT'}",
-                          style: const pw.TextStyle(fontSize: 9)),
-                      pw.Text(config['address'] ?? '',
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.center),
-                    ],
-                  ),
-                ),
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 1),
-                pw.SizedBox(height: 5),
+                // 🏢 HEADER PERUSAHAAN (CENTERED)
+                isCenter
+                    ? pw.SizedBox(
+                        width: double.infinity,
+                        child: pw.Stack(
+                          children: [
+                            if (logoImage != null)
+                              pw.Positioned(
+                                left: 0,
+                                top: 0,
+                                child: pw.Container(
+                                    height: 24,
+                                    child: pw.Image(logoImage,
+                                        fit: pw.BoxFit.contain)),
+                              ),
+                            pw.SizedBox(
+                              width: double.infinity,
+                              child: pw.Column(
+                                crossAxisAlignment:
+                                    pw.CrossAxisAlignment.center,
+                                children: [
+                                  pw.Text(
+                                    (config['shop_name'] ?? 'OPTIK B. RISKI')
+                                        .toString()
+                                        .toUpperCase(),
+                                    style: pw.TextStyle(
+                                        fontSize: fHeader - 2,
+                                        fontWeight: pw.FontWeight.bold,
+                                        color: PdfColor.fromInt(0xFF0F172A)),
+                                  ),
+                                  pw.SizedBox(height: 4),
+                                  pw.Text(
+                                    config['address'] ?? '',
+                                    style: pw.TextStyle(
+                                        fontSize: 8, color: PdfColors.grey700),
+                                    textAlign: pw.TextAlign.center,
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Text(
+                                    "Telp: ${config['phone'] ?? '-'}",
+                                    style: pw.TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: pw.FontWeight.bold,
+                                        color: PdfColors.black),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: pw.CrossAxisAlignment.center,
+                        children: [
+                          if (logoImage != null)
+                            pw.Padding(
+                              padding: pw.EdgeInsets.only(right: 12.0),
+                              child: pw.Container(
+                                  height: 24,
+                                  child: pw.Image(logoImage,
+                                      fit: pw.BoxFit.contain)),
+                            ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text(
+                                    (config['shop_name'] ?? 'OPTIK B. RISKI')
+                                        .toString()
+                                        .toUpperCase(),
+                                    style: pw.TextStyle(
+                                        fontSize: fHeader - 2,
+                                        fontWeight: pw.FontWeight.bold,
+                                        color: PdfColor.fromInt(0xFF0F172A))),
+                                pw.SizedBox(height: 4),
+                                pw.Text(config['address'] ?? '',
+                                    style: pw.TextStyle(
+                                        fontSize: 8, color: PdfColors.grey700),
+                                    textAlign: pw.TextAlign.end),
+                                pw.SizedBox(height: 1),
+                                pw.Text("Telp: ${config['phone'] ?? '-'}",
+                                    style: pw.TextStyle(
+                                        fontSize: 8,
+                                        fontWeight: pw.FontWeight.bold,
+                                        color: PdfColors.black)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                pw.SizedBox(height: 6),
+                pw.Divider(thickness: 1.5, color: PdfColors.black),
+                pw.SizedBox(height: 8),
 
-                // 📋 2. METADATA TRANSAKSI & PELANGGAN
+                // 👥 DATA PELANGGAN & INVOICE META
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -4746,112 +5081,120 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text(sale['no_invoice'] ?? '-',
-                            style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                        pw.SizedBox(height: 4),
                         pw.Text("PELANGGAN",
-                            style: const pw.TextStyle(
-                                fontSize: 7, color: PdfColors.grey600)),
-                        pw.Text(sale['nama_pelanggan'] ?? '-',
                             style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                                fontSize: 8,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.grey600)),
+                        pw.Text(
+                            (sale['nama_pelanggan'] ?? '-')
+                                .toString()
+                                .toUpperCase(),
+                            style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: fBody - 2,
+                                color: PdfColor.fromInt(0xFF1E293B))),
                         pw.Text("WhatsApp: ${sale['no_wa'] ?? '-'}",
-                            style: const pw.TextStyle(fontSize: 9)),
-                        if (sale['alamat'] != null &&
-                            sale['alamat'].toString().isNotEmpty)
-                          pw.Text("Alamat: ${sale['alamat']}",
-                              style: const pw.TextStyle(fontSize: 9)),
+                            style: pw.TextStyle(
+                                fontSize: 9, color: PdfColors.grey500)),
+                        pw.Text("Alamat: ${sale['alamat'] ?? '-'}",
+                            style: pw.TextStyle(
+                                fontSize: 9, color: PdfColors.grey500)),
+                        pw.Text("Email: ${sale['email_pelanggan'] ?? '-'}",
+                            style: pw.TextStyle(
+                                fontSize: 9, color: PdfColors.grey500)),
                       ],
                     ),
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
-                        pw.Text(
-                            "STATUS: ${sale['sisa_tagihan'] > 0 ? 'DP' : 'LUNAS'}",
+                        pw.Text(sale['no_invoice'] ?? '-',
                             style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                        pw.SizedBox(height: 8),
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: fBody - 1,
+                                color: PdfColor.fromInt(0xFF0F172A))),
                         pw.Text(
                             "Masuk: ${sale['created_at'].toString().split('T')[0]}",
-                            style: const pw.TextStyle(fontSize: 9)),
+                            style: pw.TextStyle(
+                                fontSize: 8.5, color: PdfColors.grey700)),
                         pw.Text("Kasir: ${sale['nama_kasir'] ?? '-'}",
-                            style: const pw.TextStyle(fontSize: 9)),
-                        pw.Text(
-                            "Metode: ${sale['metode_pembayaran'] ?? 'Tunai'}",
-                            style: const pw.TextStyle(fontSize: 9)),
+                            style: pw.TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.grey700)),
                       ],
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 0.5),
-                pw.SizedBox(height: 5),
+                pw.SizedBox(height: 6),
+                pw.Divider(color: PdfColors.grey300, height: 1),
+                pw.SizedBox(height: 6),
 
-                // 👓 3. RINCIAN ITEM PESANAN
+                // 📦 RINCIAN ITEM PESANAN
                 pw.Text("RINCIAN ITEM PESANAN",
                     style: pw.TextStyle(
                         fontSize: 8,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.grey700)),
-                pw.SizedBox(height: 4),
+                        color: PdfColors.grey600)),
+                pw.SizedBox(height: 6),
                 ...items.map((item) {
-                  String rawName = item['nama_produk'] ?? '-';
-                  if (rawName.toUpperCase().contains('LENSA') ||
-                      rawName.toUpperCase().contains('PROGRESIF')) {
-                    final rxPrescription = RegExp(
-                        r'\s*\(\s*[-+\d./\s\w]*?(?:/|ADD)[-+\d./\s\w]*?\)');
-                    rawName = rawName.replaceAll(rxPrescription, '').trim();
+                  String cleanName = item['nama_produk'] ?? '-';
+                  if (cleanName.toUpperCase().contains('LENSA') ||
+                      cleanName.toUpperCase().contains('PROGRESIF')) {
+                    cleanName = cleanName
+                        .replaceAll(
+                            RegExp(
+                                r'\s*\(\s*[-+\d./\s\w]*?(?:/|ADD)[-+\d./\s\w]*?\)'),
+                            '')
+                        .trim();
                   }
                   return pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 4),
+                    padding: pw.EdgeInsets.symmetric(vertical: 4.0),
                     child: pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Expanded(
-                            child: pw.Text("• $rawName (x${item['qty'] ?? 1})",
-                                style: const pw.TextStyle(fontSize: 9))),
-                        pw.Text(formatRupiah(item['subtotal'] ?? 0),
+                            child: pw.Text(
+                                "- $cleanName (x${item['qty'] ?? 1})",
+                                style: pw.TextStyle(
+                                    color: PdfColor.fromInt(0xFF0F172A),
+                                    fontSize: 11,
+                                    fontWeight: pw.FontWeight.bold))),
+                        pw.Text(formatRupiah((item['subtotal'] ?? 0) as int),
                             style: pw.TextStyle(
-                                fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                                color: PdfColor.fromInt(0xFF0F172A),
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold)),
                       ],
                     ),
                   );
                 }),
 
-                // 👁️ 4. MATRIKS TABEL MEDIS REFRAKSI (SEKARANG SINKRON DATA RIIL DATABASE!)
+                // 📊 TABEL REFRAKSI LENSA (SINKRON DATABASE)
                 if (hasLensa) ...[
-                  pw.SizedBox(height: 5),
-                  pw.Divider(thickness: 0.5),
-                  pw.SizedBox(height: 3),
-                  pw.Text("DETAIL DIAGNOSA REFRAKSI LENSA RIIL:",
-                      style: pw.TextStyle(
-                          fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 4),
+                  pw.SizedBox(height: 6),
+                  pw.Divider(color: PdfColors.grey300, height: 1),
+                  pw.SizedBox(height: 6),
                   pw.Container(
+                    decoration: pw.BoxDecoration(
+                        border: pw.Border.all(
+                            color: PdfColors.grey400, width: 0.5)),
                     child: pw.Table(
                       border: pw.TableBorder.all(
-                          color: PdfColors.grey400, width: 0.5),
-                      columnWidths: const {
-                        0: pw.FlexColumnWidth(1.8),
-                        1: pw.FlexColumnWidth(2),
-                        2: pw.FlexColumnWidth(2),
-                        3: pw.FlexColumnWidth(2),
-                        4: pw.FlexColumnWidth(2),
-                      },
+                          color: PdfColors.grey300, width: 0.5),
                       children: [
                         pw.TableRow(
                           decoration:
-                              const pw.BoxDecoration(color: PdfColors.grey200),
+                              pw.BoxDecoration(color: PdfColors.grey200),
                           children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                               .map((txt) => pw.Padding(
-                                    padding: const pw.EdgeInsets.all(3),
-                                    child: pw.Text(txt,
-                                        style: pw.TextStyle(
-                                            fontSize: 7,
-                                            fontWeight: pw.FontWeight.bold),
-                                        textAlign: pw.TextAlign.center),
-                                  ))
+                                  padding: pw.EdgeInsets.symmetric(vertical: 3),
+                                  child: pw.Text(txt,
+                                      style: pw.TextStyle(
+                                          fontSize: 8,
+                                          fontWeight: pw.FontWeight.bold,
+                                          color: PdfColors.grey700),
+                                      textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
                         pw.TableRow(
@@ -4867,9 +5210,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                             _parseResepDinamis(detailResepDb, 'OD', 'ADD')
                           ]
                               .map((txt) => pw.Padding(
-                                  padding: const pw.EdgeInsets.all(3),
+                                  padding: pw.EdgeInsets.all(3),
                                   child: pw.Text(txt,
-                                      style: const pw.TextStyle(fontSize: 8),
+                                      style: pw.TextStyle(
+                                          fontSize: 8, color: PdfColors.black),
                                       textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
@@ -4886,95 +5230,145 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                             _parseResepDinamis(detailResepDb, 'OS', 'ADD')
                           ]
                               .map((txt) => pw.Padding(
-                                  padding: const pw.EdgeInsets.all(3),
+                                  padding: pw.EdgeInsets.all(3),
                                   child: pw.Text(txt,
-                                      style: const pw.TextStyle(fontSize: 8),
+                                      style: pw.TextStyle(
+                                          fontSize: 8, color: PdfColors.black),
                                       textAlign: pw.TextAlign.center)))
                               .toList(),
                         ),
                       ],
                     ),
                   ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                      "PD Pasien (R/L): ${_parseResepDinamis(detailResepDb, '', 'PD')} mm",
-                      style: pw.TextStyle(
-                          fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  pw.Padding(
+                      padding: pw.EdgeInsets.only(top: 6, left: 4),
+                      child: pw.Text(
+                          "PD Pasien (R/L): ${_parseResepDinamis(detailResepDb, '', 'PD')} mm",
+                          style: pw.TextStyle(
+                              color: PdfColors.black,
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold))),
                 ],
+                pw.SizedBox(height: 4),
+                pw.Divider(color: PdfColors.black, thickness: 1),
+                pw.SizedBox(height: 6),
 
-                pw.SizedBox(height: 5),
-                pw.Divider(thickness: 1),
-                pw.SizedBox(height: 5),
-
-                // 💰 5. SECTION SUMMARY FINANSIAL
+                // 💰 BADGE LUNAS & RANGKUMAN FINANSIAL
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Container(
-                      height: 50,
-                      width: 50,
-                      child: pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(),
-                          data: sale['no_invoice'] ?? 'EMPTY'),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Container(
+                          padding: pw.EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: pw.BoxDecoration(
+                              color: sisaTagihan > 0
+                                  ? PdfColor.fromInt(0xFFFFF3E0)
+                                  : PdfColor.fromInt(0xFFE6F4EA),
+                              borderRadius: pw.BorderRadius.circular(4),
+                              border: pw.Border.all(
+                                  color: sisaTagihan > 0
+                                      ? PdfColors.orange300
+                                      : PdfColor.fromInt(0xFF34A853))),
+                          child: pw.Text(sisaTagihan > 0 ? "DP" : "LUNAS",
+                              style: pw.TextStyle(
+                                  color: sisaTagihan > 0
+                                      ? PdfColors.orange900
+                                      : PdfColor.fromInt(0xFF137333),
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 8)),
+                        ),
+                        pw.SizedBox(height: 6),
+                        if (config['show_qr_invoice'] == true)
+                          pw.Container(
+                              height: 55,
+                              width: 55,
+                              child: pw.BarcodeWidget(
+                                  barcode: pw.Barcode.qrCode(),
+                                  data: sale['no_invoice'] ?? '',
+                                  padding: pw.EdgeInsets.zero)),
+                      ],
                     ),
                     pw.SizedBox(
-                      width: 180,
-                      child: pw.Column(
+                      width: 210,
+                      child: pw.Table(
+                        columnWidths: const {
+                          0: pw.FlexColumnWidth(1.4),
+                          1: pw.FlexColumnWidth(1.2)
+                        },
                         children: [
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text("Total Belanja",
-                                  style: const pw.TextStyle(fontSize: 8.5)),
-                              pw.Text(formatRupiah(sale['total_harga'] ?? 0),
-                                  style: pw.TextStyle(
-                                      fontSize: 8.5,
-                                      fontWeight: pw.FontWeight.bold))
-                            ],
-                          ),
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text("Total Dibayar",
-                                  style: const pw.TextStyle(fontSize: 8.5)),
-                              pw.Text(formatRupiah(sale['dibayarkan'] ?? 0),
-                                  style: const pw.TextStyle(fontSize: 8.5))
-                            ],
-                          ),
-                          pw.Divider(thickness: 0.5),
-                          pw.Row(
-                            mainAxisAlignment:
-                                pw.MainAxisAlignment.spaceBetween,
-                            children: [
-                              pw.Text("Sisa Tagihan:",
-                                  style: pw.TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: pw.FontWeight.bold)),
-                              pw.Text(formatRupiah(sale['sisa_tagihan'] ?? 0),
-                                  style: pw.TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: pw.FontWeight.bold,
-                                      color: sale['sisa_tagihan'] > 0
-                                          ? PdfColors.red
-                                          : PdfColors.green))
-                            ],
-                          ),
+                          pw.TableRow(children: [
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 1.5),
+                                child: pw.Text("TOTAL BELANJA",
+                                    style: pw.TextStyle(
+                                        color: PdfColors.grey700,
+                                        fontSize: fBody - 2,
+                                        fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 1.5),
+                                child: pw.Text(formatRupiah(totalHarga),
+                                    style: pw.TextStyle(
+                                        color: const PdfColor(0, 0, 0),
+                                        fontSize: fBody - 2,
+                                        fontWeight: pw.FontWeight.bold),
+                                    textAlign: pw.TextAlign.end)),
+                          ]),
+                          pw.TableRow(children: [
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 1.5),
+                                child: pw.Text("UANG MUKA (DP)",
+                                    style: pw.TextStyle(
+                                        color: PdfColors.grey600,
+                                        fontSize: fBody - 3))),
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 1.5),
+                                child: pw.Text(formatRupiah(uangMukaDP),
+                                    style: pw.TextStyle(
+                                        color: PdfColors.grey700,
+                                        fontSize: fBody - 3),
+                                    textAlign: pw.TextAlign.end)),
+                          ]),
+                          pw.TableRow(children: [
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 3.0),
+                                child: pw.Text("SISA TAGIHAN",
+                                    style: pw.TextStyle(
+                                        color: const PdfColor(0, 0, 0),
+                                        fontSize: fBody - 1,
+                                        fontWeight: pw.FontWeight.bold))),
+                            pw.Padding(
+                                padding: pw.EdgeInsets.symmetric(vertical: 3.0),
+                                child: pw.Text(formatRupiah(sisaTagihan),
+                                    style: pw.TextStyle(
+                                        color: sisaTagihan > 0
+                                            ? PdfColors.red700
+                                            : PdfColor.fromInt(0xFF34A853),
+                                        fontSize: fBody - 1,
+                                        fontWeight: pw.FontWeight.bold),
+                                    textAlign: pw.TextAlign.end)),
+                          ]),
                         ],
                       ),
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 10),
-                pw.Divider(thickness: 0.5),
+                pw.Divider(color: PdfColors.grey400),
                 pw.SizedBox(height: 4),
-                pw.Text(
-                    config['footer_text'] ??
-                        'Terima kasih atas kepercayaan Anda.',
-                    style: const pw.TextStyle(fontSize: 8),
-                    textAlign: pw.TextAlign.left),
+
+                // 📝 FOOTER T&C NOTICE
+                pw.Text("TERIMA KASIH ATAS KEPERCAYAAN ANDA",
+                    style: pw.TextStyle(
+                        color: PdfColors.grey600,
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text(cleanFooter,
+                    style:
+                        pw.TextStyle(color: PdfColors.grey700, fontSize: 8.5)),
               ],
             );
           },
@@ -5037,11 +5431,15 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     final double fHeader = (config['font_size_header'] ?? 16).toDouble();
     final double fBody = (config['font_size_body'] ?? 12).toDouble();
 
+    // 🎯 FIX MANDATORI: Inisialisasi variabel finansial laci untuk konsumsi UI Widget Tree screen utama
+    int totalHarga = sale['total_harga'] ?? 0;
+    int uangMukaDP = sale['dibayarkan'] ?? 0;
+    int sisaTagihan = sale['sisa_tagihan'] ?? 0;
+
     final bool hasLensa = items.any((item) =>
         item['tipe_produk'].toString().toLowerCase().contains('lensa') ||
         item['nama_produk'].toString().toLowerCase().contains('lensa'));
 
-// Ganti baris eror lama dengan baris steril ini:
     String detailResepDb = items.firstWhere((e) => e['tipe_produk'] == 'Lensa',
             orElse: () => {'detail_resep': ''})['detail_resep'] ??
         '';
@@ -5194,45 +5592,55 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     ),
                     const SizedBox(height: 8),
 
-                    // 📋 2. DATA PELANGGAN
+                    // 📋 2. DATA PELANGGAN & INTERNAL META ADMINISTRATIF (SISI KIRI PELANGGAN, SISI KANAN NOTA)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(sale['no_invoice'] ?? '-',
-                                style: TextStyle(
-                                    color: const Color(0xFF0F172A),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: fBody - 1,
-                                    letterSpacing: 0.2)),
-                            const SizedBox(height: 6),
-                            const Text("PELANGGAN",
-                                style: TextStyle(
-                                    color: Colors.black38,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8)),
-                            const SizedBox(height: 1),
-                            Text(sale['nama_pelanggan'] ?? '-',
-                                style: TextStyle(
-                                    color: const Color(0xFF1E293B),
-                                    fontSize: fBody - 2,
-                                    fontWeight: FontWeight.bold)),
-                            Text(sale['no_wa'] ?? '-',
-                                style: TextStyle(
-                                    color: Colors.black54,
-                                    fontSize: fBody - 3)),
-                            if (sale['alamat'] != null &&
-                                sale['alamat'].toString().isNotEmpty)
-                              Text(sale['alamat'],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(sale['no_invoice'] ?? '-',
+                                  style: TextStyle(
+                                      color: const Color(0xFF0F172A),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: fBody - 1,
+                                      letterSpacing: 0.2)),
+                              const SizedBox(height: 6),
+                              const Text("PELANGGAN",
+                                  style: TextStyle(
+                                      color: Colors.black38,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8)),
+                              const SizedBox(height: 1),
+                              Text(
+                                  (sale['nama_pelanggan'] ?? '-')
+                                      .toString()
+                                      .toUpperCase(),
+                                  style: TextStyle(
+                                      color: const Color(0xFF1E293B),
+                                      fontSize: fBody - 2,
+                                      fontWeight: FontWeight.bold)),
+                              Text("WhatsApp: ${sale['no_wa'] ?? '-'}",
                                   style: TextStyle(
                                       color: Colors.black54,
                                       fontSize: fBody - 3)),
-                          ],
+                              if (sale['alamat'] != null &&
+                                  sale['alamat'].toString().isNotEmpty)
+                                Text("Alamat: ${sale['alamat']}",
+                                    style: TextStyle(
+                                        color: Colors.black54,
+                                        fontSize: fBody - 3)),
+                              Text("Email: ${sale['email_pelanggan'] ?? '-'}",
+                                  style: TextStyle(
+                                      color: Colors.black54,
+                                      fontSize: fBody - 3)),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 15),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
@@ -5240,20 +5648,20 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                  color: sale['sisa_tagihan'] > 0
+                                  color: sisaTagihan > 0
                                       ? Colors.orange.shade50
                                       : Colors.green.shade50,
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                      color: sale['sisa_tagihan'] > 0
+                                      color: sisaTagihan > 0
                                           ? Colors.orange.shade300
                                           : Colors.green.shade300)),
                               child: Text(
-                                  sale['sisa_tagihan'] > 0
+                                  sisaTagihan > 0
                                       ? "DP (SISA TAGIHAN)"
                                       : "LUNAS",
                                   style: TextStyle(
-                                      color: sale['sisa_tagihan'] > 0
+                                      color: sisaTagihan > 0
                                           ? Colors.orange.shade900
                                           : Colors.green.shade900,
                                       fontWeight: FontWeight.bold,
@@ -5271,6 +5679,18 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                         color: Colors.black87,
                                         fontSize: 8.5,
                                         fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                const Text("Kasir: ",
+                                    style: TextStyle(
+                                        color: Colors.black38, fontSize: 8.5)),
+                                Text(sale['nama_kasir'] ?? 'Staff',
+                                    style: const TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold)),
                               ],
                             ),
                             Row(
@@ -5323,7 +5743,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                      "• $rawName (x${item['qty'] ?? 1})",
+                                      "- $rawName (x${item['qty'] ?? 1})",
                                       style: const TextStyle(
                                           color: Color(0xFF0F172A),
                                           fontSize: 11.5,
@@ -5485,7 +5905,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                   const Text("Total Belanja",
                                       style: TextStyle(
                                           color: Colors.black54, fontSize: 11)),
-                                  Text(formatRupiah(sale['total_harga'] ?? 0),
+                                  Text(formatRupiah(totalHarga),
                                       style: const TextStyle(
                                           color: Color(0xFF0F172A),
                                           fontSize: 11,
@@ -5499,7 +5919,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                   const Text("Total Dibayar",
                                       style: TextStyle(
                                           color: Colors.black38, fontSize: 11)),
-                                  Text(formatRupiah(sale['dibayarkan'] ?? 0),
+                                  Text(formatRupiah(uangMukaDP),
                                       style: const TextStyle(
                                           color: Colors.black54,
                                           fontSize: 11,
@@ -5517,17 +5937,14 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                      sale['sisa_tagihan'] > 0
-                                          ? "Sisa Tagihan"
-                                          : "Sisa Piutang",
-                                      style: const TextStyle(
+                                  const Text("SISA TAGIHAN",
+                                      style: TextStyle(
                                           color: Color(0xFF0F172A),
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.bold)),
-                                  Text(formatRupiah(sale['sisa_tagihan'] ?? 0),
+                                  Text(formatRupiah(sisaTagihan),
                                       style: TextStyle(
-                                          color: sale['sisa_tagihan'] > 0
+                                          color: sisaTagihan > 0
                                               ? Colors.red.shade700
                                               : Colors.green.shade700,
                                           fontSize: 12,

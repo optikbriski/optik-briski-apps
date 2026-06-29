@@ -1,3 +1,4 @@
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -40,22 +41,21 @@ class _LoginPageState extends State<LoginPage> {
       String assignedTokoId = 'PUSAT';
       String assignedRole = 'kasir';
 
-      // 2. DETEKSI DARI TABEL KARYAWAN: Cari data toko_id aslinya
+      // 2. DETEKSI DARI TABEL KARYAWAN: Ambil data untuk pengecekan asal aplikasi
       final karyawanRes = await Supabase.instance.client
           .from('karyawan')
           .select('toko_id, jabatan')
           .eq('email', userEmail)
           .maybeSingle();
 
+      // 🛑 KUNCI SEKURITI MUTLAK: Jika akun DITEMUKAN di tabel karyawan, artinya akun ini dibuat dari APK Karyawan.
+      // Langsung paksa role-nya menjadi 'kasir' agar otomatis ditendang oleh barikade di bawah,
+      // tidak peduli apakah di tabel jabatannya tertulis 'admin', 'manager', atau lainnya!
       if (karyawanRes != null) {
         assignedTokoId = karyawanRes['toko_id'] ?? 'PUSAT';
-        assignedRole =
-            (karyawanRes['jabatan']?.toString().toLowerCase() == 'manager' ||
-                    karyawanRes['jabatan']?.toString().toLowerCase() == 'admin')
-                ? 'admin_toko'
-                : 'kasir';
+        assignedRole = 'kasir';
       } else {
-        // 3. JALUR HARD-MAPPING FALLBACK (Jika tabel karyawan kosong akibat SQL clean)
+        // 3. JALUR AKUN ADMIN ASLI: Hanya mengecek akun yang dibuat LANGSUNG di Supabase Dashboard (Tidak ada di tabel karyawan)
         if (userEmail == 'risctonn@gmail.com') {
           assignedTokoId = 'PUSAT';
           assignedRole = 'owner';
@@ -64,12 +64,33 @@ class _LoginPageState extends State<LoginPage> {
           assignedRole = 'admin_toko';
         } else if (userEmail == 'nriscton@gmail.com') {
           assignedTokoId = 'PUSAT';
-          assignedRole = 'kasir';
+          assignedRole = 'kasir'; // Email kasir fallback tetap diblokir
+        } else {
+          // Akun admin baru lainnya yang lu buat langsung via Supabase Dashboard Auth tanpa lewat apk lapangan
+          assignedTokoId = 'PUSAT';
+          assignedRole = user.userMetadata?['role'] ?? 'admin_toko';
         }
       }
 
-      // 💡 FIX UTAMA: JALUR OTOMATISASI MAKSIMAL BIAR GA USAH SENTUH SQL LAGI
-      // Aplikasi Flutter otomatis mendaftarkan ID Toko baru ke Master Toko agar tidak terkena Foreign Key Error
+      // 🛑 BARIKADE UTAMA: TENDANG INSTAN AKUN KARYAWAN LAPANGAN
+      if (assignedRole == 'kasir') {
+        // Hancurkan session login di level Supabase Auth seketika agar tidak bypass refresh page
+        await Supabase.instance.client.auth.signOut();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  "Akses Ditolak: Akun Lapangan/Karyawan tidak diizinkan masuk ke sistem Admin!"),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        setState(() => isLoading = false);
+        return; // Blokir eksekusi total ke bawah!
+      }
+
+      // 🏢 JALUR OTOMATISASI RE-REGISTRASI MASTER TOKO (Hanya untuk Admin/Owner yang lolos)
       await Supabase.instance.client.from('toko_id').upsert({
         'id': assignedTokoId,
         'toko_id': assignedTokoId == 'PUSAT'
@@ -77,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
             : 'Optik B. Riski - $assignedTokoId',
       });
 
-      // 4. Lakukan upsert ke profiles (Sekarang dijamin lolos 100% karena toko_id sudah aman terdaftar di atas)
+      // 4. Lakukan upsert ke profiles harian admin
       await Supabase.instance.client.from('profiles').upsert({
         'id': user.id,
         'email': userEmail,
@@ -94,7 +115,6 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // Ambil profile bersih dan kunci tipe datanya agar aman dari warning lint closure
       final Map<String, dynamic> safeProfile = finalProfile;
 
       Navigator.pushReplacement(

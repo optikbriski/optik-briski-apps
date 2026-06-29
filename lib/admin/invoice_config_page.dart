@@ -1163,7 +1163,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                               Padding(
                                                   padding: const EdgeInsets
                                                       .symmetric(vertical: 3.0),
-                                                  child: Text("SISA TAGIHAN",
+                                                  child: Text(
+                                                      "Sisa Piutang", // <--- Sudah diubah sesuai screenshot
                                                       style: TextStyle(
                                                           color: const Color(
                                                               0xFF0F172A),
@@ -1175,24 +1176,25 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                                           fontWeight: FontWeight
                                                               .bold))),
                                               Padding(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                          vertical: 3.0),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(vertical: 3.0),
                                                   child: Text(
-                                                      _formatRupiah(
-                                                          _previewSale?['sisa_tagihan'] ??
-                                                              0),
+                                                      _formatRupiah(_previewSale?[
+                                                              'sisa_tagihan'] ??
+                                                          0),
                                                       style: TextStyle(
-                                                          color: (_previewSale?['sisa_tagihan'] ?? 0) >
+                                                          color: (_previewSale?[
+                                                                          'sisa_tagihan'] ??
+                                                                      0) >
                                                                   0
                                                               ? Colors
                                                                   .red.shade700
-                                                              : Colors.green
-                                                                  .shade700,
-                                                          fontSize:
-                                                              (_fontSizeBody - 1)
-                                                                  .clamp(9.0, 18.0),
-                                                          fontWeight: FontWeight.bold),
+                                                              : const Color(
+                                                                  0xFF34A853), // <--- Mengunci warna Hijau Google murni pas Rp0 Lunas
+                                                          fontSize: (_fontSizeBody - 1)
+                                                              .clamp(9.0, 18.0),
+                                                          fontWeight:
+                                                              FontWeight.bold),
                                                       textAlign: TextAlign.end)),
                                             ],
                                           ),

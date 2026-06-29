@@ -180,8 +180,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   // Memilih Foto
   Future<void> _pickImage() async {
     try {
-      final result = await FilePicker.pickFiles(
+      // PERUBAHAN: Tambahkan .platform sebelum pickFiles
+      final result = await FilePicker.platform.pickFiles(
           type: FileType.image, allowMultiple: false, withData: true);
+
       if (result != null && result.files.isNotEmpty) {
         setState(() => foto = result.files.first);
       }
