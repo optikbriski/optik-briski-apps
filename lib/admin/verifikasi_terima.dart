@@ -49,8 +49,11 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     }
   }
 
+// ✅ PERBAIKAN: Amankan fungsi dari spam click di awal method
   Future<void> _prosesVerifikasi(dynamic task) async {
-    // 1. WAJIB BUKA KAMERA & AMBIL FOTO
+    if (isLoading) return;
+
+    // 1. Ambil Foto Bukti
     final photo = await picker.pickImage(source: ImageSource.camera);
     if (photo == null) {
       if (!mounted) return;
@@ -61,12 +64,16 @@ class _IncomingVerificationState extends State<IncomingVerification> {
 
     setState(() => isLoading = true);
     try {
-      // 2. UPDATE STATUS HISTORY JADI SUCCESS
-      await supabase
-          .from('stock_move_history')
-          .update({'status': 'SUCCESS'}).eq('id', task['id']);
+      // 2. OPSI UTAMA: Upload foto bukti ke Supabase Storage agar tidak hilang
+      final bytes = await photo.readAsBytes();
+      final String fileName =
+          'bukti_${task['id']}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-      // 3. TAMBAH STOK FISIK DI CABANG
+      await supabase.storage
+          .from('verification-proofs')
+          .uploadBinary(fileName, bytes);
+
+      // 3. TAMBAH STOK FISIK DI CABANG DULU (Lebih aman jika ini gagal duluan)
       final existingProd = await supabase
           .from('products')
           .select('id, stock')
@@ -83,18 +90,25 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           'nama': task['product_name'],
           'stock': task['jumlah'],
           'toko_id': widget.profile['toko_id'],
-          'harga': 0, // Nol dulu, biar Kasir cabang yang set harga
+          'harga': 0,
           'kategori': 'Frame',
           'sub_kategori': 'Lainnya',
         });
       }
+
+// 4. UPDATE STATUS HISTORY JADI SUCCESS (Gunakan nama kolom yang sesuai dengan DB)
+      await supabase.from('stock_move_history').update({
+        'status': 'SUCCESS',
+        'bukti_foto_penerim':
+            fileName, // ✅ FIX: Sudah sinkron dengan Screenshot 2026-07-01 at 18.35.35.jpg
+      }).eq('id', task['id']);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("smr_sukses_terima".tr()),
           backgroundColor: Colors.green));
 
-      _load(); // Refresh daftar yang masih pending
+      _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -154,9 +168,10 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                         ),
                         trailing: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              minimumSize: const Size(110,
-                                  40), // Ukuran tombol dibuat lebih proporsional
+                              backgroundColor: isLoading
+                                  ? Colors.grey
+                                  : Colors.green, // Ubah warna jika loading
+                              minimumSize: const Size(110, 40),
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
                               shape: RoundedRectangleBorder(
@@ -168,7 +183,9 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                                   color: Colors.white,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold)),
-                          onPressed: () => _prosesVerifikasi(task),
+                          // ✅ PERBAIKAN: Jika isLoading true, onPressed jadi null (tombol beku)
+                          onPressed:
+                              isLoading ? null : () => _prosesVerifikasi(task),
                         ),
                       ),
                     );
