@@ -7,6 +7,8 @@ import 'face_template.dart';
 import 'geofence_service.dart';
 import 'liveness_result.dart';
 
+/// Absensi lokal: GPS + liveness ML Kit + face template di perangkat.
+/// AWS Rekognition (hybrid) ditunda sampai akun AWS siap; Edge Function tetap ada di repo.
 class AttendanceService {
   AttendanceService({
     SupabaseClient? client,
@@ -43,6 +45,11 @@ class AttendanceService {
 
   Future<GeofenceCheckResult> checkGeofence(String tokoId) {
     return _geofence.ensureAtStore(tokoId);
+  }
+
+  bool isFaceEnrolled(Map<String, dynamic>? karyawan) {
+    if (karyawan == null) return false;
+    return FaceTemplateUtil.fromJson(karyawan['face_template']) != null;
   }
 
   Future<String> enrollFace({

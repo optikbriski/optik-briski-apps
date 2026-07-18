@@ -17,7 +17,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
+import 'pengajuan_jadwal_page.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/karyawan/karyawan_home_service.dart';
+import '../../shared/responsive.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -32,17 +35,22 @@ class KaryawanPage extends StatefulWidget {
 String? _fotoProfileUrl;
 
 class KaryawanPageState extends State<KaryawanPage> {
+  final _homeService = KaryawanHomeService();
+
   // 1. WADAH DATA DINAMIS
   late String _namaKaryawan;
   String _jabatanKaryawan = "...";
   String _cabangKaryawan = "...";
+  String? _karyawanId;
   bool _isLoading = true;
 
-  // 2. JADWAL DUMMY MINGGUAN
-  late List<Map<String, String>> _jadwalMingguIni;
+  // 2. JADWAL MINGGUAN (dari Supabase)
+  List<Map<String, String>> _jadwalMingguIni = [];
 
   // Wadah List SOP
   List<Map<String, dynamic>> _daftarSOPTugas = [];
+
+  double _securityScore = 0;
 
   // MESIN NAVIGASI BAWAH
   int _currentIndex = 0;
@@ -51,29 +59,21 @@ class KaryawanPageState extends State<KaryawanPage> {
   void initState() {
     super.initState();
     _namaKaryawan = 'memuat'.tr();
-    _jadwalMingguIni = [
-      {'hari': 'hari_senin'.tr(), 'tanggal': '20 Mei', 'shift': '09:00-17:00'},
-      {'hari': 'hari_selasa'.tr(), 'tanggal': '21 Mei', 'shift': '09:00-17:00'},
-      {'hari': 'hari_rabu'.tr(), 'tanggal': '22 Mei', 'shift': '13:00-21:00'},
-      {'hari': 'hari_kamis'.tr(), 'tanggal': '23 Mei', 'shift': '13:00-21:00'},
-      {'hari': 'hari_jumat'.tr(), 'tanggal': '24 Mei', 'shift': '09:00-17:00'},
-      {'hari': 'hari_sabtu'.tr(), 'tanggal': '25 Mei', 'shift': '09:00-17:00'},
-      {
-        'hari': 'hari_minggu'.tr(),
-        'tanggal': '26 Mei',
-        'shift': 'shift_libur'.tr()
-      },
-    ];
     _tarikDataProfil();
     _cekUpdateApkSilent();
   }
+
+  double _fabBottomPad(BuildContext context) =>
+      100 + MediaQuery.paddingOf(context).bottom;
 
   // MESIN POP-UP PILIHAN BAHASA
   void _tampilkanDialogBahasa(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return R.constrainedDialog(
+          context: context,
+          child: AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -93,6 +93,7 @@ class KaryawanPageState extends State<KaryawanPage> {
               _buildOpsiBahasaItem(context, "lang_ja".tr(), const Locale('ja')),
             ],
           ),
+        ),
         );
       },
     );
@@ -173,28 +174,40 @@ class KaryawanPageState extends State<KaryawanPage> {
   // MESIN PENARIK DATA
   Future<void> _tarikDataProfil() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null || user.email == null) return;
+      final snap = await _homeService.loadHome();
+      if (snap == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
-// Kita tambahkan kolom 'foto_profile' agar URL-nya ikut ditarik
-      final data = await Supabase.instance.client
-          .from('karyawan')
-          .select('nama, jabatan, cabang, foto_profile')
-          .eq('email', user.email!)
-          .maybeSingle();
+      if (!mounted) return;
+      setState(() {
+        _karyawanId = snap.karyawan['id']?.toString();
+        _namaKaryawan =
+            snap.karyawan['nama']?.toString() ?? 'default_karyawan'.tr();
+        _jabatanKaryawan =
+            snap.karyawan['jabatan']?.toString() ?? 'default_staff'.tr();
+        _cabangKaryawan = snap.karyawan['cabang']?.toString() ??
+            snap.karyawan['toko_id']?.toString() ??
+            '-';
+        _fotoProfileUrl = snap.karyawan['foto_profile']?.toString();
+        _jadwalMingguIni = snap.jadwalMinggu;
+        _daftarSOPTugas = snap.sopTasks;
+        totalPoinBulanIni = snap.totalPoinBulan;
+        currentStreakHari = snap.streakHari;
+        isStreakBonusActive = snap.streakHari >= 3;
+        _sudahKlaimPoinHariIni = snap.sudahKlaimHariIni;
+        _riwayat30HariCache = snap.riwayat30Hari;
+        _securityScore = snap.securityScore;
+        _isLoading = false;
+      });
 
-      if (data != null && mounted) {
-        setState(() {
-          _namaKaryawan = data['nama'] ?? 'default_karyawan'.tr();
-          _jabatanKaryawan = data['jabatan'] ?? 'default_staff'.tr();
-          _cabangKaryawan = data['cabang'] ?? '-';
-
-          // Simpan URL Foto dari database ke dalam variabel
-          _fotoProfileUrl = data['foto_profile'];
-
-          _setSOPBerdasarkanJabatan(_jabatanKaryawan);
-          _isLoading = false;
-        });
+      if (_karyawanId != null) {
+        await _homeService.ensureTodayReminders(
+          karyawanId: _karyawanId!,
+          jadwalMinggu: _jadwalMingguIni,
+          sopTasks: _daftarSOPTugas,
+        );
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -202,43 +215,47 @@ class KaryawanPageState extends State<KaryawanPage> {
     }
   }
 
-  // MESIN PEMBUAT SOP CERDAS
-  void _setSOPBerdasarkanJabatan(String jabatan) {
-    if (jabatan == 'Kasir') {
-      _daftarSOPTugas = [
-        {'tugas': 'sop_kasir_1'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_kasir_2'.tr(), 'selesai': false, 'jenis_bukti': 'input'},
-        {'tugas': 'sop_kasir_3'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_kasir_4'.tr(), 'selesai': false, 'jenis_bukti': 'scan'}
-      ];
-    } else if (jabatan == 'RO' || jabatan == 'Optometrist (RO)') {
-      _daftarSOPTugas = [
-        {'tugas': 'sop_ro_1'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_ro_2'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_ro_3'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_ro_4'.tr(), 'selesai': false, 'jenis_bukti': 'scan'}
-      ];
-    } else if (jabatan == 'Kepala Toko') {
-      _daftarSOPTugas = [
-        {'tugas': 'sop_kt_1'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_kt_2'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_kt_3'.tr(), 'selesai': false, 'jenis_bukti': 'scan'},
-        {'tugas': 'sop_kt_4'.tr(), 'selesai': false, 'jenis_bukti': 'input'}
-      ];
-    } else {
-      _daftarSOPTugas = [
-        {'tugas': 'sop_staff_1'.tr(), 'selesai': false, 'jenis_bukti': 'foto'},
-        {'tugas': 'sop_staff_2'.tr(), 'selesai': false, 'jenis_bukti': 'foto'}
-      ];
-    }
-  }
-
   int totalPoinBulanIni = 0;
   int currentStreakHari = 0;
   bool isStreakBonusActive = false;
   bool _sudahKlaimPoinHariIni = false;
+  List<int> _riwayat30HariCache = List<int>.filled(30, 0);
 
   final ImagePicker picker = ImagePicker();
+
+  Future<void> _persistSopDone(
+    int index, {
+    String? buktiText,
+    Uint8List? buktiBytes,
+  }) async {
+    if (_karyawanId == null) {
+      _showPremiumSnackbar(
+          "sop_error_judul".tr(), 'Data karyawan belum siap.', Colors.red);
+      return;
+    }
+    final task = _daftarSOPTugas[index];
+    if ((task['id']?.toString() ?? '').isEmpty) {
+      _showPremiumSnackbar(
+        "sop_error_judul".tr(),
+        'Template SOP belum tersedia di database. Jalankan migration dulu.',
+        Colors.orange,
+      );
+      return;
+    }
+    try {
+      await _homeService.completeSopTask(
+        karyawanId: _karyawanId!,
+        task: task,
+        buktiText: buktiText,
+        buktiBytes: buktiBytes,
+      );
+      setState(() => _daftarSOPTugas[index]['selesai'] = true);
+      _showPremiumSnackbar(
+          "sop_bukti_sah".tr(), "sop foto sukses".tr(), Colors.green);
+    } catch (e) {
+      _showPremiumSnackbar("sop_error_judul".tr(), '$e', Colors.redAccent);
+    }
+  }
 
   void _toggleTugas(int index) async {
     if (_daftarSOPTugas[index]['selesai']) {
@@ -256,9 +273,8 @@ class KaryawanPageState extends State<KaryawanPage> {
       );
 
       if (foto != null) {
-        setState(() => _daftarSOPTugas[index]['selesai'] = true);
-        _showPremiumSnackbar(
-            "sop_bukti_sah".tr(), "sop foto sukses".tr(), Colors.green);
+        final bytes = await foto.readAsBytes();
+        await _persistSopDone(index, buktiBytes: bytes);
       } else {
         _showPremiumSnackbar(
             "sop_batal".tr(), "sop_foto_batal".tr(), Colors.orange);
@@ -273,9 +289,7 @@ class KaryawanPageState extends State<KaryawanPage> {
       );
 
       if (result != null) {
-        setState(() => _daftarSOPTugas[index]['selesai'] = true);
-        _showPremiumSnackbar(
-            "sop_scan_berhasil".tr(), "sop_scan_valid".tr(), Colors.green);
+        await _persistSopDone(index, buktiText: result.toString());
       } else {
         _showPremiumSnackbar(
             "sop_batal".tr(), "sop_scan_batal_msg".tr(), Colors.orange);
@@ -291,7 +305,9 @@ class KaryawanPageState extends State<KaryawanPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
+        return R.constrainedDialog(
+          context: context,
+          child: AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text("sop_input_aktual".tr(), textAlign: TextAlign.center),
@@ -312,10 +328,11 @@ class KaryawanPageState extends State<KaryawanPage> {
             ElevatedButton(
               style:
                   ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-              onPressed: () {
+              onPressed: () async {
                 if (inputController.text.isNotEmpty) {
                   Navigator.pop(context);
-                  setState(() => _daftarSOPTugas[index]['selesai'] = true);
+                  await _persistSopDone(index,
+                      buktiText: inputController.text.trim());
                   _showPremiumSnackbar("sop_terkonfirmasi".tr(),
                       "sop_aktual_tersimpan".tr(), Colors.green);
                 } else {
@@ -328,45 +345,79 @@ class KaryawanPageState extends State<KaryawanPage> {
                       color: Colors.white, fontWeight: FontWeight.bold)),
             )
           ],
+        ),
         );
       },
     );
   }
 
+  void _tampilkanDetailJadwal(Map<String, String> jadwal) {
+    final catatan = jadwal['catatan']?.trim();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E293B),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${jadwal['hari']} • ${jadwal['tanggal']}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text('Shift: ${jadwal['shift']}',
+                style: const TextStyle(color: Colors.white70, fontSize: 15)),
+            if (catatan != null && catatan.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Catatan: $catatan',
+                  style: const TextStyle(color: Colors.white54)),
+            ],
+            const SizedBox(height: 16),
+            const Text(
+              'Butuh ijin / cuti / tukar jadwal? Ajukan lewat tombol di bawah. '
+              'Admin cabang yang menyetujui.',
+              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanJadwalPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.event_available_rounded, size: 18),
+                label: const Text('Ajukan ijin / tukar jadwal'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   // POP-UP RIWAYAT POIN 30 HARI
   void _tampilkanRiwayatPoin() {
-    List<int> riwayat30Hari = [
-      2,
-      2,
-      2,
-      0,
-      1,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      0,
-      2,
-      2,
-      1,
-      2,
-      2,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3
-    ];
+    final riwayat30Hari = _riwayat30HariCache.isEmpty
+        ? List<int>.filled(30, 0)
+        : List<int>.from(_riwayat30HariCache);
 
     showModalBottomSheet(
       context: context,
@@ -400,8 +451,10 @@ class KaryawanPageState extends State<KaryawanPage> {
               Text("poin_riwayat_desc".tr(),
                   style: const TextStyle(fontSize: 13, color: Colors.grey)),
               const SizedBox(height: 25),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
                 children: [
                   _buildLegendItem(Colors.green, "poin sempurna".tr()),
                   _buildLegendItem(Colors.amber, "poin_parsial".tr()),
@@ -473,11 +526,13 @@ class KaryawanPageState extends State<KaryawanPage> {
             height: 14,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(label,
-            style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B))),
+        Flexible(
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B))),
+        ),
       ],
     );
   }
@@ -593,23 +648,34 @@ class KaryawanPageState extends State<KaryawanPage> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
-        color: Colors.white,
-        elevation: 20,
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          height: 70,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home_rounded, "nav_beranda".tr(), 0),
-              _buildNavItem(Icons.fact_check_rounded, "nav sop".tr(), 1),
-              const SizedBox(width: 50),
-              _buildNavItem(Icons.headset_mic_rounded, "nav bantuan".tr(), 3),
-              _buildNavItem(Icons.person_rounded, "nav_profil".tr(), 2),
-            ],
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: BottomAppBar(
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8,
+          color: Colors.white,
+          elevation: 20,
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: 70,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Expanded(
+                    child: _buildNavItem(
+                        Icons.home_rounded, "nav_beranda".tr(), 0)),
+                Expanded(
+                    child: _buildNavItem(
+                        Icons.fact_check_rounded, "nav sop".tr(), 1)),
+                const SizedBox(width: 50),
+                Expanded(
+                    child: _buildNavItem(
+                        Icons.headset_mic_rounded, "nav bantuan".tr(), 3)),
+                Expanded(
+                    child: _buildNavItem(
+                        Icons.person_rounded, "nav_profil".tr(), 2)),
+              ],
+            ),
           ),
         ),
       ),
@@ -651,6 +717,9 @@ class KaryawanPageState extends State<KaryawanPage> {
             const SizedBox(height: 4),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color:
                     isSelected ? const Color(0xFF2563EB) : Colors.grey.shade400,
@@ -666,7 +735,7 @@ class KaryawanPageState extends State<KaryawanPage> {
 
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -843,12 +912,31 @@ class KaryawanPageState extends State<KaryawanPage> {
             ],
           ),
           const SizedBox(height: 35),
-          Text("jadwal_mingguan_judul".tr(),
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1E293B))),
-          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: Text("jadwal_mingguan_judul".tr(),
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E293B))),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PengajuanJadwalPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                label: const Text('Ijin / Tukar',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           SizedBox(
             height: 170,
             child: ListView.builder(
@@ -857,7 +945,10 @@ class KaryawanPageState extends State<KaryawanPage> {
               itemCount: _jadwalMingguIni.length,
               itemBuilder: (context, index) {
                 final jadwal = _jadwalMingguIni[index];
-                final isLibur = jadwal['shift']!.contains("shift_libur".tr());
+                final shift = jadwal['shift'] ?? '-';
+                final isLibur = shift.toLowerCase().contains('libur') ||
+                    shift.contains("shift_libur".tr());
+                final isEmpty = shift.contains('Belum');
                 return Container(
                   width: 140,
                   margin: const EdgeInsets.only(right: 15, bottom: 10),
@@ -898,23 +989,21 @@ class KaryawanPageState extends State<KaryawanPage> {
                                   color: Colors.grey,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500)),
-                          if (!isLibur)
-                            GestureDetector(
-                              onTap: () {
-                                _showPremiumSnackbar(
-                                    "jadwal_kalender_judul".tr(),
-                                    "${'jadwal_kalender_msg'.tr()} ${jadwal['hari']}...",
-                                    Colors.blueAccent);
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(6)),
-                                child: const Icon(Icons.edit_calendar_rounded,
-                                    size: 14, color: Colors.blueAccent),
-                              ),
+                          GestureDetector(
+                            onTap: () => _tampilkanDetailJadwal(jadwal),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(6)),
+                              child: Icon(
+                                  isEmpty
+                                      ? Icons.info_outline_rounded
+                                      : Icons.event_note_rounded,
+                                  size: 14,
+                                  color: Colors.blueAccent),
                             ),
+                          ),
                         ],
                       ),
                       const Spacer(),
@@ -941,7 +1030,6 @@ class KaryawanPageState extends State<KaryawanPage> {
               },
             ),
           ),
-          const SizedBox(height: 30),
         ],
       ),
     );
@@ -954,7 +1042,7 @@ class KaryawanPageState extends State<KaryawanPage> {
         _daftarSOPTugas.isEmpty ? 0 : tugasSelesai / _daftarSOPTugas.length;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1038,8 +1126,10 @@ class KaryawanPageState extends State<KaryawanPage> {
             ],
           ),
           const SizedBox(height: 25),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text("sop_progres_harian".tr(),
                   style: const TextStyle(
@@ -1175,38 +1265,37 @@ class KaryawanPageState extends State<KaryawanPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15)),
                 ),
-                onPressed: () {
-                  bool semuaSelesai =
-                      _daftarSOPTugas.every((t) => t['selesai'] == true);
-                  if (!semuaSelesai) {
-                    _showPremiumSnackbar("sop_belum_lengkap_judul".tr(),
-                        "sop_belum_lengkap_desc".tr(), Colors.orange);
-                    return;
-                  }
+                onPressed: () async {
+                  if (_karyawanId == null) return;
                   if (_sudahKlaimPoinHariIni) {
                     _showPremiumSnackbar("sop_sudah_disimpan_judul".tr(),
                         "sop_sudah_disimpan_desc".tr(), Colors.blueAccent);
                     return;
                   }
-
-                  setState(() {
-                    _sudahKlaimPoinHariIni = true;
-                    currentStreakHari++;
-                    if (currentStreakHari >= 3) {
-                      isStreakBonusActive = true;
-                      totalPoinBulanIni += (35 + 5);
+                  try {
+                    final claimed = await _homeService.claimDailySopPoints(
+                      karyawanId: _karyawanId!,
+                      tasks: _daftarSOPTugas,
+                      streakHari: currentStreakHari,
+                    );
+                    setState(() {
+                      _sudahKlaimPoinHariIni = true;
+                      totalPoinBulanIni += claimed;
+                      isStreakBonusActive = currentStreakHari >= 3;
+                    });
+                    if (isStreakBonusActive) {
                       _showPremiumSnackbar(
                           "poin_streak_bonus_judul".tr(),
                           "${'poin_streak_bonus_msg'.tr()} $currentStreakHari",
                           Colors.orange.shade700);
                     } else {
-                      isStreakBonusActive = false;
-                      totalPoinBulanIni += 35;
                       _showPremiumSnackbar("poin_selesai_judul".tr(),
                           "poin_selesai_msg".tr(), Colors.green);
                     }
-                    if (totalPoinBulanIni > 1000) totalPoinBulanIni = 1000;
-                  });
+                  } catch (e) {
+                    _showPremiumSnackbar(
+                        "sop_error_judul".tr(), '$e', Colors.orange);
+                  }
                 },
                 icon:
                     const Icon(Icons.cloud_upload_rounded, color: Colors.white),
@@ -1218,7 +1307,6 @@ class KaryawanPageState extends State<KaryawanPage> {
               ),
             ),
           ),
-          const SizedBox(height: 120),
         ],
       ),
     );
@@ -1228,7 +1316,7 @@ class KaryawanPageState extends State<KaryawanPage> {
     return Container(
       color: const Color(0xFF0F172A),
       child: ListView(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
         children: [
           Container(
             padding: const EdgeInsets.all(25),
@@ -1272,18 +1360,23 @@ class KaryawanPageState extends State<KaryawanPage> {
                   ],
                 ),
                 const SizedBox(height: 15),
-                Text("profil 100 aman".tr(),
+                Text(
+                    '${(_securityScore * 100).round()}% aman',
                     style: TextStyle(
-                        color: Colors.greenAccent.shade400,
+                        color: _securityScore >= 0.9
+                            ? Colors.greenAccent.shade400
+                            : Colors.orangeAccent,
                         fontWeight: FontWeight.w700,
                         fontSize: 14)),
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
-                    value: 1.0,
+                    value: _securityScore,
                     backgroundColor: Colors.grey.shade800,
-                    color: Colors.greenAccent.shade400,
+                    color: _securityScore >= 0.9
+                        ? Colors.greenAccent.shade400
+                        : Colors.orangeAccent,
                     minHeight: 8,
                   ),
                 ),
@@ -1337,7 +1430,6 @@ class KaryawanPageState extends State<KaryawanPage> {
               ],
             ),
           ),
-          const SizedBox(height: 120),
         ],
       ),
     );

@@ -11,6 +11,8 @@ import 'barcode_scanner.dart' hide RiwayatTransaksiPage;
 import 'riwayat_transaksi_page.dart';
 import 'request_order_page.dart';
 import 'invoice_config_page.dart';
+import 'attendance_monitor_page.dart';
+import 'jadwal_kerja_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -149,20 +151,24 @@ class _DashboardPageState extends State<DashboardPage> {
                         : null,
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("dash_selamat_bekerja".tr(),
-                          style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11)),
-                      Text(
-                        "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: Colors.white),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("dash_selamat_bekerja".tr(),
+                            style: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 11)),
+                        Text(
+                          "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.white),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -180,14 +186,19 @@ class _DashboardPageState extends State<DashboardPage> {
                       letterSpacing: 1.5)),
               const SizedBox(height: 15),
 
-              // --- GRID NAVIGASI UTAMA 4 KOLOM PROPORSIAL ---
-              GridView.count(
+              // --- GRID NAVIGASI RESPONSIF (HP / tablet / web) ---
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final w = constraints.maxWidth;
+                  final cols = w < 420 ? 2 : (w < 720 ? 3 : 4);
+                  final ratio = w < 420 ? 1.05 : (w < 720 ? 1.1 : 1.15);
+                  return GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 4,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
-                childAspectRatio: 1.2,
+                crossAxisCount: cols,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: ratio,
                 children: [
                   // 1. MENU PERSETUJUAN KARYAWAN (HANYA PUSAT)
                   if (widget.profile['toko_id'] == 'PUSAT')
@@ -201,19 +212,39 @@ class _DashboardPageState extends State<DashboardPage> {
                             MaterialPageRoute(
                                 builder: (c) => const AdminApprovalPage()))),
 
-                  // 2. MENU ABSENSI — dijalankan di APK Karyawan (GPS + face)
+                  // 2. MENU ABSENSI — monitor shift/log (clock-in di APK Karyawan)
                   _menuCard(
                       context,
                       "hr_tab_absen".tr(),
                       Icons.face_retouching_natural_rounded,
                       Colors.purpleAccent,
-                      () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Absensi (GPS + liveness + wajah) dijalankan dari APK Karyawan.',
-                              ),
+                      () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AttendanceMonitorPage(
+                                  profile: widget.profile),
                             ),
                           )),
+
+                  // 2b. JADWAL KERJA — pusat pilih cabang; toko atur cabangnya
+                  if (widget.profile['toko_id'] == 'PUSAT' ||
+                      widget.profile['toko_id'] == 'CABANG-PUSAT' ||
+                      widget.profile['role'] == 'owner' ||
+                      widget.profile['role'] == 'admin_pusat' ||
+                      widget.profile['role'] == 'admin_toko')
+                    _menuCard(
+                      context,
+                      'Jadwal Kerja',
+                      Icons.calendar_month_rounded,
+                      Colors.indigoAccent,
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              JadwalKerjaPage(profile: widget.profile),
+                        ),
+                      ),
+                    ),
 
 // --- 3. MENU KASIR POS (Kembalikan ke SalesPage) ---
                   _menuCard(
@@ -326,6 +357,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       },
                     ),
                 ],
+                  );
+                },
               ),
               const SizedBox(height: 30),
             ],
@@ -402,31 +435,33 @@ class _DashboardPageState extends State<DashboardPage> {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                maxLines: 1, // ✅ FIX: Mencegah text panjang merusak layout
-                overflow: TextOverflow
-                    .ellipsis, // ✅ FIX: Memotong teks menjadi titik-titik jika kepanjangan
-                style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: color.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 22),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

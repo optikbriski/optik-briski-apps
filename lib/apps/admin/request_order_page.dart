@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/logistics/request_order_service.dart';
+import 'request_order_pusat_page.dart';
+
 class RequestOrderPage extends StatefulWidget {
   final Map<String, dynamic> profile;
   const RequestOrderPage({super.key, required this.profile});
@@ -12,27 +15,43 @@ class RequestOrderPage extends StatefulWidget {
 
 class _RequestOrderPageState extends State<RequestOrderPage> {
   final supabase = Supabase.instance.client;
+  final _svc = RequestOrderService();
   List<Map<String, dynamic>> pendingRequestsList = [];
   bool isLoading = true;
 
   final TextEditingController trackingSearchCtrl = TextEditingController();
   List<Map<String, dynamic>> trackingResults = [];
 
+  bool get _isPusat {
+    final toko = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
+    return toko == 'PUSAT' || toko == 'CABANG-PUSAT';
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadTodayRequests();
+    if (_isPusat) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                RequestOrderPusatPage(profile: widget.profile),
+          ),
+        );
+      });
+    } else {
+      _loadTodayRequests();
+    }
   }
 
-  // 💡 FIX 1: Perbaikan Query Tanggal (Ganti textSearch ke Range ISO Timestamp agar SQL tidak Error)
   Future<void> _loadTodayRequests() async {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
       final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
       final todayDate = DateTime.now().toIso8601String().split('T')[0];
-
-      // Ambil batas aman awal dan akhir hari ini dalam format ISO Timestamp resmi
       final startOfDay = "${todayDate}T00:00:00.000Z";
       final endOfDay = "${todayDate}T23:59:59.999Z";
 
@@ -69,13 +88,10 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
       final List<int> idsToUpdate =
           pendingRequestsList.map((e) => e['id'] as int).toList();
 
-      await supabase.from('pending_requests').update({
-        'status': 'SENT_TO_HQ',
-        'tracking_status': 'DIKIRIM_KE_PUSAT',
-      }).inFilter('id', idsToUpdate);
+      await _svc.sendToHq(idsToUpdate);
 
       _showSnack(
-          "✓ Sukses mengirim ${idsToUpdate.length} Pesanan ke Gudang Pusat!",
+          "✓ Sukses mengirim ${idsToUpdate.length} pesanan ke Gudang Pusat!",
           Colors.green);
       _loadTodayRequests();
     } catch (e) {
@@ -87,16 +103,40 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
   Future<void> _lacakStatusTransaksi(String query) async {
     if (query.trim().isEmpty) return;
     try {
-      final res = await supabase
+      final tokoId = widget.profile['toko_id']?.toString();
+      var q = supabase
           .from('pending_requests')
           .select()
           .or('no_invoice.ilike.%$query%,nama_pelanggan.ilike.%$query%');
+      if (tokoId != null && tokoId.isNotEmpty && !_isPusat) {
+        q = q.eq('toko_id', tokoId);
+      }
+      final res = await q.order('created_at', ascending: false).limit(40);
 
       setState(() {
         trackingResults = List<Map<String, dynamic>>.from(res);
       });
     } catch (e) {
       _showSnack("Gagal melacak transaksi: $e", Colors.red);
+    }
+  }
+
+  Color _trackColor(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'APPROVED':
+        return Colors.tealAccent;
+      case 'PREPARING':
+        return Colors.orangeAccent;
+      case 'SHIPPING':
+        return Colors.blueAccent;
+      case 'SUCCESS':
+        return Colors.greenAccent;
+      case 'REJECTED':
+        return Colors.redAccent;
+      case 'SENT_TO_HQ':
+        return Colors.amberAccent;
+      default:
+        return Colors.white54;
     }
   }
 
@@ -112,24 +152,36 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isPusat) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F172A),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text("LOGISTIK & REQUEST ORDER PUSAT",
+        title: const Text("REQUEST ORDER CABANG",
             style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: Colors.white)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: _loadTodayRequests,
+            icon: const Icon(Icons.refresh, color: Colors.white),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- SEKSI 1: LIVE CRM TRACKING SYSTEM ---
             Container(
               padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
@@ -138,18 +190,25 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("LIVE CRM TRACKING SYSTEM",
+                  const Text("TRACKING REQUEST ORDER",
                       style: TextStyle(
                           color: Colors.orangeAccent,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Alur: Cabang kirim → Approval Pusat → Preparing → '
+                    'Pengiriman → Selesai (terima di cabang).',
+                    style: TextStyle(
+                        color: Colors.white38, fontSize: 11, height: 1.3),
+                  ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: trackingSearchCtrl,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: "Masukkan Nomor Invoice / Nama Customer...",
+                      hintText: "Nomor Invoice / Nama Customer...",
                       hintStyle:
                           const TextStyle(color: Colors.grey, fontSize: 12),
                       prefixIcon: const Icon(Icons.track_changes,
@@ -177,30 +236,44 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                       itemCount: trackingResults.length,
                       itemBuilder: (context, idx) {
                         final track = trackingResults[idx];
+                        final st = track['status']?.toString() ?? '';
+                        final color = _trackColor(st);
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
                               "${track['nama_produk']} (${track['qty_request']} pcs)",
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold)),
                           subtitle: Text(
-                              "Invoice: ${track['no_invoice']} | Pasien: ${track['nama_pelanggan']}",
+                              "Invoice: ${track['no_invoice']} | "
+                              "${track['nama_pelanggan']}"
+                              "${track['stock_move_resi'] != null ? ' | Resi ${track['stock_move_resi']}' : ''}",
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   color: Colors.grey, fontSize: 11)),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: Colors.blueAccent.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20)),
-                            child: Text(
-                              track['tracking_status'] ?? 'DIPROSES',
-                              style: const TextStyle(
-                                  color: Colors.blueAccent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold),
+                          trailing: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: color.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20)),
+                              child: Text(
+                                RequestOrderService.labelStatus(st),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: color,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         );
@@ -211,27 +284,23 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               ),
             ),
             const SizedBox(height: 20),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Expanded(
-                  child: Text(
-                    "ANTREAN REQUEST HARI INI",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold),
-                  ),
+                const Text(
+                  "ANTREAN REQUEST HARI INI",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 10),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
-                    minimumSize: const Size(150, 40),
-                    maximumSize: const Size(180, 40),
                   ),
                   icon: const Icon(Icons.send_sharp,
                       size: 14, color: Colors.white),
@@ -247,7 +316,6 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               ],
             ),
             const SizedBox(height: 12),
-
             Expanded(
               child: isLoading
                   ? const Center(
@@ -279,6 +347,8 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                                       size: 18),
                                 ),
                                 title: Text(req['nama_produk'] ?? 'Produk',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 13,

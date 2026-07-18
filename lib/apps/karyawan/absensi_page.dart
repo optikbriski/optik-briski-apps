@@ -22,8 +22,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
   Map<String, dynamic>? _openShift;
   String? _error;
 
-  bool get _faceEnrolled =>
-      _karyawan != null && _karyawan!['face_template'] != null;
+  bool get _faceEnrolled => _service.isFaceEnrolled(_karyawan);
 
   @override
   void initState() {
@@ -186,6 +185,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       children: [
                         Text(
                           _karyawan?['nama']?.toString() ?? '-',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -195,23 +196,32 @@ class _AbsensiPageState extends State<AbsensiPage> {
                         const SizedBox(height: 6),
                         Text(
                           '${_karyawan?['jabatan'] ?? '-'} • ${_karyawan?['toko_id'] ?? '-'}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.white70),
                         ),
                         const SizedBox(height: 12),
-                        _statusChip(
-                          _faceEnrolled
-                              ? 'Wajah terdaftar'
-                              : 'Wajah belum didaftarkan',
-                          _faceEnrolled ? Colors.greenAccent : Colors.orange,
-                        ),
-                        const SizedBox(height: 8),
-                        _statusChip(
-                          _openShift == null
-                              ? 'Belum absen masuk'
-                              : 'Shift aktif sejak ${df.format(DateTime.parse(_openShift!['masuk_at']))}',
-                          _openShift == null
-                              ? Colors.blueAccent
-                              : Colors.tealAccent,
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _statusChip(
+                              _faceEnrolled
+                                  ? 'Wajah terdaftar'
+                                  : 'Wajah belum didaftarkan',
+                              _faceEnrolled
+                                  ? Colors.greenAccent
+                                  : Colors.orange,
+                            ),
+                            _statusChip(
+                              _openShift == null
+                                  ? 'Belum absen masuk'
+                                  : 'Shift aktif sejak ${df.format(DateTime.parse(_openShift!['masuk_at']))}',
+                              _openShift == null
+                                  ? Colors.blueAccent
+                                  : Colors.tealAccent,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -220,9 +230,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   _card(
                     child: const Text(
                       'Syarat absen:\n'
-                      '1. Device berada di radius toko\n'
+                      '1. Device berada di radius toko (GPS)\n'
                       '2. Liveness (senyum)\n'
-                      '3. Wajah cocok dengan data terdaftar',
+                      '3. Wajah cocok dengan data terdaftar (lokal)',
                       style: TextStyle(color: Colors.white70, height: 1.5),
                     ),
                   ),

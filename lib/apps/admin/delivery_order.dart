@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap foto bukti surat jalan pengiriman
 import 'package:easy_localization/easy_localization.dart';
-import 'package:qr_flutter/qr_flutter.dart'; // Siapkan import ini untuk pratinjau resi di part akhir nanti
+import 'package:qr_flutter/qr_flutter.dart';
+import '../../shared/responsive.dart'; // Siapkan import ini untuk pratinjau resi di part akhir nanti
 
 // Shortcut pintas client Supabase khusus file DO ini
 final supabase = Supabase.instance.client;
@@ -350,12 +351,16 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: [
+        title: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          children: [
           const Icon(Icons.local_shipping, color: Colors.blueAccent),
-          const SizedBox(width: 10),
           Text("do_kirim_langsung".tr(),
               style: const TextStyle(
                   color: Colors.white,
@@ -381,6 +386,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                     color: Colors.white, fontWeight: FontWeight.bold)),
           )
         ],
+      ),
       ),
     );
   }
@@ -539,19 +545,29 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                 ),
                 const SizedBox(height: 15),
 
-                // Horizontal Chips Filter Kategori Item
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildCategoryChip('Frame', Colors.blueAccent),
-                      const SizedBox(width: 10),
-                      _buildCategoryChip('Lensa', Colors.orangeAccent),
-                      const SizedBox(width: 10),
-                      _buildCategoryChip('Lainnya', Colors.green),
-                    ],
-                  ),
-                )
+                // Filter kategori — wrap di HP, scroll di layar lebar
+                R.isNarrow(context)
+                    ? Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: [
+                          _buildCategoryChip('Frame', Colors.blueAccent),
+                          _buildCategoryChip('Lensa', Colors.orangeAccent),
+                          _buildCategoryChip('Lainnya', Colors.green),
+                        ],
+                      )
+                    : SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildCategoryChip('Frame', Colors.blueAccent),
+                            const SizedBox(width: 10),
+                            _buildCategoryChip('Lensa', Colors.orangeAccent),
+                            const SizedBox(width: 10),
+                            _buildCategoryChip('Lainnya', Colors.green),
+                          ],
+                        ),
+                      )
               ],
             ),
           ),
@@ -835,57 +851,115 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                     offset: const Offset(0, -5))
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orangeAccent,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12))),
-                    onPressed: (isProcessing || selectedItems.isEmpty)
-                        ? null
-                        : saveDraft,
-                    child: isProcessing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.black, strokeWidth: 2))
-                        : Text("do_btn_simpan".tr(),
-                            style: const TextStyle(
-                                color: Colors.black,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12)),
+            child: R.isNarrow(context)
+                ? Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orangeAccent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12))),
+                          onPressed: (isProcessing || selectedItems.isEmpty)
+                              ? null
+                              : saveDraft,
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.black, strokeWidth: 2))
+                              : Text("do_btn_simpan".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12))),
+                          onPressed: (isProcessing || selectedItems.isEmpty)
+                              ? null
+                              : confirmAndSend,
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : Text("do_btn_kirim".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orangeAccent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12))),
+                          onPressed: (isProcessing || selectedItems.isEmpty)
+                              ? null
+                              : saveDraft,
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.black, strokeWidth: 2))
+                              : Text("do_btn_simpan".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12))),
+                          onPressed: (isProcessing || selectedItems.isEmpty)
+                              ? null
+                              : confirmAndSend,
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : Text("do_btn_kirim".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12))),
-                    onPressed: (isProcessing || selectedItems.isEmpty)
-                        ? null
-                        : confirmAndSend,
-                    child: isProcessing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : Text("do_btn_kirim".tr(),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12)),
-                  ),
-                ),
-              ],
-            ),
           )
         ],
       ),
@@ -1259,7 +1333,9 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
   void _confirmRemove(int index) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("draf_hapus_title".tr(),
@@ -1288,6 +1364,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           )
         ],
       ),
+      ),
     );
   }
 
@@ -1295,7 +1372,9 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
   void _showCancelDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("draf_batal_title".tr(),
@@ -1351,6 +1430,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           )
         ],
       ),
+      ),
     );
   }
 
@@ -1401,7 +1481,10 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        preferWidth: 360,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text("draf_siap_kirim".tr(),
@@ -1461,6 +1544,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
             ),
           )
         ],
+      ),
       ),
     );
   }
@@ -1728,48 +1812,97 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                     offset: const Offset(0, -5))
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: isProcessing ? null : _showCancelDialog,
-                    style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: Colors.redAccent, width: 1.5),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: Text("draf_btn_batalkan".tr(),
-                        style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12)),
+            child: R.isNarrow(context)
+                ? Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: isProcessing ? null : _showCancelDialog,
+                          style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                  color: Colors.redAccent, width: 1.5),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14)),
+                          child: Text("draf_btn_batalkan".tr(),
+                              style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: isProcessing ? null : sendDraft,
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14)),
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : Text("draf_btn_konfirmasi_kirim".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isProcessing ? null : _showCancelDialog,
+                          style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                  color: Colors.redAccent, width: 1.5),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14)),
+                          child: Text("draf_btn_batalkan".tr(),
+                              style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: isProcessing ? null : sendDraft,
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14)),
+                          child: isProcessing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : Text("draf_btn_konfirmasi_kirim".tr(),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: isProcessing ? null : sendDraft,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: isProcessing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : Text("draf_btn_konfirmasi_kirim".tr(),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12)),
-                  ),
-                ),
-              ],
-            ),
           )
         ],
       ),

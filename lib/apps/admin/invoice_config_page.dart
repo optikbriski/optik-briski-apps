@@ -5,6 +5,7 @@ import 'dart:typed_data'; // Untuk konversi data binary Uint8List gambar hasil c
 import 'package:image_picker/image_picker.dart'; // Driver mengambil berkas dari galeri/file explorer
 import 'package:crop_your_image/crop_your_image.dart'; // Engine pemotong citra logo secara real-time
 import 'dart:convert';
+import '../../shared/responsive.dart';
 
 class InvoiceConfigPage extends StatefulWidget {
   final Map<String, dynamic>
@@ -325,7 +326,10 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     final Uint8List? croppedData = await showDialog<Uint8List?>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        preferWidth: 450,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text("✂️ Crop Logo Identitas Cabang",
             style: TextStyle(
@@ -333,7 +337,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                 fontSize: 14,
                 fontWeight: FontWeight.bold)),
         content: SizedBox(
-          width: 450,
+          width: double.infinity,
           height: 400,
           child: Crop(
             image: imageBytes,
@@ -360,6 +364,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
             onPressed: () => cropController.crop(),
           )
         ],
+      ),
       ),
     );
 
@@ -417,11 +422,13 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
-      body: Row(
-        children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 720;
+          final panels = <Widget>[
           // PANEL KONTROL KIRI
           Expanded(
-            flex: 4,
+            flex: narrow ? 1 : 4,
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(25),
               child: Column(
@@ -586,21 +593,28 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
               ),
             ),
           ),
-          const VerticalDivider(color: Colors.white10, width: 1),
+          narrow
+              ? const Divider(color: Colors.white10, height: 1)
+              : const VerticalDivider(color: Colors.white10, width: 1),
 
           // ===================================================================
           // 📄 PANEL LIVE PREVIEW KANAN: 100% SECURE ZERO HARDCODED SYSTEM
           // ===================================================================
           Expanded(
-            flex: 3,
+            flex: narrow ? 1 : 3,
             child: Container(
               color: const Color(0xFF0F172A),
               padding: const EdgeInsets.all(20),
               child: Center(
-                child: SingleChildScrollView(
+                child: LayoutBuilder(
+                  builder: (context, previewConstraints) {
+                    final previewW =
+                        (previewConstraints.maxWidth - 8).clamp(280.0, 420.0);
+                    final previewH = previewW * 594 / 420;
+                    return SingleChildScrollView(
                   child: Container(
-                    width: 420,
-                    height: 594,
+                    width: previewW,
+                    height: previewH,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 26, vertical: 20),
                     decoration: BoxDecoration(
@@ -1221,11 +1235,17 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                             ],
                           ),
                   ),
+                );
+                  },
                 ),
               ),
             ),
           ),
-        ],
+          ];
+          return narrow
+              ? Column(children: panels)
+              : Row(children: panels);
+        },
       ),
     );
   }

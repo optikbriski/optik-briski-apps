@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/whatsapp_launcher.dart';
 
 class BantuanPage extends StatelessWidget {
   const BantuanPage({super.key});
+
+  Future<void> _openWa(BuildContext context) async {
+    try {
+      await openAdminWhatsApp(
+        message: 'Halo Admin Optik B. Riski, saya butuh bantuan dari APK Karyawan.',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,14 +114,7 @@ class BantuanPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("bantuan_msg_wa".tr()),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                },
+                onPressed: () => _openWa(context),
                 icon: const Icon(Icons.chat_rounded, color: Colors.white),
                 label: Text(
                   "bantuan_btn_wa".tr(),

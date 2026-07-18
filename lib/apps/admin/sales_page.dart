@@ -18,6 +18,8 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart'; // Pastikan import ini ada
+import '../../shared/pos_print_service.dart';
+import '../../shared/responsive.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -1028,7 +1030,10 @@ class _SalesPageState extends State<SalesPage> {
               });
             }
 
-            return AlertDialog(
+            return R.constrainedDialog(
+              context: context,
+              preferWidth: 360,
+              child: AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
@@ -1038,8 +1043,8 @@ class _SalesPageState extends State<SalesPage> {
                       fontSize: 14,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
-                width: 360,
-                height: 450,
+                width: double.infinity,
+                height: (MediaQuery.sizeOf(context).height * 0.55).clamp(320.0, 450.0),
                 child: Column(
                   children: [
                     TextField(
@@ -1150,6 +1155,7 @@ class _SalesPageState extends State<SalesPage> {
                   ],
                 ),
               ),
+            ),
             );
           },
         );
@@ -1181,7 +1187,10 @@ class _SalesPageState extends State<SalesPage> {
                     (m) => m.toLowerCase().contains(searchQuery.toLowerCase()))
                 .toList();
 
-            return AlertDialog(
+            return R.constrainedDialog(
+              context: context,
+              preferWidth: 300,
+              child: AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
@@ -1192,8 +1201,8 @@ class _SalesPageState extends State<SalesPage> {
                       fontSize: 14,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
-                width: 300,
-                height: 400,
+                width: double.infinity,
+                height: (MediaQuery.sizeOf(context).height * 0.5).clamp(280.0, 400.0),
                 child: Column(
                   children: [
                     TextField(
@@ -1238,6 +1247,7 @@ class _SalesPageState extends State<SalesPage> {
                   ],
                 ),
               ),
+            ),
             );
           },
         );
@@ -1285,7 +1295,10 @@ class _SalesPageState extends State<SalesPage> {
                   .addPostFrameCallback((_) => cariDataLainnya(initLoad: true));
             }
 
-            return AlertDialog(
+            return R.constrainedDialog(
+              context: context,
+              preferWidth: 360,
+              child: AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
@@ -1295,8 +1308,8 @@ class _SalesPageState extends State<SalesPage> {
                       fontSize: 14,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
-                width: 360,
-                height: 450,
+                width: double.infinity,
+                height: (MediaQuery.sizeOf(context).height * 0.55).clamp(320.0, 450.0),
                 child: Column(
                   children: [
                     TextField(
@@ -1400,6 +1413,7 @@ class _SalesPageState extends State<SalesPage> {
                   ],
                 ),
               ),
+            ),
             );
           },
         );
@@ -1597,7 +1611,10 @@ class _SalesPageState extends State<SalesPage> {
             int sisaTagihan =
                 paymentStatus == "DP" ? (_totalAkhir - uangMukaDP) : 0;
 
-            return AlertDialog(
+            return R.constrainedDialog(
+              context: context,
+              preferWidth: 390,
+              child: AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
@@ -1607,7 +1624,7 @@ class _SalesPageState extends State<SalesPage> {
                       fontSize: 14,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
-                width: 390,
+                width: double.infinity,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1963,7 +1980,9 @@ class _SalesPageState extends State<SalesPage> {
                                 decoration: BoxDecoration(
                                     border: Border.all(color: Colors.black26),
                                     borderRadius: BorderRadius.circular(4)),
-                                child: Table(
+                                child: HScroll(
+                                  minWidth: 480,
+                                  child: Table(
                                   border:
                                       TableBorder.all(color: Colors.black12),
                                   columnWidths: const {
@@ -2046,6 +2065,7 @@ class _SalesPageState extends State<SalesPage> {
                                           .toList(),
                                     ),
                                   ],
+                                ),
                                 ),
                               ),
                               Padding(
@@ -2235,6 +2255,7 @@ class _SalesPageState extends State<SalesPage> {
                       style: TextStyle(fontWeight: FontWeight.bold)),
                 )
               ],
+            ),
             );
           },
         );
@@ -3202,11 +3223,76 @@ class _SalesPageState extends State<SalesPage> {
               fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2),
         ),
         actions: [
+          if (R.isNarrow(context))
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white70),
+              color: const Color(0xFF1E293B),
+              onSelected: (action) {
+                switch (action) {
+                  case 'close':
+                    _prosesCloseStore();
+                    break;
+                  case 'lock':
+                    _resetForm();
+                    setState(() {
+                      isPosUnlocked = false;
+                      activeCashier = null;
+                      namaKasir = "";
+                      kasirCtrl.clear();
+                      isScanningLocal = true;
+                    });
+                    _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
+                        Colors.orange);
+                    break;
+                  case 'clear':
+                    _resetForm();
+                    _showSnack(
+                        "Keranjang transaksi berhasil dikosongkan", Colors.red);
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'close',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.power_settings_new_rounded,
+                          color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Text("pos_trip_close".tr()),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'lock',
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded,
+                          color: Colors.orangeAccent, size: 18),
+                      SizedBox(width: 8),
+                      Text('Lock & Switch Cashier'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'clear',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep,
+                          color: Colors.redAccent, size: 18),
+                      SizedBox(width: 8),
+                      Text('Kosongkan Keranjang'),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // 🏢 1. TOMBOL TUTUP TOKO / CLOSING SHIFT (Khusus ditekan malam hari pas toko mau pulang)
                 IconButton(
                   icon: const Icon(Icons.power_settings_new_rounded,
                       color: Colors.redAccent),
@@ -3215,7 +3301,6 @@ class _SalesPageState extends State<SalesPage> {
                 ),
                 const SizedBox(width: 8),
 
-                // 🔑 2. TOMBOL BARU: KUNCI & GANTI KASIR (Kembali ke menu scan barcode kasir tanpa tutup toko)
                 IconButton(
                   icon: const Icon(Icons.lock_outline_rounded,
                       color: Colors.orangeAccent),
@@ -3223,12 +3308,11 @@ class _SalesPageState extends State<SalesPage> {
                   onPressed: () {
                     _resetForm();
                     setState(() {
-                      isPosUnlocked = false; // Mengunci layar kasir
-                      activeCashier = null; // Menghapus sesi kasir aktif
+                      isPosUnlocked = false;
+                      activeCashier = null;
                       namaKasir = "";
                       kasirCtrl.clear();
-                      isScanningLocal =
-                          true; // 🎯 FIX CRITICAL: Kamera scanner diaktifkan lagi biar ga beku!
+                      isScanningLocal = true;
                     });
                     _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
                         Colors.orange);
@@ -3257,7 +3341,6 @@ class _SalesPageState extends State<SalesPage> {
                       color: Colors.greenAccent),
                 ),
 
-                // 🛒 3. TOMBOL SAPU: Hanya bersihkan keranjang belanja, kasir gak perlu logout/terkunci
                 IconButton(
                   icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
                   tooltip: "pos_ttip_batal".tr(),
@@ -4947,13 +5030,19 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     }
   }
 
-  void _simulasikanPrintThermal() async {
+  Future<void> _showFlexiblePrint(
+      Map<String, dynamic> sale, List<dynamic> items) async {
     setState(() => isPrinting = true);
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() => isPrinting = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("pos_simulasi_thermal_sukses".tr()),
-        backgroundColor: Colors.green));
+    try {
+      await PosPrintService.showPrintOptions(
+        context,
+        sale: sale,
+        items: items,
+        formatRupiah: (n) => formatRupiah(n.round()),
+      );
+    } finally {
+      if (mounted) setState(() => isPrinting = false);
+    }
   }
 
   // 🎯 MESIN PARSER PINTAR: Membongkar string database menjadi matriks tabel medis riil hulu ke hilir
@@ -5828,7 +5917,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                         decoration: BoxDecoration(
                             border: Border.all(color: Colors.black26),
                             borderRadius: BorderRadius.circular(4)),
-                        child: Table(
+                        child: HScroll(
+                          minWidth: 480,
+                          child: Table(
                           border: TableBorder.all(color: Colors.black12),
                           columnWidths: const {
                             0: FlexColumnWidth(1.8),
@@ -5903,6 +5994,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                   .toList(),
                             ),
                           ],
+                        ),
                         ),
                       ),
                       Padding(
@@ -6087,7 +6179,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal),
-                        onPressed: isPrinting ? null : _simulasikanPrintThermal,
+                        onPressed: isPrinting
+                            ? null
+                            : () => _showFlexiblePrint(sale, items),
                         icon: const Icon(Icons.print, size: 16),
                         label: Text("nota_btn_cetak".tr(),
                             style: const TextStyle(fontSize: 11)),
@@ -6111,7 +6205,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               ),
               const SizedBox(height: 10),
               SizedBox(
-                width: 420,
+                width: R.dialogMaxWidth(context, 420),
                 height: 45,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(

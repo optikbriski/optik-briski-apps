@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'coa_approval_page.dart';
+import '../../shared/responsive.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -408,7 +409,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(builder: (context, setInnerState) {
-          return AlertDialog(
+          return R.constrainedDialog(
+            context: context,
+            preferWidth: 420,
+            child: AlertDialog(
             backgroundColor: const Color(0xFF1E293B),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -792,6 +796,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       child: const Text("SIMPAN JURNAL"),
                     )
                   ],
+          ),
           );
         });
       },
@@ -933,23 +938,26 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         // 📦 PANEL OVERVIEW 5 KARTU HORIZONTAL SEJAJAR (CORE TIER ATAS CORPO-STYLE)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-          child: Row(
-            children: [
-              _buildTopOverviewCard("↓ Kas Masuk POS",
-                  _formatRupiah(totalPemasukanPOS), Colors.greenAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("↑ Pengeluaran",
-                  _formatRupiah(totalPengeluaran), Colors.redAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("👓 Jualan Riil",
-                  _formatRupiah(totalPenjualanRiilCabang), Colors.blueAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("⏳ Belum Bayar",
-                  _formatRupiah(totalSisaTagihanCabang), Colors.orangeAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard(
-                  "🏛 Saldo Toko", _formatRupiah(saldoTokoAkhir), Colors.white),
-            ],
+          child: HScroll(
+            minWidth: 680,
+            child: Row(
+              children: [
+                _buildTopOverviewCard("↓ Kas Masuk POS",
+                    _formatRupiah(totalPemasukanPOS), Colors.greenAccent),
+                const SizedBox(width: 4),
+                _buildTopOverviewCard("↑ Pengeluaran",
+                    _formatRupiah(totalPengeluaran), Colors.redAccent),
+                const SizedBox(width: 4),
+                _buildTopOverviewCard("👓 Jualan Riil",
+                    _formatRupiah(totalPenjualanRiilCabang), Colors.blueAccent),
+                const SizedBox(width: 4),
+                _buildTopOverviewCard("⏳ Belum Bayar",
+                    _formatRupiah(totalSisaTagihanCabang), Colors.orangeAccent),
+                const SizedBox(width: 4),
+                _buildTopOverviewCard("🏛 Saldo Toko",
+                    _formatRupiah(saldoTokoAkhir), Colors.white),
+              ],
+            ),
           ),
         ),
 
@@ -1152,7 +1160,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               }
 
               return ListView.builder(
-                padding: const EdgeInsets.all(15).copyWith(top: 5),
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 88),
                 itemCount: displayedDates.length,
                 itemBuilder: (context, index) {
                   String tglKey = displayedDates[index];
@@ -1343,7 +1351,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.fromLTRB(15, 15, 15, 88),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1502,7 +1510,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       border: Border.all(color: Colors.white10, width: 0.5)),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Table(
+                    child: HScroll(
+                      minWidth: 640,
+                      child: Table(
                       border:
                           TableBorder.all(color: Colors.white10, width: 0.5),
                       columnWidths: const {
@@ -1642,6 +1652,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       ],
                     ),
                   ),
+                ),
                 ),
           const SizedBox(height: 20),
 

@@ -838,7 +838,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                     DropdownButtonFormField<String>(
                       value: jabatan,
                       dropdownColor: Colors.white,
-                      items: ["Kasir", "RO", "Sales / SPG"]
+                      items: const [
+                        "Kasir",
+                        "RO",
+                        "Sales / SPG",
+                        "Kepala Toko",
+                        "Admin",
+                        "Lab / Teknisi",
+                      ]
                           .map((e) => DropdownMenuItem(
                               value: e,
                               child: Text(e,

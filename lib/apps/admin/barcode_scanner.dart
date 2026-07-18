@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../shared/responsive.dart';
 import 'sales_page.dart';
 
 // ============================================================================
@@ -90,21 +91,33 @@ class _OptikBRiskiScannerState extends State<OptikBRiskiScanner> {
 
           // PANEL TEKS INSTRUKSI FLUIDA BAWAH
           Positioned(
-            bottom: 60,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Text(
-                "scan_instruksi"
-                    .tr(), // Sesuai dengan repositori lokalisasi JSON multi-bahasa
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: SafeArea(
+              top: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: R.widthOf(context) - 48),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Text(
+                      "scan_instruksi".tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -165,7 +178,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       BuildContext context, Map<String, dynamic> trx) async {
     showDialog(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (c) => R.constrainedDialog(
+        context: c,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Row(
@@ -173,11 +188,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
             const Icon(Icons.admin_panel_settings,
                 color: Colors.orangeAccent, size: 22),
             const SizedBox(width: 10),
-            Text("Detail Audit Pusat",
-                style: TextStyle(
-                    color: Colors.orangeAccent.shade200,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text("Detail Audit Pusat",
+                  style: TextStyle(
+                      color: Colors.orangeAccent.shade200,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -229,6 +246,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                       fontWeight: FontWeight.bold,
                       fontSize: 12)))
         ],
+      ),
       ),
     );
   }
@@ -325,10 +343,10 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                                     fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        trailing: Wrap(
+                          spacing: 0,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            // 1. TOMBOL STRUK / RE-PRINT NOTA RESMI (REDIRECT TO INVOICE DETAIL)
                             IconButton(
                               icon: const Icon(Icons.receipt_long,
                                   color: Colors.blueAccent, size: 22),
@@ -343,7 +361,6 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                                 );
                               },
                             ),
-                            // 2. TOMBOL MONITORING AUDIT INTERNAL (HANYA MUNCUL DI LEVEL ID PUSAT)
                             if (widget.profile?['toko_id'] == 'PUSAT')
                               IconButton(
                                 icon: const Icon(Icons.admin_panel_settings,

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_cropper/image_cropper.dart';
+import '../../shared/whatsapp_launcher.dart';
 
 class DetailDataPribadiPage extends StatefulWidget {
   const DetailDataPribadiPage({super.key});
@@ -271,11 +272,21 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                   elevation: 5,
                   shadowColor: Colors.black26,
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text("profil_msg_wa_admin".tr())), // TRANSLATE
-                  );
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await openAdminWhatsApp(
+                      message:
+                          'Halo Admin, saya ingin mengajukan perubahan data pribadi.',
+                    );
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('$e'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
                 },
                 icon: const Icon(Icons.edit_document,
                     color: Colors.white, size: 20),

@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, prefer_const_constructors
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../shared/responsive.dart';
 
 class CoaApprovalPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -113,8 +114,10 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
       builder: (ctx) => Dialog(
         backgroundColor: Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          width: 500, // Lebar maksimal pop-up
+        child: R.constrainedDialog(
+          context: context,
+          preferWidth: 500,
+          child: Padding(
           padding: EdgeInsets.all(24),
           child: SingleChildScrollView(
             child: Column(
@@ -125,11 +128,13 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("Detail Transaksi",
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text("Detail Transaksi",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold)),
+                    ),
                     IconButton(
                         icon: Icon(Icons.close, color: Colors.white38),
                         onPressed: () => Navigator.pop(ctx))
@@ -216,6 +221,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
               ],
             ),
           ),
+          ),
         ),
       ),
     );
@@ -229,11 +235,17 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
         children: [
           Text("$label:",
               style: const TextStyle(color: Colors.white38, fontSize: 11)),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold)),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'request_order_page.dart';
+import '../../shared/responsive.dart';
 
 // ====================================================================
 // PRODUCT MASTER (REVISI FINAL: +BROADCAST STOCK ALOCATION MULTI-TENANT)
@@ -440,8 +441,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       builder: (ctx) => Dialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          width: 380,
+        child: R.constrainedDialog(
+          context: ctx,
+          preferWidth: 380,
+          child: Container(
           padding: const EdgeInsets.all(25),
           child: SingleChildScrollView(
             child: Column(
@@ -597,6 +600,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
@@ -684,14 +688,17 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             };
             bool hasSelection = selectedCabangMap.values.contains(true);
 
-            return Dialog(
+            return R.constrainedDialog(
+              context: context,
+              preferWidth: 500,
+              child: Dialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
-              // 🎯 KUNCI UKURAN: Lebar dan Tinggi Maksimal dikunci supaya Mouse Tracker tidak bingung
-              child: Container(
-                width: 500,
-                height: 600,
+              child: SizedBox(
+                width: double.infinity,
+                height: (MediaQuery.sizeOf(context).height * 0.75).clamp(400.0, 600.0),
+                child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -828,7 +835,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     ],
                   ],
                 ),
+                ),
               ),
+            ),
             );
           },
         );
@@ -841,7 +850,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       List<String> cabangs, int qty, VoidCallback onConfirm) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        preferWidth: 420,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: const Row(
@@ -875,6 +887,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     color: Colors.white, fontWeight: FontWeight.bold)),
           )
         ],
+      ),
       ),
     );
   }
@@ -1409,7 +1422,49 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                       fontSize: 12)),
                             ],
                           ),
-                          trailing: Row(
+                          trailing: R.isCompact(context)
+                              ? PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert,
+                                      color: Colors.white54, size: 20),
+                                  color: const Color(0xFF1E293B),
+                                  onSelected: (action) {
+                                    if (action == 'detail') {
+                                      showProductDetail(item);
+                                    } else if (action == 'order') {
+                                      _bukaRequestOrder(item);
+                                    }
+                                  },
+                                  itemBuilder: (_) => [
+                                    PopupMenuItem(
+                                      value: 'detail',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.qr_code_2_rounded,
+                                              color: Colors.blueAccent,
+                                              size: 18),
+                                          const SizedBox(width: 8),
+                                          Text('$labelStok$displayStock Pcs',
+                                              style: const TextStyle(
+                                                  fontSize: 12)),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!isCanEdit)
+                                      const PopupMenuItem(
+                                        value: 'order',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.shopping_basket_rounded,
+                                                color: Colors.orangeAccent,
+                                                size: 18),
+                                            SizedBox(width: 8),
+                                            Text('Minta Stok'),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                )
+                              : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
@@ -1420,42 +1475,30 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                           Colors.orangeAccent.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(8)),
                                   child: Text(
-                                      "$labelStok$displayStock Pcs", // <-- Menampilkan stok asli terfilter
+                                      "$labelStok$displayStock Pcs",
                                       style: const TextStyle(
                                           color: Colors.orangeAccent,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold))),
-                              const SizedBox(width: 5),
                               IconButton(
+                                  iconSize: 20,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 36, minHeight: 36),
+                                  padding: EdgeInsets.zero,
                                   icon: const Icon(Icons.qr_code_2_rounded,
-                                      color: Colors.blueAccent, size: 22),
+                                      color: Colors.blueAccent, size: 20),
                                   onPressed: () => showProductDetail(item)),
-                              if (!isCanEdit) ...[
-                                const SizedBox(width: 5),
-                                SizedBox(
-                                  width: 100,
-                                  height: 32,
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orangeAccent,
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(8)),
-                                    ),
-                                    onPressed: () => _bukaRequestOrder(item),
-                                    icon: const Icon(
-                                        Icons.shopping_basket_rounded,
-                                        color: Colors.black,
-                                        size: 14),
-                                    label: const Text("Minta Stok",
-                                        style: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold)),
-                                  ),
+                              if (!isCanEdit)
+                                IconButton(
+                                  iconSize: 20,
+                                  constraints: const BoxConstraints(
+                                      minWidth: 36, minHeight: 36),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.shopping_basket_rounded,
+                                      color: Colors.orangeAccent, size: 20),
+                                  tooltip: "Minta Stok",
+                                  onPressed: () => _bukaRequestOrder(item),
                                 ),
-                              ],
                             ],
                           ),
                           // 🎯 REVISI KLIK: Jika dia admin pusat buka form edit, jika dia cabang buka pop-up detail produk!

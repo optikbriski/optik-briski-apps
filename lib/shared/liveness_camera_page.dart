@@ -10,6 +10,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import 'attendance/face_template.dart';
 import 'attendance/liveness_result.dart';
+import 'responsive.dart';
 
 class LivenessCameraPage extends StatefulWidget {
   const LivenessCameraPage({super.key});
@@ -412,75 +413,88 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
             },
           ),
         ),
-        body: Column(
-          children: [
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: _statusColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _statusColor, width: 1.5),
-              ),
-              child: Text(
-                _livenessStatus,
-                style: TextStyle(
-                  color: _statusColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ),
-            const SizedBox(height: 40),
-            Expanded(
-              child: Center(
+        body: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
-                  width: 300,
-                  height: 400,
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(200),
-                    border: Border.all(color: _statusColor, width: 4.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _statusColor.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      )
-                    ],
+                    color: _statusColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _statusColor, width: 1.5),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(200),
-                    child: OverflowBox(
-                      alignment: Alignment.center,
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: viewWidth,
-                          height: viewHeight,
-                          child: CameraPreview(_cameraController!),
-                        ),
-                      ),
+                  child: Text(
+                    _livenessStatus,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _statusColor,
+                      fontSize: R.isNarrow(context) ? 14 : 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 40),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                "liveness_instruksi".tr(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  height: 1.5,
+              const SizedBox(height: 24),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final maxW = constraints.maxWidth - 48;
+                    final frameW = maxW.clamp(180.0, 300.0);
+                    final frameH = frameW * 4 / 3;
+                    return Center(
+                      child: Container(
+                        width: frameW,
+                        height: frameH,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(frameW / 2),
+                          border: Border.all(color: _statusColor, width: 4.0),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _statusColor.withOpacity(0.3),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            )
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(frameW / 2),
+                          child: OverflowBox(
+                            alignment: Alignment.center,
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: viewWidth,
+                                height: viewHeight,
+                                child: CameraPreview(_cameraController!),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
-            ),
-            const SizedBox(height: 60),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: Text(
+                  "liveness_instruksi".tr(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'responsive.dart';
 
 class ScannerPenerimaanPage extends StatefulWidget {
   final String cabangKaryawan;
@@ -67,10 +68,14 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => R.constrainedDialog(
+        context: dialogContext,
+        preferWidth: 380,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
+        content: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: warna, size: 80),
@@ -92,23 +97,16 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))),
                 onPressed: () {
-                  // 1. Tutup dialognya terlebih dahulu memakai dialogContext
                   Navigator.pop(dialogContext);
-
-                  // 2. Cek apakah operasi sukses atau gagal
                   if (sukses) {
-                    // Pelindung lifecycle sebelum menutup halaman utama
                     if (!mounted) return;
-                    // Jika sukses, tutup halaman dan bawa pulang datanya ke Stock Move Report
                     Navigator.pop(context, rawQRData.trim());
                   } else {
-                    // JIKA GAGAL: Hidupkan kembali kameranya agar bisa scan ulang
                     setState(() => _isScanning = true);
                     cameraController.start();
                   }
                 },
                 child: Text(
-                  // ✅ FIX: Mengubah "Coba Lagi" menjadi kode lokalisasi bahasa agar konsisten
                   sukses ? "scan_btn_tutup".tr() : "scan_btn_coba_lagi".tr(),
                   style: const TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold),
@@ -117,6 +115,8 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
             )
           ],
         ),
+        ),
+      ),
       ),
     );
   }
@@ -187,15 +187,29 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
           ),
           // Teks Instruksi di Bawah
           Positioned(
-            bottom: 80,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text(
-                "scan instruksi".tr(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: SafeArea(
+              top: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: R.widthOf(context) - 48),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      "scan instruksi".tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                ),
               ),
             ),
           )

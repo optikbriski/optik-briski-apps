@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'liveness_camera_page.dart';
+import 'responsive.dart';
 
 class AdminApprovalPage extends StatefulWidget {
   final String roleAdmin;
@@ -164,8 +165,12 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 950),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: R.dialogMaxWidth(context, 950),
+            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          ),
+          child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B),
@@ -177,21 +182,18 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.badge_rounded,
-                            color: Colors.blueAccent),
-                        const SizedBox(width: 10),
-                        Text(
-                          "appr_detail_title".tr(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                    const Icon(Icons.badge_rounded,
+                        color: Colors.blueAccent),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "appr_detail_title".tr(),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded,
@@ -211,18 +213,73 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                           ? CrossAxisAlignment.center
                           : CrossAxisAlignment.start,
                       children: [
-                        // KIRI (atau ATAS jika mobile): ID CARD VIRTUAL
                         _buildVirtualIDCard(data),
                         SizedBox(
                             width: isMobile ? 0 : 40,
                             height: isMobile ? 30 : 0),
-                        // KANAN (atau BAWAH jika mobile): GRID DATA KARYAWAN RESPONSIF
-                        Expanded(
-                          flex: isMobile ? 0 : 1,
+                        Flexible(
+                          fit: isMobile ? FlexFit.loose : FlexFit.tight,
                           child: SizedBox(
                             width: isMobile ? double.infinity : 550,
                             child: Column(
                               children: [
+                                if (isMobile) ...[
+                                  _buildDataSection("hr_data_pribadi".tr(), [
+                                    _buildInfoRow("profil_label_nik".tr(),
+                                        data['nik'] ?? '-'),
+                                    _buildInfoRow("appr_email".tr(),
+                                        data['email'] ?? '-'),
+                                    _buildInfoRow("appr_nomor_wa".tr(),
+                                        data['wa'] ?? '-',
+                                        valColor: Colors.greenAccent),
+                                    _buildInfoRow("appr_gender".tr(),
+                                        data['gender'] ?? '-'),
+                                    _buildInfoRow(
+                                        "profil_label_umur".tr(),
+                                        "appr_tahun".tr(args: [
+                                          (data['umur'] ?? '-').toString()
+                                        ])),
+                                    _buildInfoRow("appr_alamat".tr(),
+                                        data['alamat_lengkap'] ?? '-'),
+                                  ]),
+                                  const SizedBox(height: 16),
+                                  _buildDataSection("hr_kepegawaian".tr(), [
+                                    _buildInfoRow(
+                                        "appr_tgl_mulai".tr(),
+                                        data['tanggal_mulai'] != null
+                                            ? data['tanggal_mulai']
+                                                .toString()
+                                                .split('T')[0]
+                                            : '-'),
+                                    if (_isPusat)
+                                      _buildInfoRow(
+                                          "appr_pin_absensi".tr(),
+                                          data['pin_absensi']?.toString() ??
+                                              '-',
+                                          valColor: Colors.redAccent),
+                                    _buildInfoRow("appr_status".tr(),
+                                        data['status_approval'] ?? '-',
+                                        valColor: Colors.greenAccent),
+                                  ]),
+                                  const SizedBox(height: 16),
+                                  _buildDataSection("appr_data_payroll".tr(), [
+                                    _buildInfoRow("hr_reg_bank".tr(),
+                                        data['nama_bank'] ?? 'BCA'),
+                                    _buildInfoRow("appr_no_rekening".tr(),
+                                        data['no_rekening'] ?? '-',
+                                        valColor: Colors.blueAccent),
+                                  ]),
+                                  const SizedBox(height: 16),
+                                  _buildDataSection("hr_kontak_darurat".tr(), [
+                                    _buildInfoRow("appr_nama_kontak".tr(),
+                                        data['darurat_nama'] ?? '-'),
+                                    if (_isPusat)
+                                      _buildInfoRow(
+                                          "hr_reg_wa_darurat".tr(),
+                                          data['darurat_wa'] ?? '-',
+                                          valColor: Colors.orangeAccent),
+                                  ]),
+                                ] else ...[
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -302,7 +359,8 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                                       ]),
                                     ),
                                   ],
-                                )
+                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -316,6 +374,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -491,7 +550,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   void _tampilkanDialogSetuju(String id, String nama) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => R.constrainedDialog(
+        context: context,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
@@ -528,6 +589,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           )
         ],
       ),
+      ),
     );
   }
 
@@ -536,7 +598,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     TextEditingController alasanCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => R.constrainedDialog(
+        context: context,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
@@ -604,6 +668,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           )
         ],
       ),
+      ),
     );
   }
 
@@ -656,38 +721,73 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               ],
             ),
             const SizedBox(height: 15),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: const BorderSide(color: Colors.redAccent),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: () => _tampilkanDialogTolak(id, nama),
-                    icon: const Icon(Icons.close_rounded, size: 18),
-                    label: Text("appr_btn_tolak".tr()),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: () => _tampilkanDialogSetuju(id, nama),
-                    icon: const Icon(Icons.check_rounded, size: 18),
-                    label: Text("appr_btn_setuju".tr()),
-                  ),
-                ),
-              ],
-            )
+            R.isNarrow(context)
+                ? Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: const BorderSide(color: Colors.redAccent),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _tampilkanDialogTolak(id, nama),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: Text("appr_btn_tolak".tr()),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _tampilkanDialogSetuju(id, nama),
+                          icon: const Icon(Icons.check_rounded, size: 18),
+                          label: Text("appr_btn_setuju".tr()),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: const BorderSide(color: Colors.redAccent),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _tampilkanDialogTolak(id, nama),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: Text("appr_btn_tolak".tr()),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _tampilkanDialogSetuju(id, nama),
+                          icon: const Icon(Icons.check_rounded, size: 18),
+                          label: Text("appr_btn_setuju".tr()),
+                        ),
+                      ),
+                    ],
+                  )
           ],
         ),
       ),
@@ -762,38 +862,44 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             unselectedLabelColor: Colors.white54,
             tabs: [
               Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.people_alt_rounded, size: 18),
-                    const SizedBox(width: 8),
-                    Text("appr_tab_aktif".tr()),
-                  ],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.people_alt_rounded, size: 18),
+                      const SizedBox(width: 6),
+                      Text("appr_tab_aktif".tr()),
+                    ],
+                  ),
                 ),
               ),
               Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.how_to_reg_rounded, size: 18),
-                    const SizedBox(width: 8),
-                    Text("appr_tab_verifikasi".tr()),
-                    if (_listKaryawanPending.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                            color: Colors.redAccent, shape: BoxShape.circle),
-                        child: Text(
-                          _listKaryawanPending.length.toString(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      )
-                    ]
-                  ],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.how_to_reg_rounded, size: 18),
+                      const SizedBox(width: 6),
+                      Text("appr_tab_verifikasi".tr()),
+                      if (_listKaryawanPending.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                              color: Colors.redAccent, shape: BoxShape.circle),
+                          child: Text(
+                            _listKaryawanPending.length.toString(),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      ]
+                    ],
+                  ),
                 ),
               ),
             ],

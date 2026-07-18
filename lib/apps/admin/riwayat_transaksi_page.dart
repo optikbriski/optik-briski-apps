@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
+import '../../shared/responsive.dart';
 import 'sales_page.dart';
 
 // ============================================================================
@@ -246,7 +247,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
     showDialog(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (c) => R.constrainedDialog(
+        context: c,
+        child: AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Row(
@@ -254,11 +257,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
             const Icon(Icons.admin_panel_settings,
                 color: Colors.orangeAccent, size: 20),
             const SizedBox(width: 10),
-            const Text("Detail Audit Pusat",
-                style: TextStyle(
-                    color: Colors.orangeAccent,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold)),
+            const Expanded(
+              child: Text("Detail Audit Pusat",
+                  style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -292,6 +297,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               onPressed: () => Navigator.pop(c),
               child: const Text("Tutup", style: TextStyle(color: Colors.grey)))
         ],
+      ),
       ),
     );
   }
@@ -400,20 +406,40 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         // 📊 CORE BOARD A: 4 KARTU INTISARI UTAMA FINANSIAL (TOP GRID)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-          child: Row(
-            children: [
-              _buildTopOverviewCard("↓ Tunai Masuk",
-                  formatRupiah(branchTotalDuitMasuk), Colors.greenAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("👓 Omzet Bruto",
-                  formatRupiah(branchTotalOmzetBruto), Colors.blueAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("⏳ Piutang Usaha",
-                  formatRupiah(branchTotalPiutangMacet), Colors.orangeAccent),
-              const SizedBox(width: 4),
-              _buildTopOverviewCard("📄 Volume Nota",
-                  "$branchTotalNotaTerbit Lembar", Colors.white),
-            ],
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final cards = [
+                _buildTopOverviewCard("↓ Tunai Masuk",
+                    formatRupiah(branchTotalDuitMasuk), Colors.greenAccent),
+                _buildTopOverviewCard("👓 Omzet Bruto",
+                    formatRupiah(branchTotalOmzetBruto), Colors.blueAccent),
+                _buildTopOverviewCard("⏳ Piutang Usaha",
+                    formatRupiah(branchTotalPiutangMacet), Colors.orangeAccent),
+                _buildTopOverviewCard("📄 Volume Nota",
+                    "$branchTotalNotaTerbit Lembar", Colors.white),
+              ];
+              if (R.isNarrow(context)) {
+                final half = (c.maxWidth - 4) / 2;
+                return Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: cards
+                      .map((card) => SizedBox(width: half, child: card))
+                      .toList(),
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 4),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 4),
+                  Expanded(child: cards[2]),
+                  const SizedBox(width: 4),
+                  Expanded(child: cards[3]),
+                ],
+              );
+            },
           ),
         ),
 
@@ -477,24 +503,46 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5)),
                       const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          _buildAgingBox(
-                              "0-30 HARI\n(LANCAR)",
-                              formatRupiah(piutangLancar30Hari),
-                              Colors.tealAccent),
-                          const SizedBox(width: 6),
-                          _buildAgingBox(
-                              "31-60 HARI\n(WATCHLIST)",
-                              formatRupiah(piutangPengawasan60Hari),
-                              Colors.amberAccent),
-                          const SizedBox(width: 6),
-                          _buildAgingBox(
-                              ">60 HARI\n(CRITICAL)",
-                              formatRupiah(piutangKritisMacet),
-                              Colors.redAccent),
-                        ],
-                      )
+                      R.isNarrow(context)
+                          ? Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _buildAgingBox(
+                                    "0-30 HARI\n(LANCAR)",
+                                    formatRupiah(piutangLancar30Hari),
+                                    Colors.tealAccent),
+                                _buildAgingBox(
+                                    "31-60 HARI\n(WATCHLIST)",
+                                    formatRupiah(piutangPengawasan60Hari),
+                                    Colors.amberAccent),
+                                _buildAgingBox(
+                                    ">60 HARI\n(CRITICAL)",
+                                    formatRupiah(piutangKritisMacet),
+                                    Colors.redAccent),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                    child: _buildAgingBox(
+                                        "0-30 HARI\n(LANCAR)",
+                                        formatRupiah(piutangLancar30Hari),
+                                        Colors.tealAccent)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child: _buildAgingBox(
+                                        "31-60 HARI\n(WATCHLIST)",
+                                        formatRupiah(piutangPengawasan60Hari),
+                                        Colors.amberAccent)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child: _buildAgingBox(
+                                        ">60 HARI\n(CRITICAL)",
+                                        formatRupiah(piutangKritisMacet),
+                                        Colors.redAccent)),
+                              ],
+                            )
                     ],
                   ),
                 ),
@@ -603,13 +651,14 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                                 fontSize: 11.5)),
                         subtitle: Padding(
                           padding: const EdgeInsets.only(top: 4.0),
-                          child: Row(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 4,
                             children: [
                               Text("In: ${formatRupiah(dayCashIn)}",
                                   style: const TextStyle(
                                       color: Colors.greenAccent,
                                       fontSize: 10.5)),
-                              const SizedBox(width: 10),
                               Text("Omzet: ${formatRupiah(dayOmzet)}",
                                   style: const TextStyle(
                                       color: Colors.blueAccent,
@@ -659,26 +708,26 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   }
 
   Widget _buildTopOverviewCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(8)),
-        child: Column(
-          children: [
-            Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 9),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 10.5, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        children: [
+          Text(label,
+              style: const TextStyle(color: Colors.white38, fontSize: 9),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontSize: 10.5, fontWeight: FontWeight.bold),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center),
+        ],
       ),
     );
   }
@@ -687,10 +736,12 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
+          Flexible(
+            child: Text(label,
+                style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
+          ),
+          const SizedBox(width: 8),
           Text(value,
               style: TextStyle(
                   color: textCol, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -700,32 +751,31 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   }
 
   Widget _buildAgingBox(String status, String value, Color accent) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-            color: Colors.black12,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.white10, width: 0.5)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(status,
-                style: TextStyle(
-                    color: accent,
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2)),
-            const SizedBox(height: 6),
-            Text(value,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
+    return Container(
+      width: R.isNarrow(context) ? (R.widthOf(context) - 48) / 2 : double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.black12,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white10, width: 0.5)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(status,
+              style: TextStyle(
+                  color: accent,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  height: 1.2)),
+          const SizedBox(height: 6),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
+        ],
       ),
     );
   }
@@ -763,21 +813,40 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           child: ListTile(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(trx['no_invoice'] ?? '-',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13)),
-                Text(formatRupiah(totalHarga),
-                    style: const TextStyle(
-                        color: Colors.blueAccent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold)),
-              ],
-            ),
+            title: R.isNarrow(context)
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(trx['no_invoice'] ?? '-',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13)),
+                      const SizedBox(height: 4),
+                      Text(formatRupiah(totalHarga),
+                          style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(trx['no_invoice'] ?? '-',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
+                      ),
+                      Text(formatRupiah(totalHarga),
+                          style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -786,19 +855,19 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 2),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text("Diterima: ${formatRupiah(cashCollected)}",
                         style: const TextStyle(
                             color: Colors.greenAccent, fontSize: 11)),
-                    if (sisaTagihan > 0) ...[
-                      const SizedBox(width: 8),
+                    if (sisaTagihan > 0)
                       Text("Sisa: ${formatRupiah(sisaTagihan)}",
                           style: const TextStyle(
                               color: Colors.redAccent,
                               fontSize: 11,
                               fontWeight: FontWeight.bold)),
-                    ]
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -807,8 +876,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                         const TextStyle(color: Colors.white38, fontSize: 11)),
               ],
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+            trailing: Wrap(
+              spacing: 0,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding:
@@ -827,7 +897,6 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                           fontSize: 9,
                           fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(width: 5),
                 IconButton(
                   icon: const Icon(Icons.receipt_long,
                       color: Colors.blueAccent, size: 20),

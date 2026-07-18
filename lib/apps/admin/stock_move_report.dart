@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../shared/logistics/request_order_service.dart';
 
 // ============================================================================
 // MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
@@ -270,6 +271,14 @@ class _StockMoveReportState extends State<StockMoveReport> {
           .update({'status': 'SUCCESS', 'bukti_foto_penerima': imgUrl}).eq(
               'id', task['id']);
 
+      // Sinkron Request Order yang tertaut ke mutasi ini → SUCCESS
+      try {
+        await RequestOrderService().markSuccessFromMove(
+          stockMoveId: task['id'].toString(),
+          resi: task['product_name']?.toString(),
+        );
+      } catch (_) {}
+
       // REKONSILIASI AKUNTANSI GUDANG: Bongkar isi JSON dan suntikkan otomatis ke aset cabang tujuan
       if (rawItems.contains('[{')) {
         String jsonPart = rawItems.substring(rawItems.indexOf('[{'));
@@ -470,8 +479,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
   }
 
   Widget _buildAssetCard(String title, String value, Color color) {
-    return Expanded(
-      child: Container(
+    return Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
@@ -482,16 +490,17 @@ class _StockMoveReportState extends State<StockMoveReport> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white38, fontSize: 9)),
             const SizedBox(height: 5),
             Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 11.5, fontWeight: FontWeight.bold),
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color, fontSize: 11.5, fontWeight: FontWeight.bold)),
           ],
         ),
-      ),
     );
   }
 
@@ -529,20 +538,34 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.5)),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _buildAssetCard("Aset Transit",
-                        _formatRupiah(totalTransitValue), Colors.orangeAccent),
-                    const SizedBox(width: 5),
-                    _buildAssetCard("Aset Tersalurkan",
-                        _formatRupiah(totalSuccessValue), Colors.greenAccent),
-                    const SizedBox(width: 5),
-                    _buildAssetCard("Penyusutan (Batal)",
-                        _formatRupiah(totalBatalValue), Colors.redAccent),
-                    const SizedBox(width: 5),
-                    _buildAssetCard(
-                        "Vol Transit", "$totalTransitVolume PCS", Colors.white),
-                  ],
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final cols = c.maxWidth < 520 ? 2 : 4;
+                    return GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: cols,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                      childAspectRatio: cols == 2 ? 2.4 : 1.8,
+                      children: [
+                        _buildAssetCard(
+                            "Aset Transit",
+                            _formatRupiah(totalTransitValue),
+                            Colors.orangeAccent),
+                        _buildAssetCard(
+                            "Aset Tersalurkan",
+                            _formatRupiah(totalSuccessValue),
+                            Colors.greenAccent),
+                        _buildAssetCard(
+                            "Penyusutan (Batal)",
+                            _formatRupiah(totalBatalValue),
+                            Colors.redAccent),
+                        _buildAssetCard("Vol Transit",
+                            "$totalTransitVolume PCS", Colors.white),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -585,15 +608,14 @@ class _StockMoveReportState extends State<StockMoveReport> {
                       fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     _buildFilterChip('WAITING', Colors.orangeAccent),
-                    const SizedBox(width: 6),
                     _buildFilterChip('TRANSIT', Colors.blueAccent),
-                    const SizedBox(width: 6),
                     _buildFilterChip('SUCCESS', Colors.green),
-                    const SizedBox(width: 6),
                     _buildFilterChip('BATAL', Colors.red),
                   ],
                 ),
@@ -617,15 +639,20 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             child: Text("smr_kosong".tr(),
                                 style: const TextStyle(
                                     color: Colors.white24, fontSize: 12)))
-                        : GridView.builder(
+                        : LayoutBuilder(
+                            builder: (context, c) {
+                              final cols = c.maxWidth < 520
+                                  ? 1
+                                  : (c.maxWidth < 900 ? 2 : 3);
+                              return GridView.builder(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 4),
                             gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: cols,
                                     crossAxisSpacing: 10,
                                     mainAxisSpacing: 10,
-                                    childAspectRatio: 0.85),
+                                    childAspectRatio: cols == 1 ? 1.35 : 0.85),
                             itemCount: filteredHistory.length,
                             itemBuilder: (context, index) {
                               final item = filteredHistory[index];
@@ -786,10 +813,12 @@ class _StockMoveReportState extends State<StockMoveReport> {
                                 ),
                               );
                             },
+                          );
+                            },
                           ),
           )
         ],
       ),
     );
   }
-} // 🌟 SINKRONISASI MODUL 18 BERES TOTAL 100% STERIL AMAN TANPA OVERFLOW
+}

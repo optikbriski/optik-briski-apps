@@ -7,6 +7,9 @@ import 'delivery_order.dart';
 import 'stock_move_report.dart';
 import 'barcode_scanner.dart';
 import 'restore_operation.dart';
+import 'request_order_page.dart';
+import 'request_order_pusat_page.dart';
+import '../../shared/responsive.dart';
 
 // ============================================================================
 // MODUL 05: ENTERPRISE INVENTORY ASSET CONTROL & VALUATION SYSTEM
@@ -219,6 +222,29 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   },
                 ),
 
+                // MENU: REQUEST ORDER PIPELINE
+                _opTile(
+                  context,
+                  isPusat
+                      ? 'Request Order Pusat'
+                      : 'Request Order Cabang',
+                  isPusat
+                      ? 'Approval → Preparing → Shipping → Success + reservasi stok'
+                      : 'Kirim antrean ke Pusat & lacak status',
+                  Icons.assignment_turned_in_rounded,
+                  Colors.orangeAccent,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => isPusat
+                            ? RequestOrderPusatPage(profile: widget.profile)
+                            : RequestOrderPage(profile: widget.profile),
+                      ),
+                    );
+                  },
+                ),
+
                 const SizedBox(height: 25),
                 Text("inv_quick_tools".tr(),
                     style: const TextStyle(
@@ -265,6 +291,8 @@ class _InventoryOverviewState extends State<InventoryOverview> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white38, fontSize: 9.5)),
             const SizedBox(height: 6),
             Text(value,
@@ -316,68 +344,69 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                             fontWeight: FontWeight.bold))),
               ],
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _infoRow("inv_stok_saat_ini".tr(), "${res['stock'] ?? 0} PCS",
-                      Colors.greenAccent),
-                  _infoRow("inv_kategori".tr(), res['kategori'] ?? '-',
-                      Colors.white70),
-                  const Divider(color: Colors.white10, height: 16),
-
-                  // 💸 HIGH-LEVEL CORPORATE FINANCIAL MATRIX AUDIT PER BARCODE SCANNED
-                  const Text("📊 STRUKTUR AKUNTANSI ASSET PROD",
-                      style: TextStyle(
-                          color: Colors.amberAccent,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5)),
-                  const SizedBox(height: 6),
-                  _infoRow(
-                      "Harga Pokok (HPP)", _formatRupiah(modal), Colors.white),
-                  _infoRow("Harga Jual Retail", _formatRupiah(jual),
-                      Colors.blueAccent),
-                  _infoRow("Margin Bersih / Pcs", _formatRupiah(marginItem),
-                      Colors.tealAccent),
-                  _infoRow(
-                      "Gross Profit Margin",
-                      "${pctMargin.toStringAsFixed(1)} %",
-                      pctMargin >= 50
-                          ? Colors.greenAccent
-                          : Colors.orangeAccent),
-
-                  const Divider(color: Colors.white10, height: 16),
-                  if (res['kategori'] == 'Frame' && res['warna'] != null)
-                    _infoRow("inv_warna_frame".tr(), res['warna'],
-                        Colors.orangeAccent),
-                  if (res['kategori'] == 'Lensa') ...[
-                    _infoRow("inv_jenis_lensa".tr(), res['jenis_lensa'] ?? '-',
-                        Colors.orangeAccent),
-                    _infoRow("SPH", _formatOpticLocal(res['sph_r']),
-                        Colors.cyanAccent),
-                    _infoRow("CYL", _formatOpticLocal(res['cyl_r']),
-                        Colors.cyanAccent),
-                    if (res['jenis_lensa'] == 'Progresif' ||
-                        res['jenis_lensa'] == 'Kryptok')
-                      _infoRow("ADD", _formatOpticLocal(res['add_r']),
-                          Colors.purpleAccent),
+            content: R.constrainedDialog(
+              context: context,
+              preferWidth: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _infoRow("inv_stok_saat_ini".tr(),
+                        "${res['stock'] ?? 0} PCS", Colors.greenAccent),
+                    _infoRow("inv_kategori".tr(), res['kategori'] ?? '-',
+                        Colors.white70),
+                    const Divider(color: Colors.white10, height: 16),
+                    const Text("📊 STRUKTUR AKUNTANSI ASSET PROD",
+                        style: TextStyle(
+                            color: Colors.amberAccent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5)),
+                    const SizedBox(height: 6),
+                    _infoRow("Harga Pokok (HPP)", _formatRupiah(modal),
+                        Colors.white),
+                    _infoRow("Harga Jual Retail", _formatRupiah(jual),
+                        Colors.blueAccent),
+                    _infoRow("Margin Bersih / Pcs", _formatRupiah(marginItem),
+                        Colors.tealAccent),
+                    _infoRow(
+                        "Gross Profit Margin",
+                        "${pctMargin.toStringAsFixed(1)} %",
+                        pctMargin >= 50
+                            ? Colors.greenAccent
+                            : Colors.orangeAccent),
+                    const Divider(color: Colors.white10, height: 16),
+                    if (res['kategori'] == 'Frame' && res['warna'] != null)
+                      _infoRow("inv_warna_frame".tr(), res['warna'],
+                          Colors.orangeAccent),
+                    if (res['kategori'] == 'Lensa') ...[
+                      _infoRow("inv_jenis_lensa".tr(),
+                          res['jenis_lensa'] ?? '-', Colors.orangeAccent),
+                      _infoRow("SPH", _formatOpticLocal(res['sph_r']),
+                          Colors.cyanAccent),
+                      _infoRow("CYL", _formatOpticLocal(res['cyl_r']),
+                          Colors.cyanAccent),
+                      if (res['jenis_lensa'] == 'Progresif' ||
+                          res['jenis_lensa'] == 'Kryptok')
+                        _infoRow("ADD", _formatOpticLocal(res['add_r']),
+                            Colors.purpleAccent),
+                    ],
+                    const SizedBox(height: 12),
+                    if (res['image_url'] != null && res['image_url'] != '-')
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(res['image_url'],
+                            height: 110,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => const Icon(
+                                Icons.image_not_supported,
+                                color: Colors.white10,
+                                size: 40)),
+                      ),
                   ],
-                  const SizedBox(height: 12),
-                  if (res['image_url'] != null && res['image_url'] != '-')
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(res['image_url'],
-                          height: 110,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => const Icon(
-                              Icons.image_not_supported,
-                              color: Colors.white10,
-                              size: 40)),
-                    ),
-                ],
+                ),
               ),
             ),
             actions: [
