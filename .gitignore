@@ -47,3 +47,7 @@ app.*.map.json
 
 # Local secrets (copy from launch.json.example)
 .vscode/launch.json
+
+# Vercel
+.vercel
+
