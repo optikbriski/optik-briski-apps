@@ -29,6 +29,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
   final searchController = TextEditingController();
   final ImagePicker picker = ImagePicker();
 
+  // Filter jenis mutasi: all | restock (DO) | request (RO) | retur
+  String selectedKind = 'all';
+
   // Filter Kategori Status Logistik Multi-Combine
   Set<String> selectedStatuses = {};
 
@@ -41,6 +44,106 @@ class _StockMoveReportState extends State<StockMoveReport> {
       0; // Akun [5401] - Nilai Kerugian Penyusutan / Selisih Aset Batal
   int totalTransitVolume =
       0; // Total Kuantitas Fisik Barang dalam Masa Transit (PCS)
+
+  /// Klasifikasi: restock (DO), request (RO), retur — termasuk data legacy OUTGOING.
+  String _moveKind(dynamic item) {
+    final tipe = (item['tipe'] ?? '').toString().toUpperCase();
+    final resi = (item['product_name'] ?? '').toString().toUpperCase();
+    final ket = (item['keterangan'] ?? '').toString();
+
+    if (tipe == 'RETUR' || resi.startsWith('RET-')) return 'retur';
+    if (tipe == 'REQUEST' ||
+        resi.startsWith('RO-') ||
+        ket.contains('RequestOrder#')) {
+      return 'request';
+    }
+    if (tipe == 'DELIVERY' || resi.startsWith('DO-')) return 'restock';
+    return 'restock';
+  }
+
+  String _kindLabel(String kind) {
+    switch (kind) {
+      case 'request':
+        return 'Request';
+      case 'retur':
+        return 'Retur';
+      case 'restock':
+      default:
+        return 'Restock';
+    }
+  }
+
+  Color _kindColor(String kind) {
+    switch (kind) {
+      case 'request':
+        return Colors.cyanAccent;
+      case 'retur':
+        return Colors.purpleAccent;
+      case 'restock':
+      default:
+        return Colors.amberAccent;
+    }
+  }
+
+  String _emptyMessageForKind() {
+    switch (selectedKind) {
+      case 'restock':
+        return 'smr_kosong_restock'.tr();
+      case 'request':
+        return 'smr_kosong_request'.tr();
+      case 'retur':
+        return 'smr_kosong_retur'.tr();
+      default:
+        return 'smr_kosong'.tr();
+    }
+  }
+
+  void _recomputeKpis(List<dynamic> scope) {
+    int hitungTransitVal = 0;
+    int hitungSuccessVal = 0;
+    int hitungBatalVal = 0;
+    int hitungTransitVol = 0;
+
+    for (var item in scope) {
+      String status = (item['status'] ?? 'PENDING').toString().toUpperCase();
+      String rawItems = item['keterangan'] ?? '';
+      int subtotalNotaMutasi = 0;
+      int subtotalVolumeItem = 0;
+
+      if (rawItems.contains('[{')) {
+        try {
+          String jsonPart = rawItems.substring(rawItems.indexOf('[{'));
+          List itemsObj = jsonDecode(jsonPart);
+          for (var itm in itemsObj) {
+            int qty = int.tryParse(itm['qty'].toString()) ?? 0;
+            int hargaItem = int.tryParse(itm['harga']?.toString() ?? '') ??
+                int.tryParse(itm['harga_modal']?.toString() ?? '0') ??
+                0;
+            subtotalNotaMutasi += (qty * hargaItem);
+            subtotalVolumeItem += qty;
+          }
+        } catch (_) {}
+      } else {
+        int qtyFlat = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
+        subtotalNotaMutasi = qtyFlat * 150000;
+        subtotalVolumeItem = qtyFlat;
+      }
+
+      if (status == 'TRANSIT' || status == 'WAITING' || status == 'PENDING') {
+        hitungTransitVal += subtotalNotaMutasi;
+        hitungTransitVol += subtotalVolumeItem;
+      } else if (status == 'SUCCESS') {
+        hitungSuccessVal += subtotalNotaMutasi;
+      } else if (status == 'BATAL' || status == 'REJECTED') {
+        hitungBatalVal += subtotalNotaMutasi;
+      }
+    }
+
+    totalTransitValue = hitungTransitVal;
+    totalSuccessValue = hitungSuccessVal;
+    totalBatalValue = hitungBatalVal;
+    totalTransitVolume = hitungTransitVol;
+  }
 
   @override
   void initState() {
@@ -113,68 +216,24 @@ class _StockMoveReportState extends State<StockMoveReport> {
         }).toList();
       }
 
-      // Re-inisialisasi Hitung Ulang Posisi Neraca Buku Mutasi Logistik
-      int hitungTransitVal = 0;
-      int hitungSuccessVal = 0;
-      int hitungBatalVal = 0;
-      int hitungTransitVol = 0;
-
-      for (var item in targetScope) {
-        String status = (item['status'] ?? 'PENDING').toString().toUpperCase();
-        String rawItems = item['keterangan'] ?? '';
-        int subtotalNotaMutasi = 0;
-        int subtotalVolumeItem = 0;
-
-        // Ekstraksi nilai kapitalisasi barang dari dalam JSON array order hulu
-        if (rawItems.contains('[{')) {
-          try {
-            String jsonPart = rawItems.substring(rawItems.indexOf('[{'));
-            List itemsObj = jsonDecode(jsonPart);
-            for (var itm in itemsObj) {
-              int qty = int.tryParse(itm['qty'].toString()) ?? 0;
-              int hargaItem = int.tryParse(itm['harga']?.toString() ?? '') ??
-                  int.tryParse(itm['harga_modal']?.toString() ?? '0') ??
-                  0;
-
-              subtotalNotaMutasi += (qty * hargaItem);
-              subtotalVolumeItem += qty;
-            }
-          } catch (_) {}
-        } else {
-          // Fallback estimasi nominal jika data menggunakan row record jumlah flat
-          int qtyFlat = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
-          subtotalNotaMutasi =
-              qtyFlat * 150000; // Taksiran flat modal inventory retail optik
-          subtotalVolumeItem = qtyFlat;
-        }
-
-        // Alokasi Rekonsiliasi Neraca Berdasarkan Validasi Status Fisik
-        if (status == 'TRANSIT' || status == 'WAITING' || status == 'PENDING') {
-          hitungTransitVal += subtotalNotaMutasi;
-          hitungTransitVol += subtotalVolumeItem;
-        } else if (status == 'SUCCESS') {
-          hitungSuccessVal += subtotalNotaMutasi;
-        } else if (status == 'BATAL' || status == 'REJECTED') {
-          hitungBatalVal += subtotalNotaMutasi;
-        }
-      }
-
       setState(() {
         allHistory = targetScope;
-        filteredHistory = targetScope;
-        totalTransitValue = hitungTransitVal;
-        totalSuccessValue = hitungSuccessVal;
-        totalBatalValue = hitungBatalVal;
-        totalTransitVolume = hitungTransitVol;
+        selectedKind = 'all';
         selectedStatuses.clear();
         searchController.clear();
+        errorLog = '';
         isLoading = false;
       });
+      _filterHistory();
     } catch (e) {
       if (mounted) {
         setState(() {
           allHistory = [];
           filteredHistory = [];
+          totalTransitValue = 0;
+          totalSuccessValue = 0;
+          totalBatalValue = 0;
+          totalTransitVolume = 0;
           isLoading = false;
           errorLog = e.toString();
         });
@@ -182,13 +241,17 @@ class _StockMoveReportState extends State<StockMoveReport> {
     }
   }
 
-  // 3. FUNGSI FILTER SEARCH ENGINE & CHIP SELECTION MULTI-COMBINE
+  // 3. FUNGSI FILTER: jenis (DO/RO/Retur) + status + pencarian
   void _filterHistory() {
     String query = searchController.text.toLowerCase().trim();
     setState(() {
       filteredHistory = allHistory.where((item) {
+        final kind = _moveKind(item);
+        final matchesKind =
+            selectedKind == 'all' || kind == selectedKind;
+
         String searchString =
-            "${item['product_name']} ${item['dari_lokasi']} ${item['ke_lokasi']}"
+            "${item['product_name']} ${item['dari_lokasi']} ${item['ke_lokasi']} ${item['keterangan']}"
                 .toLowerCase();
         bool matchesSearch = query.isEmpty || searchString.contains(query);
 
@@ -197,9 +260,25 @@ class _StockMoveReportState extends State<StockMoveReport> {
         bool matchesStatus =
             selectedStatuses.isEmpty || selectedStatuses.contains(itemStatus);
 
-        return matchesSearch && matchesStatus;
+        return matchesKind && matchesSearch && matchesStatus;
       }).toList();
+      _recomputeKpis(filteredHistory);
     });
+  }
+
+  static const _bg = Color(0xFF0B1220);
+  static const _panel = Color(0xFF121A2B);
+  static const _panelSoft = Color(0xFF1A2438);
+  static const _line = Color(0xFF2A3548);
+
+  int _countKind(String kind) {
+    if (kind == 'all') return allHistory.length;
+    return allHistory.where((e) => _moveKind(e) == kind).length;
+  }
+
+  void _selectKind(String kind) {
+    setState(() => selectedKind = kind);
+    _filterHistory();
   }
 
   void _runSearch(String q) {
@@ -446,61 +525,269 @@ class _StockMoveReportState extends State<StockMoveReport> {
     );
   }
 
-  Widget _buildFilterChip(String statusLable, Color badgeColor) {
-    bool isActive = selectedStatuses.contains(statusLable);
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () {
-        setState(() {
-          if (isActive) {
-            selectedStatuses.remove(statusLable);
-          } else {
-            selectedStatuses.add(statusLable);
-          }
+  Widget _buildStatusChip(String statusLabel, Color badgeColor) {
+    final isActive = selectedStatuses.contains(statusLabel);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          setState(() {
+            if (isActive) {
+              selectedStatuses.remove(statusLabel);
+            } else {
+              selectedStatuses.add(statusLabel);
+            }
+          });
           _filterHistory();
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? badgeColor.withOpacity(0.15) : Colors.transparent,
-          border: Border.all(color: isActive ? badgeColor : Colors.white10),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          statusLable,
-          style: TextStyle(
-              color: isActive ? badgeColor : Colors.grey,
-              fontWeight: FontWeight.bold,
-              fontSize: 10),
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? badgeColor.withOpacity(0.16) : _panelSoft,
+            border: Border.all(
+                color: isActive ? badgeColor.withOpacity(0.7) : _line),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            statusLabel,
+            style: TextStyle(
+              color: isActive ? badgeColor : const Color(0xFF94A3B8),
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 0.2,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAssetCard(String title, String value, Color color) {
-    return Container(
-        padding: const EdgeInsets.all(10),
+  Widget _kindTile({
+    required String kind,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    final active = selectedKind == kind;
+    final count = _countKind(kind);
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: active ? color.withOpacity(0.14) : _panelSoft,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _selectKind(kind),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: active ? color.withOpacity(0.55) : Colors.transparent,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(icon,
+                      size: 16,
+                      color: active ? color : const Color(0xFF94A3B8)),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      color: active ? Colors.white : Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      height: 1.1,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: active ? color : const Color(0xFF94A3B8),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _kpiPill(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white10, width: 0.5),
+          color: _panelSoft,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _line),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
+            Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white38, fontSize: 9)),
-            const SizedBox(height: 5),
+                style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 3),
             Text(value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: color, fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    color: color, fontSize: 11, fontWeight: FontWeight.w800)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _miniBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(text,
+          style: TextStyle(
+              color: color, fontSize: 9.5, fontWeight: FontWeight.w800)),
+    );
+  }
+
+  Widget _moveCard(dynamic item) {
+    final myToko = widget.profile['toko_id'].toString().toUpperCase();
+    final status = (item['status'] ?? 'PENDING').toString().toUpperCase();
+    final kind = _moveKind(item);
+    final kindColor = _kindColor(kind);
+    final amITheReceiver =
+        item['ke_lokasi'].toString().toUpperCase() == myToko;
+    final amITheSender =
+        item['dari_lokasi'].toString().toUpperCase() == myToko;
+
+    Color statusColor = Colors.blueAccent;
+    if (status == 'SUCCESS') {
+      statusColor = const Color(0xFF4ADE80);
+    } else if (status == 'WAITING' ||
+        status == 'PENDING' ||
+        status == 'TRANSIT') {
+      statusColor = const Color(0xFFFBBF24);
+    } else if (status == 'BATAL' || status == 'REJECTED') {
+      statusColor = const Color(0xFFF87171);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${item['product_name'] ?? '-'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _miniBadge(_kindLabel(kind), kindColor),
+                const SizedBox(width: 6),
+                _miniBadge(status, statusColor),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${item['jumlah'] ?? 0} PCS  ·  ${item['dari_lokasi'] ?? '-'} → ${item['ke_lokasi'] ?? '-'}',
+              style: TextStyle(
+                color: kindColor.withOpacity(0.95),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _cleanKeterangan(item['keterangan'] ?? ''),
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF94A3B8),
+                height: 1.35,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (amITheSender || amITheReceiver || myToko == 'PUSAT')
+                  TextButton.icon(
+                    onPressed: () => _showDetail(item),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.info_outline_rounded, size: 16),
+                    label: const Text('Detail',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                const Spacer(),
+                if ((status == 'TRANSIT' || status == 'PENDING') &&
+                    amITheReceiver)
+                  FilledButton.icon(
+                    onPressed: () => _confirmTerima(item),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.camera_alt_rounded, size: 15),
+                    label: Text("smr_btn_terima".tr(),
+                        style: const TextStyle(
+                            fontSize: 11.5, fontWeight: FontWeight.w800)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -509,314 +796,253 @@ class _StockMoveReportState extends State<StockMoveReport> {
   // ==========================================================================
   @override
   Widget build(BuildContext context) {
+    final unitLabel = "smr_unit"
+        .tr()
+        .replaceFirst('{}', widget.profile['toko_id'].toString())
+        .replaceFirst('{}', filteredHistory.length.toString());
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: _panel,
         elevation: 0,
-        title: Text("smr_title".tr(),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        surfaceTintColor: Colors.transparent,
+        title: Column(
+          children: [
+            Text("smr_title".tr(),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3)),
+            const SizedBox(height: 2),
+            Text("smr_subtitle".tr(),
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500)),
+          ],
+        ),
         centerTitle: true,
         actions: [
           IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-              onPressed: _fetchMoveHistory)
+            tooltip: 'Muat ulang',
+            onPressed: _fetchMoveHistory,
+            style: IconButton.styleFrom(
+              backgroundColor: _panelSoft,
+              side: const BorderSide(color: _line),
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          // 📊 CORE LOGISTICS ASSET MATRIX PANEL (TOP DASHBOARD OVERVIEW)
+          // Jenis mutasi — akses utama (dengan count)
           Padding(
-            padding: const EdgeInsets.all(12.0).copyWith(bottom: 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("⚖️ EVALUASI MONETER BARANG DALAM PERJALANAN",
-                    style: TextStyle(
-                        color: Colors.amberAccent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5)),
-                const SizedBox(height: 8),
-                LayoutBuilder(
-                  builder: (context, c) {
-                    final cols = c.maxWidth < 520 ? 2 : 4;
-                    return GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: cols,
-                      crossAxisSpacing: 6,
-                      mainAxisSpacing: 6,
-                      childAspectRatio: cols == 2 ? 2.4 : 1.8,
-                      children: [
-                        _buildAssetCard(
-                            "Aset Transit",
-                            _formatRupiah(totalTransitValue),
-                            Colors.orangeAccent),
-                        _buildAssetCard(
-                            "Aset Tersalurkan",
-                            _formatRupiah(totalSuccessValue),
-                            Colors.greenAccent),
-                        _buildAssetCard(
-                            "Penyusutan (Batal)",
-                            _formatRupiah(totalBatalValue),
-                            Colors.redAccent),
-                        _buildAssetCard("Vol Transit",
-                            "$totalTransitVolume PCS", Colors.white),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // BAR PENCARIAN & SEARCH ENGINE INTERACTIVE
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: searchController,
-              onChanged: _runSearch,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: "smr_cari".tr(),
-                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-                prefixIcon:
-                    const Icon(Icons.search, color: Colors.grey, size: 18),
-                filled: true,
-                fillColor: const Color(0xFF1E293B),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _panel,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _line),
+              ),
+              child: Row(
+                children: [
+                  _kindTile(
+                    kind: 'all',
+                    label: 'Semua',
+                    icon: Icons.layers_rounded,
+                    color: Colors.white70,
+                  ),
+                  _kindTile(
+                    kind: 'restock',
+                    label: 'Restock',
+                    icon: Icons.local_shipping_rounded,
+                    color: const Color(0xFFFBBF24),
+                  ),
+                  _kindTile(
+                    kind: 'request',
+                    label: 'Request',
+                    icon: Icons.playlist_add_check_rounded,
+                    color: const Color(0xFF22D3EE),
+                  ),
+                  _kindTile(
+                    kind: 'retur',
+                    label: 'Retur',
+                    icon: Icons.undo_rounded,
+                    color: const Color(0xFFC084FC),
+                  ),
+                ],
               ),
             ),
           ),
 
+          // KPI ringkas 1 baris
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "smr_unit"
-                      .tr()
-                      .replaceFirst('{}', widget.profile['toko_id'].toString())
-                      .replaceFirst('{}', filteredHistory.length.toString()),
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.blueAccent,
-                      fontWeight: FontWeight.bold),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 6),
+                  child: Text("smr_kpi_title".tr(),
+                      style: const TextStyle(
+                          color: Color(0xFFFBBF24),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4)),
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 6,
-                  runSpacing: 6,
+                Row(
                   children: [
-                    _buildFilterChip('WAITING', Colors.orangeAccent),
-                    _buildFilterChip('TRANSIT', Colors.blueAccent),
-                    _buildFilterChip('SUCCESS', Colors.green),
-                    _buildFilterChip('BATAL', Colors.red),
+                    _kpiPill('Transit', _formatRupiah(totalTransitValue),
+                        const Color(0xFFFBBF24)),
+                    _kpiPill('Tersalur', _formatRupiah(totalSuccessValue),
+                        const Color(0xFF4ADE80)),
+                    _kpiPill('Batal', _formatRupiah(totalBatalValue),
+                        const Color(0xFFF87171)),
+                    _kpiPill('Vol', '$totalTransitVolume PCS', Colors.white),
                   ],
                 ),
               ],
             ),
           ),
+
+          // Search + status dalam satu panel
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              decoration: BoxDecoration(
+                color: _panel,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _line),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: searchController,
+                    onChanged: _runSearch,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: "smr_cari".tr(),
+                      hintStyle: const TextStyle(
+                          color: Color(0xFF64748B), fontSize: 12.5),
+                      prefixIcon: const Icon(Icons.search_rounded,
+                          color: Color(0xFF94A3B8), size: 20),
+                      filled: true,
+                      fillColor: _panelSoft,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          unitLabel,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF60A5FA),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (selectedStatuses.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            setState(() => selectedStatuses.clear());
+                            _filterHistory();
+                          },
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            foregroundColor: const Color(0xFF94A3B8),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: const Text('Reset status',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildStatusChip('WAITING', const Color(0xFFFBBF24)),
+                      _buildStatusChip('TRANSIT', const Color(0xFF60A5FA)),
+                      _buildStatusChip('SUCCESS', const Color(0xFF4ADE80)),
+                      _buildStatusChip('BATAL', const Color(0xFFF87171)),
+                      _buildStatusChip('PENDING', const Color(0xFFF59E0B)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           const SizedBox(height: 10),
 
-          // IMPLEMENTASI GRIDVIEW DENGAN STRUKTUR AKUNTANSI ASSET
           Expanded(
             child: isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent))
+                    child: CircularProgressIndicator(color: Color(0xFF60A5FA)))
                 : errorLog.isNotEmpty
                     ? Center(
-                        child: Text("Error Database Sync: $errorLog",
-                            style: const TextStyle(
-                                color: Colors.redAccent, fontSize: 12)))
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text("Error Database Sync: $errorLog",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Color(0xFFF87171), fontSize: 12)),
+                        ))
                     : filteredHistory.isEmpty
                         ? Center(
-                            child: Text("smr_kosong".tr(),
-                                style: const TextStyle(
-                                    color: Colors.white24, fontSize: 12)))
-                        : LayoutBuilder(
-                            builder: (context, c) {
-                              final cols = c.maxWidth < 520
-                                  ? 1
-                                  : (c.maxWidth < 900 ? 2 : 3);
-                              return GridView.builder(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: cols,
-                                    crossAxisSpacing: 10,
-                                    mainAxisSpacing: 10,
-                                    childAspectRatio: cols == 1 ? 1.35 : 0.85),
-                            itemCount: filteredHistory.length,
-                            itemBuilder: (context, index) {
-                              final item = filteredHistory[index];
-                              final myToko = widget.profile['toko_id']
-                                  .toString()
-                                  .toUpperCase();
-                              final status = (item['status'] ?? 'PENDING')
-                                  .toString()
-                                  .toUpperCase();
-
-                              final bool amITheReceiver =
-                                  item['ke_lokasi'].toString().toUpperCase() ==
-                                      myToko;
-                              final bool amITheSender = item['dari_lokasi']
-                                      .toString()
-                                      .toUpperCase() ==
-                                  myToko;
-
-                              Color statusColor = Colors.blueAccent;
-                              if (status == 'SUCCESS') {
-                                statusColor = Colors.greenAccent;
-                              } else if (status == 'WAITING' ||
-                                  status == 'PENDING' ||
-                                  status == 'TRANSIT') {
-                                statusColor = Colors.orangeAccent;
-                              } else if (status == 'BATAL' ||
-                                  status == 'REJECTED') {
-                                statusColor = Colors.redAccent;
-                              }
-
-                              return Card(
-                                color: const Color(0xFF1E293B),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    side: const BorderSide(
-                                        color: Colors.white10, width: 0.5)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text("${item['product_name'] ?? '-'}",
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                          "${item['jumlah'] ?? 0} PCS ➔ Ke: ${item['ke_lokasi'] ?? '-'}",
-                                          style: const TextStyle(
-                                              color: Colors.amberAccent,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 10.5)),
-                                      const Divider(
-                                          color: Colors.white10, height: 12),
-                                      Text(
-                                          "Rute: ${item['dari_lokasi']} ➔ ${item['ke_lokasi']}",
-                                          style: const TextStyle(
-                                              fontSize: 9.5,
-                                              color: Colors.white38,
-                                              height: 1.2)),
-                                      const SizedBox(height: 5),
-                                      Expanded(
-                                        child: Text(
-                                            _cleanKeterangan(
-                                                item['keterangan'] ?? ''),
-                                            style: const TextStyle(
-                                                fontSize: 9.5,
-                                                color: Colors.white60,
-                                                fontStyle: FontStyle.italic),
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 3),
-                                        decoration: BoxDecoration(
-                                            color:
-                                                statusColor.withOpacity(0.15),
-                                            borderRadius:
-                                                BorderRadius.circular(4)),
-                                        child: Text(status,
-                                            style: TextStyle(
-                                                fontSize: 8.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: statusColor)),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          if (amITheSender ||
-                                              amITheReceiver ||
-                                              myToko == 'PUSAT')
-                                            InkWell(
-                                              onTap: () => _showDetail(item),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.all(5),
-                                                decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                        color: Colors.white24),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            6)),
-                                                child: const Icon(
-                                                    Icons.info_outline,
-                                                    color: Colors.white54,
-                                                    size: 12),
-                                              ),
-                                            ),
-                                          if ((status == 'TRANSIT' ||
-                                                  status == 'PENDING') &&
-                                              amITheReceiver) ...[
-                                            const SizedBox(width: 5),
-                                            InkWell(
-                                              onTap: () => _confirmTerima(item),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 5),
-                                                decoration: BoxDecoration(
-                                                    color: Colors.green,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            6)),
-                                                child: Row(
-                                                  children: [
-                                                    const Icon(
-                                                        Icons
-                                                            .camera_alt_rounded,
-                                                        size: 11,
-                                                        color: Colors.white),
-                                                    const SizedBox(width: 4),
-                                                    Text("smr_btn_terima".tr(),
-                                                        style: const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 9.5,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold)),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      )
-                                    ],
+                            child: Padding(
+                              padding: const EdgeInsets.all(28),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: _panel,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: _line),
+                                    ),
+                                    child: const Icon(
+                                        Icons.inventory_2_outlined,
+                                        color: Color(0xFF64748B),
+                                        size: 28),
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                            },
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    _emptyMessageForKind(),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                            itemCount: filteredHistory.length,
+                            itemBuilder: (context, index) =>
+                                _moveCard(filteredHistory[index]),
                           ),
-          )
+          ),
         ],
       ),
     );

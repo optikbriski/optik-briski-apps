@@ -5,7 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap foto bukti surat jalan pengiriman
 import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../shared/responsive.dart'; // Siapkan import ini untuk pratinjau resi di part akhir nanti
+import '../../shared/responsive.dart';
+import '../../shared/logistics/restock_suggest_service.dart';
 
 // Shortcut pintas client Supabase khusus file DO ini
 final supabase = Supabase.instance.client;
@@ -40,37 +41,57 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
 
   // Variabel penyimpan filter kategori yang sedang aktif
   Set<String> selectedCategories = {};
+  /// DO = restock: default hanya tampilkan yang perlu dilengkapi (laku − stok).
+  /// Set false untuk lihat semua stok Pusat.
+  bool onlyNeedRestock = true;
+  Map<String, RestockHint> restockHints = {};
+  bool isLoadingHints = false;
 
-  // Fungsi dinamis pembuat tombol filter Kategori (Frame / Lensa / Lainnya)
+  static const _bg = Color(0xFF0B1220);
+  static const _panel = Color(0xFF121A2B);
+  static const _panelSoft = Color(0xFF1A2438);
+  static const _line = Color(0xFF2A3548);
+
   Widget _buildCategoryChip(String category, Color badgeColor) {
-    bool isActive = selectedCategories.contains(category);
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () {
-        setState(() {
-          if (isActive) {
-            selectedCategories.remove(category);
-          } else {
-            selectedCategories.add(category);
-          }
-        });
-        filterProduk(); // Fungsi filter akan di-inject di Part 2
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? badgeColor.withOpacity(0.2) : Colors.transparent,
-          border: Border.all(
-              color: isActive ? badgeColor : Colors.grey.withOpacity(0.5)),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          category,
-          style: TextStyle(
-            color: isActive ? badgeColor : Colors.grey,
-            fontWeight: FontWeight.bold,
-            fontSize: 11,
+    final isActive = selectedCategories.contains(category);
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: isActive ? badgeColor.withOpacity(0.16) : _panelSoft,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              setState(() {
+                if (isActive) {
+                  selectedCategories.remove(category);
+                } else {
+                  selectedCategories.add(category);
+                }
+              });
+              filterProduk();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isActive
+                      ? badgeColor.withOpacity(0.6)
+                      : _line,
+                ),
+              ),
+              child: Text(
+                category,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isActive ? badgeColor : const Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -103,16 +124,22 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           .map((e) => e['toko_id']?.toString() ?? "")
           .where((t) => t.isNotEmpty && t != 'PUSAT')
           .toSet()
-          .toList();
+          .toList()
+        ..sort();
 
-      await _fetchProduk();
-
+      // Cabang harus dipilih dulu agar saran restock terhitung benar.
       if (mounted) {
         setState(() {
           listToko = unik;
-          if (listToko.isNotEmpty) selectedToko = listToko.first;
+          if (listToko.isNotEmpty) {
+            selectedToko = listToko.contains(selectedToko)
+                ? selectedToko
+                : listToko.first;
+          }
         });
       }
+
+      await _fetchProduk();
     } catch (e) {
       debugPrint("Load Jaringan Cabang Error: $e");
     } finally {
@@ -120,7 +147,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     }
   }
 
-  // 2. MENARIK SELURUH ITEM INVENTORI YANG TERSEDIA DI PUSAT
+  // 2. MENARIK ITEM INVENTORI GUDANG PUSAT SAJA
   Future<void> _fetchProduk() async {
     if (mounted) {
       setState(() {
@@ -132,6 +159,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       final response = await supabase
           .from('products')
           .select()
+          .eq('toko_id', 'PUSAT')
           .order('nama', ascending: true);
 
       if (mounted) {
@@ -141,6 +169,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           isLoading = false;
         });
       }
+      await _loadRestockHints();
     } catch (e) {
       if (mounted) {
         setState(() => isLoading = false);
@@ -151,31 +180,96 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     }
   }
 
+  Future<void> _loadRestockHints() async {
+    final toko = selectedToko;
+    if (toko == null || toko.isEmpty) {
+      if (mounted) setState(() => restockHints = {});
+      return;
+    }
+    if (mounted) setState(() => isLoadingHints = true);
+    try {
+      final hints = await RestockSuggestService().hintsForToko(toko);
+      if (mounted) {
+        setState(() {
+          restockHints = hints;
+          isLoadingHints = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Restock hints error: $e');
+      if (mounted) setState(() => isLoadingHints = false);
+    }
+  }
+
+  List<dynamic> _buildDisplayList() {
+    final query = searchController.text.toLowerCase().trim();
+    final list = listProdukPusat.where((item) {
+      final namaProduk = (item['nama'] ?? '').toString().toLowerCase();
+      final matchesSearch = query.isEmpty || namaProduk.contains(query);
+
+      final itemCat =
+          (item['kategori'] ?? '').toString().toLowerCase().trim();
+      final matchesCategory = selectedCategories.isEmpty ||
+          selectedCategories
+              .any((cat) => cat.toLowerCase().trim() == itemCat);
+
+      final id = item['id']?.toString() ?? '';
+      final saran = restockHints[id]?.suggestedQty ?? 0;
+      final matchesNeed = !onlyNeedRestock || saran > 0;
+
+      return matchesSearch && matchesCategory && matchesNeed;
+    }).toList();
+
+    list.sort((a, b) {
+      final sa = restockHints[a['id']?.toString()]?.suggestedQty ?? 0;
+      final sb = restockHints[b['id']?.toString()]?.suggestedQty ?? 0;
+      if (sa > 0 && sb <= 0) return -1;
+      if (sb > 0 && sa <= 0) return 1;
+      final bySaran = sb.compareTo(sa);
+      if (bySaran != 0) return bySaran;
+      return (a['nama'] ?? '')
+          .toString()
+          .toLowerCase()
+          .compareTo((b['nama'] ?? '').toString().toLowerCase());
+    });
+    return list;
+  }
+
   // 1. FUNGSI LOGIKA FILTER & PENCARIAN MULTI-KATEGORI SECARA INSTAN
   void filterProduk() {
-    String query = searchController.text.toLowerCase().trim();
     setState(() {
-      if (query.isEmpty && selectedCategories.isEmpty) {
-        isFiltering = false;
-        filteredProduk = [];
-      } else {
-        isFiltering = true;
-        filteredProduk = listProdukPusat.where((item) {
-          // A. Jalur Pencarian Teks Nama Produk
-          String namaProduk = (item['nama'] ?? '').toString().toLowerCase();
-          bool matchesSearch = query.isEmpty || namaProduk.contains(query);
-
-          // B. Jalur Filter Berdasarkan Tombol Kategori Aktif
-          String itemCat =
-              (item['kategori'] ?? '').toString().toLowerCase().trim();
-          bool matchesCategory = selectedCategories.isEmpty ||
-              selectedCategories
-                  .any((cat) => cat.toLowerCase().trim() == itemCat);
-
-          return matchesSearch && matchesCategory;
-        }).toList();
-      }
+      isFiltering = searchController.text.trim().isNotEmpty ||
+          selectedCategories.isNotEmpty ||
+          onlyNeedRestock;
+      filteredProduk = _buildDisplayList();
     });
+  }
+
+  void _applySuggestedQty(String id, int maxStok) {
+    final saran = restockHints[id]?.suggestedQty ?? 0;
+    if (saran <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tidak ada saran restock untuk produk ini'),
+          backgroundColor: Colors.orange));
+      return;
+    }
+    final qty = saran > maxStok ? maxStok : saran;
+    setState(() {
+      selectedItems[id] = qty;
+      qtyControllers[id] ??= TextEditingController();
+      qtyControllers[id]!.text = qty.toString();
+    });
+  }
+
+  String _formatShareBreakdown(List<StoreShare> shares) {
+    final top = shares
+        .where((s) => s.allocated > 0 || s.needQty > 0 || s.inboundQty > 0)
+        .take(4);
+    return top.map((s) {
+      final name = s.tokoId.replaceFirst('CABANG-', '');
+      final extra = s.inboundQty > 0 ? '+RO${s.inboundQty}' : '';
+      return '$name:${s.allocated} (laku ${s.sold30d}$extra)';
+    }).join(' · ');
   }
 
   // 2. FUNGSI MEMILIH / MEMBATALKAN PILIHAN ITEM KE DALAM KERANJANG DO
@@ -195,8 +289,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       if (selectedItems.containsKey(id)) {
         selectedItems.remove(id);
       } else {
-        selectedItems[id] = 1;
-        qtyControllers[id] ??= TextEditingController(text: '1');
+        final saran = restockHints[id]?.suggestedQty ?? 0;
+        final initial =
+            saran > 0 ? (saran > stokTersedia ? stokTersedia : saran) : 1;
+        selectedItems[id] = initial;
+        qtyControllers[id] ??= TextEditingController(text: initial.toString());
+        qtyControllers[id]!.text = initial.toString();
       }
     });
   }
@@ -444,7 +542,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         'dari_lokasi': 'PUSAT',
         'ke_lokasi': selectedToko,
         'jumlah': _calculateTotalQty(),
-        'tipe': 'OUTGOING',
+        'tipe': 'DELIVERY',
         'status': 'TRANSIT',
         'bukti_foto_pengirim': imgUrl,
         'keterangan': buildCartJson(),
@@ -475,99 +573,257 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   // 2. TAMPILAN ANTARMUKA LAYOUT UTAMA KARTU MUTASI BARANG PUSAT
   @override
   Widget build(BuildContext context) {
-    final displayList = isFiltering ? filteredProduk : listProdukPusat;
+    final displayList = _buildDisplayList();
+    final cartCount = selectedItems.length;
+    final cartQty =
+        selectedItems.values.fold<int>(0, (s, q) => s + q);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: _panel,
         elevation: 0,
-        title: Text("do_title".tr(),
-            style: const TextStyle(
-                fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        surfaceTintColor: Colors.transparent,
+        title: Column(
+          children: [
+            Text("do_title".tr(),
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8)),
+            const Text('Kirim restock Pusat → cabang',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500)),
+          ],
+        ),
         centerTitle: true,
         actions: [
-          // Tombol Akses Halaman Transaksi Gantung (Menuju Part 5)
           IconButton(
-              icon: const Icon(Icons.inventory_2,
-                  color: Colors.orangeAccent, size: 22),
-              tooltip: "do_trip_gantung".tr(),
-              onPressed: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const DraftManagerPage()));
-              })
+            tooltip: "do_trip_gantung".tr(),
+            style: IconButton.styleFrom(
+              backgroundColor: _panelSoft,
+              side: const BorderSide(color: _line),
+            ),
+            icon: const Icon(Icons.inventory_2_rounded,
+                color: Color(0xFFFBBF24), size: 20),
+            onPressed: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const DraftManagerPage()));
+            },
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          // --- PANEL HEADER: PILIH CABANG TUJUAN & SEARCH BAR ---
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                DropdownButtonFormField<String>(
-                  value: listToko.contains(selectedToko) ? selectedToko : null,
-                  decoration: InputDecoration(
-                    labelText: "do_cabang_tujuan".tr(),
-                    labelStyle:
-                        const TextStyle(color: Colors.grey, fontSize: 12),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _panel,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _line),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
-                  dropdownColor: const Color(0xFF1E293B),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  items: listToko
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (val) => setState(() => selectedToko = val),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: searchController,
-                  onChanged: (v) => filterProduk(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: InputDecoration(
-                      hintText: "do_cari_produk".tr(),
-                      hintStyle:
-                          const TextStyle(color: Colors.grey, fontSize: 13),
-                      prefixIcon: const Icon(Icons.search,
-                          color: Colors.grey, size: 18),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value:
+                        listToko.contains(selectedToko) ? selectedToko : null,
+                    decoration: InputDecoration(
+                      labelText: "do_cabang_tujuan".tr(),
+                      labelStyle: const TextStyle(
+                          color: Color(0xFF94A3B8), fontSize: 12),
+                      prefixIcon: const Icon(Icons.storefront_rounded,
+                          color: Color(0xFF94A3B8), size: 20),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: _panelSoft,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none)),
-                ),
-                const SizedBox(height: 15),
-
-                // Filter kategori — wrap di HP, scroll di layar lebar
-                R.isNarrow(context)
-                    ? Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        children: [
-                          _buildCategoryChip('Frame', Colors.blueAccent),
-                          _buildCategoryChip('Lensa', Colors.orangeAccent),
-                          _buildCategoryChip('Lainnya', Colors.green),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    dropdownColor: _panelSoft,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                    items: listToko
+                        .map((c) =>
+                            DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (val) async {
+                      setState(() => selectedToko = val);
+                      await _loadRestockHints();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: searchController,
+                    onChanged: (v) => filterProduk(),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: "do_cari_produk".tr(),
+                      hintStyle: const TextStyle(
+                          color: Color(0xFF64748B), fontSize: 12.5),
+                      prefixIcon: const Icon(Icons.search_rounded,
+                          color: Color(0xFF94A3B8), size: 20),
+                      filled: true,
+                      fillColor: _panelSoft,
+                      isDense: true,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  if (isLoadingHints) ...[
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: const LinearProgressIndicator(
+                        minHeight: 3,
+                        color: Color(0xFFFBBF24),
+                        backgroundColor: _line,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFFBBF24).withOpacity(0.12),
+                          _panelSoft,
                         ],
-                      )
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: const Color(0xFFFBBF24).withOpacity(0.35)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            _buildCategoryChip('Frame', Colors.blueAccent),
-                            const SizedBox(width: 10),
-                            _buildCategoryChip('Lensa', Colors.orangeAccent),
-                            const SizedBox(width: 10),
-                            _buildCategoryChip('Lainnya', Colors.green),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 5),
+                              decoration: BoxDecoration(
+                                color:
+                                    const Color(0xFFFBBF24).withOpacity(0.18),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.local_shipping_rounded,
+                                      size: 14, color: Color(0xFFFBBF24)),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'RESTOCK',
+                                    style: TextStyle(
+                                      color: Color(0xFFFBBF24),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.7,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                setState(
+                                    () => onlyNeedRestock = !onlyNeedRestock);
+                                filterProduk();
+                              },
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                foregroundColor: const Color(0xFF94A3B8),
+                                padding: EdgeInsets.zero,
+                              ),
+                              child: Text(
+                                onlyNeedRestock
+                                    ? 'Lihat semua'
+                                    : 'Hanya restock',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ),
                           ],
                         ),
-                      )
+                        const SizedBox(height: 8),
+                        Text(
+                          onlyNeedRestock
+                              ? 'Menampilkan produk yang perlu dilengkapi (laku − stok toko).'
+                              : 'Menampilkan seluruh katalog stok Pusat.',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _buildCategoryChip(
+                                'Frame', const Color(0xFF60A5FA)),
+                            _buildCategoryChip(
+                                'Lensa', const Color(0xFFFBBF24)),
+                            _buildCategoryChip(
+                                'Lainnya', const Color(0xFF4ADE80)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
+            child: Row(
+              children: [
+                Text(
+                  '${displayList.length} produk',
+                  style: const TextStyle(
+                    color: Color(0xFF60A5FA),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (cartCount > 0)
+                  Text(
+                    'Keranjang: $cartCount item · $cartQty pcs',
+                    style: const TextStyle(
+                      color: Color(0xFFFBBF24),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -576,13 +832,80 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           Expanded(
             child: isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent))
+                    child: CircularProgressIndicator(color: Color(0xFF60A5FA)))
                 : displayList.isEmpty
                     ? Center(
-                        child: Text("retur_stok_kosong".tr(),
-                            style: const TextStyle(color: Colors.grey)))
+                        child: Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: _panel,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: _line),
+                                ),
+                                child: Icon(
+                                  listProdukPusat.isEmpty
+                                      ? Icons.warehouse_outlined
+                                      : Icons.inventory_2_outlined,
+                                  color: const Color(0xFF64748B),
+                                  size: 30,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                listProdukPusat.isEmpty
+                                    ? "do_stok_kosong".tr()
+                                    : onlyNeedRestock
+                                        ? 'Tidak ada yang perlu dilengkapi'
+                                        : 'Tidak ada produk cocok filter',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                listProdukPusat.isEmpty
+                                    ? 'Pastikan produk Pusat sudah terisi di Product Master.'
+                                    : onlyNeedRestock
+                                        ? 'Stok toko sudah cukup, ada RO jalan, atau belum ada penjualan 30 hari.\nKetuk "Lihat semua" untuk katalog Pusat.'
+                                        : 'Coba ubah kategori atau kata kunci pencarian.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 12,
+                                  height: 1.4,
+                                ),
+                              ),
+                              if (listProdukPusat.isNotEmpty &&
+                                  onlyNeedRestock) ...[
+                                const SizedBox(height: 14),
+                                FilledButton(
+                                  onPressed: () {
+                                    setState(() => onlyNeedRestock = false);
+                                    filterProduk();
+                                  },
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFBBF24),
+                                    foregroundColor: Colors.black,
+                                  ),
+                                  child: const Text('Lihat semua stok Pusat',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w800)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
                         itemCount: displayList.length,
                         itemBuilder: (context, index) {
                           final item = displayList[index];
@@ -593,6 +916,17 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                               int.tryParse(item['stock']?.toString() ?? '0') ??
                                   0;
                           bool isSelected = selectedItems.containsKey(id);
+                          final hint = restockHints[id];
+                          final stockCabang = hint?.stockCabang ?? 0;
+                          final inboundQty = hint?.inboundQty ?? 0;
+                          final sold30d = hint?.sold30d ?? 0;
+                          final saranQty = hint?.suggestedQty ?? 0;
+                          final needQty = hint?.needQty ?? 0;
+                          final totalNeedAll = hint?.totalNeedAll ?? 0;
+                          final pusatEnough = hint?.pusatEnough ?? true;
+                          final salesRank = hint?.salesRank ?? 0;
+                          final cabangCount = hint?.cabangCount ?? 0;
+                          final coveredQty = stockCabang + inboundQty;
 
                           String kategori =
                               (item['kategori']?.toString().trim() ?? '')
@@ -657,18 +991,30 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
 
                           return AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.only(bottom: 12),
+                            margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? Colors.blueAccent.withOpacity(0.08)
-                                  : Colors.white.withOpacity(0.02),
+                                  ? const Color(0xFF2563EB).withOpacity(0.12)
+                                  : saranQty > 0
+                                      ? const Color(0xFFFBBF24).withOpacity(0.07)
+                                      : _panel,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                   color: isSelected
-                                      ? Colors.blueAccent.withOpacity(0.7)
-                                      : Colors.white.withOpacity(0.05),
-                                  width: isSelected ? 1.5 : 1),
+                                      ? const Color(0xFF60A5FA)
+                                      : saranQty > 0
+                                          ? const Color(0xFFFBBF24)
+                                              .withOpacity(0.5)
+                                          : _line,
+                                  width: isSelected || saranQty > 0 ? 1.4 : 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.14),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
@@ -760,22 +1106,110 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                                 fontSize: 11),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis),
-                                      const SizedBox(height: 5),
-                                      Row(
-                                        children: [
-                                          Container(
-                                              width: 5,
-                                              height: 5,
-                                              decoration: const BoxDecoration(
-                                                  color: Colors.greenAccent,
-                                                  shape: BoxShape.circle)),
-                                          const SizedBox(width: 6),
-                                          Text("Stok Pusat: $maxStok Pcs",
-                                              style: const TextStyle(
-                                                  color: Colors.greenAccent,
-                                                  fontSize: 11)),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Pusat: $maxStok · Stok toko: $stockCabang'
+                                        '${inboundQty > 0 ? ' · Jalan/RO: $inboundQty' : ''}'
+                                        ' · Laku 30h: $sold30d',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.55),
+                                          fontSize: 10.5,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        sold30d > 0
+                                            ? 'Melengkapi rata2: $sold30d − $coveredQty = butuh $needQty'
+                                            : 'Belum ada penjualan 30 hari · saran 0',
+                                        style: TextStyle(
+                                          color: needQty > 0
+                                              ? Colors.lightBlueAccent
+                                              : Colors.white38,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        saranQty > 0
+                                            ? 'Saran kirim: $saranQty pcs'
+                                            : coveredQty >= sold30d &&
+                                                    sold30d > 0
+                                                ? 'Saran: 0 (stok toko sudah cukup / ada RO jalan)'
+                                                : 'Saran: 0',
+                                        style: TextStyle(
+                                          color: saranQty > 0
+                                              ? Colors.amberAccent
+                                              : Colors.white38,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      if (cabangCount > 0) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          pusatEnough
+                                              ? 'Pusat cukup untuk $cabangCount cabang (total sisa butuh $totalNeedAll)'
+                                              : 'Pusat kurang: sisa butuh $totalNeedAll / ada $maxStok · bagi ke yang lebih laku${salesRank > 0 ? ' · prioritas #$salesRank' : ''}',
+                                          style: TextStyle(
+                                            color: pusatEnough
+                                                ? Colors.greenAccent
+                                                    .withOpacity(0.85)
+                                                : Colors.orangeAccent
+                                                    .withOpacity(0.9),
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (hint != null &&
+                                            hint.shares.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _formatShareBreakdown(hint.shares),
+                                            style: TextStyle(
+                                              color:
+                                                  Colors.white.withOpacity(0.4),
+                                              fontSize: 9,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ],
-                                      )
+                                      ],
+                                      if (saranQty > 0) ...[
+                                        const SizedBox(height: 4),
+                                        GestureDetector(
+                                          onTap: () =>
+                                              _applySuggestedQty(id, maxStok),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amberAccent
+                                                  .withOpacity(0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                  color: Colors.amberAccent
+                                                      .withOpacity(0.5)),
+                                            ),
+                                            child: const Text(
+                                              'Isi saran',
+                                              style: TextStyle(
+                                                color: Colors.amberAccent,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -829,8 +1263,18 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                         ],
                                       )
                                     : IconButton(
-                                        icon: const Icon(Icons.add_box,
-                                            color: Colors.blueAccent, size: 24),
+                                        icon: Icon(
+                                          saranQty > 0
+                                              ? Icons.add_shopping_cart_rounded
+                                              : Icons.add_box,
+                                          color: saranQty > 0
+                                              ? Colors.amberAccent
+                                              : Colors.blueAccent,
+                                          size: 24,
+                                        ),
+                                        tooltip: saranQty > 0
+                                            ? 'Tambah dengan saran $saranQty'
+                                            : 'Tambah',
                                         onPressed: () => _toggleItem(item)),
                               ],
                             ),
@@ -839,128 +1283,77 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                       ),
           ),
 
-          // --- BOTTOM BAR ACTION ACTION BUTTONS ---
+          // --- BOTTOM BAR ---
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
+              color: _panel,
+              border: const Border(top: BorderSide(color: _line)),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5))
+                  color: Colors.black.withOpacity(0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, -4),
+                ),
               ],
             ),
-            child: R.isNarrow(context)
-                ? Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orangeAccent,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12))),
-                          onPressed: (isProcessing || selectedItems.isEmpty)
-                              ? null
-                              : saveDraft,
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.black, strokeWidth: 2))
-                              : Text("do_btn_simpan".tr(),
-                                  style: const TextStyle(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                        ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFBBF24),
+                        side: const BorderSide(color: Color(0xFFFBBF24)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueAccent,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12))),
-                          onPressed: (isProcessing || selectedItems.isEmpty)
-                              ? null
-                              : confirmAndSend,
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                              : Text("do_btn_kirim".tr(),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orangeAccent,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12))),
-                          onPressed: (isProcessing || selectedItems.isEmpty)
-                              ? null
-                              : saveDraft,
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.black, strokeWidth: 2))
-                              : Text("do_btn_simpan".tr(),
-                                  style: const TextStyle(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueAccent,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12))),
-                          onPressed: (isProcessing || selectedItems.isEmpty)
-                              ? null
-                              : confirmAndSend,
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                              : Text("do_btn_kirim".tr(),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                        ),
-                      ),
-                    ],
+                      onPressed: (isProcessing || selectedItems.isEmpty)
+                          ? null
+                          : saveDraft,
+                      child: isProcessing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFBBF24), strokeWidth: 2))
+                          : Text("do_btn_simpan".tr(),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 12)),
+                    ),
                   ),
-          )
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 1,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: _panelSoft,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: (isProcessing || selectedItems.isEmpty)
+                          ? null
+                          : confirmAndSend,
+                      child: isProcessing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text("do_btn_kirim".tr(),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1638,7 +2031,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         'dari_lokasi': 'PUSAT',
         'ke_lokasi': widget.draft['tujuan'],
         'jumlah': totalQty,
-        'tipe': 'OUTGOING',
+        'tipe': 'DELIVERY',
         'status': 'WAITING',
         'bukti_foto_pengirim': imgUrl,
         'keterangan': jsonEncode(localItems),

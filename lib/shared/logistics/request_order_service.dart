@@ -322,7 +322,7 @@ class RequestOrderService {
           'dari_lokasi': 'PUSAT',
           'ke_lokasi': tokoTujuan,
           'jumlah': qty,
-          'tipe': 'OUTGOING',
+          'tipe': 'REQUEST',
           'status': 'TRANSIT',
           'keterangan':
               'RequestOrder#$id | Invoice ${req['no_invoice'] ?? '-'} | $itemJson',
