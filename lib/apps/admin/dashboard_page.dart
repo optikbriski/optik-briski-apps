@@ -2,17 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'login_page.dart';
 import 'sales_page.dart';
 import 'inventory.dart';
 import 'product_master.dart';
 import 'buku_besar.dart';
-import '../main.dart';
-import '../shared/admin_approval_page.dart';
-import '../shared/liveness_camera_page.dart';
+import '../../shared/admin_approval_page.dart';
 import 'barcode_scanner.dart' hide RiwayatTransaksiPage;
 import 'riwayat_transaksi_page.dart';
-import 'package:optik_b_riski/admin/request_order_page.dart';
+import 'request_order_page.dart';
 import 'invoice_config_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -118,8 +115,10 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         actions: [
           IconButton(
-            onPressed: () => Navigator.pushReplacement(
-                context, MaterialPageRoute(builder: (c) => const LoginPage())),
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              // AdminAuthWrapper akan otomatis kembali ke LoginPage
+            },
             icon: const Icon(Icons.logout_rounded,
                 color: Colors.redAccent, size: 22),
           )
@@ -202,16 +201,19 @@ class _DashboardPageState extends State<DashboardPage> {
                             MaterialPageRoute(
                                 builder: (c) => const AdminApprovalPage()))),
 
-                  // 2. MENU ABSENSI WAJAH (KARYAWAN)
+                  // 2. MENU ABSENSI — dijalankan di APK Karyawan (GPS + face)
                   _menuCard(
                       context,
                       "hr_tab_absen".tr(),
                       Icons.face_retouching_natural_rounded,
                       Colors.purpleAccent,
-                      () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (c) => const LivenessCameraPage()))),
+                      () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Absensi (GPS + liveness + wajah) dijalankan dari APK Karyawan.',
+                              ),
+                            ),
+                          )),
 
 // --- 3. MENU KASIR POS (Kembalikan ke SalesPage) ---
                   _menuCard(

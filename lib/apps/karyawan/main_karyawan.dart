@@ -2,14 +2,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'login_karyawan_page.dart';
 import 'detail_pribadi_page.dart';
-import 'register_karyawan_page.dart';
 import 'pengaturan_akun_karyawan.dart';
 import 'bantuan_page.dart';
 import 'pengaduan_page.dart';
 import 'pengingat_page.dart';
-import '../shared/scanner_penerimaan_page.dart';
+import '../../shared/scanner_penerimaan_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -18,67 +16,11 @@ import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'software_update_page.dart';
+import 'absensi_page.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:easy_logger/easy_logger.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
-
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await EasyLocalization.ensureInitialized();
-  EasyLocalization.logger.enableLevels = [
-    LevelMessages.info,
-    LevelMessages.warning,
-    LevelMessages.error,
-  ];
-
-  // 3. Inisialisasi Database Supabase
-  await Supabase.initialize(
-    url: 'https://pxqjdggxhwtwfsialrtu.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB4cWpkZ2d4aHd0d2ZzaWFscnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDQ1NDMsImV4cCI6MjA5MzI4MDU0M30.LcnbMEr62-OOouv1kEeCswyuSg62Rge4WZrSffY9MOM',
-  );
-
-  // 4. Jalankan Aplikasi DENGAN BUNGKUSAN Mesin Bahasa
-  runApp(
-    EasyLocalization(
-      supportedLocales: const [
-        Locale('id'),
-        Locale('en'),
-        Locale('ms'),
-        Locale('zh'),
-        Locale('ja'),
-      ],
-      path: 'assets/translations',
-      fallbackLocale: const Locale('id'),
-      child: const MyAppKaryawan(),
-    ),
-  );
-}
-
-class MyAppKaryawan extends StatelessWidget {
-  const MyAppKaryawan({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      // GANTI BARIS INI
-      title: 'Karyawan Optik B. Riski',
-
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: context.localizationDelegates,
-      supportedLocales: context.supportedLocales,
-      locale: context.locale,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Poppins',
-      ),
-      home: const LoginKaryawanPage(),
-    );
-  }
-}
 
 class KaryawanPage extends StatefulWidget {
   const KaryawanPage({super.key});
@@ -1373,6 +1315,11 @@ class KaryawanPageState extends State<KaryawanPage> {
                 _buildMenuProfil(Icons.person_rounded,
                     "menu_detail profil".tr(), "sub_detail_profil".tr(), true),
                 _buildMenuProfil(
+                    Icons.face_retouching_natural_rounded,
+                    'Absensi',
+                    'Masuk/pulang: GPS toko + liveness + wajah',
+                    true),
+                _buildMenuProfil(
                     Icons.settings_rounded,
                     "menu_pengaturan_akun".tr(),
                     "sub_pengaturan_akun".tr(),
@@ -1412,6 +1359,11 @@ class KaryawanPageState extends State<KaryawanPage> {
                     context,
                     MaterialPageRoute(
                         builder: (context) => const DetailDataPribadiPage()));
+              } else if (title == 'Absensi') {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const AbsensiPage()));
               } else if (title == "menu_pengaturan_akun".tr()) {
                 Navigator.push(
                     context,

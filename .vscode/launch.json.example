@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Admin (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "toolArgs": [
+        "--dart-define",
+        "SUPABASE_URL=YOUR_SUPABASE_URL",
+        "--dart-define",
+        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
+        "--dart-define",
+        "APP_FLAVOR=admin"
+      ]
+    },
+    {
+      "name": "Karyawan (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_karyawan.dart",
+      "toolArgs": [
+        "--dart-define",
+        "SUPABASE_URL=YOUR_SUPABASE_URL",
+        "--dart-define",
+        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
+        "--dart-define",
+        "APP_FLAVOR=karyawan"
+      ]
+    },
+    {
+      "name": "Member (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_member.dart",
+      "toolArgs": [
+        "--dart-define",
+        "SUPABASE_URL=YOUR_SUPABASE_URL",
+        "--dart-define",
+        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
+        "--dart-define",
+        "APP_FLAVOR=member"
+      ]
+    }
+  ]
+}

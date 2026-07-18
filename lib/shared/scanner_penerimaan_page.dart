@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:easy_localization/easy_localization.dart'; // <-- Senjata Utama
+import 'package:easy_localization/easy_localization.dart';
 
 class ScannerPenerimaanPage extends StatefulWidget {
   final String cabangKaryawan;
@@ -12,11 +12,23 @@ class ScannerPenerimaanPage extends StatefulWidget {
 
 class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
   bool _isScanning = true;
-  MobileScannerController cameraController = MobileScannerController();
+
+  // Controller scanner kamera
+  final MobileScannerController cameraController = MobileScannerController();
+
+  // Bagian pembersihan memori (Anti-Lemot & HP Kasir ga panas)
+  @override
+  void dispose() {
+    cameraController.dispose();
+    super.dispose();
+  }
 
   void _validasiBarangMasuk(String dataDariQR) {
     if (!_isScanning) return;
     setState(() => _isScanning = false);
+
+    // Hentikan deteksi kamera sementara saat dialog muncul agar tidak double scan
+    cameraController.stop();
 
     if (dataDariQR.contains(widget.cabangKaryawan)) {
       _tampilkanDialogHasil(
@@ -26,6 +38,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
             "${"scan_data_terbaca".tr()} $dataDariQR\n\n${"scan_barang_dari_pusat".tr()} ${widget.cabangKaryawan} ${"scan berhasil dicatat".tr()}",
         icon: Icons.check_circle_rounded,
         warna: Colors.green,
+        rawQRData: dataDariQR,
       );
     } else {
       _tampilkanDialogHasil(
@@ -35,6 +48,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
             "${"scan_data_terbaca".tr()} $dataDariQR\n\n${"scan_akses_ditolak".tr()} ${widget.cabangKaryawan}!",
         icon: Icons.error_rounded,
         warna: Colors.redAccent,
+        rawQRData: dataDariQR,
       );
     }
   }
@@ -45,11 +59,15 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
     required String pesan,
     required IconData icon,
     required Color warna,
+    required String rawQRData,
   }) {
+    // Pelindung tambahan sebelum memunculkan dialog
+    if (!mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
@@ -74,30 +92,33 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))),
                 onPressed: () {
-                  Navigator.pop(context); // Tutup dialog
-                  Navigator.pop(
-                      context,
-                      sukses
-                          ? dataDariQR(pesan)
-                          : null); // Kembali ke halaman SMR membawa data
+                  // 1. Tutup dialognya terlebih dahulu memakai dialogContext
+                  Navigator.pop(dialogContext);
+
+                  // 2. Cek apakah operasi sukses atau gagal
+                  if (sukses) {
+                    // Pelindung lifecycle sebelum menutup halaman utama
+                    if (!mounted) return;
+                    // Jika sukses, tutup halaman dan bawa pulang datanya ke Stock Move Report
+                    Navigator.pop(context, rawQRData.trim());
+                  } else {
+                    // JIKA GAGAL: Hidupkan kembali kameranya agar bisa scan ulang
+                    setState(() => _isScanning = true);
+                    cameraController.start();
+                  }
                 },
-                child: Text("scan_btn_tutup".tr(),
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  // ✅ FIX: Mengubah "Coba Lagi" menjadi kode lokalisasi bahasa agar konsisten
+                  sukses ? "scan_btn_tutup".tr() : "scan_btn_coba_lagi".tr(),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             )
           ],
         ),
       ),
     );
-  }
-
-  String dataDariQR(String pesan) {
-    return pesan
-        .split('\n')
-        .first
-        .replaceAll("scan_data_terbaca".tr(), '')
-        .trim();
   }
 
   @override
@@ -127,6 +148,23 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
         children: [
           MobileScanner(
             controller: cameraController,
+            errorBuilder: (context, error) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.videocam_off_rounded,
+                        color: Colors.redAccent, size: 50),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Gagal mengakses kamera.\nPastikan izin kamera telah diberikan di pengaturan HP.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
+              );
+            },
             onDetect: (capture) {
               final List<Barcode> barcodes = capture.barcodes;
               for (final barcode in barcodes) {
@@ -137,6 +175,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
               }
             },
           ),
+          // Kotak Target Scanner
           Container(
             decoration: BoxDecoration(
               border: Border.all(
@@ -146,6 +185,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
             width: 250,
             height: 250,
           ),
+          // Teks Instruksi di Bawah
           Positioned(
             bottom: 80,
             child: Container(

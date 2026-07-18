@@ -24,7 +24,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   List<dynamic> _listKaryawanPending = [];
   bool _isLoading = true;
 
-  // 🎯 FIX 1: Masukkan role admin_pusat agar bisa memantau seluruh cabang tanpa terkunci
+  // Cek apakah admin pusat atau owner agar bisa memantau seluruh cabang
   bool get _isPusat =>
       widget.cabangAdmin == 'PUSAT' ||
       widget.roleAdmin == 'owner' ||
@@ -36,13 +36,18 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     _tarikDataKaryawan();
   }
 
-  // 1. FUNGSI TARIK DATA
+  // 1. FUNGSI TARIK DATA (OPTIMAL & HEMAT BUNDLE DATA)
   Future<void> _tarikDataKaryawan() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
-    try {
-      var query = supabase.from('karyawan').select();
 
-      // 🎯 FIX 2: Mengubah filter dari 'cabang' ke 'toko_id' agar cocok dengan kode pendek database
+    try {
+      // ✅ FIX 1: Mengubah .in_ menjadi .inFilter agar kompatibel dengan versi SDK Supabase terbaru lo
+      var query = supabase
+          .from('karyawan')
+          .select()
+          .inFilter('status_approval', ['Aktif', 'Pending', 'Menunggu OTP']);
+
       if (!_isPusat && widget.cabangAdmin.isNotEmpty) {
         query = query.eq('toko_id', widget.cabangAdmin);
       }
@@ -54,7 +59,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           _listKaryawanAktif =
               data.where((e) => e['status_approval'] == 'Aktif').toList();
 
-          // 🎯 FIX 3: Meloloskan karyawan baru yang berstatus 'Menunggu OTP' agar langsung muncul di dashboard
           _listKaryawanPending = data
               .where((e) =>
                   e['status_approval'] == 'Pending' ||
@@ -67,6 +71,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("${'appr_err_umum'.tr()}$e"),
@@ -80,6 +85,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   // 2. FUNGSI EKSEKUSI DATABASE
   Future<void> _prosesPendaftaran(
       String idKaryawan, String statusBaru, String nama) async {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text("appr_memproses".tr(args: [nama])),
       backgroundColor: Colors.blueAccent,
@@ -91,6 +97,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           .update({'status_approval': statusBaru}).eq('id', idKaryawan);
 
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -106,6 +113,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("${'appr_gagal'.tr()}$e"),
@@ -143,21 +151,21 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
         trailing: IconButton(
           icon:
               const Icon(Icons.info_outline_rounded, color: Colors.blueAccent),
-          onPressed: () => _tampilkanDetailKaryawan(k), // TOMBOL DETAIL
+          onPressed: () => _tampilkanDetailKaryawan(k),
         ),
       ),
     );
   }
 
-  // UI PREMIUM: POP-UP GABUNGAN (ID CARD KIRI, DETAIL KANAN)
+  // UI PREMIUM & RESPONSIVE POP-UP
   void _tampilkanDetailKaryawan(Map<String, dynamic> data) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(20),
+        insetPadding: const EdgeInsets.all(16),
         child: Container(
-          width: 950,
+          constraints: const BoxConstraints(maxWidth: 950),
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B),
@@ -193,103 +201,115 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                   ],
                 ),
                 const SizedBox(height: 25),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // KIRI: ID CARD VIRTUAL
-                      _buildVirtualIDCard(data),
-                      const SizedBox(width: 40),
-                      // KANAN: GRID DATA KARYAWAN
-                      SizedBox(
-                        width: 550,
-                        child: Column(
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isMobile = constraints.maxWidth < 750;
+
+                    return Flex(
+                      direction: isMobile ? Axis.vertical : Axis.horizontal,
+                      crossAxisAlignment: isMobile
+                          ? CrossAxisAlignment.center
+                          : CrossAxisAlignment.start,
+                      children: [
+                        // KIRI (atau ATAS jika mobile): ID CARD VIRTUAL
+                        _buildVirtualIDCard(data),
+                        SizedBox(
+                            width: isMobile ? 0 : 40,
+                            height: isMobile ? 30 : 0),
+                        // KANAN (atau BAWAH jika mobile): GRID DATA KARYAWAN RESPONSIF
+                        Expanded(
+                          flex: isMobile ? 0 : 1,
+                          child: SizedBox(
+                            width: isMobile ? double.infinity : 550,
+                            child: Column(
                               children: [
-                                Expanded(
-                                  child: _buildDataSection(
-                                      "hr_data_pribadi".tr(), [
-                                    _buildInfoRow("profil_label_nik".tr(),
-                                        data['nik'] ?? '-'),
-                                    _buildInfoRow("appr_email".tr(),
-                                        data['email'] ?? '-'),
-                                    _buildInfoRow(
-                                        "appr_nomor_wa".tr(), data['wa'] ?? '-',
-                                        valColor: Colors.greenAccent),
-                                    _buildInfoRow("appr_gender".tr(),
-                                        data['gender'] ?? '-'),
-                                    _buildInfoRow(
-                                        "profil_label_umur".tr(),
-                                        "appr_tahun".tr(args: [
-                                          (data['umur'] ?? '-').toString()
-                                        ])),
-                                    _buildInfoRow("appr_alamat".tr(),
-                                        data['alamat_lengkap'] ?? '-'),
-                                  ]),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: _buildDataSection(
+                                          "hr_data_pribadi".tr(), [
+                                        _buildInfoRow("profil_label_nik".tr(),
+                                            data['nik'] ?? '-'),
+                                        _buildInfoRow("appr_email".tr(),
+                                            data['email'] ?? '-'),
+                                        _buildInfoRow("appr_nomor_wa".tr(),
+                                            data['wa'] ?? '-',
+                                            valColor: Colors.greenAccent),
+                                        _buildInfoRow("appr_gender".tr(),
+                                            data['gender'] ?? '-'),
+                                        _buildInfoRow(
+                                            "profil_label_umur".tr(),
+                                            "appr_tahun".tr(args: [
+                                              (data['umur'] ?? '-').toString()
+                                            ])),
+                                        _buildInfoRow("appr_alamat".tr(),
+                                            data['alamat_lengkap'] ?? '-'),
+                                      ]),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: _buildDataSection(
+                                          "hr_kepegawaian".tr(), [
+                                        _buildInfoRow(
+                                            "appr_tgl_mulai".tr(),
+                                            data['tanggal_mulai'] != null
+                                                ? data['tanggal_mulai']
+                                                    .toString()
+                                                    .split('T')[0]
+                                                : '-'),
+                                        _isPusat
+                                            ? _buildInfoRow(
+                                                "appr_pin_absensi".tr(),
+                                                data['pin_absensi']
+                                                        ?.toString() ??
+                                                    '-',
+                                                valColor: Colors.redAccent)
+                                            : const SizedBox(),
+                                        _buildInfoRow("appr_status".tr(),
+                                            data['status_approval'] ?? '-',
+                                            valColor: Colors.greenAccent),
+                                      ]),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 30),
-                                Expanded(
-                                  child:
-                                      _buildDataSection("hr_kepegawaian".tr(), [
-                                    _buildInfoRow(
-                                        "appr_tgl_mulai".tr(),
-                                        data['tanggal_mulai'] != null
-                                            ? data['tanggal_mulai']
-                                                .toString()
-                                                .split('T')[0]
-                                            : '-'),
-                                    _isPusat
-                                        ? _buildInfoRow(
-                                            "appr_pin_absensi".tr(),
-                                            data['pin_absensi']?.toString() ??
-                                                '-',
-                                            valColor: Colors.redAccent)
-                                        : const SizedBox(),
-                                    _buildInfoRow("appr_status".tr(),
-                                        data['status_approval'] ?? '-',
-                                        valColor: Colors.greenAccent),
-                                  ]),
-                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: _buildDataSection(
+                                          "appr_data_payroll".tr(), [
+                                        _buildInfoRow("hr_reg_bank".tr(),
+                                            data['nama_bank'] ?? 'BCA'),
+                                        _buildInfoRow("appr_no_rekening".tr(),
+                                            data['no_rekening'] ?? '-',
+                                            valColor: Colors.blueAccent),
+                                      ]),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: _buildDataSection(
+                                          "hr_kontak_darurat".tr(), [
+                                        _buildInfoRow("appr_nama_kontak".tr(),
+                                            data['darurat_nama'] ?? '-'),
+                                        _isPusat
+                                            ? _buildInfoRow(
+                                                "hr_reg_wa_darurat".tr(),
+                                                data['darurat_wa'] ?? '-',
+                                                valColor: Colors.orangeAccent)
+                                            : const SizedBox(),
+                                      ]),
+                                    ),
+                                  ],
+                                )
                               ],
                             ),
-                            const SizedBox(height: 30),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: _buildDataSection(
-                                      "appr_data_payroll".tr(), [
-                                    _buildInfoRow("hr_reg_bank".tr(),
-                                        data['nama_bank'] ?? 'BCA'),
-                                    _buildInfoRow("appr_no_rekening".tr(),
-                                        data['no_rekening'] ?? '-',
-                                        valColor: Colors.blueAccent),
-                                  ]),
-                                ),
-                                const SizedBox(width: 30),
-                                Expanded(
-                                  child: _buildDataSection(
-                                      "hr_kontak_darurat".tr(), [
-                                    _buildInfoRow("appr_nama_kontak".tr(),
-                                        data['darurat_nama'] ?? '-'),
-                                    _isPusat
-                                        ? _buildInfoRow(
-                                            "hr_reg_wa_darurat".tr(),
-                                            data['darurat_wa'] ?? '-',
-                                            valColor: Colors.orangeAccent)
-                                        : const SizedBox(),
-                                  ]),
-                                ),
-                              ],
-                            )
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
+                          ),
+                        )
+                      ],
+                    );
+                  },
                 )
               ],
             ),
@@ -299,7 +319,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // WIDGET HELPER: ID CARD VIRTUAL (SISI KIRI)
+  // WIDGET HELPER: ID CARD VIRTUAL
   Widget _buildVirtualIDCard(Map<String, dynamic> data) {
     return Container(
       width: 280,
@@ -319,6 +339,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
       child: Column(
         children: [
           Row(
+            // ✅ FIX 2: Mengubah Maincenter menjadi MainAxisAlignment.center yang valid
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.remove_red_eye, color: Colors.amber, size: 24),
@@ -420,7 +441,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // WIDGET HELPER: PEMBUAT SECTION & BARIS DATA (SISI KANAN)
   Widget _buildDataSection(String title, List<Widget> rows) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,6 +585,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                     borderRadius: BorderRadius.circular(8))),
             onPressed: () {
               if (alasanCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).clearSnackBars();
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text("appr_err_tolak".tr()),
                   backgroundColor: Colors.orange,
@@ -586,7 +607,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // 5. WIDGET CARD KARYAWAN PENDING (BUTUH VERIFIKASI)
+  // 5. WIDGET CARD KARYAWAN PENDING
   Widget _buildCardKaryawanPending(Map<String, dynamic> k) {
     final String id = k['id'] ?? '';
     final String nama = k['nama'] ?? '-';
@@ -630,7 +651,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                 IconButton(
                   icon: const Icon(Icons.info_outline_rounded,
                       color: Colors.blueAccent),
-                  onPressed: () => _tampilkanDetailKaryawan(k), // TOMBOL DETAIL
+                  onPressed: () => _tampilkanDetailKaryawan(k),
                 ),
               ],
             ),
@@ -647,7 +668,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                     ),
                     onPressed: () => _tampilkanDialogTolak(id, nama),
                     icon: const Icon(Icons.close_rounded, size: 18),
-                    // 🎯 BARIS 650 FIX: Pindahkan .tr() ke dalam bungkus Text
                     label: Text("appr_btn_tolak".tr()),
                   ),
                 ),
@@ -663,7 +683,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                     ),
                     onPressed: () => _tampilkanDialogSetuju(id, nama),
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    // 🎯 BARIS 665 FIX: Pindahkan .tr() ke dalam bungkus Text
                     label: Text("appr_btn_setuju".tr()),
                   ),
                 ),
@@ -675,7 +694,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // WIDGET HELPER DARK MODE: EMPTY STATE (DATA KOSONG)
   Widget _buildEmptyState(String message, IconData icon) {
     return Center(
       child: Column(
@@ -705,7 +723,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // BUILD UTAMA (ANTARMUKA HALAMAN)
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -787,7 +804,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                 child: CircularProgressIndicator(color: Colors.blueAccent))
             : TabBarView(
                 children: [
-                  // TAB 1: KARYAWAN AKTIF
                   _listKaryawanAktif.isEmpty
                       ? _buildEmptyState(
                           "appr_aktif_kosong".tr(), Icons.group_off_rounded)
@@ -803,8 +819,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                                     _listKaryawanAktif[index]),
                           ),
                         ),
-
-                  // TAB 2: MENUNGGU VERIFIKASI (PENDING & MENUNGGU OTP)
                   _listKaryawanPending.isEmpty
                       ? _buildEmptyState(
                           "appr_verifikasi_kosong".tr(), Icons.verified_rounded)

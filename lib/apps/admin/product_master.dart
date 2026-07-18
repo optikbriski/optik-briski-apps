@@ -41,6 +41,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   String filterUnit = 'SEMUA';
   String filterKat = 'SEMUA';
 
+  // 🎯 SELEKSI MODE BARCODE BARU
+  String barcodeMode =
+      'AUTOMATIC'; // Pilihan: 'AUTOMATIC' atau 'MANUAL_PRODUCT'
+
   List<String> units = ['SEMUA'];
   List<dynamic> listProduk = [];
   bool isLoading = true;
@@ -193,6 +197,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   }
 
   Future<void> _save() async {
+    // 1. Validasi Input Dasar Nama Produk
     if (nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("Nama Produk Wajib Diisi!"),
@@ -200,8 +205,36 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       return;
     }
 
+    // 2. Validasi Jika Kasir Memilih Barcode Bawaan Tapi Kolom Masih Kosong
+    if (barcodeMode == 'MANUAL_PRODUCT' &&
+        barcodeController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Barcode Bawaan Produk Wajib Diisi / Di-scan!"),
+          backgroundColor: Colors.orange));
+      return;
+    }
+
     setState(() => isLoading = true);
     try {
+      // 🚨 BARIKADE VALIDASI: Deteksi duplikat barcode sebelum data dikirim ke Supabase (Hanya saat tambah barang baru)
+      if (editId == null && barcodeMode == 'MANUAL_PRODUCT') {
+        final checkExist = await Supabase.instance.client
+            .from('products')
+            .select('nama')
+            .eq('barcode', barcodeController.text.trim())
+            .maybeSingle();
+
+        if (checkExist != null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  "⚠️ Gagal! Barcode sudah terdaftar untuk produk: ${checkExist['nama']}"),
+              backgroundColor: Colors.redAccent));
+          setState(() => isLoading = false);
+          return; // Menghentikan mutlak proses insert ke bawah
+        }
+      }
+
       String? imgUrl;
       if (foto != null && foto!.bytes != null) {
         final path =
@@ -221,14 +254,22 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           ? _toTitleCase(inputSubController.text.trim())
           : (inputSub ?? '');
 
+      // 🔥 DETERMINASI KODE BARCODE BERDASARKAN SELEKSI RADIO BUTTON
+      String finalBarcode = '';
+      if (barcodeMode == 'AUTOMATIC') {
+        finalBarcode =
+            '${inputKat == 'Lensa' ? 'LNS' : 'BC'}-${DateTime.now().millisecondsSinceEpoch}';
+      } else {
+        finalBarcode = barcodeController.text.trim();
+      }
+
       final basePayload = {
         'nama': namaRapi,
         'harga': int.tryParse(hargaController.text.replaceAll('.', '')) ?? 0,
         'kategori': inputKat,
         'sub_kategori': subRapi,
-        'barcode': barcodeController.text.trim().isEmpty && inputKat == 'Lensa'
-            ? 'LNS-${DateTime.now().millisecondsSinceEpoch}'
-            : barcodeController.text.trim(),
+        'barcode':
+            finalBarcode, // 🎯 Mengunci string barcode hasil kalkulasi mode di atas
         'warna': inputKat == 'Frame' ? _toTitleCase(warnaCtrl.text) : null,
         'jenis_lensa': inputKat == 'Lensa' ? selectedJenisLensa : null,
         'sph_r': inputKat == 'Lensa' ? double.tryParse(sphCtrl.text) : null,
@@ -335,6 +376,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       inputSub = 'Plastik';
       selectedJenisLensa = null;
       foto = null;
+      barcodeMode = 'AUTOMATIC'; // 🎯 Reset kembali ke setelan default otomatis
     });
   }
 
@@ -1037,6 +1079,45 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 ),
               ]),
               const SizedBox(height: 15),
+
+              // 🎯 SUNTIKAN UI BARU: Radio Button Pemilihan Jalur Barcode Produk
+              Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text("Generate Otomatis",
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                      value: 'AUTOMATIC',
+                      groupValue: barcodeMode,
+                      activeColor: Colors.blueAccent,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) => setState(() => barcodeMode = val!),
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile<String>(
+                      title: const Text("Barcode Bawaan",
+                          style: TextStyle(color: Colors.white, fontSize: 12)),
+                      value: 'MANUAL_PRODUCT',
+                      groupValue: barcodeMode,
+                      activeColor: Colors.blueAccent,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) => setState(() => barcodeMode = val!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // 🔍 MUNCULKAN INPUT SCANNER JIKA MEMILIH BARCODE BAWAAN
+              if (barcodeMode == 'MANUAL_PRODUCT') ...[
+                _buildInput(
+                    barcodeController,
+                    "Scan / Ketik Barcode Produk (*)",
+                    Icons.qr_code_scanner_rounded),
+                const SizedBox(height: 15),
+              ],
+
               _buildInput(
                   nameController,
                   inputKat == 'Lensa'
@@ -1404,6 +1485,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                         barcodeController.text =
                                             item['barcode'] ?? '';
                                         warnaCtrl.text = item['warna'] ?? '';
+                                        // 🎯 Buka field input manual agar barcode lamanya kelihatan pas diedit
+                                        barcodeMode = 'MANUAL_PRODUCT';
                                         inputKat = item['kategori'] ?? 'Frame';
                                         String rawSub = item['sub_kategori']
                                                 ?.toString()

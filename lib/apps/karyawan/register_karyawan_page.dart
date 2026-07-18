@@ -4,7 +4,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart'; // Aktifkan jika dipakai di sini
-import '../shared/liveness_camera_page.dart';
+import '../../shared/attendance/liveness_result.dart';
+import '../../shared/liveness_camera_page.dart';
 import 'otp_verification_page.dart';
 import 'package:easy_localization/easy_localization.dart'; // <-- Senjata Utama
 
@@ -439,7 +440,10 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                 builder: (context) =>
                                     const LivenessCameraPage()),
                           );
-                          if (result == true) {
+                          final ok = result == true ||
+                              (result is LivenessCaptureResult &&
+                                  result.success);
+                          if (ok) {
                             setState(() => isFaceVerified = true);
                           }
                         },

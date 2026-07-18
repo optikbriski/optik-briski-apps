@@ -648,6 +648,12 @@ class _SalesPageState extends State<SalesPage> {
         'status': 'OPEN'
       });
 
+      // 🎯 KUNCI SESI: Biar aman pas di-back browser (Dari langkah sebelumnya)
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_store_open_$tokoId', true);
+      await prefs.setString(
+          'last_open_time_$tokoId', DateTime.now().toIso8601String());
+
       setState(() {
         isStoreOpen = true;
         activeCashier = res;
@@ -655,8 +661,10 @@ class _SalesPageState extends State<SalesPage> {
       });
       _showSnack("✅ Toko Opened by: ${res['nama']}", Colors.green);
     } catch (e) {
+      // 🎯 FIX: Ini pasangan catch utamanya yang tadi hilang kemakan
       _showSnack("❌ Error Open Store: $e", Colors.red);
     } finally {
+      // 🎯 FIX: Ini status loading diturunkan biar aplikasi ga nge-hang
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -2902,15 +2910,29 @@ class _SalesPageState extends State<SalesPage> {
 
   @override
   Widget build(BuildContext context) {
-// 1. Jika toko tutup, panggil layar yang baru
+    // Tampung widget UI ke dalam variable penampung sementara
+    Widget currentUI;
+
     if (!isStoreOpen) {
-      return _buildClosedStoreUI();
+      currentUI = _buildClosedStoreUI();
+    } else {
+      currentUI = isPosUnlocked && activeCashier != null
+          ? _buildSalesMainUI()
+          : _buildBarcodeScannerLayar();
     }
 
-    // 2. Kalau sudah terbuka, cek apakah sudah login kasir
-    return isPosUnlocked && activeCashier != null
-        ? _buildSalesMainUI()
-        : _buildBarcodeScannerLayar();
+    // 🎯 SUNTIKAN SAKTI 2: Bungkus dengan PopScope untuk menjinakkan tombol back Chrome & swipe Mac
+    return PopScope(
+      canPop:
+          !isStoreOpen, // Jika sesi toko buka, canPop = false (tombol back terkunci mati!)
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _showSnack(
+            "Sesi kasir aktif! Gunakan menu internal/closing untuk navigasi.",
+            Colors.orange);
+      },
+      child: currentUI,
+    );
   }
 
   Widget _buildClosedStoreUI() {
@@ -3037,6 +3059,22 @@ class _SalesPageState extends State<SalesPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
+      // 🎯 SUNTIKAN SAKTI: Mengadakan AppBar transparan khusus untuk tombol kembali ke Dashboard Admin
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          tooltip: "Kembali ke Dashboard",
+          onPressed: () async {
+            await kameraLoginCtrl
+                .stop(); // 📸 Matikan aliran video kamera laptop/tablet biar gak bocor memory & lampu indikator mati
+            Navigator.pop(
+                context); // ➔ Tendang balik kasir ke halaman dashboard utama admin lo
+          },
+        ),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(30.0),
@@ -3168,11 +3206,33 @@ class _SalesPageState extends State<SalesPage> {
             padding: const EdgeInsets.only(right: 10),
             child: Row(
               children: [
+                // 🏢 1. TOMBOL TUTUP TOKO / CLOSING SHIFT (Khusus ditekan malam hari pas toko mau pulang)
                 IconButton(
                   icon: const Icon(Icons.power_settings_new_rounded,
                       color: Colors.redAccent),
                   tooltip: "pos_trip_close".tr(),
                   onPressed: () => _prosesCloseStore(),
+                ),
+                const SizedBox(width: 8),
+
+                // 🔑 2. TOMBOL BARU: KUNCI & GANTI KASIR (Kembali ke menu scan barcode kasir tanpa tutup toko)
+                IconButton(
+                  icon: const Icon(Icons.lock_outline_rounded,
+                      color: Colors.orangeAccent),
+                  tooltip: "Lock & Switch Cashier",
+                  onPressed: () {
+                    _resetForm();
+                    setState(() {
+                      isPosUnlocked = false; // Mengunci layar kasir
+                      activeCashier = null; // Menghapus sesi kasir aktif
+                      namaKasir = "";
+                      kasirCtrl.clear();
+                      isScanningLocal =
+                          true; // 🎯 FIX CRITICAL: Kamera scanner diaktifkan lagi biar ga beku!
+                    });
+                    _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
+                        Colors.orange);
+                  },
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
@@ -3196,19 +3256,15 @@ class _SalesPageState extends State<SalesPage> {
                       fontWeight: FontWeight.bold,
                       color: Colors.greenAccent),
                 ),
+
+                // 🛒 3. TOMBOL SAPU: Hanya bersihkan keranjang belanja, kasir gak perlu logout/terkunci
                 IconButton(
                   icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
                   tooltip: "pos_ttip_batal".tr(),
                   onPressed: () {
                     _resetForm();
-                    setState(() {
-                      cartItems.clear();
-                      isPosUnlocked = false;
-                      activeCashier = null;
-                      namaKasir = "";
-                      kasirCtrl.clear();
-                    });
-                    _showSnack("pos_msg_batal".tr(), Colors.red);
+                    _showSnack(
+                        "Keranjang transaksi berhasil dikosongkan", Colors.red);
                   },
                 )
               ],

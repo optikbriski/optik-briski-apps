@@ -278,13 +278,14 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     );
   }
 
-  // 🔥 FUNGSI CEK DATA STOK REAL-TIME KORPORAT BERBASIS FINANCIAL AUDIT HARGA MODAL & MARGIN PROFIT
+// 🔥 FUNGSI CEK DATA STOK REAL-TIME KORPORAT BERBASIS FINANCIAL AUDIT HARGA MODAL & MARGIN PROFIT
   Future<void> _handleQuickCheck(BuildContext context, String code) async {
     try {
       final res = await supabase
           .from('products')
           .select()
-          .eq('barcode', code)
+          .eq('sku',
+              code) // 🎯 FIX SAKTI: Ganti dari 'barcode' ke 'sku' agar sinkron dengan database harian lo!
           .eq('toko_id', widget.profile['toko_id'])
           .maybeSingle();
 

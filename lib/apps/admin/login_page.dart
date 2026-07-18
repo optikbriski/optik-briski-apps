@@ -2,11 +2,19 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
-import '/main.dart';
-import 'dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({
+    super.key,
+    this.onLoggedIn,
+    this.bannerError,
+  });
+
+  /// Dipanggil setelah login sukses + profil pusat/cabang tersimpan.
+  final ValueChanged<Map<String, dynamic>>? onLoggedIn;
+
+  /// Pesan error dari AuthWrapper (mis. akun karyawan ditolak).
+  final String? bannerError;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -17,6 +25,23 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool isLoading = false;
   bool _isPasswordVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final banner = widget.bannerError;
+    if (banner != null && banner.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(banner),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      });
+    }
+  }
 
   Future<void> handleLogin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -38,76 +63,73 @@ class _LoginPageState extends State<LoginPage> {
       if (user == null) throw "User tidak ditemukan";
 
       final userEmail = user.email ?? '';
-      String assignedTokoId = 'PUSAT';
-      String assignedRole = 'kasir';
+      final client = Supabase.instance.client;
 
-      // 2. DETEKSI DARI TABEL KARYAWAN: Ambil data untuk pengecekan asal aplikasi
-      final karyawanRes = await Supabase.instance.client
+      // Akun yang ada di tabel karyawan = APK Karyawan, bukan Admin
+      final karyawanRes = await client
           .from('karyawan')
-          .select('toko_id, jabatan')
+          .select('id')
           .eq('email', userEmail)
           .maybeSingle();
-
-      // 🛑 KUNCI SEKURITI MUTLAK: Jika akun DITEMUKAN di tabel karyawan, artinya akun ini dibuat dari APK Karyawan.
-      // Langsung paksa role-nya menjadi 'kasir' agar otomatis ditendang oleh barikade di bawah,
-      // tidak peduli apakah di tabel jabatannya tertulis 'admin', 'manager', atau lainnya!
       if (karyawanRes != null) {
-        assignedTokoId = karyawanRes['toko_id'] ?? 'PUSAT';
-        assignedRole = 'kasir';
-      } else {
-        // 3. JALUR AKUN ADMIN ASLI: Hanya mengecek akun yang dibuat LANGSUNG di Supabase Dashboard (Tidak ada di tabel karyawan)
-        if (userEmail == 'risctonn@gmail.com') {
-          assignedTokoId = 'PUSAT';
-          assignedRole = 'owner';
-        } else if (userEmail == 'riscton11@gmail.com') {
-          assignedTokoId = 'CABANG-CIMAHI';
-          assignedRole = 'admin_toko';
-        } else if (userEmail == 'nriscton@gmail.com') {
-          assignedTokoId = 'PUSAT';
-          assignedRole = 'kasir'; // Email kasir fallback tetap diblokir
-        } else {
-          // Akun admin baru lainnya yang lu buat langsung via Supabase Dashboard Auth tanpa lewat apk lapangan
-          assignedTokoId = 'PUSAT';
-          assignedRole = user.userMetadata?['role'] ?? 'admin_toko';
-        }
+        await client.auth.signOut();
+        throw 'Akses ditolak: akun Karyawan tidak boleh masuk Admin. '
+            'Pakai APK Karyawan.';
       }
 
-      // 🛑 BARIKADE UTAMA: TENDANG INSTAN AKUN KARYAWAN LAPANGAN
-      if (assignedRole == 'kasir') {
-        // Hancurkan session login di level Supabase Auth seketika agar tidak bypass refresh page
-        await Supabase.instance.client.auth.signOut();
+      // Pusat/cabang & role HANYA dari Table Editor (tabel profiles)
+      final profile = await client
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  "Akses Ditolak: Akun Lapangan/Karyawan tidak diizinkan masuk ke sistem Admin!"),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-        setState(() => isLoading = false);
-        return; // Blokir eksekusi total ke bawah!
+      if (profile == null) {
+        await client.auth.signOut();
+        throw 'Profil admin belum diisi di Table Editor.\n'
+            'Isi tabel profiles: id = UID Auth, role, toko_id.';
       }
 
-      // 🏢 JALUR OTOMATISASI RE-REGISTRASI MASTER TOKO (Hanya untuk Admin/Owner yang lolos)
-      await Supabase.instance.client.from('toko_id').upsert({
-        'id': assignedTokoId,
-        'toko_id': assignedTokoId == 'PUSAT'
-            ? 'Optik B. Riski - Pusat'
-            : 'Optik B. Riski - $assignedTokoId',
-      });
+      final assignedRole = (profile['role'] ?? '').toString().toLowerCase();
+      final assignedTokoId =
+          (profile['toko_id'] ?? '').toString().trim().toUpperCase();
 
-      // 4. Lakukan upsert ke profiles harian admin
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': user.id,
+      const adminRoles = {
+        'owner',
+        'admin_pusat',
+        'admin_toko',
+        'super_admin',
+      };
+      if (!adminRoles.contains(assignedRole)) {
+        await client.auth.signOut();
+        throw 'Role "$assignedRole" tidak diizinkan di Admin. '
+            'Set role di Table Editor: owner / admin_pusat / admin_toko.';
+      }
+
+      if (assignedTokoId.isEmpty) {
+        await client.auth.signOut();
+        throw 'toko_id di profiles kosong. Isi lewat Table Editor.';
+      }
+
+      // toko harus sudah ada di master toko_id (diisi Table Editor, bukan hardcode app)
+      final toko = await client
+          .from('toko_id')
+          .select('id')
+          .eq('id', assignedTokoId)
+          .maybeSingle();
+      if (toko == null) {
+        await client.auth.signOut();
+        throw 'Toko "$assignedTokoId" belum ada di tabel toko_id.\n'
+            'Tambah dulu di Table Editor → toko_id.';
+      }
+
+      // Sync email saja; role & toko tetap dari Table Editor
+      await client.from('profiles').update({
         'email': userEmail,
-        'role': assignedRole,
-        'toko_id': assignedTokoId,
-      });
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', user.id);
 
-      // 5. Ambil data profil final yang sudah sinkron
-      final finalProfile = await Supabase.instance.client
+      final finalProfile = await client
           .from('profiles')
           .select()
           .eq('id', user.id)
@@ -115,14 +137,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      final Map<String, dynamic> safeProfile = finalProfile;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DashboardPage(profile: safeProfile),
-        ),
-      );
+      widget.onLoggedIn?.call(Map<String, dynamic>.from(finalProfile));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -180,6 +195,15 @@ class _LoginPageState extends State<LoginPage> {
                         letterSpacing: 3,
                         fontWeight: FontWeight.w300,
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Login Admin Pusat / Cabang',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueAccent.withOpacity(0.85),
+                      letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 20),
