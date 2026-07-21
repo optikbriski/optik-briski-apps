@@ -1,14 +1,16 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'attendance_config.dart';
 import 'face_template.dart';
 import 'geofence_service.dart';
 import 'liveness_result.dart';
 
-/// Absensi lokal: GPS + liveness ML Kit + face template di perangkat.
-/// AWS Rekognition (hybrid) ditunda sampai akun AWS siap; Edge Function tetap ada di repo.
+/// Absensi: GPS + AWS Face Liveness (opsional) + face template lokal.
+/// Kredensial AWS hanya di Edge Function — tidak pernah di APK.
 class AttendanceService {
   AttendanceService({
     SupabaseClient? client,
@@ -58,11 +60,7 @@ class AttendanceService {
     required LivenessCaptureResult liveness,
     required GeofenceCheckResult geo,
   }) async {
-    if (!liveness.success ||
-        liveness.faceTemplate == null ||
-        liveness.photoBytes == null) {
-      throw 'Liveness/wajah gagal. Coba lagi dengan pencahayaan lebih baik.';
-    }
+    _requireLivenessPassed(liveness);
 
     final photoUrl = await _uploadPhoto(
       karyawanId: karyawanId,
@@ -70,10 +68,21 @@ class AttendanceService {
       bytes: liveness.photoBytes!,
     );
 
+    String? awsFaceId;
+    try {
+      awsFaceId = await _awsIndexFace(
+        karyawanId: karyawanId,
+        imageBytes: liveness.photoBytes!,
+      );
+    } catch (e) {
+      debugPrint('AWS IndexFaces skip: $e');
+    }
+
     await _client.from('karyawan').update({
       'face_template': liveness.faceTemplate,
       'face_photo_url': photoUrl,
       'face_enrolled_at': DateTime.now().toIso8601String(),
+      if (awsFaceId != null) 'aws_face_id': awsFaceId,
     }).eq('id', karyawanId);
 
     await _client.from('attendance_logs').insert({
@@ -86,6 +95,9 @@ class AttendanceService {
       'distance_meters': geo.distanceMeters,
       'match_score': 0,
       'liveness_ok': true,
+      'liveness_confidence': liveness.livenessConfidence,
+      'liveness_session_id': liveness.livenessSessionId,
+      'liveness_provider': liveness.livenessProvider ?? 'local',
       'device_info': defaultTargetPlatform.name,
     });
 
@@ -96,6 +108,7 @@ class AttendanceService {
     required Map<String, dynamic> karyawan,
     required LivenessCaptureResult liveness,
     required GeofenceCheckResult geo,
+    String? qrTokenId,
   }) async {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
@@ -104,7 +117,7 @@ class AttendanceService {
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
 
-    final score = _matchOrThrow(karyawan, liveness);
+    final score = await _matchOrThrow(karyawan, liveness);
 
     final photoUrl = await _uploadPhoto(
       karyawanId: karyawanId,
@@ -134,7 +147,11 @@ class AttendanceService {
       'distance_meters': geo.distanceMeters,
       'match_score': score,
       'liveness_ok': true,
+      'liveness_confidence': liveness.livenessConfidence,
+      'liveness_session_id': liveness.livenessSessionId,
+      'liveness_provider': liveness.livenessProvider ?? 'local',
       'device_info': defaultTargetPlatform.name,
+      if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
     });
   }
 
@@ -149,7 +166,7 @@ class AttendanceService {
     final open = await fetchOpenShift(karyawanId);
     if (open == null) throw 'Belum ada shift masuk hari ini.';
 
-    final score = _matchOrThrow(karyawan, liveness);
+    final score = await _matchOrThrow(karyawan, liveness);
 
     final photoUrl = await _uploadPhoto(
       karyawanId: karyawanId,
@@ -173,33 +190,106 @@ class AttendanceService {
       'distance_meters': geo.distanceMeters,
       'match_score': score,
       'liveness_ok': true,
+      'liveness_confidence': liveness.livenessConfidence,
+      'liveness_session_id': liveness.livenessSessionId,
+      'liveness_provider': liveness.livenessProvider ?? 'local',
       'device_info': defaultTargetPlatform.name,
     });
   }
 
-  double _matchOrThrow(
+  void _requireLivenessPassed(LivenessCaptureResult liveness) {
+    if (!liveness.success) {
+      throw 'Liveness gagal. Pastikan wajah jelas dan ikuti instruksi di layar.';
+    }
+    if (liveness.photoBytes == null || liveness.faceTemplate == null) {
+      throw 'Wajah tidak terbaca jelas. Coba lagi dengan pencahayaan lebih baik.';
+    }
+    if (AttendanceConfig.useAwsFaceLiveness) {
+      if (liveness.livenessProvider != 'aws') {
+        throw 'AWS Face Liveness belum aktif / gagal. '
+            'Hubungi admin — akun AWS belum siap, atau matikan flag '
+            'useAwsFaceLiveness di AttendanceConfig.';
+      }
+      final conf = liveness.livenessConfidence ?? 0;
+      if (conf < AttendanceConfig.minLivenessConfidence) {
+        throw 'Skor liveness AWS ${conf.toStringAsFixed(1)} di bawah '
+            '${AttendanceConfig.minLivenessConfidence.toStringAsFixed(0)}.';
+      }
+    }
+  }
+
+  Future<double> _matchOrThrow(
     Map<String, dynamic> karyawan,
     LivenessCaptureResult liveness,
-  ) {
-    if (!liveness.success || liveness.faceTemplate == null) {
-      throw 'Liveness gagal. Pastikan wajah jelas dan senyum saat diminta.';
-    }
-    if (liveness.photoBytes == null) {
-      throw 'Foto absen gagal diambil. Coba lagi.';
-    }
+  ) async {
+    _requireLivenessPassed(liveness);
 
     final enrolled = FaceTemplateUtil.fromJson(karyawan['face_template']);
     if (enrolled == null) {
       throw 'Wajah belum terdaftar. Daftar wajah dulu.';
     }
 
-    final score = FaceTemplateUtil.distance(enrolled, liveness.faceTemplate!);
-    if (!FaceTemplateUtil.isMatch(enrolled, liveness.faceTemplate!)) {
-      throw 'Wajah tidak cocok dengan data terdaftar '
-          '(skor ${score.toStringAsFixed(3)}). '
-          'Coba pencahayaan lebih baik atau daftar ulang wajah.';
+    double score = 0;
+    if (AttendanceConfig.useLocalFaceMatch) {
+      score = FaceTemplateUtil.distance(enrolled, liveness.faceTemplate!);
+      if (!FaceTemplateUtil.isMatch(enrolled, liveness.faceTemplate!)) {
+        throw 'Wajah tidak cocok dengan data terdaftar '
+            '(skor ${score.toStringAsFixed(3)}). '
+            'Coba pencahayaan lebih baik atau daftar ulang wajah.';
+      }
     }
+
+    if (AttendanceConfig.useAwsFaceCompare) {
+      await _awsCompareFace(
+        karyawanId: karyawan['id'] as String,
+        sourceImageUrl: (karyawan['face_photo_url'] ?? '').toString(),
+        imageBytes: liveness.photoBytes!,
+      );
+    }
+
     return score;
+  }
+
+  Future<String?> _awsIndexFace({
+    required String karyawanId,
+    required Uint8List imageBytes,
+  }) async {
+    final res = await _client.functions.invoke(
+      'aws-rekognition',
+      body: {
+        'action': 'enroll',
+        'karyawan_id': karyawanId,
+        'image_base64': base64Encode(imageBytes),
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['face_id'] != null) {
+      return data['face_id'].toString();
+    }
+    return null;
+  }
+
+  Future<void> _awsCompareFace({
+    required String karyawanId,
+    required String sourceImageUrl,
+    required Uint8List imageBytes,
+  }) async {
+    if (sourceImageUrl.isEmpty) {
+      throw 'Foto wajah terdaftar belum ada untuk perbandingan AWS.';
+    }
+    final res = await _client.functions.invoke(
+      'aws-rekognition',
+      body: {
+        'action': 'compare',
+        'karyawan_id': karyawanId,
+        'source_image_url': sourceImageUrl,
+        'image_base64': base64Encode(imageBytes),
+      },
+    );
+    final data = res.data;
+    if (data is Map && data['matched'] == true) return;
+    throw (data is Map ? data['error'] : null)?.toString() ??
+        'Wajah tidak cocok (AWS CompareFaces).';
   }
 
   Future<String> _uploadPhoto({

@@ -311,6 +311,8 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
           success: true,
           photoBytes: photoBytes,
           faceTemplate: faceTemplate,
+          livenessProvider: 'local',
+          livenessConfidence: 100,
         ),
       );
     }

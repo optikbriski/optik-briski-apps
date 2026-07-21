@@ -157,7 +157,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   subtitle: Text(
                     '${at != null ? df.format(at.toLocal()) : '-'}'
                     ' • GPS ${_fmtDistance(log['distance_meters'])} m'
-                    ' • liveness ${log['liveness_ok'] == true ? 'OK' : '-'}',
+                    ' • liveness ${log['liveness_ok'] == true ? 'OK' : '-'}'
+                    '${log['liveness_provider'] != null ? ' (${log['liveness_provider']}' : ''}'
+                    '${log['liveness_confidence'] != null ? ' ${log['liveness_confidence']}%' : ''}'
+                    '${log['liveness_provider'] != null ? ')' : ''}',
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   trailing: log['photo_url'] != null
