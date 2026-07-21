@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'training_data_client.dart';
 import 'training_mode.dart';
+import '../theme.dart';
 
 /// Simulated pusat decision in Training Mode only.
 enum TrainingApprovalOutcome {
@@ -301,12 +302,12 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFB45309).withOpacity(0.15),
+                        color: OptikAdminTokens.training.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.school_rounded,
-                        color: Color(0xFFB45309),
+                        color: OptikAdminTokens.training,
                         size: 22,
                       ),
                     ),
@@ -317,7 +318,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
-                          color: Color(0xFF0F172A),
+                          color: OptikAdminTokens.bgMid,
                         ),
                       ),
                     ),
@@ -390,7 +391,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                   child: ElevatedButton(
                     onPressed: _selected == null ? null : _confirm,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFB45309),
+                      backgroundColor: OptikAdminTokens.training,
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: Colors.black12,
                       shape: RoundedRectangleBorder(
@@ -447,7 +448,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
-                        color: selected ? color : const Color(0xFF0F172A),
+                        color: selected ? color : OptikAdminTokens.bgMid,
                       ),
                     ),
                     const SizedBox(height: 2),

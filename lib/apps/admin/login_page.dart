@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
+
 class LoginPage extends StatefulWidget {
   const LoginPage({
     super.key,
@@ -36,7 +39,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(banner),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: OptikAdminTokens.danger,
           ),
         );
       });
@@ -143,7 +146,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("${'admin_login_err_gagal'.tr()}$e"),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: OptikAdminTokens.danger,
           ),
         );
       }
@@ -154,120 +157,91 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF080E15),
-              Colors.blueAccent.withOpacity(0.05)
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 450),
-              padding: const EdgeInsets.all(40),
+    return PremiumScaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: PremiumPanel(
+              padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+              borderRadius: OptikAdminTokens.radiusXl,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
                     'assets/images/logo_briski.png',
-                    height: 200,
+                    height: 160,
                     width: double.infinity,
                     fit: BoxFit.contain,
                     errorBuilder: (c, e, s) => const Icon(
                       Icons.broken_image_rounded,
-                      size: 100,
-                      color: Colors.blueAccent,
+                      size: 88,
+                      color: OptikAdminTokens.accentSoft,
                     ),
                   ),
                   Transform.translate(
-                    offset: const Offset(0, -45),
+                    offset: const Offset(0, -28),
                     child: Text(
                       "admin_login_subtitle".tr(),
                       style: const TextStyle(
                         fontSize: 10,
-                        color: Colors.white38,
+                        color: OptikAdminTokens.textMuted,
                         letterSpacing: 3,
                         fontWeight: FontWeight.w300,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
                   Text(
                     'Login Admin Pusat / Cabang',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.blueAccent.withOpacity(0.85),
+                      color: OptikAdminTokens.accentSoft.withOpacity(0.9),
                       letterSpacing: 0.5,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 28),
                   TextField(
                     controller: _emailController,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: OptikAdminTokens.textPrimary),
+                    keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: "admin_login_email".tr(),
-                      prefixIcon: const Icon(Icons.person_outline),
+                      prefixIcon: const Icon(Icons.person_outline_rounded),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: OptikAdminTokens.textPrimary),
                     decoration: InputDecoration(
                       labelText: "admin_login_password".tr(),
-                      prefixIcon: const Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
                       suffixIcon: IconButton(
-                        icon: Icon(_isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off),
+                        icon: Icon(
+                          _isPasswordVisible
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                        ),
                         onPressed: () => setState(
                             () => _isPasswordVisible = !_isPasswordVisible),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: isLoading ? null : handleLogin,
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              "admin_login_btn".tr(),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
+                  const SizedBox(height: 28),
+                  PremiumPrimaryButton(
+                    label: "admin_login_btn".tr(),
+                    loading: isLoading,
+                    onPressed: handleLogin,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   Text(
                     "admin_login_footer".tr(),
                     style: const TextStyle(
                       fontSize: 9,
-                      color: Colors.grey,
+                      color: OptikAdminTokens.textMuted,
                     ),
                   ),
                 ],

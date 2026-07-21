@@ -6,6 +6,8 @@ import '../apps/admin/attendance_monitor_page.dart';
 import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
+import 'theme.dart';
+import 'widgets/admin/admin_premium.dart';
 
 class AdminApprovalPage extends StatefulWidget {
   final String roleAdmin;
@@ -102,7 +104,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF1E293B),
+      color: OptikAdminTokens.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: Colors.white.withOpacity(0.05)),
@@ -145,7 +147,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               maxHeight: maxH,
             ),
             child: Material(
-              color: const Color(0xFF1E293B),
+              color: OptikAdminTokens.card,
               borderRadius: BorderRadius.circular(20),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
@@ -501,7 +503,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF1E293B),
+      color: OptikAdminTokens.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: Colors.amber.withOpacity(0.3), width: 1),
@@ -619,11 +621,12 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+      child: PremiumScaffold(
         appBar: AppBar(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: Colors.transparent,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -728,7 +731,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                       : RefreshIndicator(
                           onRefresh: _tarikDataKaryawan,
                           color: Colors.blueAccent,
-                          backgroundColor: const Color(0xFF1E293B),
+                          backgroundColor: OptikAdminTokens.card,
                           child: ListView.builder(
                             padding: const EdgeInsets.all(16),
                             itemCount: _listKaryawanAktif.length,
@@ -743,7 +746,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                       : RefreshIndicator(
                           onRefresh: _tarikDataKaryawan,
                           color: Colors.blueAccent,
-                          backgroundColor: const Color(0xFF1E293B),
+                          backgroundColor: OptikAdminTokens.card,
                           child: ListView.builder(
                             padding: const EdgeInsets.all(16),
                             itemCount: _listKaryawanPending.length,

@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'theme.dart';
 
 const _prefPrinterMac = 'pos_bt_printer_mac';
 const _prefPrinterName = 'pos_bt_printer_name';
@@ -21,7 +22,7 @@ class PosPrintService {
   }) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: OptikAdminTokens.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -263,7 +264,7 @@ class PosPrintService {
     if (!context.mounted) return null;
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: OptikAdminTokens.card,
       builder: (ctx) => ListView(
         shrinkWrap: true,
         children: [

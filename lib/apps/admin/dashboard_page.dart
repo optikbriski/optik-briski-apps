@@ -18,6 +18,8 @@ import 'monthly_export_page.dart';
 import 'garansi_page.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -175,10 +177,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         title: Image.asset(
           'assets/images/logo_briski.png',
@@ -198,8 +199,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 icon: Icon(
                   Icons.school_rounded,
                   color: active
-                      ? const Color(0xFFB45309)
-                      : Colors.white70,
+                      ? OptikAdminTokens.training
+                      : OptikAdminTokens.textSecondary,
                   size: 22,
                 ),
               );
@@ -211,14 +212,14 @@ class _DashboardPageState extends State<DashboardPage> {
               // AdminAuthWrapper akan otomatis kembali ke LoginPage
             },
             icon: const Icon(Icons.logout_rounded,
-                color: Colors.redAccent, size: 22),
+                color: OptikAdminTokens.danger, size: 22),
           )
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchTodayStats,
-        color: Colors.blueAccent,
-        backgroundColor: const Color(0xFF1E293B),
+        color: OptikAdminTokens.accentSoft,
+        backgroundColor: OptikAdminTokens.card,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -230,13 +231,13 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                    backgroundColor: OptikAdminTokens.accent.withOpacity(0.12),
                     backgroundImage: _fotoProfileUrl != null
                         ? NetworkImage(_fotoProfileUrl!)
                         : null,
                     child: _fotoProfileUrl == null
                         ? const Icon(Icons.person_rounded,
-                            color: Colors.blueAccent, size: 20)
+                            color: OptikAdminTokens.accentSoft, size: 20)
                         : null,
                   ),
                   const SizedBox(width: 12),
@@ -245,8 +246,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text("dash_selamat_bekerja".tr(),
-                            style: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11)),
+                            style: const TextStyle(
+                                color: OptikAdminTokens.textMuted,
+                                fontSize: 11)),
                         Text(
                           "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
                           maxLines: 2,
@@ -254,7 +256,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: Colors.white),
+                              color: OptikAdminTokens.textPrimary),
                         ),
                       ],
                     ),
@@ -265,15 +267,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
               // --- SECTION KARTU KINERJA OMZET ---
               _buildOmzetCard(),
-              const SizedBox(height: 35),
+              const SizedBox(height: 32),
 
-              Text("dash_navigasi_menu".tr(),
-                  style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5)),
-              const SizedBox(height: 15),
+              PremiumSectionHeader(label: "dash_navigasi_menu".tr()),
 
               // --- GRID NAVIGASI RESPONSIF (HP / tablet / web) ---
               // Training: only POS, Logistics, History&DP, Warranty, Finance, Master Data.
@@ -294,20 +290,18 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisSpacing: 12,
                         childAspectRatio: ratio,
                         children: [
-                          // Manajemen Karyawan (+ monitor absensi di dalamnya)
+                          // Manajemen Karyawan (+ monitor absensi): pusat only.
                           if (!training &&
                               (widget.profile['toko_id'] == 'PUSAT' ||
                                   widget.profile['toko_id'] ==
                                       'CABANG-PUSAT' ||
                                   widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'admin_toko'))
-                            _menuCard(
-                              context,
-                              "dash_menu_management".tr(),
-                              Icons.verified_user_rounded,
-                              Colors.blueAccent,
-                              () => Navigator.push(
+                                  widget.profile['role'] == 'admin_pusat'))
+                            PremiumMenuTile(
+                              title: "dash_menu_management".tr(),
+                              icon: Icons.verified_user_rounded,
+                              color: OptikAdminTokens.accentSoft,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (c) => AdminApprovalPage(
@@ -325,12 +319,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Satu pintu Absen: QR toko → karyawan scan → face di APK
                           if (!training)
-                            _menuCard(
-                              context,
-                              'dash_menu_absen'.tr(),
-                              Icons.qr_code_2_rounded,
-                              Colors.deepPurpleAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: 'dash_menu_absen'.tr(),
+                              icon: Icons.qr_code_2_rounded,
+                              color: Colors.deepPurpleAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => AttendanceQrPage(
@@ -347,12 +340,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                   widget.profile['role'] == 'owner' ||
                                   widget.profile['role'] == 'admin_pusat' ||
                                   widget.profile['role'] == 'admin_toko'))
-                            _menuCard(
-                              context,
-                              'Jadwal Kerja',
-                              Icons.calendar_month_rounded,
-                              Colors.indigoAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: 'Jadwal Kerja',
+                              icon: Icons.calendar_month_rounded,
+                              color: Colors.indigoAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => JadwalKerjaPage(
@@ -363,12 +355,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('pos'))
-                            _menuCard(
-                              context,
-                              "POS Cashier",
-                              Icons.point_of_sale_rounded,
-                              Colors.greenAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: "POS Cashier",
+                              icon: Icons.point_of_sale_rounded,
+                              color: OptikAdminTokens.success,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (c) =>
@@ -380,12 +371,11 @@ class _DashboardPageState extends State<DashboardPage> {
                           // Request Order: only via Logistics hub (not a dashboard tile).
 
                           if (TrainingCurriculum.allows('history_dp'))
-                            _menuCard(
-                              context,
-                              "History & Down Payment",
-                              Icons.history_edu,
-                              Colors.orangeAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: "History & Down Payment",
+                              icon: Icons.history_edu,
+                              color: Colors.orangeAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (c) => RiwayatTransaksiPage(
@@ -396,12 +386,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('logistics'))
-                            _menuCard(
-                              context,
-                              "dash_menu_logistik".tr(),
-                              Icons.local_shipping_rounded,
-                              Colors.amber,
-                              () {
+                            PremiumMenuTile(
+                              title: "dash_menu_logistik".tr(),
+                              icon: Icons.local_shipping_rounded,
+                              color: OptikAdminTokens.warning,
+                              onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -419,12 +408,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                   widget.profile['role'] == 'admin_pusat' ||
                                   widget.profile['role'] == 'admin_toko' ||
                                   widget.profile['toko_id'] == 'PUSAT'))
-                            _menuCard(
-                              context,
-                              "dash_menu_master".tr(),
-                              Icons.dataset_rounded,
-                              Colors.indigoAccent,
-                              () {
+                            PremiumMenuTile(
+                              title: "dash_menu_master".tr(),
+                              icon: Icons.dataset_rounded,
+                              color: Colors.indigoAccent,
+                              onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -437,12 +425,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('finance'))
-                            _menuCard(
-                              context,
-                              "dash_menu_keuangan".tr(),
-                              Icons.account_balance_wallet_rounded,
-                              Colors.tealAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: "dash_menu_keuangan".tr(),
+                              icon: Icons.account_balance_wallet_rounded,
+                              color: Colors.tealAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (c) => BukuBesarPage(
@@ -455,12 +442,11 @@ class _DashboardPageState extends State<DashboardPage> {
                           if (!training &&
                               (widget.profile['role'] == 'owner' ||
                                   widget.profile['role'] == 'admin_pusat'))
-                            _menuCard(
-                              context,
-                              "Adjust Invoice",
-                              Icons.note_alt_rounded,
-                              Colors.pinkAccent,
-                              () {
+                            PremiumMenuTile(
+                              title: "Adjust Invoice",
+                              icon: Icons.note_alt_rounded,
+                              color: Colors.pinkAccent,
+                              onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -479,12 +465,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                       'CABANG-PUSAT' ||
                                   widget.profile['role'] == 'owner' ||
                                   widget.profile['role'] == 'admin_pusat'))
-                            _menuCard(
-                              context,
-                              'dash_menu_export'.tr(),
-                              Icons.picture_as_pdf_rounded,
-                              Colors.cyanAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: 'dash_menu_export'.tr(),
+                              icon: Icons.picture_as_pdf_rounded,
+                              color: Colors.cyanAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => MonthlyExportPage(
@@ -495,12 +480,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('warranty'))
-                            _menuCard(
-                              context,
-                              'dash_menu_garansi'.tr(),
-                              Icons.verified_rounded,
-                              Colors.lightGreenAccent,
-                              () => Navigator.push(
+                            PremiumMenuTile(
+                              title: 'dash_menu_garansi'.tr(),
+                              icon: Icons.verified_rounded,
+                              color: Colors.lightGreenAccent,
+                              onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) =>
@@ -510,12 +494,11 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (!training)
-                            _menuCard(
-                              context,
-                              'scan_qr'.tr(),
-                              Icons.qr_code_scanner_rounded,
-                              Colors.deepOrangeAccent,
-                              () => UniversalQrNav.open(
+                            PremiumMenuTile(
+                              title: 'scan_qr'.tr(),
+                              icon: Icons.qr_code_scanner_rounded,
+                              color: Colors.deepOrangeAccent,
+                              onTap: () => UniversalQrNav.open(
                                 context,
                                 profile: widget.profile,
                                 callerRole: UniversalQrCallerRole.admin,
@@ -530,104 +513,104 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(height: 28),
 
               // Mode Latihan — 6 modul kurikulum; sandbox sync; wipe on exit.
-              Text(
-                'training_sec_title'.tr(),
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(height: 10),
+              PremiumSectionHeader(label: 'training_sec_title'.tr()),
               ListenableBuilder(
                 listenable: TrainingMode.instance,
                 builder: (context, _) {
                   final active = TrainingMode.instance.isActive;
-                  return Material(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(16),
-                    child: InkWell(
-                      onTap: _trainingBusy ? null : _toggleTrainingMode,
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: active
-                                ? const Color(0xFFB45309)
-                                : Colors.white.withOpacity(0.06),
-                            width: active ? 1.5 : 1,
+                  return PremiumPanel(
+                    padding: EdgeInsets.zero,
+                    borderRadius: OptikAdminTokens.radiusMd,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _trainingBusy ? null : _toggleTrainingMode,
+                        borderRadius:
+                            BorderRadius.circular(OptikAdminTokens.radiusMd),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                                OptikAdminTokens.radiusMd),
+                            border: Border.all(
+                              color: active
+                                  ? OptikAdminTokens.training
+                                  : OptikAdminTokens.line,
+                              width: active ? 1.5 : 1,
+                            ),
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFB45309)
-                                    .withOpacity(0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.school_rounded,
-                                color: active
-                                    ? const Color(0xFFB45309)
-                                    : Colors.orangeAccent,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    active
-                                        ? 'training_menu_exit'.tr()
-                                        : 'training_menu_enter'.tr(),
-                                    style: TextStyle(
-                                      color: active
-                                          ? const Color(0xFFFBBF24)
-                                          : Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    active
-                                        ? 'training_menu_exit_desc'.tr()
-                                        : 'training_menu_enter_desc'.tr(),
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.55),
-                                      fontSize: 11,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (_trainingBusy)
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFFB45309),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: OptikAdminTokens.training
+                                      .withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                  boxShadow: active
+                                      ? OptikAdminTokens.glow(
+                                          OptikAdminTokens.trainingSoft)
+                                      : null,
                                 ),
-                              )
-                            else
-                              Icon(
-                                active
-                                    ? Icons.logout_rounded
-                                    : Icons.chevron_right_rounded,
-                                color: Colors.white38,
-                                size: 20,
+                                child: Icon(
+                                  Icons.school_rounded,
+                                  color: active
+                                      ? OptikAdminTokens.training
+                                      : OptikAdminTokens.trainingSoft,
+                                  size: 22,
+                                ),
                               ),
-                          ],
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      active
+                                          ? 'training_menu_exit'.tr()
+                                          : 'training_menu_enter'.tr(),
+                                      style: TextStyle(
+                                        color: active
+                                            ? OptikAdminTokens.warning
+                                            : OptikAdminTokens.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      active
+                                          ? 'training_menu_exit_desc'.tr()
+                                          : 'training_menu_enter_desc'.tr(),
+                                      style: const TextStyle(
+                                        color: OptikAdminTokens.textMuted,
+                                        fontSize: 11,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_trainingBusy)
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: OptikAdminTokens.training,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  active
+                                      ? Icons.logout_rounded
+                                      : Icons.chevron_right_rounded,
+                                  color: OptikAdminTokens.textMuted,
+                                  size: 20,
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -642,102 +625,11 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // WIDGET PEMBANTU: KARTU OMZET HARI INI
   Widget _buildOmzetCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(25),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blueAccent.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("dash_penjualan_hari_ini".tr(),
-                  style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2)),
-              Icon(Icons.trending_up,
-                  color: Colors.white.withOpacity(0.5), size: 18),
-            ],
-          ),
-          const SizedBox(height: 10),
-          isStatsLoading
-              ? const SizedBox(
-                  height: 30,
-                  width: 30,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : Text(_formatRupiah(_omzetHariIni),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  // WIDGET PEMBANTU: KARTU MENU NAVIGASI DENGAN PROTEKSI TEXT OVERFLOW
-  Widget _menuCard(BuildContext context, String title, IconData icon,
-      Color color, VoidCallback onTap) {
-    return Card(
-      margin: EdgeInsets.zero,
-      color: const Color(0xFF1E293B),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                    color: color.withOpacity(0.1), shape: BoxShape.circle),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return PremiumStatCard(
+      label: "dash_penjualan_hari_ini".tr(),
+      value: _formatRupiah(_omzetHariIni),
+      loading: isStatsLoading,
     );
   }
 }

@@ -8,6 +8,8 @@ import 'dart:convert';
 import '../../shared/qr/hid_scan_intake.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/leave_page_guard.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 class InvoiceConfigPage extends StatefulWidget {
   final Map<String, dynamic>
@@ -312,7 +314,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     bool confirm = await showDialog(
           context: context,
           builder: (c) => AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikAdminTokens.card,
             title: Text("Hapus Konfigurasi $_selectedTokoId?",
                 style: const TextStyle(
                     color: Colors.white,
@@ -378,7 +380,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
         context: ctx,
         preferWidth: 450,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         title: const Text("✂️ Crop Logo Identitas Cabang",
             style: TextStyle(
                 color: Colors.white,
@@ -471,17 +473,14 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
         if (didPop) return;
         _requestLeaveInvoiceConfig();
       },
-      child: Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+      child: PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'INVOICE DESIGN ADJUSTER (MULTI-BRANCH)',
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _requestLeaveInvoiceConfig,
         ),
-        title: const Text("INVOICE DESIGN ADJUSTER (MULTI-BRANCH)",
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        centerTitle: true,
+        automaticallyImplyLeading: false,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -505,7 +504,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          dropdownColor: const Color(0xFF1E293B),
+                          dropdownColor: OptikAdminTokens.card,
                           value: _selectedTokoId,
                           style: const TextStyle(
                               color: Colors.orangeAccent,
@@ -675,7 +674,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           Expanded(
             flex: narrow ? 1 : 3,
             child: Container(
-              color: const Color(0xFF0F172A),
+              color: OptikAdminTokens.bgMid,
               padding: const EdgeInsets.all(20),
               child: Center(
                 child: LayoutBuilder(
@@ -862,7 +861,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                     children: [
                                       Text(_previewSale!['no_invoice'] ?? '-',
                                           style: TextStyle(
-                                              color: const Color(0xFF0F172A),
+                                              color: OptikAdminTokens.bgMid,
                                               fontWeight: FontWeight.bold,
                                               fontSize: (_fontSizeBody - 2)
                                                   .clamp(9.0, 18.0),
@@ -898,7 +897,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                           _previewSale!['nama_pelanggan'] ??
                                               '-',
                                           style: TextStyle(
-                                              color: const Color(0xFF1E293B),
+                                              color: OptikAdminTokens.card,
                                               fontSize: (_fontSizeBody - 2)
                                                   .clamp(9.0, 18.0),
                                               fontWeight: FontWeight.bold)),

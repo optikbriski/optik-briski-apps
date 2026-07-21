@@ -10,6 +10,8 @@ import 'restore_operation.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
 import '../../shared/responsive.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ============================================================================
 // MODUL 05: ENTERPRISE INVENTORY ASSET CONTROL & VALUATION SYSTEM
@@ -114,14 +116,9 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   Widget build(BuildContext context) {
     bool isPusat = widget.profile['toko_id'] == 'PUSAT';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
-        title: Text("inv_title".tr(),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: "inv_title".tr(),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded,
@@ -283,7 +280,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white10, width: 0.5),
         ),
@@ -328,7 +325,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikAdminTokens.card,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             title: Row(
@@ -450,7 +447,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       VoidCallback onTap) {
     return Card(
       margin: const EdgeInsets.only(top: 15),
-      color: const Color(0xFF1E293B),
+      color: OptikAdminTokens.card,
       elevation: 0,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

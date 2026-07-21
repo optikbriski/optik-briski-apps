@@ -4,6 +4,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/responsive.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 import 'sales_page.dart';
 
 // ============================================================================
@@ -181,7 +183,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       builder: (c) => R.constrainedDialog(
         context: c,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Row(
           children: [
@@ -279,29 +281,15 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   // --- CORE UI GENERATOR ---
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
-        centerTitle: true,
-        title: const Text("Riwayat Transaksi Kasir",
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+    return PremiumScaffold(
+      appBar: const PremiumAppBar(title: 'Riwayat Transaksi Kasir'),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(color: OptikAdminTokens.accentSoft))
           : listTransaksi.isEmpty
-              ? const Center(
-                  child: Text("Belum ada transaksi di database",
-                      style: TextStyle(color: Colors.white70, fontSize: 13)))
+              ? const PremiumEmptyState(
+                  message: 'Belum ada transaksi di database',
+                )
               : ListView.builder(
                   padding: const EdgeInsets.all(15),
                   itemCount: listTransaksi.length,
@@ -315,7 +303,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                         : '-';
 
                     return Card(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       margin: const EdgeInsets.only(bottom: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),

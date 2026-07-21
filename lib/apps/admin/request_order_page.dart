@@ -7,6 +7,8 @@ import '../../shared/logistics/request_order_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import 'request_order_pusat_page.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 class RequestOrderPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -189,23 +191,14 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
   @override
   Widget build(BuildContext context) {
     if (_isPusat) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+      return const PremiumScaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text("REQUEST ORDER CABANG",
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.white)),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'REQUEST ORDER CABANG',
         actions: [
           IconButton(
             onPressed: _loadTodayRequests,
@@ -221,7 +214,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
             Container(
               padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: OptikAdminTokens.card,
                   borderRadius: BorderRadius.circular(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +249,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                             _lacakStatusTransaksi(trackingSearchCtrl.text),
                       ),
                       filled: true,
-                      fillColor: const Color(0xFF0F172A),
+                      fillColor: OptikAdminTokens.bgMid,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none),
@@ -368,7 +361,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                           itemBuilder: (context, index) {
                             final req = pendingRequestsList[index];
                             return Card(
-                              color: const Color(0xFF1E293B),
+                              color: OptikAdminTokens.card,
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
                                 leading: CircleAvatar(

@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ============================================================================
 // MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
@@ -267,7 +269,6 @@ class _StockMoveReportState extends State<StockMoveReport> {
     });
   }
 
-  static const _bg = Color(0xFF0B1220);
   static const _panel = Color(0xFF121A2B);
   static const _panelSoft = Color(0xFF1A2438);
   static const _line = Color(0xFF2A3548);
@@ -291,7 +292,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("smr_konfirmasi_terima".tr(),
             style: const TextStyle(
@@ -432,7 +433,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         title: Text("smr_detail_transaksi".tr(),
             style: const TextStyle(
                 fontSize: 14,
@@ -840,28 +841,10 @@ class _StockMoveReportState extends State<StockMoveReport> {
         .replaceFirst('{}', widget.profile['toko_id'].toString())
         .replaceFirst('{}', filteredHistory.length.toString());
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _panel,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: Column(
-          children: [
-            Text("smr_title".tr(),
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3)),
-            const SizedBox(height: 2),
-            Text("smr_subtitle".tr(),
-                style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF94A3B8),
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: "smr_title".tr(),
+        subtitle: "smr_subtitle".tr(),
         actions: [
           IconButton(
             tooltip: 'Muat ulang',

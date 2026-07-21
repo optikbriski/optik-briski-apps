@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Board pipeline Request Order untuk Admin Pusat.
 /// Tabs: Approval → Preparing → Shipping → Histori
@@ -591,8 +593,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   Widget build(BuildContext context) {
     final idx = _tabs.index;
 
-    return Scaffold(
-      backgroundColor: _bg,
+    return PremiumScaffold(
       body: SafeArea(
         child: Column(
           children: [

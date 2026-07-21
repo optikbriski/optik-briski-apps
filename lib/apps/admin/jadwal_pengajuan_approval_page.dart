@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/responsive.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Admin Pusat: approval ijin / cuti / tukar — dikelompok per toko
 /// (hanya toko yang punya pengajuan pending).
@@ -159,7 +161,7 @@ class _JadwalPengajuanApprovalPageState
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         title: Text(
           approve ? 'Setujui pengajuan?' : 'Tolak pengajuan?',
           style: const TextStyle(color: Colors.white),
@@ -186,7 +188,7 @@ class _JadwalPengajuanApprovalPageState
                   labelText: 'Catatan admin (opsional)',
                   labelStyle: const TextStyle(color: Colors.white54),
                   filled: true,
-                  fillColor: const Color(0xFF0F172A),
+                  fillColor: OptikAdminTokens.bgMid,
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 14),
                   border: OutlineInputBorder(
@@ -268,7 +270,7 @@ class _JadwalPengajuanApprovalPageState
             ),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             decoration: const BoxDecoration(
-              color: Color(0xFF1E293B),
+              color: OptikAdminTokens.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: SingleChildScrollView(
@@ -435,10 +437,12 @@ class _JadwalPengajuanApprovalPageState
   Widget build(BuildContext context) {
     final tokoKeys = _byToko.keys.toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         title: Text(
           widget.initialTokoId == null || widget.initialTokoId!.isEmpty
               ? 'Approval Jadwal'
@@ -507,7 +511,7 @@ class _JadwalPengajuanApprovalPageState
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: OptikAdminTokens.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: clashDays.isNotEmpty

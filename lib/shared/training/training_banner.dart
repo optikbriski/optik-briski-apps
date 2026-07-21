@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
 import 'training_mode.dart';
 
 /// Persistent banner shown only while Training Mode is active.
@@ -25,7 +26,7 @@ class TrainingBanner extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return Material(
-          color: const Color(0xFFB45309),
+          color: OptikAdminTokens.training,
           elevation: 2,
           child: SafeArea(
             bottom: false,
@@ -95,10 +96,10 @@ class TrainingBanner extends StatelessWidget {
 class TrainingModeDialogs {
   TrainingModeDialogs._();
 
-  static const _amber = Color(0xFFB45309);
-  static const _amberSoft = Color(0xFFF59E0B);
-  static const _panel = Color(0xFF0F172A);
-  static const _card = Color(0xFF1E293B);
+  static const _amber = OptikAdminTokens.training;
+  static const _amberSoft = OptikAdminTokens.trainingSoft;
+  static const _panel = OptikAdminTokens.bgMid;
+  static const _card = OptikAdminTokens.card;
 
   static const _moduleKeys = <String>[
     'training_mod_pos',
@@ -662,13 +663,13 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                 padding: const EdgeInsets.fromLTRB(28, 30, 28, 26),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(22),
-                  color: const Color(0xFF1E293B).withOpacity(0.95),
+                  color: OptikAdminTokens.card.withOpacity(0.95),
                   border: Border.all(
-                    color: const Color(0xFFB45309).withOpacity(0.4),
+                    color: OptikAdminTokens.training.withOpacity(0.4),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFB45309).withOpacity(0.25),
+                      color: OptikAdminTokens.training.withOpacity(0.25),
                       blurRadius: 28,
                       offset: const Offset(0, 12),
                     ),
@@ -689,16 +690,16 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                             gradient: RadialGradient(
                               colors: [
                                 Color.lerp(
-                                  const Color(0xFFF59E0B),
-                                  const Color(0xFFB45309),
+                                  OptikAdminTokens.trainingSoft,
+                                  OptikAdminTokens.training,
                                   t,
                                 )!,
-                                const Color(0xFFB45309),
+                                OptikAdminTokens.training,
                               ],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFB45309)
+                                color: OptikAdminTokens.training
                                     .withOpacity(0.35 + t * 0.25),
                                 blurRadius: 18 + t * 10,
                               ),

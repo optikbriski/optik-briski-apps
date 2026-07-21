@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 /// Overlay loading animasi — logo brand berdenyut (breathe) saat proses lama.
 class AppLoadingOverlay extends StatefulWidget {
@@ -105,7 +106,7 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
                         width: 260,
                         padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          color: OptikAdminTokens.card,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: _accent.withOpacity(0.35),

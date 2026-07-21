@@ -8,6 +8,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../shared/garansi/garansi_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 class GaransiPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -133,7 +135,7 @@ class _GaransiPageState extends State<GaransiPage>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: OptikAdminTokens.bgMid,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -153,10 +155,12 @@ class _GaransiPageState extends State<GaransiPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF071018),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         title: Text('garansi_page_title'.tr()),
         bottom: TabBar(
           controller: _tabs,
@@ -182,7 +186,7 @@ class _GaransiPageState extends State<GaransiPage>
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAmbilFlow(),
         backgroundColor: const Color(0xFFE8C872),
-        foregroundColor: const Color(0xFF0F172A),
+        foregroundColor: OptikAdminTokens.bgMid,
         icon: const Icon(Icons.qr_code_scanner_rounded),
         label: Text('garansi_ambil_fab'.tr()),
       ),
@@ -609,12 +613,8 @@ class _GaransiKonfirmasiAmbilPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF071018),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        title: Text('garansi_ambil_title'.tr()),
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: 'garansi_ambil_title'.tr()),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -686,7 +686,7 @@ class _GaransiKonfirmasiAmbilPageState
               onPressed: _saving ? null : _submit,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFE8C872),
-                foregroundColor: const Color(0xFF0F172A),
+                foregroundColor: OptikAdminTokens.bgMid,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: _saving
@@ -1124,7 +1124,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   onPressed: _saving ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFE8C872),
-                    foregroundColor: const Color(0xFF0F172A),
+                    foregroundColor: OptikAdminTokens.bgMid,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: _saving

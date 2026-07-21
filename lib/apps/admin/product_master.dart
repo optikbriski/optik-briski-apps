@@ -7,6 +7,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'request_order_page.dart';
 import '../../shared/responsive.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ====================================================================
 // PRODUCT MASTER (REVISI FINAL: +BROADCAST STOCK ALOCATION MULTI-TENANT)
@@ -422,7 +424,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: R.constrainedDialog(
           context: ctx,
@@ -675,7 +677,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               context: context,
               preferWidth: 500,
               child: Dialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               child: SizedBox(
@@ -766,7 +768,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   fontWeight: FontWeight.bold),
                               decoration: const InputDecoration(
                                 filled: true,
-                                fillColor: Color(0xFF0F172A),
+                                fillColor: OptikAdminTokens.bgMid,
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.zero,
                               ),
@@ -837,7 +839,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         context: ctx,
         preferWidth: 420,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: const Row(
           children: [
@@ -953,14 +955,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        elevation: 0,
-        centerTitle: true,
-        title: Text("pm_title".tr(),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: "pm_title".tr(),
         actions: [
           if (editId != null)
             IconButton(
@@ -1006,7 +1003,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: inputKat,
-                    dropdownColor: const Color(0xFF1E293B),
+                    dropdownColor: OptikAdminTokens.card,
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
                         labelText: "pm_kat".tr(),
@@ -1045,7 +1042,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                           autoCaps: true)
                       : DropdownButtonFormField<String>(
                           value: inputSub,
-                          dropdownColor: const Color(0xFF1E293B),
+                          dropdownColor: OptikAdminTokens.card,
                           style: const TextStyle(
                               color: Colors.white, fontSize: 13),
                           decoration: InputDecoration(
@@ -1130,7 +1127,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   value: selectedJenisLensa,
-                  dropdownColor: const Color(0xFF1E293B),
+                  dropdownColor: OptikAdminTokens.card,
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
                       labelText: "pm_jenis_lensa".tr(),
@@ -1185,7 +1182,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   isNumber: true),
               const SizedBox(height: 15),
               DropdownButtonFormField<String>(
-                dropdownColor: const Color(0xFF1E293B),
+                dropdownColor: OptikAdminTokens.card,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 value: selectedCabang,
                 decoration: InputDecoration(
@@ -1343,7 +1340,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       }
 
                       return Card(
-                        color: const Color(0xFF1E293B),
+                        color: OptikAdminTokens.card,
                         margin: const EdgeInsets.only(bottom: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(15),
@@ -1409,7 +1406,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                               ? PopupMenuButton<String>(
                                   icon: const Icon(Icons.more_vert,
                                       color: Colors.white54, size: 20),
-                                  color: const Color(0xFF1E293B),
+                                  color: OptikAdminTokens.card,
                                   onSelected: (action) {
                                     if (action == 'detail') {
                                       showProductDetail(item);

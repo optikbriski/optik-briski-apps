@@ -11,6 +11,8 @@ import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -416,7 +418,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             context: context,
             preferWidth: 420,
             child: AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikAdminTokens.card,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             title: const Text("Catat Keuangan Manual (COA Ledger)",
@@ -464,7 +466,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: selectedJenis,
-                          dropdownColor: const Color(0xFF0F172A),
+                          dropdownColor: OptikAdminTokens.bgMid,
                           style: const TextStyle(
                               color: Colors.white, fontSize: 13),
                           decoration: InputDecoration(
@@ -635,7 +637,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           Expanded(
                               child: DropdownButtonFormField<String>(
                             value: selectedMetode,
-                            dropdownColor: const Color(0xFF0F172A),
+                            dropdownColor: OptikAdminTokens.bgMid,
                             style: const TextStyle(
                                 color: Colors.white, fontSize: 12),
                             decoration: InputDecoration(
@@ -656,7 +658,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           Expanded(
                               child: DropdownButtonFormField<String>(
                             value: selectedStatus,
-                            dropdownColor: const Color(0xFF0F172A),
+                            dropdownColor: OptikAdminTokens.bgMid,
                             style: const TextStyle(
                                 color: Colors.white, fontSize: 12),
                             decoration: InputDecoration(
@@ -843,7 +845,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         title: const Text("Pilih Tindakan Audit",
             style: TextStyle(
                 color: Colors.white,
@@ -929,7 +931,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       itemBuilder: (context, index) {
         String tokoId = listCabangUnik[index];
         return Card(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           margin: const EdgeInsets.only(bottom: 10),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -996,7 +998,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: OptikAdminTokens.card,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.white10, width: 0.5)),
           child: Column(
@@ -1045,7 +1047,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 // 📦 CONTROL 1: DROPDOWN FILTER MULTI-PERIODE ENTERPRISE UPGRADED
               DropdownButton<String>(
                 value: selectedPeriodFilter,
-                dropdownColor: const Color(0xFF1E293B),
+                dropdownColor: OptikAdminTokens.card,
                 underline: const SizedBox(),
                 style: const TextStyle(
                     color: Colors.blueAccent,
@@ -1088,7 +1090,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             colorScheme: const ColorScheme.dark(
                               primary: Colors.blueAccent,
                               onPrimary: Colors.white,
-                              surface: Color(0xFF1E293B),
+                              surface: OptikAdminTokens.card,
                               onSurface: Colors.white,
                             ),
                           ),
@@ -1238,7 +1240,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   }
 
                   return Card(
-                    color: const Color(0xFF1E293B),
+                    color: OptikAdminTokens.card,
                     margin: const EdgeInsets.only(bottom: 10),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
@@ -1246,7 +1248,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 18, vertical: 8),
                       leading: const CircleAvatar(
-                          backgroundColor: Color(0xFF0F172A),
+                          backgroundColor: OptikAdminTokens.bgMid,
                           child: Icon(Icons.calendar_today,
                               color: Colors.tealAccent, size: 14)),
                       title: Row(
@@ -1336,7 +1338,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: OptikAdminTokens.card,
             borderRadius: BorderRadius.circular(8)),
         child: Column(
           children: [
@@ -1389,7 +1391,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
+                color: OptikAdminTokens.card,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.white10, width: 0.5)),
             child: Column(
@@ -1466,7 +1468,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
+                color: OptikAdminTokens.card,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.white10, width: 0.5)),
             child: Column(
@@ -1525,7 +1527,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(15),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(8)),
                   child: const Center(
                       child: Text(
@@ -1535,7 +1537,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 )
               : Container(
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.white10, width: 0.5)),
                   child: ClipRRect(
@@ -1556,7 +1558,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       children: [
                         TableRow(
                           decoration:
-                              const BoxDecoration(color: Color(0xFF0F172A)),
+                              const BoxDecoration(color: OptikAdminTokens.bgMid),
                           children: [
                             'PRODUK / AUDIT TRAIL',
                             'QTY',
@@ -1633,7 +1635,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         // 🏛️ BARIS BARU: KESIMPULAN REKONSILIASI TOTAL ASET DI LUAR ITERASI MAP
                         TableRow(
                           decoration:
-                              const BoxDecoration(color: Color(0xFF0F172A)),
+                              const BoxDecoration(color: OptikAdminTokens.bgMid),
                           children: [
                             Padding(
                                 padding: const EdgeInsets.all(8),
@@ -1718,8 +1720,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
                     return Card(
                       color: isNgawangManual
-                          ? const Color(0xFF0F172A)
-                          : const Color(0xFF1E293B),
+                          ? OptikAdminTokens.bgMid
+                          : OptikAdminTokens.card,
                       margin: const EdgeInsets.only(bottom: 8),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -1845,10 +1847,12 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   // ==========================================================================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           onPressed: () {

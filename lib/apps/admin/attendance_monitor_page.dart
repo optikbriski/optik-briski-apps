@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'jadwal_kerja_page.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Monitor absensi untuk Admin (bukan clock-in).
 class AttendanceMonitorPage extends StatefulWidget {
@@ -127,7 +129,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: OptikAdminTokens.card,
       builder: (ctx) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.6,
@@ -148,7 +150,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               final at =
                   DateTime.tryParse(log['created_at']?.toString() ?? '');
               return Card(
-                color: const Color(0xFF0F172A),
+                color: OptikAdminTokens.bgMid,
                 child: ListTile(
                   title: Text(
                     '${log['tipe']} • skor ${log['match_score'] ?? '-'}',
@@ -193,11 +195,9 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     final df = DateFormat('dd MMM yyyy', 'id_ID');
     final timeFmt = DateFormat('HH:mm');
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text('Monitor Absensi'),
-        backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'Monitor Absensi',
         actions: [
           IconButton(
             tooltip: 'Atur jadwal kerja',
@@ -234,11 +234,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     : DropdownButtonFormField<String?>(
                         isExpanded: true,
                         value: _tokoFilter,
-                        dropdownColor: const Color(0xFF1E293B),
+                        dropdownColor: OptikAdminTokens.card,
                         decoration: const InputDecoration(
                           isDense: true,
                           filled: true,
-                          fillColor: Color(0xFF1E293B),
+                          fillColor: OptikAdminTokens.card,
                           border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(
                               horizontal: 12, vertical: 10),
@@ -321,7 +321,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                                 s['pulang_at']?.toString() ?? '');
                             final open = s['status'] == 'OPEN';
                             return Card(
-                              color: const Color(0xFF1E293B),
+                              color: OptikAdminTokens.card,
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
                                 onTap: () => _showLogs(s),

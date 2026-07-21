@@ -5,6 +5,8 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // Shortcut client Supabase khusus file ini
 final supabase = Supabase.instance.client;
@@ -188,15 +190,8 @@ class _RestoreOperationState extends State<RestoreOperation> {
       return nama.contains(q);
     }).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: Text("retur_title".tr(),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F172A),
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: "retur_title".tr()),
       body: Column(
         children: [
           // BAR INPUT PENCARIAN PRODUK
@@ -304,7 +299,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
           // TOMBOL EKSEKUSI DI BAGIAN BAWAH HALAMAN
           Container(
             padding: const EdgeInsets.all(20),
-            color: const Color(0xFF0F172A),
+            color: OptikAdminTokens.bgMid,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.redAccent,

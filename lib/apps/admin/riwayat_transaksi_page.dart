@@ -6,6 +6,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import '../../shared/responsive.dart';
 import 'sales_page.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ============================================================================
 // MODUL 17: HIGH-LEVEL CORPORATE REVENUE AUDIT, TAX, & AGING LEDGER SYSTEM
@@ -250,7 +252,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       builder: (c) => R.constrainedDialog(
         context: c,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Row(
           children: [
@@ -357,7 +359,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
             .length;
 
         return Card(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           margin: const EdgeInsets.only(bottom: 10),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -456,7 +458,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(10)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,7 +492,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(10)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -552,7 +554,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 15),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(10)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,7 +634,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                     int dayCashIn = dayOmzet - dayPiutang;
 
                     return Card(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       margin: const EdgeInsets.only(bottom: 8),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8)),
@@ -640,7 +642,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 15, vertical: 4),
                         leading: const CircleAvatar(
-                            backgroundColor: Color(0xFF0F172A),
+                            backgroundColor: OptikAdminTokens.bgMid,
                             child: Icon(Icons.calendar_today,
                                 color: Colors.tealAccent, size: 14)),
                         title: Text(
@@ -711,7 +713,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           borderRadius: BorderRadius.circular(8)),
       child: Column(
         children: [
@@ -806,7 +808,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         String status = trx['status_pembayaran'] ?? 'Lunas';
 
         return Card(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           margin: const EdgeInsets.only(bottom: 10),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -936,12 +938,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     String roleUser =
         widget.profile['role']?.toString().toLowerCase() ?? 'kasir';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           onPressed: () {

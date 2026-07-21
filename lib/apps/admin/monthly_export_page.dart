@@ -11,6 +11,8 @@ import '../../shared/export/monthly_data_export_service.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Admin: ekspor laporan operasional ke PDF premium per rentang tanggal.
 class MonthlyExportPage extends StatefulWidget {
@@ -50,8 +52,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   List<File> _lastExportFiles = const [];
   List<ExportDownloadHistoryEntry> _history = const [];
 
-  static const _bg = Color(0xFF0F172A);
-  static const _card = Color(0xFF1E293B);
+  static const _bg = OptikAdminTokens.bgMid;
+  static const _card = OptikAdminTokens.card;
   static const _accent = Color(0xFF38BDF8);
   static const _gold = Color(0xFFC9A84C);
 
@@ -530,16 +532,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
     final modeEnabled = _multiSelected && !_busy;
     final filteredDomains = _filteredDomains;
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        title: Text(
-          'export_page_title'.tr(),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: 'export_page_title'.tr()),
       body: AppLoadingOverlay.gate(
         visible: _busy,
         message: _progressMsg.isEmpty
@@ -951,7 +945,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       onPressed: _busy ? null : _runExport,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accent,
-                        foregroundColor: const Color(0xFF0F172A),
+                        foregroundColor: OptikAdminTokens.bgMid,
                         disabledBackgroundColor: Colors.blueGrey.shade700,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),

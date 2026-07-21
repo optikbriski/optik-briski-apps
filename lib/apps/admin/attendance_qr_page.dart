@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/attendance/attendance_config.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Layar Admin: QR absensi berputar untuk clock-in di toko ini.
 /// Cabang → QR cabang itu. Pusat → QR kantor pusat (bukan pilih cabang).
@@ -134,11 +136,9 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: Text('dash_menu_absen'.tr()),
-        backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'dash_menu_absen'.tr(),
         actions: [
           IconButton(
             tooltip: 'attendance_qr_refresh'.tr(),

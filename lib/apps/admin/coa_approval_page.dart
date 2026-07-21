@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/responsive.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 class CoaApprovalPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -112,7 +114,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: R.constrainedDialog(
           context: context,
@@ -253,16 +255,9 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text("🏛️ COA MANUAL APPROVAL VAULT",
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold)),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: const PremiumAppBar(
+        title: '🏛️ COA MANUAL APPROVAL VAULT',
       ),
       body: isLoading
           ? const Center(
@@ -281,7 +276,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                         item['jenis_transaksi'] == 'PIUTANG';
 
                     return Card(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -338,7 +333,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         title: const Text("Tindakan Cepat",
             style: TextStyle(color: Colors.white, fontSize: 14)),
         content: Column(

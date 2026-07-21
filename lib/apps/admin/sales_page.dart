@@ -32,6 +32,8 @@ import '../../shared/training/training_ops_sync.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../karyawan/absensi_page.dart';
 import 'garansi_page.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -410,7 +412,7 @@ class _SalesPageState extends State<SalesPage> {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           title: Text(
@@ -555,7 +557,7 @@ class _SalesPageState extends State<SalesPage> {
       MaterialPageRoute(
         builder: (context) => Scaffold(
           appBar: AppBar(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikAdminTokens.card,
             title: const Text("Posisikan Barcode ID Karyawan",
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
             leading: IconButton(
@@ -1117,7 +1119,7 @@ class _SalesPageState extends State<SalesPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Row(
           children: [
@@ -1150,7 +1152,7 @@ class _SalesPageState extends State<SalesPage> {
                 hintText: "Contoh: 2",
                 hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                 filled: true,
-                fillColor: const Color(0xFF0F172A),
+                fillColor: OptikAdminTokens.bgMid,
                 // ✅ FIX 2: Bersihkan kata 'const' tidak perlu agar compiler adem
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -1274,7 +1276,7 @@ class _SalesPageState extends State<SalesPage> {
               context: context,
               preferWidth: 360,
               child: AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
               title: Text("pos_pilih_produk_frame".tr(),
@@ -1431,7 +1433,7 @@ class _SalesPageState extends State<SalesPage> {
               context: context,
               preferWidth: 300,
               child: AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
               title: const Text(
@@ -1539,7 +1541,7 @@ class _SalesPageState extends State<SalesPage> {
               context: context,
               preferWidth: 360,
               child: AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
               title: Text("pos_pilih_aksesoris".tr(),
@@ -1855,7 +1857,7 @@ class _SalesPageState extends State<SalesPage> {
               context: context,
               preferWidth: 390,
               child: AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
               title: const Text("🔍 PRATINJAU NOTA PENJUALAN",
@@ -1910,7 +1912,7 @@ class _SalesPageState extends State<SalesPage> {
                                                     .toUpperCase(),
                                                 style: TextStyle(
                                                     color:
-                                                        const Color(0xFF0F172A),
+                                                        OptikAdminTokens.bgMid,
                                                     fontWeight: FontWeight.w800,
                                                     fontSize: fHeader - 1,
                                                     letterSpacing: 0.5,
@@ -1976,7 +1978,7 @@ class _SalesPageState extends State<SalesPage> {
                                                     .toUpperCase(),
                                                 style: TextStyle(
                                                     color:
-                                                        const Color(0xFF0F172A),
+                                                        OptikAdminTokens.bgMid,
                                                     fontWeight: FontWeight.w800,
                                                     fontSize: fHeader - 1,
                                                     letterSpacing: 0.5)),
@@ -2036,7 +2038,7 @@ class _SalesPageState extends State<SalesPage> {
                                               letterSpacing: 0.8)),
                                       Text(nameCtrl.text.toUpperCase(),
                                           style: TextStyle(
-                                              color: const Color(0xFF1E293B),
+                                              color: OptikAdminTokens.card,
                                               fontSize: fBody - 2,
                                               fontWeight: FontWeight.bold)),
                                       Text("WhatsApp: ${phoneCtrl.text}",
@@ -2065,7 +2067,7 @@ class _SalesPageState extends State<SalesPage> {
                                   children: [
                                     Text(noInvoice,
                                         style: TextStyle(
-                                            color: const Color(0xFF0F172A),
+                                            color: OptikAdminTokens.bgMid,
                                             fontWeight: FontWeight.bold,
                                             fontSize: fBody - 1,
                                             letterSpacing: 0.2)),
@@ -2192,7 +2194,7 @@ class _SalesPageState extends State<SalesPage> {
                                         Expanded(
                                           child: Text(formattedItemLine,
                                               style: const TextStyle(
-                                                  color: Color(0xFF0F172A),
+                                                  color: OptikAdminTokens.bgMid,
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.w600,
                                                   height: 1.2)),
@@ -2201,7 +2203,7 @@ class _SalesPageState extends State<SalesPage> {
                                         Text(
                                             formatRupiah(item['subtotal'] ?? 0),
                                             style: const TextStyle(
-                                                color: Color(0xFF0F172A),
+                                                color: OptikAdminTokens.bgMid,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w700)),
                                       ],
@@ -3250,7 +3252,7 @@ class _SalesPageState extends State<SalesPage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                colors: [OptikAdminTokens.bgMid, OptikAdminTokens.card],
               ),
             ),
             child: Focus(
@@ -3360,12 +3362,13 @@ class _SalesPageState extends State<SalesPage> {
   Widget _buildBarcodeScannerLayar() {
     // ❌ BARIS "bool isScanningLocal = true;" SUDAH DIHAPUS DARI SINI AGAR TIDAK LOOPING REBUILD!
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       // 🎯 SUNTIKAN SAKTI: Mengadakan AppBar transparan khusus untuk tombol kembali ke Dashboard Admin
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
               color: Colors.white, size: 20),
@@ -3549,10 +3552,12 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   Widget _buildSalesMainUI() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           tooltip: 'leave_title_pos'.tr(),
@@ -3573,7 +3578,7 @@ class _SalesPageState extends State<SalesPage> {
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white70),
-              color: const Color(0xFF1E293B),
+              color: OptikAdminTokens.card,
               onSelected: (action) {
                 switch (action) {
                   case 'close':
@@ -3788,7 +3793,7 @@ class _SalesPageState extends State<SalesPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: Column(
@@ -3859,7 +3864,7 @@ class _SalesPageState extends State<SalesPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: OptikAdminTokens.card,
                         borderRadius: BorderRadius.circular(15),
                         border: Border.all(
                             color: Colors.blueAccent.withOpacity(0.3))),
@@ -4149,7 +4154,7 @@ class _SalesPageState extends State<SalesPage> {
                                 fit: FlexFit.tight,
                                 child: DropdownButtonFormField<String>(
                                   isExpanded: true,
-                                  dropdownColor: const Color(0xFF1E293B),
+                                  dropdownColor: OptikAdminTokens.card,
                                   value: ["Standar", "Progresif", "Kryptok"]
                                           .contains(lensJenis)
                                       ? lensJenis
@@ -4172,7 +4177,7 @@ class _SalesPageState extends State<SalesPage> {
                                 fit: FlexFit.tight,
                                 child: DropdownButtonFormField<String>(
                                   isExpanded: true,
-                                  dropdownColor: const Color(0xFF1E293B),
+                                  dropdownColor: OptikAdminTokens.card,
                                   value: [
                                     'Supersin',
                                     'Blueray',
@@ -4583,7 +4588,7 @@ class _SalesPageState extends State<SalesPage> {
                                           fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 10),
                                   DropdownButtonFormField<String>(
-                                    dropdownColor: const Color(0xFF1E293B),
+                                    dropdownColor: OptikAdminTokens.card,
                                     value: lensJenisLama,
                                     decoration: InputDecoration(
                                         labelText: "pos_jenis_lensa_lama".tr()),
@@ -5023,7 +5028,7 @@ class _SalesPageState extends State<SalesPage> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          color: OptikAdminTokens.card,
                           borderRadius: BorderRadius.circular(15),
                           border: Border.all(
                               color: Colors.blueAccent.withOpacity(0.5))),
@@ -5137,7 +5142,7 @@ class _SalesPageState extends State<SalesPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: OptikAdminTokens.card,
                         borderRadius: BorderRadius.circular(15)),
                     child: Column(
                       children: [
@@ -5196,7 +5201,7 @@ class _SalesPageState extends State<SalesPage> {
                             Flexible(
                               fit: FlexFit.loose,
                               child: DropdownButtonFormField<String>(
-                                dropdownColor: const Color(0xFF1E293B),
+                                dropdownColor: OptikAdminTokens.card,
                                 value: paymentMethod,
                                 items: ["Tunai", "Debit", "Transfer", "QRIS"]
                                     .map((e) => DropdownMenuItem(
@@ -5215,7 +5220,7 @@ class _SalesPageState extends State<SalesPage> {
                             Flexible(
                               fit: FlexFit.loose,
                               child: DropdownButtonFormField<String>(
-                                dropdownColor: const Color(0xFF1E293B),
+                                dropdownColor: OptikAdminTokens.card,
                                 value: paymentStatus,
                                 items: ["Lunas", "DP"]
                                     .map((e) => DropdownMenuItem(
@@ -5945,17 +5950,15 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+      return const PremiumScaffold(
         body:
             Center(child: CircularProgressIndicator(color: Colors.blueAccent)),
       );
     }
 
     if (saleData == null || configData == null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        appBar: AppBar(title: Text("pos_nota_title".tr())),
+      return PremiumScaffold(
+        appBar: PremiumAppBar(title: "pos_nota_title".tr()),
         body: Center(
             child: Text("pos_data_tidak_ditemukan".tr(),
                 style: const TextStyle(color: Colors.white))),
@@ -5983,16 +5986,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
             orElse: () => {'detail_resep': ''})['detail_resep'] ??
         '';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text("📄 INVOICE STRUK DIGITAL REAL",
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.white)),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: const PremiumAppBar(
+        title: '📄 INVOICE STRUK DIGITAL REAL',
         automaticallyImplyLeading: false,
       ),
       body: Center(
@@ -6044,7 +6040,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                             .toString()
                                             .toUpperCase(),
                                         style: TextStyle(
-                                            color: const Color(0xFF0F172A),
+                                            color: OptikAdminTokens.bgMid,
                                             fontWeight: FontWeight.w800,
                                             fontSize: fHeader - 1,
                                             letterSpacing: 0.5,
@@ -6096,7 +6092,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                             .toString()
                                             .toUpperCase(),
                                         style: TextStyle(
-                                            color: const Color(0xFF0F172A),
+                                            color: OptikAdminTokens.bgMid,
                                             fontWeight: FontWeight.w800,
                                             fontSize: fHeader - 1,
                                             letterSpacing: 0.5)),
@@ -6142,7 +6138,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                             children: [
                               Text(sale['no_invoice'] ?? '-',
                                   style: TextStyle(
-                                      color: const Color(0xFF0F172A),
+                                      color: OptikAdminTokens.bgMid,
                                       fontWeight: FontWeight.bold,
                                       fontSize: fBody - 1,
                                       letterSpacing: 0.2)),
@@ -6159,7 +6155,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                       .toString()
                                       .toUpperCase(),
                                   style: TextStyle(
-                                      color: const Color(0xFF1E293B),
+                                      color: OptikAdminTokens.card,
                                       fontSize: fBody - 2,
                                       fontWeight: FontWeight.bold)),
                               Text("WhatsApp: ${sale['no_wa'] ?? '-'}",
@@ -6284,7 +6280,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                   child: Text(
                                       "- $rawName (x${item['qty'] ?? 1})",
                                       style: const TextStyle(
-                                          color: Color(0xFF0F172A),
+                                          color: OptikAdminTokens.bgMid,
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.w700,
                                           height: 1.2)),
@@ -6292,7 +6288,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                 const SizedBox(width: 15),
                                 Text(formatRupiah(item['subtotal'] ?? 0),
                                     style: const TextStyle(
-                                        color: Color(0xFF0F172A),
+                                        color: OptikAdminTokens.bgMid,
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w900)),
                               ],
@@ -6451,7 +6447,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                           color: Colors.black54, fontSize: 11)),
                                   Text(formatRupiah(totalHarga),
                                       style: const TextStyle(
-                                          color: Color(0xFF0F172A),
+                                          color: OptikAdminTokens.bgMid,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold))
                                 ],
@@ -6483,7 +6479,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                 children: [
                                   const Text("SISA TAGIHAN",
                                       style: TextStyle(
-                                          color: Color(0xFF0F172A),
+                                          color: OptikAdminTokens.bgMid,
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.bold)),
                                   Text(formatRupiah(sisaTagihan),
@@ -6523,7 +6519,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                   constraints: const BoxConstraints(maxWidth: 420),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(10)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6548,7 +6544,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                             sale['diambil_at'] != null
                                         ? Colors.green
                                         : const Color(0xFFE8C872),
-                                foregroundColor: const Color(0xFF0F172A),
+                                foregroundColor: OptikAdminTokens.bgMid,
                               ),
                               onPressed: isPrinting ||
                                       sale['diambil_at'] != null ||

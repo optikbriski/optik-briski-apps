@@ -8,6 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // Shortcut pintas client Supabase khusus file DO ini
 final supabase = Supabase.instance.client;
@@ -48,7 +50,6 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   Map<String, RestockHint> restockHints = {};
   bool isLoadingHints = false;
 
-  static const _bg = Color(0xFF0B1220);
   static const _panel = Color(0xFF121A2B);
   static const _panelSoft = Color(0xFF1A2438);
   static const _line = Color(0xFF2A3548);
@@ -453,7 +454,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       builder: (ctx) => R.constrainedDialog(
         context: ctx,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -581,27 +582,10 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     final cartQty =
         selectedItems.values.fold<int>(0, (s, q) => s + q);
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _panel,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        title: Column(
-          children: [
-            Text("do_title".tr(),
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8)),
-            const Text('Kirim restock Pusat → cabang',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF94A3B8),
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
-        centerTitle: true,
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: "do_title".tr(),
+        subtitle: 'Kirim restock Pusat → cabang',
         actions: [
           IconButton(
             tooltip: "do_trip_gantung".tr(),
@@ -1441,15 +1425,8 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        elevation: 0,
-        title: Text("draf_title".tr(),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: "draf_title".tr()),
       body: Column(
         children: [
           // BAR INPUT PENCARIAN DATA DRAF
@@ -1732,7 +1709,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
       builder: (ctx) => R.constrainedDialog(
         context: ctx,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("draf_hapus_title".tr(),
             style: const TextStyle(
@@ -1771,7 +1748,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
       builder: (ctx) => R.constrainedDialog(
         context: ctx,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("draf_batal_title".tr(),
             style: const TextStyle(
@@ -1881,7 +1858,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         context: ctx,
         preferWidth: 360,
         child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text("draf_siap_kirim".tr(),
             textAlign: TextAlign.center,
@@ -2064,15 +2041,8 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        elevation: 0,
-        title: Text("draf_detail_title".tr(),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: "draf_detail_title".tr()),
       body: Column(
         children: [
           // HEADER KARTU DETAIL INFO TUJUAN CABANG
@@ -2124,7 +2094,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                       final itm = localItems[index];
                       int qty = int.tryParse(itm['qty'].toString()) ?? 0;
                       return Card(
-                        color: const Color(0xFF1E293B),
+                        color: OptikAdminTokens.card,
                         margin: const EdgeInsets.only(bottom: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -2203,7 +2173,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
+              color: OptikAdminTokens.bgMid,
               boxShadow: [
                 BoxShadow(
                     color: Colors.black.withOpacity(0.3),

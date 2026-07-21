@@ -9,6 +9,7 @@ import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
 
@@ -51,7 +52,7 @@ class _AdminAppState extends State<AdminApp> {
       ScaffoldMessenger.of(messengerCtx).showSnackBar(
         SnackBar(
           content: Text('training_msg_exited'.tr()),
-          backgroundColor: Colors.blueGrey,
+          backgroundColor: OptikAdminTokens.panel,
         ),
       );
     }
@@ -221,10 +222,9 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_booting) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+      return const PremiumScaffold(
         body: Center(
-          child: CircularProgressIndicator(color: Colors.blueAccent),
+          child: CircularProgressIndicator(color: OptikAdminTokens.accentSoft),
         ),
       );
     }

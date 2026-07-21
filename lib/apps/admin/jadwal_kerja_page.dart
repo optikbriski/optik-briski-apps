@@ -7,6 +7,8 @@ import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/responsive.dart';
 import 'jadwal_pengajuan_approval_page.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Admin Pusat: list cabang → atur jadwal_kerja karyawan cabang tersebut.
 /// Admin toko: langsung ke cabangnya sendiri.
@@ -121,13 +123,15 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         title: Text(_selectedTokoId == null
             ? 'Jadwal Kerja — Pilih Cabang'
             : 'Jadwal Kerja'),
-        backgroundColor: const Color(0xFF0F172A),
         actions: [
           if (_selectedTokoId != null && _isPusat)
             IconButton(
@@ -214,7 +218,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                       icon: const Icon(Icons.clear, color: Colors.white38),
                     ),
               filled: true,
-              fillColor: const Color(0xFF1E293B),
+              fillColor: OptikAdminTokens.card,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               border: OutlineInputBorder(
@@ -227,7 +231,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Material(
-            color: const Color(0xFF1E293B),
+            color: OptikAdminTokens.card,
             borderRadius: BorderRadius.circular(12),
             child: ListTile(
               leading: Badge(
@@ -265,7 +269,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                     final t = list[i];
                     final id = t['id']?.toString() ?? '-';
                     return Material(
-                      color: const Color(0xFF1E293B),
+                      color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(14),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
@@ -523,7 +527,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) => AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikAdminTokens.card,
             title: Text(
               '${karyawan['nama']}\n${_hari[day.weekday - 1]}, ${_dayFmt.format(day)}',
               style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -652,7 +656,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikAdminTokens.card,
           insetPadding:
               const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           title: const Text('Setting shift cabang',
@@ -780,7 +784,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
           floatingLabelBehavior: FloatingLabelBehavior.auto,
           filled: true,
-          fillColor: const Color(0xFF0F172A),
+          fillColor: OptikAdminTokens.bgMid,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           border: OutlineInputBorder(
@@ -1004,7 +1008,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         Column(
           children: [
             Material(
-              color: const Color(0xFF0F172A),
+              color: OptikAdminTokens.bgMid,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 child: LayoutBuilder(
@@ -1028,7 +1032,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
+                            color: OptikAdminTokens.card,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: Colors.white10),
                           ),
@@ -1076,7 +1080,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                               if (states.contains(WidgetState.selected)) {
                                 return Colors.indigoAccent.withOpacity(0.45);
                               }
-                              return const Color(0xFF1E293B);
+                              return OptikAdminTokens.card;
                             }),
                           ),
                         ),
@@ -1161,7 +1165,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                           final layer = layerLabel(
                               officeLayerOf(k['jabatan']?.toString()));
                           return Card(
-                            color: const Color(0xFF1E293B),
+                            color: OptikAdminTokens.card,
                             margin: const EdgeInsets.only(bottom: 10),
                             clipBehavior: Clip.antiAlias,
                             child: Column(
@@ -1245,7 +1249,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       avatar: Icon(icon, size: 16, color: Colors.white70),
       label: Text(label, style: const TextStyle(fontSize: 12)),
       onPressed: onTap,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: OptikAdminTokens.card,
       side: const BorderSide(color: Colors.white12),
       labelStyle: const TextStyle(color: Colors.white70),
       visualDensity: VisualDensity.compact,

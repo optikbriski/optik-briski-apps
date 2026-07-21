@@ -5,6 +5,8 @@ import 'qr/hid_scan_intake.dart';
 import 'qr/qr_route.dart';
 import 'responsive.dart';
 import 'logistics/receive_scan_service.dart';
+import 'theme.dart';
+import 'widgets/admin/admin_premium.dart';
 
 class ScannerPenerimaanPage extends StatefulWidget {
   final String cabangKaryawan;
@@ -138,7 +140,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
         context: dialogContext,
         preferWidth: 380,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           content: SingleChildScrollView(
@@ -214,19 +216,13 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
   Widget _buildBody(BuildContext context) {
     // Hasil routing dari Scan QR universal — tanpa kamera kedua.
     if (_fromUniversalScan) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF0F172A),
-          elevation: 0,
+      return PremiumScaffold(
+        appBar: PremiumAppBar(
+          title: 'scan_qr'.tr(),
           leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
+            icon: const Icon(Icons.close_rounded),
             onPressed: () => Navigator.pop(context),
           ),
-          title: Text('scan_qr'.tr(),
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold)),
-          centerTitle: true,
         ),
         body: Center(
           child: _isProcessing

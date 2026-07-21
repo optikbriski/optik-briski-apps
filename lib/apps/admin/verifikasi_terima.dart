@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
 
 // ✅ MANTRA PENGAMAN: Definisikan ulang shortcut client Supabase di file ini
 final supabase = Supabase.instance.client;
@@ -121,16 +123,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          const Color(0xFF0F172A), // Menjaga keselarasan tema gelap Bos Natan
-      appBar: AppBar(
-          backgroundColor: const Color(0xFF0F172A),
-          elevation: 0,
-          centerTitle: true,
-          title: Text("inc_title".tr(),
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: "inc_title".tr()),
       body: isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Colors.blueAccent))

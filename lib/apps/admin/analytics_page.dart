@@ -4,6 +4,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_premium.dart';
+
 class AnalyticsDashboard extends StatefulWidget {
   final Map<String, dynamic> profile;
   const AnalyticsDashboard({super.key, required this.profile});
@@ -65,20 +68,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        title: Text(
-          "analytics_title".tr(),
-          style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(title: "analytics_title".tr()),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(color: OptikAdminTokens.accentSoft))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(

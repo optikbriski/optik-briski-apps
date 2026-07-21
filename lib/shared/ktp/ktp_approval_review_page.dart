@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
+
 /// Hasil review dari halaman detail verifikasi.
 enum KtpReviewResult { approved, rejected, cancelled }
 
@@ -235,7 +238,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: OptikAdminTokens.bgMid,
         title: const Text('Tolak pendaftaran?',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: TextField(
@@ -246,7 +249,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             hintText: 'Alasan penolakan wajib diisi…',
             hintStyle: const TextStyle(color: Colors.white38),
             filled: true,
-            fillColor: const Color(0xFF1E293B),
+            fillColor: OptikAdminTokens.card,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -302,16 +305,9 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
     final wa = (widget.karyawan['wa'] ?? '-').toString();
     final wide = MediaQuery.sizeOf(context).width >= 900;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Detail Verifikasi',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'Detail Verifikasi',
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: _saving
@@ -392,7 +388,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       return Container(
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: OptikAdminTokens.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.white12),
         ),
@@ -406,7 +402,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: ColoredBox(
-        color: const Color(0xFF1E293B),
+        color: OptikAdminTokens.card,
         child: InteractiveViewer(
           minScale: 0.8,
           maxScale: 4,
@@ -643,7 +639,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
 
   Widget _bottomActions() {
     return Material(
-      color: const Color(0xFF1E293B),
+      color: OptikAdminTokens.card,
       elevation: 8,
       child: SafeArea(
         top: false,
@@ -705,7 +701,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: OptikAdminTokens.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
@@ -754,7 +750,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
+        color: OptikAdminTokens.bgMid,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -894,7 +890,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       ),
       selected: on,
       selectedColor: Colors.greenAccent,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: OptikAdminTokens.bgMid,
       onSelected: (_) => onChanged(key),
     );
   }
