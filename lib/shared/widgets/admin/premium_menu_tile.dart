@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
-/// Dashboard / navigation tile with press scale and icon glow.
+/// Menu tile matching Training Mode module chips:
+/// compact glass chip, rounded-square icon (no neon circle glow).
 class PremiumMenuTile extends StatefulWidget {
   const PremiumMenuTile({
     super.key,
@@ -26,7 +27,7 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
   @override
   Widget build(BuildContext context) {
     return AnimatedScale(
-      scale: _pressed ? 0.96 : 1,
+      scale: _pressed ? 0.97 : 1,
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
       child: Material(
@@ -34,50 +35,67 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
         child: InkWell(
           onTap: widget.onTap,
           onHighlightChanged: (v) => setState(() => _pressed = v),
-          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+          borderRadius: BorderRadius.circular(14),
           child: Ink(
             decoration: BoxDecoration(
-              color: OptikAdminTokens.card.withOpacity(0.92),
-              borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              border: Border.all(color: OptikAdminTokens.line),
-              gradient: OptikAdminTokens.cardSheen,
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  OptikAdminTokens.card.withOpacity(0.96),
+                  OptikAdminTokens.panel.withOpacity(0.98),
+                ],
+              ),
+              border: Border.all(
+                color: widget.color.withOpacity(0.28),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.22),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
+                  color: Colors.black.withOpacity(0.28),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(11),
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: widget.color.withOpacity(0.12),
-                      boxShadow: OptikAdminTokens.glow(widget.color),
-                      border: Border.all(
-                        color: widget.color.withOpacity(0.22),
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          widget.color.withOpacity(0.95),
+                          Color.lerp(widget.color, Colors.black, 0.28)!,
+                        ],
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.color.withOpacity(0.28),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(widget.icon, color: widget.color, size: 22),
+                    child: Icon(widget.icon, color: Colors.white, size: 20),
                   ),
-                  const SizedBox(height: 10),
-                  Flexible(
+                  const SizedBox(width: 10),
+                  Expanded(
                     child: Text(
                       widget.title,
-                      textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: OptikAdminTokens.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
+                        color: OptikAdminTokens.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
                       ),
                     ),
                   ),

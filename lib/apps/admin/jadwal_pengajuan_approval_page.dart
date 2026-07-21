@@ -436,6 +436,11 @@ class _JadwalPengajuanApprovalPageState
   @override
   Widget build(BuildContext context) {
     final tokoKeys = _byToko.keys.toList();
+    final totalPending =
+        _byToko.values.fold<int>(0, (sum, rows) => sum + rows.length);
+    final clashTokoCount = tokoKeys
+        .where((toko) => _clashDays(_byToko[toko]!).isNotEmpty)
+        .length;
 
     return PremiumScaffold(
       appBar: AppBar(
@@ -479,9 +484,33 @@ class _JadwalPengajuanApprovalPageState
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                      itemCount: tokoKeys.length + 1,
+                      itemCount: tokoKeys.length + 2,
                       itemBuilder: (context, index) {
                         if (index == 0) {
+                          return PremiumStatGrid(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            items: [
+                              PremiumStatItem(
+                                label: 'Pengajuan',
+                                value: '$totalPending',
+                                color: Colors.purpleAccent,
+                              ),
+                              PremiumStatItem(
+                                label: 'Cabang',
+                                value: '${tokoKeys.length}',
+                                color: Colors.blueAccent,
+                              ),
+                              PremiumStatItem(
+                                label: 'Bentrok hari',
+                                value: '$clashTokoCount',
+                                color: clashTokoCount > 0
+                                    ? Colors.orangeAccent
+                                    : Colors.tealAccent,
+                              ),
+                            ],
+                          );
+                        }
+                        if (index == 1) {
                           return const Padding(
                             padding: EdgeInsets.only(bottom: 14),
                             child: Text(
@@ -494,7 +523,7 @@ class _JadwalPengajuanApprovalPageState
                             ),
                           );
                         }
-                        final toko = tokoKeys[index - 1];
+                        final toko = tokoKeys[index - 2];
                         final rows = _byToko[toko]!;
                         final clash = _clashDays(rows);
                         return _tokoSection(toko, rows, clash);

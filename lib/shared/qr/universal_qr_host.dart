@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'universal_qr_nav.dart';
 
@@ -30,6 +31,8 @@ class UniversalQrHost {
 
   static UniversalQrHostData? get current => _notifier.value;
 
+  /// Safe from [State.initState] — defers notify so [ListenableBuilder] is not
+  /// marked dirty during an active build (MaterialApp.builder shell).
   static void bind({
     required UniversalQrCallerRole callerRole,
     Map<String, dynamic>? profile,
@@ -37,16 +40,32 @@ class UniversalQrHost {
     String? karyawanId,
     String? karyawanNama,
   }) {
-    _notifier.value = UniversalQrHostData(
-      callerRole: callerRole,
-      profile: profile,
-      cabangKaryawan: cabangKaryawan,
-      karyawanId: karyawanId,
-      karyawanNama: karyawanNama,
+    _setLater(
+      UniversalQrHostData(
+        callerRole: callerRole,
+        profile: profile,
+        cabangKaryawan: cabangKaryawan,
+        karyawanId: karyawanId,
+        karyawanNama: karyawanNama,
+      ),
     );
   }
 
   static void clear() {
-    _notifier.value = null;
+    _setLater(null);
+  }
+
+  static void _setLater(UniversalQrHostData? next) {
+    void apply() {
+      _notifier.value = next;
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      apply();
+    } else {
+      SchedulerBinding.instance.addPostFrameCallback((_) => apply());
+    }
   }
 }

@@ -3363,15 +3363,10 @@ class _SalesPageState extends State<SalesPage> {
     // ❌ BARIS "bool isScanningLocal = true;" SUDAH DIHAPUS DARI SINI AGAR TIDAK LOOPING REBUILD!
 
     return PremiumScaffold(
-      // 🎯 SUNTIKAN SAKTI: Mengadakan AppBar transparan khusus untuk tombol kembali ke Dashboard Admin
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
+      appBar: PremiumAppBar(
+        title: "pos_otorisasi_kasir".tr(),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           tooltip: "Kembali ke Dashboard",
           onPressed: () async {
             await kameraLoginCtrl.stop();
@@ -3380,35 +3375,50 @@ class _SalesPageState extends State<SalesPage> {
         ),
       ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(30.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.qr_code_scanner_rounded,
-                  color: Colors.blueAccent, size: 80),
-              const SizedBox(height: 20),
-              Text(
-                "pos_otorisasi_kasir".tr(),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "pos_msg_scan_kasir".tr(),
-                style: const TextStyle(color: Colors.grey, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: 280,
-                height: 280,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: MobileScanner(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: PremiumPanel(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+              borderRadius: 24,
+              borderColor: OptikAdminTokens.accent.withOpacity(0.4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const PremiumIconBadge(
+                    icon: Icons.qr_code_scanner_rounded,
+                    color: OptikAdminTokens.accentSoft,
+                    size: 56,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "pos_otorisasi_kasir".tr(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: OptikAdminTokens.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "pos_msg_scan_kasir".tr(),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: 280,
+                    height: 280,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: MobileScanner(
                     fit: BoxFit.cover,
                     controller:
                         kameraLoginCtrl, // ✅ Gunakan controller kelas agar beneran bisa dimatikan
@@ -3476,50 +3486,52 @@ class _SalesPageState extends State<SalesPage> {
                 ), // Penutup ClipRRect
               ), // Penutup SizedBox
               if (TrainingMode.instance.isActive) ...[
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: 280,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFB45309),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    icon: const Icon(Icons.school_rounded),
-                    label: Text('training_pos_unlock_cashier'.tr()),
-                    onPressed: () async {
-                      try {
-                        final res = await supabase
-                            .from('karyawan')
-                            .select()
-                            .eq('nik', 'TRAINING01')
-                            .maybeSingle();
-                        if (res == null) {
-                          _showSnack(
-                            'training_pos_unlock_missing'.tr(),
-                            Colors.red,
-                          );
-                          return;
-                        }
-                        await kameraLoginCtrl.stop();
-                        setState(() {
-                          activeCashier = res;
-                          namaKasir = res['nama']?.toString() ?? 'Kasir Latihan';
-                          kasirCtrl.text = namaKasir;
-                          isPosUnlocked = true;
-                          isScanningLocal = false;
-                        });
-                      } catch (e) {
+                const SizedBox(height: 20),
+                PremiumPrimaryButton(
+                  label: 'training_pos_unlock_cashier'.tr(),
+                  icon: Icons.school_rounded,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      OptikAdminTokens.trainingSoft,
+                      OptikAdminTokens.training,
+                    ],
+                  ),
+                  onPressed: () async {
+                    try {
+                      final res = await supabase
+                          .from('karyawan')
+                          .select()
+                          .eq('nik', 'TRAINING01')
+                          .maybeSingle();
+                      if (res == null) {
                         _showSnack(
-                          'training_msg_error'.tr().replaceAll('{}', '$e'),
+                          'training_pos_unlock_missing'.tr(),
                           Colors.red,
                         );
+                        return;
                       }
-                    },
-                  ),
+                      await kameraLoginCtrl.stop();
+                      setState(() {
+                        activeCashier = res;
+                        namaKasir = res['nama']?.toString() ?? 'Kasir Latihan';
+                        kasirCtrl.text = namaKasir;
+                        isPosUnlocked = true;
+                        isScanningLocal = false;
+                      });
+                    } catch (e) {
+                      _showSnack(
+                        'training_msg_error'.tr().replaceAll('{}', '$e'),
+                        Colors.red,
+                      );
+                    }
+                  },
                 ),
               ],
             ],
+              ),
+            ),
           ),
         ),
       ),

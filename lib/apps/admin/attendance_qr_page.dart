@@ -154,99 +154,121 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
           : Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'dash_absen_flow_hint'.tr(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      height: 1.45,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'attendance_qr_hint'.tr(namedArgs: {
-                      'toko': _tokoId ?? '-',
-                      'detik': '${AttendanceConfig.qrTtlSeconds}',
-                    }),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      height: 1.4,
-                      fontSize: 12,
-                    ),
-                  ),
-                  if (TrainingMode.instance.isActive) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'training_attendance_stub_note'.tr(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFFFBBF24),
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.redAccent),
-                      ),
-                    ),
                   Expanded(
-                    child: Center(
-                      child: _issue == null
-                          ? Text(
-                              'attendance_qr_waiting'.tr(),
-                              style: const TextStyle(color: Colors.white54),
-                            )
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _tokoId ?? '-',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Container(
-                                  padding: const EdgeInsets.all(18),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: QrImageView(
-                                    data: _issue!.payload,
-                                    version: QrVersions.auto,
-                                    size: 260,
-                                    backgroundColor: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 18),
-                                Text(
-                                  'attendance_qr_countdown'.tr(
-                                    namedArgs: {'detik': '$_secondsLeft'},
-                                  ),
-                                  style: TextStyle(
-                                    color: _secondsLeft <= 8
-                                        ? Colors.orangeAccent
-                                        : Colors.tealAccent,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                    child: PremiumPanel(
+                      padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
+                      borderRadius: 22,
+                      child: Column(
+                        children: [
+                          PremiumIconBadge(
+                            icon: Icons.qr_code_scanner_rounded,
+                            color: OptikAdminTokens.accentSoft,
+                            size: 52,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'dash_absen_flow_hint'.tr(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              height: 1.45,
+                              fontSize: 13,
                             ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'attendance_qr_hint'.tr(namedArgs: {
+                              'toko': _tokoId ?? '-',
+                              'detik': '${AttendanceConfig.qrTtlSeconds}',
+                            }),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              height: 1.4,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (TrainingMode.instance.isActive) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              'training_attendance_stub_note'.tr(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFBBF24),
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style:
+                                    const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                          Expanded(
+                            child: Center(
+                              child: _issue == null
+                                  ? Text(
+                                      'attendance_qr_waiting'.tr(),
+                                      style: const TextStyle(
+                                          color: Colors.white54),
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _tokoId ?? '-',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Container(
+                                          padding: const EdgeInsets.all(18),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: QrImageView(
+                                            data: _issue!.payload,
+                                            version: QrVersions.auto,
+                                            size: 260,
+                                            backgroundColor: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 18),
+                                        Text(
+                                          'attendance_qr_countdown'.tr(
+                                            namedArgs: {
+                                              'detik': '$_secondsLeft'
+                                            },
+                                          ),
+                                          style: TextStyle(
+                                            color: _secondsLeft <= 8
+                                                ? Colors.orangeAccent
+                                                : Colors.tealAccent,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

@@ -27,6 +27,13 @@ abstract final class OptikAdminTokens {
   static const double radiusLg = 20;
   static const double radiusXl = 24;
 
+  /// Minimum gutters — jangan biarkan kontrol/kartu nempel.
+  static const double spaceXs = 6;
+  static const double spaceSm = 10;
+  static const double spaceMd = 14;
+  static const double spaceLg = 20;
+  static const double spaceXl = 28;
+
   static List<BoxShadow> get cardShadow => [
         BoxShadow(
           color: Colors.black.withOpacity(0.35),
@@ -229,6 +236,28 @@ ThemeData buildAdminTheme() {
       labelColor: OptikAdminTokens.accentSoft,
       unselectedLabelColor: OptikAdminTokens.textMuted,
       indicatorSize: TabBarIndicatorSize.label,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: OptikAdminTokens.card,
+      selectedColor: OptikAdminTokens.accent.withOpacity(0.22),
+      disabledColor: OptikAdminTokens.panel,
+      labelStyle: const TextStyle(
+        color: OptikAdminTokens.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        color: OptikAdminTokens.textPrimary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
+        side: const BorderSide(color: OptikAdminTokens.lineStrong),
+      ),
+      side: const BorderSide(color: OptikAdminTokens.lineStrong),
     ),
   );
 }

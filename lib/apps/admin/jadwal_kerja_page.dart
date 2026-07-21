@@ -9,6 +9,7 @@ import '../../shared/responsive.dart';
 import 'jadwal_pengajuan_approval_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/premium_date_range_picker.dart';
 
 /// Admin Pusat: list cabang → atur jadwal_kerja karyawan cabang tersebut.
 /// Admin toko: langsung ke cabangnya sendiri.
@@ -230,29 +231,24 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Material(
-            color: OptikAdminTokens.card,
-            borderRadius: BorderRadius.circular(12),
-            child: ListTile(
-              leading: Badge(
-                isLabelVisible: _pendingCount > 0,
-                label: Text('$_pendingCount'),
-                child: const Icon(Icons.fact_check_outlined,
-                    color: Colors.tealAccent),
+          child: PremiumListTile(
+            title: 'Approval ijin / tukar jadwal',
+            subtitle: _pendingCount == 0
+                ? 'Tidak ada pengajuan menunggu'
+                : '$_pendingCount menunggu approval',
+            icon: Icons.fact_check_outlined,
+            iconColor: Colors.tealAccent,
+            leading: Badge(
+              isLabelVisible: _pendingCount > 0,
+              label: Text('$_pendingCount'),
+              child: PremiumIconBadge(
+                icon: Icons.fact_check_outlined,
+                color: Colors.tealAccent,
+                size: 44,
               ),
-              title: const Text('Approval ijin / tukar jadwal',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                _pendingCount == 0
-                    ? 'Tidak ada pengajuan menunggu'
-                    : '$_pendingCount menunggu approval',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              trailing:
-                  const Icon(Icons.chevron_right, color: Colors.white38),
-              onTap: () => _openApproval(),
             ),
+            margin: EdgeInsets.zero,
+            onTap: () => _openApproval(),
           ),
         ),
         Expanded(
@@ -268,37 +264,12 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                   itemBuilder: (context, i) {
                     final t = list[i];
                     final id = t['id']?.toString() ?? '-';
-                    return Material(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(14),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              Colors.purpleAccent.withOpacity(0.2),
-                          child: const Icon(Icons.storefront_rounded,
-                              color: Colors.purpleAccent),
-                        ),
-                        title: Text(
-                          _namaCabang(t),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          'Kode: $id',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12),
-                        ),
-                        trailing: const Icon(Icons.chevron_right,
-                            color: Colors.white38),
-                        onTap: () => setState(() => _selectedTokoId = id),
-                      ),
+                    return PremiumListTile(
+                      title: _namaCabang(t),
+                      subtitle: 'Kode: $id',
+                      icon: Icons.storefront_rounded,
+                      iconColor: Colors.purpleAccent,
+                      onTap: () => setState(() => _selectedTokoId = id),
                     );
                   },
                 ),
@@ -476,6 +447,29 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       }
     });
     _load();
+  }
+
+  Future<void> _openPeriodPicker() async {
+    final result = await showPremiumDateRangePicker(
+      context: context,
+      initialStart: _rangeStart,
+      initialEnd: _rangeEnd,
+      initialPresetId: 'custom',
+    );
+    if (result == null) return;
+    final start = DateTime(result.start.year, result.start.month, result.start.day);
+    final end = DateTime(result.end.year, result.end.month, result.end.day);
+    final span = end.difference(start).inDays;
+    setState(() {
+      if (span <= 10) {
+        _mode = _JadwalMode.minggu;
+        _anchor = _mondayOf(start);
+      } else {
+        _mode = _JadwalMode.bulan;
+        _anchor = DateTime(start.year, start.month, 1);
+      }
+    });
+    await _load();
   }
 
   List<Map<String, dynamic>> _defaultRowsForKaryawan(String kid) {
@@ -1010,7 +1004,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             Material(
               color: OptikAdminTokens.bgMid,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final narrow = constraints.maxWidth < 420;
@@ -1027,28 +1021,46 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                             fontSize: 16,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: OptikAdminTokens.card,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Text(
-                            '${s.shift1Label}: ${s.shift1Kuota} org (${s.shift1Masuk}–${s.shift1Pulang})\n'
-                            '${s.shift2Label}: ${s.shift2Kuota} org (${s.shift2Masuk}–${s.shift2Pulang})\n'
-                            'Kuota/hari ${s.totalKuotaHarian} • ${_karyawan.length} karyawan'
-                            '${s.totalKuotaHarian > _karyawan.length ? " • kuota > orang" : ""}',
-                            style: const TextStyle(
+                        const SizedBox(height: OptikAdminTokens.spaceMd),
+                        PremiumStatGrid(
+                          spacing: OptikAdminTokens.spaceSm,
+                          items: [
+                            PremiumStatItem(
+                              label: s.shift1Label,
+                              value: '${s.shift1Kuota} org',
+                              color: Colors.tealAccent,
+                            ),
+                            PremiumStatItem(
+                              label: s.shift2Label,
+                              value: '${s.shift2Kuota} org',
+                              color: Colors.orangeAccent,
+                            ),
+                            PremiumStatItem(
+                              label: 'Kuota/hari',
+                              value: '${s.totalKuotaHarian}',
+                              color: Colors.blueAccent,
+                            ),
+                            PremiumStatItem(
+                              label: 'Karyawan',
+                              value: '${_karyawan.length}',
                               color: Colors.white70,
-                              fontSize: 12,
-                              height: 1.35,
+                            ),
+                          ],
+                        ),
+                        if (s.totalKuotaHarian > _karyawan.length)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                top: OptikAdminTokens.spaceSm),
+                            child: Text(
+                              'Kuota harian melebihi jumlah karyawan — cek setting shift.',
+                              style: TextStyle(
+                                color: Colors.orangeAccent.withOpacity(0.9),
+                                fontSize: 11,
+                                height: 1.3,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: OptikAdminTokens.spaceMd),
                         SegmentedButton<_JadwalMode>(
                           showSelectedIcon: false,
                           segments: [
@@ -1067,7 +1079,6 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                           selected: {_mode},
                           onSelectionChanged: (sel) => _setMode(sel.first),
                           style: ButtonStyle(
-                            visualDensity: VisualDensity.compact,
                             foregroundColor:
                                 WidgetStateProperty.resolveWith((states) {
                               if (states.contains(WidgetState.selected)) {
@@ -1084,56 +1095,51 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                             }),
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: OptikAdminTokens.spaceMd),
                         Row(
                           children: [
                             IconButton(
-                              visualDensity: VisualDensity.compact,
                               onPressed: () => _shiftPeriod(-1),
                               icon: const Icon(Icons.chevron_left,
                                   color: Colors.white),
                             ),
+                            const SizedBox(width: 4),
                             Expanded(
-                              child: Text(
-                                _rangeLabel,
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white70),
+                              child: PremiumDateRangeTrigger(
+                                label: _rangeLabel,
+                                onTap: _openPeriodPicker,
                               ),
                             ),
+                            const SizedBox(width: 4),
                             IconButton(
-                              visualDensity: VisualDensity.compact,
                               onPressed: () => _shiftPeriod(1),
                               icon: const Icon(Icons.chevron_right,
                                   color: Colors.white),
                             ),
                           ],
                         ),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 0,
-                          alignment: WrapAlignment.start,
+                        const SizedBox(height: OptikAdminTokens.spaceMd),
+                        PremiumChipWrap(
                           children: [
-                            _actionChip(
+                            PremiumActionChip(
                               icon: Icons.tune_rounded,
                               label: 'Kuota & jam',
-                              onTap: _busy ? null : _editShiftSettings,
+                              onPressed: _busy ? null : _editShiftSettings,
                             ),
-                            _actionChip(
+                            PremiumActionChip(
                               icon: Icons.casino_rounded,
                               label: 'Auto random',
-                              onTap: _busy ? null : _autoRandomPeriod,
+                              onPressed: _busy ? null : _autoRandomPeriod,
                             ),
-                            _actionChip(
+                            PremiumActionChip(
                               icon: Icons.playlist_add_check,
                               label: 'Default sama',
-                              onTap: _busy ? null : _isiDefaultSemua,
+                              onPressed: _busy ? null : _isiDefaultSemua,
                             ),
-                            _actionChip(
+                            PremiumActionChip(
                               icon: Icons.fact_check_outlined,
                               label: 'Approval ijin',
-                              onTap: widget.onOpenApproval,
+                              onPressed: widget.onOpenApproval,
                             ),
                           ],
                         ),
@@ -1237,23 +1243,6 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         if (_busy)
           const Center(child: CircularProgressIndicator()),
       ],
-    );
-  }
-
-  Widget _actionChip({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onTap,
-  }) {
-    return ActionChip(
-      avatar: Icon(icon, size: 16, color: Colors.white70),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      onPressed: onTap,
-      backgroundColor: OptikAdminTokens.card,
-      side: const BorderSide(color: Colors.white12),
-      labelStyle: const TextStyle(color: Colors.white70),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 

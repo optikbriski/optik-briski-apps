@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
-/// Layered slate background + optional app bar for Admin pages.
+/// Quiet layered slate — backdrop never steals pointer events (keeps FAB clickable).
 class PremiumScaffold extends StatelessWidget {
   const PremiumScaffold({
     super.key,
     this.appBar,
     required this.body,
     this.floatingActionButton,
+    this.floatingActionButtonLocation,
     this.bottomNavigationBar,
     this.drawer,
     this.endDrawer,
@@ -19,6 +20,7 @@ class PremiumScaffold extends StatelessWidget {
   final PreferredSizeWidget? appBar;
   final Widget body;
   final Widget? floatingActionButton;
+  final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Widget? bottomNavigationBar;
   final Widget? drawer;
   final Widget? endDrawer;
@@ -29,21 +31,22 @@ class PremiumScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: OptikAdminTokens.bgMid,
+      backgroundColor: OptikAdminTokens.bg,
       extendBodyBehindAppBar: extendBodyBehindAppBar,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: appBar,
       drawer: drawer,
       endDrawer: endDrawer,
       floatingActionButton: floatingActionButton,
+      floatingActionButtonLocation:
+          floatingActionButtonLocation ?? FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: bottomNavigationBar,
       body: Stack(
         fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
         children: [
-          const _PremiumBackdrop(),
-          padding == null
-              ? body
-              : Padding(padding: padding!, child: body),
+          const IgnorePointer(child: _PremiumBackdrop()),
+          padding == null ? body : Padding(padding: padding!, child: body),
         ],
       ),
     );
@@ -56,51 +59,27 @@ class _PremiumBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: BoxDecoration(gradient: OptikAdminTokens.bgGradient),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned(
-            top: -80,
-            right: -40,
-            child: _blob(
-              size: 220,
-              color: OptikAdminTokens.accent.withOpacity(0.08),
-            ),
-          ),
-          Positioned(
-            bottom: -60,
-            left: -50,
-            child: _blob(
-              size: 260,
-              color: OptikAdminTokens.trainingSoft.withOpacity(0.04),
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(0, -0.85),
-                radius: 1.2,
-                colors: [
-                  Colors.white.withOpacity(0.03),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-        ],
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF0B1220),
+            Color(0xFF0F172A),
+            Color(0xFF0A101C),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _blob({required double size, required Color color}) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color,
+          gradient: RadialGradient(
+            center: const Alignment(0, -1.05),
+            radius: 1.1,
+            colors: [
+              OptikAdminTokens.accent.withOpacity(0.07),
+              Colors.transparent,
+            ],
+          ),
         ),
       ),
     );

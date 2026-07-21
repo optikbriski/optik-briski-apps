@@ -53,7 +53,6 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   List<ExportDownloadHistoryEntry> _history = const [];
 
   static const _bg = OptikAdminTokens.bgMid;
-  static const _card = OptikAdminTokens.card;
   static const _accent = Color(0xFF38BDF8);
   static const _gold = Color(0xFFC9A84C);
 
@@ -567,26 +566,37 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
               _infraBanner(),
             ],
             const SizedBox(height: 22),
-            Container(
+            PremiumStatGrid(
+              padding: const EdgeInsets.only(bottom: 18),
+              items: [
+                PremiumStatItem(
+                  label: 'Domain dipilih',
+                  value: '${_selectedDomainIds.length}',
+                  color: _accent,
+                ),
+                PremiumStatItem(
+                  label: 'Riwayat ekspor',
+                  value: _historyLoading ? '…' : '${_history.length}',
+                  color: _gold,
+                ),
+                PremiumStatItem(
+                  label: 'Salinan berikut',
+                  value: _salinanPreviewLabel,
+                  color: Colors.tealAccent,
+                ),
+              ],
+            ),
+            PremiumPanel(
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
-              ),
+              borderRadius: 22,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'export_date_range'.tr(),
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
+                  PremiumSectionHeader(
+                    label: 'export_date_range'.tr(),
+                    padding: EdgeInsets.zero,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 4),
                   Opacity(
                     opacity: _busy ? 0.5 : 1,
                     child: IgnorePointer(
@@ -597,7 +607,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: OptikAdminTokens.spaceMd),
                   Text(
                     'export_jakarta_note'.tr(),
                     style: TextStyle(
@@ -609,14 +619,9 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'export_domains_select'.tr(),
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
+                        child: PremiumSectionHeader(
+                          label: 'export_domains_select'.tr(),
+                          padding: EdgeInsets.zero,
                         ),
                       ),
                       TextButton(
@@ -630,6 +635,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: OptikAdminTokens.spaceSm),
                       TextButton(
                         onPressed: _busy ? null : _clearDomains,
                         child: Text(
@@ -643,7 +649,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: OptikAdminTokens.spaceMd),
                   Text(
                     'export_selected_count'.tr(
                       namedArgs: {
@@ -794,7 +800,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                             ),
                           ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: OptikAdminTokens.spaceMd),
                   Text(
                     'export_snapshot_legend'.tr(),
                     style: TextStyle(
@@ -803,17 +809,12 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'export_output_mode'.tr(),
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
+                  const SizedBox(height: OptikAdminTokens.spaceMd),
+                  PremiumSectionHeader(
+                    label: 'export_output_mode'.tr(),
+                    padding: EdgeInsets.zero,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 2),
                   Opacity(
                     opacity: modeEnabled ? 1 : 0.45,
                     child: Column(
@@ -985,23 +986,11 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             ),
             if (_lastSummaries.isNotEmpty) ...[
               const SizedBox(height: 22),
-              Text(
-                'export_last_result'.tr(),
-                style: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
+              PremiumSectionHeader(label: 'export_last_result'.tr()),
+              const SizedBox(height: 4),
+              PremiumPanel(
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: _card,
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                borderRadius: 16,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1040,31 +1029,19 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
               ),
             ],
             const SizedBox(height: 26),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'export_history_title'.tr(),
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
+            PremiumSectionHeader(
+              label: 'export_history_title'.tr(),
+              trailing: IconButton(
+                tooltip: 'export_history_refresh'.tr(),
+                onPressed: _busy || _historyLoading ? null : _loadHistory,
+                icon: Icon(
+                  Icons.refresh_rounded,
+                  size: 20,
+                  color: Colors.white.withOpacity(0.55),
                 ),
-                IconButton(
-                  tooltip: 'export_history_refresh'.tr(),
-                  onPressed: _busy || _historyLoading ? null : _loadHistory,
-                  icon: Icon(
-                    Icons.refresh_rounded,
-                    size: 20,
-                    color: Colors.white.withOpacity(0.55),
-                  ),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             if (_historyLoading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -1077,13 +1054,9 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                 ),
               )
             else if (_history.isEmpty)
-              Container(
-                width: double.infinity,
+              PremiumPanel(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _card,
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                borderRadius: 16,
                 child: Text(
                   _historySchemaMissing
                       ? 'export_history_migration'.tr()
@@ -1164,15 +1137,11 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
         ? h.adminEmail!
         : (h.adminUserId ?? '—');
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
+    return PremiumPanel(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
+      borderRadius: 16,
+      margin: const EdgeInsets.only(bottom: 10),
+      borderColor: _gold.withOpacity(0.28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

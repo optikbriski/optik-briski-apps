@@ -9,6 +9,7 @@ class PremiumPrimaryButton extends StatelessWidget {
     this.loading = false,
     this.icon,
     this.expand = true,
+    this.gradient,
   });
 
   final String label;
@@ -16,9 +17,13 @@ class PremiumPrimaryButton extends StatelessWidget {
   final bool loading;
   final IconData? icon;
   final bool expand;
+  final Gradient? gradient;
 
   @override
   Widget build(BuildContext context) {
+    final g = gradient ?? OptikAdminTokens.accentGradient;
+    final enabled = onPressed != null && !loading;
+
     final child = loading
         ? const SizedBox(
             height: 22,
@@ -36,30 +41,42 @@ class PremiumPrimaryButton extends StatelessWidget {
                 Icon(icon, size: 18),
                 const SizedBox(width: 8),
               ],
-              Text(label),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                  fontSize: 14,
+                ),
+              ),
             ],
           );
 
-    final button = ElevatedButton(
-      onPressed: loading ? null : onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: OptikAdminTokens.accent,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: OptikAdminTokens.accent.withOpacity(0.45),
-        elevation: 0,
-        minimumSize: Size(expand ? double.infinity : 0, 52),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        ),
-        textStyle: const TextStyle(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-          fontSize: 13,
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            width: expand ? double.infinity : null,
+            height: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: g,
+              boxShadow: [
+                BoxShadow(
+                  color: OptikAdminTokens.accent.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Center(child: child),
+          ),
         ),
       ),
-      child: child,
     );
-
-    return button;
   }
 }

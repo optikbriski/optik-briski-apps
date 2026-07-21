@@ -612,7 +612,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final count = _countKind(kind);
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
+        padding: const EdgeInsets.symmetric(horizontal: OptikAdminTokens.spaceXs),
         child: Material(
           color: active ? color.withOpacity(0.14) : _panelSoft,
           borderRadius: BorderRadius.circular(12),
@@ -656,38 +656,6 @@ class _StockMoveReportState extends State<StockMoveReport> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _kpiPill(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: _panelSoft,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 3),
-            Text(value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-          ],
         ),
       ),
     );
@@ -864,7 +832,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(OptikAdminTokens.spaceSm),
               decoration: BoxDecoration(
                 color: _panel,
                 borderRadius: BorderRadius.circular(16),
@@ -901,14 +869,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
             ),
           ),
 
-          // KPI ringkas 1 baris
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, OptikAdminTokens.spaceMd, 12, 0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 6),
+                  padding: const EdgeInsets.only(left: 4, bottom: OptikAdminTokens.spaceMd),
                   child: Text("smr_kpi_title".tr(),
                       style: const TextStyle(
                           color: Color(0xFFFBBF24),
@@ -916,15 +883,28 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.4)),
                 ),
-                Row(
-                  children: [
-                    _kpiPill('Transit', _formatRupiah(totalTransitValue),
-                        const Color(0xFFFBBF24)),
-                    _kpiPill('Tersalur', _formatRupiah(totalSuccessValue),
-                        const Color(0xFF4ADE80)),
-                    _kpiPill('Batal', _formatRupiah(totalBatalValue),
-                        const Color(0xFFF87171)),
-                    _kpiPill('Vol', '$totalTransitVolume PCS', Colors.white),
+                PremiumStatGrid(
+                  items: [
+                    PremiumStatItem(
+                      label: 'Transit',
+                      value: _formatRupiah(totalTransitValue),
+                      color: const Color(0xFFFBBF24),
+                    ),
+                    PremiumStatItem(
+                      label: 'Tersalur',
+                      value: _formatRupiah(totalSuccessValue),
+                      color: const Color(0xFF4ADE80),
+                    ),
+                    PremiumStatItem(
+                      label: 'Batal',
+                      value: _formatRupiah(totalBatalValue),
+                      color: const Color(0xFFF87171),
+                    ),
+                    PremiumStatItem(
+                      label: 'Vol',
+                      value: '$totalTransitVolume PCS',
+                      color: Colors.white,
+                    ),
                   ],
                 ),
               ],
@@ -933,7 +913,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
 
           // Search + status dalam satu panel
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, OptikAdminTokens.spaceMd, 12, 0),
             child: Container(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
               decoration: BoxDecoration(
@@ -993,10 +973,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                  const SizedBox(height: OptikAdminTokens.spaceMd),
+                  PremiumChipWrap(
                     children: [
                       _buildStatusChip('WAITING', const Color(0xFFFBBF24)),
                       _buildStatusChip('TRANSIT', const Color(0xFF60A5FA)),

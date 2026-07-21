@@ -6,7 +6,7 @@ class PremiumSectionHeader extends StatelessWidget {
     super.key,
     required this.label,
     this.trailing,
-    this.padding = const EdgeInsets.only(left: 4, bottom: 14),
+    this.padding = const EdgeInsets.only(left: 2, bottom: 12, top: 4),
   });
 
   final String label;
@@ -22,11 +22,11 @@ class PremiumSectionHeader extends StatelessWidget {
           Expanded(
             child: Text(
               label.toUpperCase(),
-              style: const TextStyle(
-                color: OptikAdminTokens.textMuted,
+              style: TextStyle(
+                color: OptikAdminTokens.textMuted.withOpacity(0.95),
                 fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.6,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
               ),
             ),
           ),

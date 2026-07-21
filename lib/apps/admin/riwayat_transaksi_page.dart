@@ -358,34 +358,19 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 (e['toko_id']?.toString().toUpperCase() ?? 'PUSAT') == tokoId)
             .length;
 
-        return Card(
-          color: OptikAdminTokens.card,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          child: ListTile(
-            leading: const CircleAvatar(
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.store, color: Colors.white, size: 16)),
-            title: Text(
-                tokoId == 'PUSAT'
-                    ? 'OPTIK B. RISKI - PUSAT'
-                    : 'OPTIK B. RISKI - $tokoId',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13)),
-            subtitle: Text("Arsip Penjualan: $hitungNota Nota Terbit",
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
-            trailing: const Icon(Icons.arrow_forward_ios,
-                color: Colors.white12, size: 14),
-            onTap: () {
-              setState(() {
-                selectedTokoId = tokoId;
-              });
-              _fetchDataTransaksiPerCabang(tokoId);
-            },
-          ),
+        return PremiumListTile(
+          title: tokoId == 'PUSAT'
+              ? 'OPTIK B. RISKI - PUSAT'
+              : 'OPTIK B. RISKI - $tokoId',
+          subtitle: 'Arsip Penjualan: $hitungNota Nota Terbit',
+          icon: Icons.store_rounded,
+          iconColor: Colors.blueAccent,
+          onTap: () {
+            setState(() {
+              selectedTokoId = tokoId;
+            });
+            _fetchDataTransaksiPerCabang(tokoId);
+          },
         );
       },
     );
@@ -405,44 +390,30 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
     return Column(
       children: [
-        // 📊 CORE BOARD A: 4 KARTU INTISARI UTAMA FINANSIAL (TOP GRID)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final cards = [
-                _buildTopOverviewCard("↓ Tunai Masuk",
-                    formatRupiah(branchTotalDuitMasuk), Colors.greenAccent),
-                _buildTopOverviewCard("👓 Omzet Bruto",
-                    formatRupiah(branchTotalOmzetBruto), Colors.blueAccent),
-                _buildTopOverviewCard("⏳ Piutang Usaha",
-                    formatRupiah(branchTotalPiutangMacet), Colors.orangeAccent),
-                _buildTopOverviewCard("📄 Volume Nota",
-                    "$branchTotalNotaTerbit Lembar", Colors.white),
-              ];
-              if (R.isNarrow(context)) {
-                final half = (c.maxWidth - 4) / 2;
-                return Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: cards
-                      .map((card) => SizedBox(width: half, child: card))
-                      .toList(),
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 4),
-                  Expanded(child: cards[1]),
-                  const SizedBox(width: 4),
-                  Expanded(child: cards[2]),
-                  const SizedBox(width: 4),
-                  Expanded(child: cards[3]),
-                ],
-              );
-            },
-          ),
+        PremiumStatGrid(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, OptikAdminTokens.spaceMd),
+          items: [
+            PremiumStatItem(
+              label: '↓ Tunai Masuk',
+              value: formatRupiah(branchTotalDuitMasuk),
+              color: Colors.greenAccent,
+            ),
+            PremiumStatItem(
+              label: 'Omzet Bruto',
+              value: formatRupiah(branchTotalOmzetBruto),
+              color: Colors.blueAccent,
+            ),
+            PremiumStatItem(
+              label: 'Piutang Usaha',
+              value: formatRupiah(branchTotalPiutangMacet),
+              color: Colors.orangeAccent,
+            ),
+            PremiumStatItem(
+              label: 'Volume Nota',
+              value: '$branchTotalNotaTerbit Lembar',
+              color: Colors.white,
+            ),
+          ],
         ),
 
         // 🏛️ CORE BOARD B: ADVANCED AUDIT PANEL (PAJAK, AGING RECEIVABLE & REKENING BANK)
@@ -454,22 +425,19 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // --- SUB-PANEL 1: PAJAK & KPI STRATEGIS CORPORATE ---
-                Container(
-                  padding: const EdgeInsets.all(12),
+                PremiumPanel(
+                  padding: const EdgeInsets.all(14),
+                  borderRadius: 16,
                   margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(10)),
+                  borderColor: Colors.amberAccent.withOpacity(0.28),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("⚖️ DEKLARASI PERPAJAKAN & EFISIENSI REVENUE",
-                          style: TextStyle(
-                              color: Colors.amberAccent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
-                      const SizedBox(height: 8),
+                      PremiumSectionHeader(
+                        label: 'Deklarasi Perpajakan & Efisiensi Revenue',
+                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: OptikAdminTokens.spaceMd),
                       _buildRowDataIntel(
                           "DPP (Dasar Pengenaan Pajak / Omzet Netto)",
                           formatRupiah(branchTotalDppNetto),
@@ -488,87 +456,57 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 ),
 
                 // --- SUB-PANEL 2: AGING ACCOUNTS RECEIVABLE LEDGER (BUKU PENUAN PIUTANG) ---
-                Container(
-                  padding: const EdgeInsets.all(12),
+                PremiumPanel(
+                  padding: const EdgeInsets.all(14),
+                  borderRadius: 16,
                   margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(10)),
+                  borderColor: Colors.orangeAccent.withOpacity(0.28),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                          "⏳ AR AGING LEDGER (ANALISIS UMUR PIUTANG JATUH TEMPO)",
-                          style: TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
-                      const SizedBox(height: 10),
-                      R.isNarrow(context)
-                          ? Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                _buildAgingBox(
-                                    "0-30 HARI\n(LANCAR)",
-                                    formatRupiah(piutangLancar30Hari),
-                                    Colors.tealAccent),
-                                _buildAgingBox(
-                                    "31-60 HARI\n(WATCHLIST)",
-                                    formatRupiah(piutangPengawasan60Hari),
-                                    Colors.amberAccent),
-                                _buildAgingBox(
-                                    ">60 HARI\n(CRITICAL)",
-                                    formatRupiah(piutangKritisMacet),
-                                    Colors.redAccent),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                Expanded(
-                                    child: _buildAgingBox(
-                                        "0-30 HARI\n(LANCAR)",
-                                        formatRupiah(piutangLancar30Hari),
-                                        Colors.tealAccent)),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                    child: _buildAgingBox(
-                                        "31-60 HARI\n(WATCHLIST)",
-                                        formatRupiah(piutangPengawasan60Hari),
-                                        Colors.amberAccent)),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                    child: _buildAgingBox(
-                                        ">60 HARI\n(CRITICAL)",
-                                        formatRupiah(piutangKritisMacet),
-                                        Colors.redAccent)),
-                              ],
-                            )
+                      PremiumSectionHeader(
+                        label: 'AR Aging Ledger (Umur Piutang Jatuh Tempo)',
+                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: OptikAdminTokens.spaceMd),
+                      PremiumStatGrid(
+                        items: [
+                          PremiumStatItem(
+                            label: '0-30 HARI (LANCAR)',
+                            value: formatRupiah(piutangLancar30Hari),
+                            color: Colors.tealAccent,
+                          ),
+                          PremiumStatItem(
+                            label: '31-60 HARI (WATCHLIST)',
+                            value: formatRupiah(piutangPengawasan60Hari),
+                            color: Colors.amberAccent,
+                          ),
+                          PremiumStatItem(
+                            label: '>60 HARI (CRITICAL)',
+                            value: formatRupiah(piutangKritisMacet),
+                            color: Colors.redAccent,
+                          ),
+                        ],
+                      )
                     ],
                   ),
                 ),
 
                 // --- SUB-PANEL 3: REKONSILIASI JALUR MUTASI BANK ---
-                Container(
-                  padding: const EdgeInsets.all(12),
+                PremiumPanel(
+                  padding: const EdgeInsets.all(14),
+                  borderRadius: 16,
                   margin: const EdgeInsets.only(bottom: 15),
-                  decoration: BoxDecoration(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(10)),
+                  borderColor: Colors.blueAccent.withOpacity(0.28),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("💳 AUDIT INSTRUMEN REKENING BANK & SETORAN",
-                          style: TextStyle(
-                              color: Colors.blueAccent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                      PremiumSectionHeader(
+                        label: 'Audit Instrumen Rekening Bank & Setoran',
+                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: OptikAdminTokens.spaceMd),
+                      PremiumChipWrap(
                         children: breakdownMetodeBayar.entries.map((e) {
                           return Container(
                             padding: const EdgeInsets.symmetric(
@@ -599,13 +537,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 ),
 
                 // --- LIST CALENDAR JURNAL HARIAN BAWAH ---
-                const Padding(
-                  padding: EdgeInsets.only(left: 6, bottom: 8),
-                  child: Text("Arsip Jurnal Nota Harian",
-                      style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
+                const PremiumSectionHeader(
+                  label: 'Arsip Jurnal Nota Harian',
+                  padding: EdgeInsets.only(left: 6, bottom: 8, top: 0),
                 ),
 
                 ListView.builder(
@@ -633,70 +567,75 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                                 0));
                     int dayCashIn = dayOmzet - dayPiutang;
 
-                    return Card(
-                      color: OptikAdminTokens.card,
+                    return PremiumPanel(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 15, vertical: 12),
+                      borderRadius: 16,
                       margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 15, vertical: 4),
-                        leading: const CircleAvatar(
-                            backgroundColor: OptikAdminTokens.bgMid,
-                            child: Icon(Icons.calendar_today,
-                                color: Colors.tealAccent, size: 14)),
-                        title: Text(
-                            _formatTanggalIndonesia(tanggalKey).toUpperCase(),
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11.5)),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 4,
-                            children: [
-                              Text("In: ${formatRupiah(dayCashIn)}",
-                                  style: const TextStyle(
-                                      color: Colors.greenAccent,
-                                      fontSize: 10.5)),
-                              Text("Omzet: ${formatRupiah(dayOmzet)}",
-                                  style: const TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontSize: 10.5)),
-                            ],
+                      onTap: () {
+                        setState(() {
+                          selectedDateStr = tanggalKey;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          PremiumIconBadge(
+                            icon: Icons.calendar_today_rounded,
+                            color: Colors.tealAccent,
+                            size: 40,
                           ),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text("Sisa: ${formatRupiah(dayPiutang)}",
-                                    style: TextStyle(
-                                        color: dayPiutang > 0
-                                            ? Colors.orangeAccent
-                                            : Colors.white24,
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold)),
-                                Text("${listNotaHariIni.length} Nota",
-                                    style: const TextStyle(
-                                        color: Colors.white38, fontSize: 9)),
+                                Text(
+                                  _formatTanggalIndonesia(tanggalKey)
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                                const SizedBox(height: OptikAdminTokens.spaceSm),
+                                PremiumChipWrap(
+                                  spacing: OptikAdminTokens.spaceSm,
+                                  runSpacing: OptikAdminTokens.spaceSm,
+                                  children: [
+                                    Text("In: ${formatRupiah(dayCashIn)}",
+                                        style: const TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontSize: 10.5)),
+                                    Text("Omzet: ${formatRupiah(dayOmzet)}",
+                                        style: const TextStyle(
+                                            color: Colors.blueAccent,
+                                            fontSize: 10.5)),
+                                  ],
+                                ),
                               ],
                             ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.arrow_forward_ios,
-                                color: Colors.white12, size: 10),
-                          ],
-                        ),
-                        onTap: () {
-                          setState(() {
-                            selectedDateStr = tanggalKey;
-                          });
-                        },
+                          ),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text("Sisa: ${formatRupiah(dayPiutang)}",
+                                  style: TextStyle(
+                                      color: dayPiutang > 0
+                                          ? Colors.orangeAccent
+                                          : Colors.white24,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold)),
+                              Text("${listNotaHariIni.length} Nota",
+                                  style: const TextStyle(
+                                      color: Colors.white38, fontSize: 9)),
+                            ],
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.chevron_right_rounded,
+                              color: OptikAdminTokens.textMuted, size: 18),
+                        ],
                       ),
                     );
                   },
@@ -706,31 +645,6 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTopOverviewCard(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-      decoration: BoxDecoration(
-          color: OptikAdminTokens.card,
-          borderRadius: BorderRadius.circular(8)),
-      child: Column(
-        children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white38, fontSize: 9),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  color: color, fontSize: 10.5, fontWeight: FontWeight.bold),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center),
-        ],
-      ),
     );
   }
 
@@ -747,36 +661,6 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           Text(value,
               style: TextStyle(
                   color: textCol, fontSize: 11, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAgingBox(String status, String value, Color accent) {
-    return Container(
-      width: R.isNarrow(context) ? (R.widthOf(context) - 48) / 2 : double.infinity,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-          color: Colors.black12,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white10, width: 0.5)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(status,
-              style: TextStyle(
-                  color: accent,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2)),
-          const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -857,9 +741,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 2),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
+                PremiumChipWrap(
+                  spacing: OptikAdminTokens.spaceSm,
+                  runSpacing: OptikAdminTokens.spaceSm,
                   children: [
                     Text("Diterima: ${formatRupiah(cashCollected)}",
                         style: const TextStyle(
@@ -878,9 +762,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                         const TextStyle(color: Colors.white38, fontSize: 11)),
               ],
             ),
-            trailing: Wrap(
-              spacing: 0,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            trailing: PremiumChipWrap(
+              spacing: OptikAdminTokens.spaceSm,
+              runSpacing: OptikAdminTokens.spaceSm,
               children: [
                 Container(
                   padding:

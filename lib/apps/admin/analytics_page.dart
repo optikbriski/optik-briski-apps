@@ -78,20 +78,25 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _statCard("analytics_omzet".tr(), _formatRupiah(_totalOmzet),
-                      Icons.account_balance_wallet_rounded, Colors.greenAccent),
-                  const SizedBox(height: 15),
-                  _statCard(
-                      "analytics_stok_kritis".tr(),
-                      "analytics_produk".tr(args: [_stokKritis.toString()]),
-                      Icons.warning_amber_rounded,
-                      Colors.orangeAccent),
-                  const SizedBox(height: 40),
-                  Text("analytics_performa".tr(),
-                      style: const TextStyle(
-                          color: Colors.grey, fontSize: 10, letterSpacing: 2)),
-                  const SizedBox(height: 30),
+                  PremiumStatGrid(
+                    items: [
+                      PremiumStatItem(
+                        label: "analytics_omzet".tr(),
+                        value: _formatRupiah(_totalOmzet),
+                        color: Colors.greenAccent,
+                      ),
+                      PremiumStatItem(
+                        label: "analytics_stok_kritis".tr(),
+                        value: "analytics_produk"
+                            .tr(args: [_stokKritis.toString()]),
+                        color: Colors.orangeAccent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  PremiumSectionHeader(label: "analytics_performa".tr()),
                   SizedBox(
+                    width: double.infinity,
                     height: 200,
                     child: BarChart(
                       BarChartData(
@@ -130,41 +135,4 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
     );
   }
 
-  // WIDGET PEMBANTU: KARTU STATISTIK
-  Widget _statCard(String t, String v, IconData i, Color c) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-                color: c.withOpacity(0.2), shape: BoxShape.circle),
-            child: Icon(i, color: c),
-          ),
-          const SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 5),
-              Text(
-                v,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold),
-              ),
-            ],
-          )
-        ],
-      ),
-    );
-  }
 }

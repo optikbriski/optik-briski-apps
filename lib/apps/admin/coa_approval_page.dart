@@ -255,6 +255,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
 
   @override
   Widget build(BuildContext context) {
+    final pendingCount = pendingItems.length;
+    final totalNominal = pendingItems.fold<int>(
+      0,
+      (sum, item) => sum + (int.tryParse(item['nominal']?.toString() ?? '0') ?? 0),
+    );
+    final pemasukanCount = pendingItems.where((item) {
+      final jenis = item['jenis_transaksi']?.toString() ?? '';
+      return jenis == 'PEMASUKAN' || jenis == 'PIUTANG';
+    }).length;
+
     return PremiumScaffold(
       appBar: const PremiumAppBar(
         title: '🏛️ COA MANUAL APPROVAL VAULT',
@@ -262,70 +272,117 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
       body: isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Colors.blueAccent))
-          : pendingItems.isEmpty
-              ? const Center(
-                  child: Text(
-                      "Brankas bersih! Tidak ada antrean approval manual COA.",
-                      style: TextStyle(color: Colors.white38, fontSize: 12)))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(15),
-                  itemCount: pendingItems.length,
-                  itemBuilder: (context, index) {
-                    final item = pendingItems[index];
-                    bool isPemasukan = item['jenis_transaksi'] == 'PEMASUKAN' ||
-                        item['jenis_transaksi'] == 'PIUTANG';
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PremiumStatGrid(
+                  padding: const EdgeInsets.fromLTRB(15, 12, 15, 8),
+                  items: [
+                    PremiumStatItem(
+                      label: 'Antrean',
+                      value: '$pendingCount',
+                      color: Colors.orangeAccent,
+                    ),
+                    PremiumStatItem(
+                      label: 'Total Nominal',
+                      value: _formatRupiah(totalNominal),
+                      color: Colors.blueAccent,
+                    ),
+                    PremiumStatItem(
+                      label: 'Pemasukan',
+                      value: '$pemasukanCount',
+                      color: Colors.tealAccent,
+                    ),
+                    PremiumStatItem(
+                      label: 'Pengeluaran',
+                      value: '${pendingCount - pemasukanCount}',
+                      color: Colors.redAccent,
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: pendingItems.isEmpty
+                      ? PremiumEmptyState(
+                          message:
+                              "Brankas bersih! Tidak ada antrean approval manual COA.",
+                          icon: Icons.account_balance_wallet_outlined,
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+                          itemCount: pendingItems.length,
+                          itemBuilder: (context, index) {
+                            final item = pendingItems[index];
+                            bool isPemasukan =
+                                item['jenis_transaksi'] == 'PEMASUKAN' ||
+                                    item['jenis_transaksi'] == 'PIUTANG';
 
-                    return Card(
-                      color: OptikAdminTokens.card,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      child: InkWell(
-                        onLongPress: () => _showOptionDialog(item),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            return GestureDetector(
+                              onLongPress: () => _showOptionDialog(item),
+                              child: PremiumPanel(
+                                padding: const EdgeInsets.all(16),
+                                borderRadius: 16,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                borderColor: isPemasukan
+                                    ? Colors.tealAccent.withOpacity(0.28)
+                                    : Colors.redAccent.withOpacity(0.28),
+                                onTap: () => _showDetailDialog(item),
+                                child: Row(
                                   children: [
-                                    Text(
-                                        "${item['toko_id']} • ${item['kategori'].toString().toUpperCase()}",
-                                        style: const TextStyle(
-                                            color: Colors.blueAccent,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                        "${isPemasukan ? '+' : '-'} ${_formatRupiah(item['nominal'])} • Oleh: ${item['nama_kasir'] ?? 'Staff'}",
-                                        style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12)),
+                                    PremiumIconBadge(
+                                      icon: isPemasukan
+                                          ? Icons.arrow_downward_rounded
+                                          : Icons.arrow_upward_rounded,
+                                      color: isPemasukan
+                                          ? Colors.tealAccent
+                                          : Colors.redAccent,
+                                      size: 44,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                              "${item['toko_id']} • ${item['kategori'].toString().toUpperCase()}",
+                                              style: const TextStyle(
+                                                  color: Colors.blueAccent,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                              "${isPemasukan ? '+' : '-'} ${_formatRupiah(item['nominal'])} • Oleh: ${item['nama_kasir'] ?? 'Staff'}",
+                                              style: const TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 12)),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 70,
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.blueGrey.withOpacity(0.2),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        onPressed: () =>
+                                            _showDetailDialog(item),
+                                        child: const Text("DETAIL",
+                                            style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.white)),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                              SizedBox(
-                                width: 70,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        Colors.blueGrey.withOpacity(0.2),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  onPressed: () => _showDetailDialog(item),
-                                  child: const Text("DETAIL",
-                                      style: TextStyle(
-                                          fontSize: 10, color: Colors.white)),
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
-                      ),
-                    );
-                  },
                 ),
+              ],
+            ),
     );
   }
 

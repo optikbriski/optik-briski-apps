@@ -412,30 +412,24 @@ class _GaransiPageState extends State<GaransiPage>
           style: TextStyle(color: Colors.white.withOpacity(0.6)),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _statCard(
-                'Menunggu ambil',
-                '${_stats['menunggu_ambil'] ?? 0}',
-                Icons.hourglass_top_rounded,
-              ),
+        PremiumStatGrid(
+          items: [
+            PremiumStatItem(
+              label: 'Menunggu ambil',
+              value: '${_stats['menunggu_ambil'] ?? 0}',
+              color: const Color(0xFFE8C872),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _statCard(
-                'garansi_stat_aktif'.tr(),
-                '${_stats['kartu_aktif'] ?? 0}',
-                Icons.verified_rounded,
-              ),
+            PremiumStatItem(
+              label: 'garansi_stat_aktif'.tr(),
+              value: '${_stats['kartu_aktif'] ?? 0}',
+              color: OptikAdminTokens.success,
+            ),
+            PremiumStatItem(
+              label: 'garansi_stat_klaim_bulan'.tr(),
+              value: '${_stats['klaim_bulan_ini'] ?? 0}',
+              color: OptikAdminTokens.accentSoft,
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-        _statCard(
-          'garansi_stat_klaim_bulan'.tr(),
-          '${_stats['klaim_bulan_ini'] ?? 0}',
-          Icons.assignment_turned_in_rounded,
         ),
         const SizedBox(height: 16),
         Text(
@@ -450,37 +444,6 @@ class _GaransiPageState extends State<GaransiPage>
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8C872).withOpacity(0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: const Color(0xFFE8C872), size: 22),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

@@ -222,57 +222,84 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: OptikAdminTokens.card,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- SECTION HEADER USER PROFILE ---
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: OptikAdminTokens.accent.withOpacity(0.12),
-                    backgroundImage: _fotoProfileUrl != null
-                        ? NetworkImage(_fotoProfileUrl!)
-                        : null,
-                    child: _fotoProfileUrl == null
-                        ? const Icon(Icons.person_rounded,
-                            color: OptikAdminTokens.accentSoft, size: 20)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("dash_selamat_bekerja".tr(),
-                            style: const TextStyle(
-                                color: OptikAdminTokens.textMuted,
-                                fontSize: 11)),
-                        Text(
-                          "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: OptikAdminTokens.textPrimary),
-                        ),
-                      ],
+              // Header — same structure as Training Mode dialog
+              PremiumPanel(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                borderRadius: 20,
+                borderColor: OptikAdminTokens.accent.withOpacity(0.28),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: OptikAdminTokens.accentGradient,
+                        boxShadow: [
+                          BoxShadow(
+                            color: OptikAdminTokens.accent.withOpacity(0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                        image: _fotoProfileUrl != null
+                            ? DecorationImage(
+                                image: NetworkImage(_fotoProfileUrl!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: _fotoProfileUrl == null
+                          ? const Icon(Icons.person_rounded,
+                              color: Colors.white, size: 24)
+                          : null,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "dash_selamat_bekerja".tr().toUpperCase(),
+                            style: TextStyle(
+                              color: OptikAdminTokens.accentSoft
+                                  .withOpacity(0.95),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              height: 1.2,
+                              color: OptikAdminTokens.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 25),
+              const SizedBox(height: 14),
 
-              // --- SECTION KARTU KINERJA OMZET ---
               _buildOmzetCard(),
-              const SizedBox(height: 32),
+              const SizedBox(height: 22),
 
               PremiumSectionHeader(label: "dash_navigasi_menu".tr()),
 
-              // --- GRID NAVIGASI RESPONSIF (HP / tablet / web) ---
-              // Training: only POS, Logistics, History&DP, Warranty, Finance, Master Data.
+              // Module chips grid — densitas seperti dialog Training Mode
               ListenableBuilder(
                 listenable: TrainingMode.instance,
                 builder: (context, _) {
@@ -280,8 +307,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final w = constraints.maxWidth;
-                      final cols = w < 420 ? 2 : (w < 720 ? 3 : 4);
-                      final ratio = w < 420 ? 1.05 : (w < 720 ? 1.1 : 1.15);
+                      final cols = w < 420 ? 2 : (w < 900 ? 3 : 4);
+                      // Horizontal chip tiles → wider aspect
+                      final ratio = w < 420 ? 2.85 : (w < 900 ? 3.0 : 3.2);
                       return GridView.count(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -512,112 +540,120 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 28),
 
-              // Mode Latihan — 6 modul kurikulum; sandbox sync; wipe on exit.
               PremiumSectionHeader(label: 'training_sec_title'.tr()),
               ListenableBuilder(
                 listenable: TrainingMode.instance,
                 builder: (context, _) {
                   final active = TrainingMode.instance.isActive;
-                  return PremiumPanel(
-                    padding: EdgeInsets.zero,
-                    borderRadius: OptikAdminTokens.radiusMd,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _trainingBusy ? null : _toggleTrainingMode,
-                        borderRadius:
-                            BorderRadius.circular(OptikAdminTokens.radiusMd),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(
-                                OptikAdminTokens.radiusMd),
-                            border: Border.all(
-                              color: active
-                                  ? OptikAdminTokens.training
-                                  : OptikAdminTokens.line,
-                              width: active ? 1.5 : 1,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: OptikAdminTokens.training
-                                      .withOpacity(0.15),
-                                  shape: BoxShape.circle,
-                                  boxShadow: active
-                                      ? OptikAdminTokens.glow(
-                                          OptikAdminTokens.trainingSoft)
-                                      : null,
-                                ),
-                                child: Icon(
-                                  Icons.school_rounded,
-                                  color: active
-                                      ? OptikAdminTokens.training
-                                      : OptikAdminTokens.trainingSoft,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      active
-                                          ? 'training_menu_exit'.tr()
-                                          : 'training_menu_enter'.tr(),
-                                      style: TextStyle(
-                                        color: active
-                                            ? OptikAdminTokens.warning
-                                            : OptikAdminTokens.textPrimary,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      active
-                                          ? 'training_menu_exit_desc'.tr()
-                                          : 'training_menu_enter_desc'.tr(),
-                                      style: const TextStyle(
-                                        color: OptikAdminTokens.textMuted,
-                                        fontSize: 11,
-                                        height: 1.3,
-                                      ),
-                                    ),
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _trainingBusy ? null : _toggleTrainingMode,
+                      borderRadius: BorderRadius.circular(22),
+                      child: PremiumPanel(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                        borderRadius: 22,
+                        borderColor: (active
+                                ? OptikAdminTokens.training
+                                : OptikAdminTokens.trainingSoft)
+                            .withOpacity(0.45),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    OptikAdminTokens.trainingSoft,
+                                    OptikAdminTokens.training,
                                   ],
                                 ),
-                              ),
-                              if (_trainingBusy)
-                                const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: OptikAdminTokens.training,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: OptikAdminTokens.training
+                                        .withOpacity(0.35),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 5),
                                   ),
-                                )
-                              else
-                                Icon(
-                                  active
-                                      ? Icons.logout_rounded
-                                      : Icons.chevron_right_rounded,
-                                  color: OptikAdminTokens.textMuted,
-                                  size: 20,
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.school_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'training_enter_eyebrow'.tr(),
+                                    style: TextStyle(
+                                      color: OptikAdminTokens.trainingSoft
+                                          .withOpacity(0.95),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    active
+                                        ? 'training_menu_exit'.tr()
+                                        : 'training_menu_enter'.tr(),
+                                    style: TextStyle(
+                                      color: active
+                                          ? OptikAdminTokens.warning
+                                          : OptikAdminTokens.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    active
+                                        ? 'training_menu_exit_desc'.tr()
+                                        : 'training_menu_enter_desc'.tr(),
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.7),
+                                      fontSize: 12,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_trainingBusy)
+                              const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: OptikAdminTokens.trainingSoft,
                                 ),
-                            ],
-                          ),
+                              )
+                            else
+                              Icon(
+                                active
+                                    ? Icons.logout_rounded
+                                    : Icons.chevron_right_rounded,
+                                color: OptikAdminTokens.textMuted,
+                                size: 22,
+                              ),
+                          ],
                         ),
                       ),
                     ),
                   );
                 },
               ),
-              const SizedBox(height: 30),
             ],
           ),
         ),

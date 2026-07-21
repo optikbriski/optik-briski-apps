@@ -596,6 +596,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     return PremiumScaffold(
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _topBar(),
             if (!_loading && _error == null) ...[
@@ -669,13 +670,9 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   Widget _pipelineSummary() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Container(
+      child: PremiumPanel(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: _panel,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _line),
-        ),
+        borderRadius: 20,
         child: LayoutBuilder(
           builder: (context, c) {
             final narrow = c.maxWidth < 520;
@@ -799,64 +796,19 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _errorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: Color(0xFFF87171), size: 36),
-            const SizedBox(height: 12),
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFF87171), height: 1.4)),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _load, child: const Text('Coba lagi')),
-          ],
-        ),
-      ),
+    return PremiumEmptyState(
+      message: _error ?? 'Terjadi kesalahan',
+      icon: Icons.error_outline_rounded,
+      action: FilledButton(onPressed: _load, child: const Text('Coba lagi')),
     );
   }
 
   Widget _emptyState(int tabIndex) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: _panel,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _line),
-              ),
-              child: Icon(_tabIcons[tabIndex],
-                  color: _tabColors[tabIndex].withOpacity(0.8), size: 30),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              tabIndex == 3
-                  ? 'Tidak ada histori di rentang ini'
-                  : 'Antrian ${_tabLabels[tabIndex]} kosong',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              tabIndex == 3
-                  ? 'Coba ubah tanggal dan/atau filter toko.'
-                  : _tabHints[tabIndex],
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF94A3B8), height: 1.35),
-            ),
-          ],
-        ),
-      ),
+    return PremiumEmptyState(
+      message: tabIndex == 3
+          ? 'Tidak ada histori di rentang ini. Coba ubah tanggal dan/atau filter toko.'
+          : 'Antrian ${_tabLabels[tabIndex]} kosong. ${_tabHints[tabIndex]}',
+      icon: _tabIcons[tabIndex],
     );
   }
 
@@ -901,23 +853,15 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _tokoOnlyFilterBar() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
+    return PremiumPanel(
+      padding: const EdgeInsets.all(14),
+      borderRadius: 18,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Filter toko',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
+          PremiumSectionHeader(
+            label: 'Filter toko',
+            padding: EdgeInsets.zero,
           ),
           const SizedBox(height: 4),
           const Text(
@@ -936,39 +880,29 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _historyFilterBar() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
+    return PremiumPanel(
+      padding: const EdgeInsets.all(14),
+      borderRadius: 18,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Filter histori',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
+          PremiumSectionHeader(
+            label: 'Filter histori',
+            padding: EdgeInsets.zero,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: OptikAdminTokens.spaceMd),
           const Text(
             'Tanggal saja = semua toko. Toko saja = semua tanggal. '
             'Keduanya = order toko terpilih di rentang tanggal. Maks. 5 toko.',
             style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: OptikAdminTokens.spaceSm),
           PremiumDateRangeTrigger(
             label: _histTriggerLabel,
             onTap: _openHistRangePicker,
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          const SizedBox(height: OptikAdminTokens.spaceMd),
+          PremiumChipWrap(
             children: [
               FilterChip(
                 selected: _histUseDate,
@@ -1025,9 +959,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _selectedTokoChips() {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+    return PremiumChipWrap(
       children: [
         for (final id in _filterTokoIds)
           InputChip(
@@ -1112,15 +1044,13 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         canApprove &&
         snap.available < ((req['qty_request'] as num?)?.toInt() ?? 0);
 
-    return Container(
+    return PremiumPanel(
+      padding: EdgeInsets.zero,
+      borderRadius: 16,
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: availLow ? const Color(0xFFF59E0B).withOpacity(0.45) : _line,
-        ),
-      ),
+      borderColor: availLow
+          ? const Color(0xFFF59E0B).withOpacity(0.45)
+          : OptikAdminTokens.lineStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1170,10 +1100,8 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                     height: 1.25,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                const SizedBox(height: OptikAdminTokens.spaceSm),
+                PremiumChipWrap(
                   children: [
                     _metaPill(Icons.numbers_rounded, '$qty pcs'),
                     if (req['sku'] != null)
@@ -1460,15 +1388,11 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     final color = _statusColor(status);
     final ok = status == 'SUCCESS';
 
-    return Container(
+    return PremiumPanel(
+      padding: const EdgeInsets.all(14),
+      borderRadius: 16,
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      borderColor: color.withOpacity(0.35),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1545,7 +1469,6 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             ),
           ],
         ),
-      ),
     );
   }
 }

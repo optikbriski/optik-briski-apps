@@ -101,19 +101,17 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 
   // WIDGET CARD KARYAWAN AKTIF
   Widget _buildCardKaryawanAktif(Map<String, dynamic> k) {
-    return Card(
-      elevation: 0,
+    return PremiumPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       margin: const EdgeInsets.only(bottom: 12),
-      color: OptikAdminTokens.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withOpacity(0.05)),
-      ),
+      borderRadius: 16,
+      borderColor: Colors.greenAccent.withOpacity(0.28),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: const CircleAvatar(
-          backgroundColor: Colors.greenAccent,
-          child: Icon(Icons.person, color: Colors.black),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: PremiumIconBadge(
+          icon: Icons.person_rounded,
+          color: Colors.greenAccent,
+          size: 44,
         ),
         title: Text(
           k['nama'] ?? '-',
@@ -500,121 +498,87 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     final String nama = k['nama']?.toString() ?? '-';
     final hasKtp = (k['ktp_photo_url']?.toString() ?? '').isNotEmpty;
 
-    return Card(
-      elevation: 0,
+    return PremiumPanel(
+      padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 12),
-      color: OptikAdminTokens.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.amber.withOpacity(0.3), width: 1),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      borderRadius: 16,
+      borderColor: Colors.amber.withOpacity(0.35),
+      onTap: () => _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  const CircleAvatar(
-                    backgroundColor: Colors.amber,
-                    child: Icon(Icons.person_outline_rounded,
-                        color: Colors.black),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(nama,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                fontSize: 16)),
-                        const SizedBox(height: 4),
-                        Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 13)),
-                        Text(
-                          hasKtp
-                              ? 'Ada foto KTP + jejak OCR'
-                              : 'Belum ada foto KTP',
-                          style: TextStyle(
-                            color:
-                                hasKtp ? Colors.greenAccent : Colors.orange,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded,
-                      color: Colors.blueAccent),
-                ],
+              PremiumIconBadge(
+                icon: Icons.person_outline_rounded,
+                color: Colors.amber,
+                size: 44,
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () =>
-                      _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
-                  icon: const Icon(Icons.fact_check_rounded, size: 18),
-                  label: const Text(
-                    'Buka detail & putuskan',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(nama,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13)),
+                    Text(
+                      hasKtp
+                          ? 'Ada foto KTP + jejak OCR'
+                          : 'Belum ada foto KTP',
+                      style: TextStyle(
+                        color:
+                            hasKtp ? Colors.greenAccent : Colors.orange,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Tolak / Approve hanya setelah review data di dalam detail.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 11),
-              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: Colors.blueAccent),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () =>
+                  _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+              icon: const Icon(Icons.fact_check_rounded, size: 18),
+              label: const Text(
+                'Buka detail & putuskan',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Tolak / Approve hanya setelah review data di dalam detail.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildEmptyState(String message, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.02),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 60, color: Colors.white24),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            "appr_data_kosong".tr(),
-            style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white70),
-          ),
-          const SizedBox(height: 8),
-          Text(message,
-              style: const TextStyle(color: Colors.white38, fontSize: 13)),
-        ],
-      ),
-    );
+    return PremiumEmptyState(message: message, icon: icon);
   }
 
   @override

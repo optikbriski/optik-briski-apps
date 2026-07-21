@@ -211,21 +211,18 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                  color: OptikAdminTokens.card,
-                  borderRadius: BorderRadius.circular(12)),
+            PremiumPanel(
+              padding: const EdgeInsets.all(18),
+              borderRadius: 20,
+              borderColor: Colors.orangeAccent.withOpacity(0.28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("TRACKING REQUEST ORDER",
-                      style: TextStyle(
-                          color: Colors.orangeAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1)),
-                  const SizedBox(height: 6),
+                  PremiumSectionHeader(
+                    label: 'Tracking Request Order',
+                    padding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 4),
                   const Text(
                     'Alur: Cabang kirim → Approval Pusat → Preparing → '
                     'Pengiriman → Selesai (terima di cabang).',
@@ -313,36 +310,27 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               ),
             ),
             const SizedBox(height: 20),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Text(
-                  "ANTREAN REQUEST HARI INI",
+            PremiumSectionHeader(label: 'Antrean Request Hari Ini'),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.send_sharp,
+                    size: 14, color: Colors.white),
+                label: const Text(
+                  "KIRIM KE PUSAT",
                   style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                  ),
-                  icon: const Icon(Icons.send_sharp,
-                      size: 14, color: Colors.white),
-                  label: const Text(
-                    "KIRIM KE PUSAT",
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
-                  ),
-                  onPressed: _kirimKePusatMassal,
-                ),
-              ],
+                onPressed: _kirimKePusatMassal,
+              ),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -360,40 +348,22 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                           itemCount: pendingRequestsList.length,
                           itemBuilder: (context, index) {
                             final req = pendingRequestsList[index];
-                            return Card(
-                              color: OptikAdminTokens.card,
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor:
-                                      req['tipe_request'] == 'PRE_ORDER'
-                                          ? Colors.orange.withOpacity(0.1)
-                                          : Colors.red.withOpacity(0.1),
-                                  child: Icon(Icons.shopping_basket,
-                                      color: req['tipe_request'] == 'PRE_ORDER'
-                                          ? Colors.orange
-                                          : Colors.red,
-                                      size: 18),
-                                ),
-                                title: Text(req['nama_produk'] ?? 'Produk',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold)),
-                                subtitle: Text(
-                                    "Kekurangan: ${req['qty_request']} pcs | Tipe: ${req['tipe_request']}",
-                                    style: const TextStyle(
-                                        color: Colors.grey, fontSize: 11)),
-                                trailing: const Text(
-                                  "PENDING",
-                                  style: TextStyle(
-                                      color: Colors.orangeAccent,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold),
-                                ),
+                            return PremiumListTile(
+                              title: req['nama_produk'] ?? 'Produk',
+                              subtitle:
+                                  "Kekurangan: ${req['qty_request']} pcs | Tipe: ${req['tipe_request']}",
+                              icon: Icons.shopping_basket_rounded,
+                              iconColor: req['tipe_request'] == 'PRE_ORDER'
+                                  ? Colors.orange
+                                  : Colors.redAccent,
+                              trailing: const Text(
+                                "PENDING",
+                                style: TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold),
                               ),
+                              margin: const EdgeInsets.only(bottom: 8),
                             );
                           },
                         ),

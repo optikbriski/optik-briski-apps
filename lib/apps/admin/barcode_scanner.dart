@@ -331,9 +331,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                                     fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        trailing: Wrap(
-                          spacing: 0,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                        trailing: PremiumChipWrap(
+                          spacing: OptikAdminTokens.spaceSm,
+                          runSpacing: OptikAdminTokens.spaceSm,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.receipt_long,

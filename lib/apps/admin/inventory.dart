@@ -129,58 +129,51 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(
+                  color: OptikAdminTokens.accentSoft))
           : ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
               children: [
-                // 📊 EXECUTIVE INVENTORY ACCOUNTING BOARD (TOP 4 TIER MATRIX)
-                const Text("🏛️ NERACA KAPITALISASI ASET GUDANG",
-                    style: TextStyle(
-                        color: Colors.amberAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1.2)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildAssetCard("Aset Pokok (HPP)",
-                        _formatRupiah(totalAssetValuation), Colors.blueAccent),
-                    const SizedBox(width: 6),
-                    _buildAssetCard(
-                        "Potensi Omzet",
-                        _formatRupiah(totalPotentialRevenue),
-                        Colors.greenAccent),
-                  ],
+                PremiumSectionHeader(
+                  label: 'Neraca kapitalisasi aset gudang',
+                  padding: const EdgeInsets.only(bottom: 12),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _buildAssetCard("Proyeksi Margin",
-                        _formatRupiah(totalPotentialMargin), Colors.tealAccent),
-                    const SizedBox(width: 6),
-                    _buildAssetCard(
-                        "Total Volume", "$totalVolumeItem PCS", Colors.white),
+                PremiumStatGrid(
+                  items: [
+                    PremiumStatItem(
+                      label: 'Aset Pokok (HPP)',
+                      value: _formatRupiah(totalAssetValuation),
+                      color: OptikAdminTokens.accentSoft,
+                    ),
+                    PremiumStatItem(
+                      label: 'Potensi Omzet',
+                      value: _formatRupiah(totalPotentialRevenue),
+                      color: OptikAdminTokens.success,
+                    ),
+                    PremiumStatItem(
+                      label: 'Proyeksi Margin',
+                      value: _formatRupiah(totalPotentialMargin),
+                      color: Colors.tealAccent,
+                    ),
+                    PremiumStatItem(
+                      label: 'Total Volume',
+                      value: '$totalVolumeItem PCS',
+                      color: OptikAdminTokens.textPrimary,
+                    ),
                   ],
                 ),
 
-                const SizedBox(height: 25),
-                Text("inv_logistics".tr(),
-                    style: const TextStyle(
-                        color: Colors.blueAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1.2)),
+                const SizedBox(height: 22),
+                PremiumSectionHeader(label: "inv_logistics".tr()),
 
-                // MENU 1: OPERASI MUTASI (DELIVERY ORDER / RETUR BARANG)
-                _opTile(
-                  context,
-                  isPusat ? "inv_do_title".tr() : "inv_retur_title".tr(),
-                  isPusat ? "inv_do_desc".tr() : "inv_retur_desc".tr(),
-                  isPusat
+                PremiumListTile(
+                  title: isPusat ? "inv_do_title".tr() : "inv_retur_title".tr(),
+                  subtitle: isPusat ? "inv_do_desc".tr() : "inv_retur_desc".tr(),
+                  icon: isPusat
                       ? Icons.local_shipping_rounded
                       : Icons.assignment_return_rounded,
-                  Colors.blue,
-                  () {
+                  iconColor: OptikAdminTokens.accentSoft,
+                  onTap: () {
                     if (isPusat) {
                       Navigator.push(
                         context,
@@ -201,14 +194,12 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   },
                 ),
 
-                // MENU 2: LAPORAN MUTASI (STOCK MOVE REPORT)
-                _opTile(
-                  context,
-                  "inv_smr_title".tr(),
-                  "inv_smr_desc".tr(),
-                  Icons.receipt_long_rounded,
-                  Colors.cyan,
-                  () {
+                PremiumListTile(
+                  title: "inv_smr_title".tr(),
+                  subtitle: "inv_smr_desc".tr(),
+                  icon: Icons.receipt_long_rounded,
+                  iconColor: Colors.cyanAccent,
+                  onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -219,18 +210,16 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   },
                 ),
 
-                // MENU: REQUEST ORDER PIPELINE
-                _opTile(
-                  context,
-                  isPusat
+                PremiumListTile(
+                  title: isPusat
                       ? 'Request Order Pusat'
                       : 'Request Order Cabang',
-                  isPusat
+                  subtitle: isPusat
                       ? 'Approval → Preparing → Shipping → Success + reservasi stok'
                       : 'Kirim antrean ke Pusat & lacak status',
-                  Icons.assignment_turned_in_rounded,
-                  Colors.orangeAccent,
-                  () {
+                  icon: Icons.assignment_turned_in_rounded,
+                  iconColor: OptikAdminTokens.trainingSoft,
+                  onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -242,22 +231,15 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   },
                 ),
 
-                const SizedBox(height: 25),
-                Text("inv_quick_tools".tr(),
-                    style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1.2)),
+                const SizedBox(height: 12),
+                PremiumSectionHeader(label: "inv_quick_tools".tr()),
 
-                // MENU 3: QUICK SCAN BARCODE PRODUK
-                _opTile(
-                  context,
-                  "inv_quick_scan".tr(),
-                  "inv_quick_scan_desc".tr(),
-                  Icons.qr_code_scanner_rounded,
-                  Colors.greenAccent,
-                  () {
+                PremiumListTile(
+                  title: "inv_quick_scan".tr(),
+                  subtitle: "inv_quick_scan_desc".tr(),
+                  icon: Icons.qr_code_scanner_rounded,
+                  iconColor: OptikAdminTokens.success,
+                  onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -272,34 +254,6 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _buildAssetCard(String title, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: OptikAdminTokens.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white10, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white38, fontSize: 9.5)),
-            const SizedBox(height: 6),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 12.5, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
-      ),
     );
   }
 
@@ -443,38 +397,4 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     );
   }
 
-  Widget _opTile(BuildContext context, String t, String s, IconData i, Color c,
-      VoidCallback onTap) {
-    return Card(
-      margin: const EdgeInsets.only(top: 15),
-      color: OptikAdminTokens.card,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Colors.white10, width: 0.5)),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        leading: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-                color: c.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(i, color: c, size: 22)),
-        title: Text(t,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13.5,
-                color: Colors.white)),
-        subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(s,
-                style: const TextStyle(
-                    fontSize: 11, color: Colors.grey, height: 1.2))),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded,
-            size: 12, color: Colors.white24),
-      ),
-    );
-  }
 }

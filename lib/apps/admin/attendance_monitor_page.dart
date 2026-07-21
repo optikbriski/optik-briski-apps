@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'jadwal_kerja_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/premium_date_range_picker.dart';
 
 /// Monitor absensi untuk Admin (bukan clock-in).
 class AttendanceMonitorPage extends StatefulWidget {
@@ -18,11 +19,38 @@ class AttendanceMonitorPage extends StatefulWidget {
 
 class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   bool _loading = true;
-  DateTime _date = DateTime.now();
+  DateTime _start = DateTime.now();
+  DateTime _end = DateTime.now();
+  String _presetId = 'last7';
   String? _tokoFilter;
   List<String> _tokoOptions = [];
   List<Map<String, dynamic>> _shifts = [];
   String? _error;
+  final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  String get _rangeLabel {
+    final range = '${_dayFmt.format(_start)} – ${_dayFmt.format(_end)}';
+    switch (_presetId) {
+      case 'last7':
+        return '7 hari terakhir: $range';
+      case 'last30':
+        return '30 hari terakhir: $range';
+      case 'last60':
+        return '60 hari terakhir: $range';
+      case 'last90':
+        return '90 hari terakhir: $range';
+      case 'thisMonth':
+        return 'Bulan ini: $range';
+      case 'lastMonth':
+        return 'Bulan lalu: $range';
+      case 'lastYear':
+        return 'Tahun lalu: $range';
+      default:
+        return range;
+    }
+  }
 
   bool get _isPusat {
     final toko = (widget.profile['toko_id'] ?? '').toString();
@@ -36,6 +64,9 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   @override
   void initState() {
     super.initState();
+    final now = _dateOnly(DateTime.now());
+    _end = now;
+    _start = now.subtract(const Duration(days: 6));
     _tokoFilter = _isPusat ? null : widget.profile['toko_id']?.toString();
     _bootstrap();
   }
@@ -64,9 +95,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       _error = null;
     });
     try {
-      final day = DateFormat('yyyy-MM-dd').format(_date);
-      final start = '${day}T00:00:00';
-      final end = '${day}T23:59:59';
+      final startDay = DateFormat('yyyy-MM-dd').format(_dateOnly(_start));
+      final endDay = DateFormat('yyyy-MM-dd').format(_dateOnly(_end));
+      final start = '${startDay}T00:00:00';
+      final end = '${endDay}T23:59:59';
 
       final toko = _tokoFilter?.isNotEmpty == true
           ? _tokoFilter
@@ -100,16 +132,19 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final result = await showPremiumDateRangePicker(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialStart: _dateOnly(_start),
+      initialEnd: _dateOnly(_end),
+      initialPresetId: _presetId,
     );
-    if (picked != null) {
-      setState(() => _date = picked);
-      await _load();
-    }
+    if (result == null) return;
+    setState(() {
+      _start = _dateOnly(result.start);
+      _end = _dateOnly(result.end);
+      _presetId = result.presetId;
+    });
+    await _load();
   }
 
   String _fmtDistance(dynamic v) {
@@ -125,7 +160,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         .order('created_at');
 
     if (!mounted) return;
-    final df = DateFormat('HH:mm:ss');
+    final logTimeFmt = DateFormat('dd MMM yyyy HH:mm:ss', 'id_ID');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -157,7 +192,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     style: const TextStyle(color: Colors.white),
                   ),
                   subtitle: Text(
-                    '${at != null ? df.format(at.toLocal()) : '-'}'
+                    '${at != null ? logTimeFmt.format(at.toLocal()) : '-'}'
                     ' • GPS ${_fmtDistance(log['distance_meters'])} m'
                     ' • liveness ${log['liveness_ok'] == true ? 'OK' : '-'}'
                     '${log['liveness_provider'] != null ? ' (${log['liveness_provider']}' : ''}'
@@ -192,7 +227,6 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat('dd MMM yyyy', 'id_ID');
     final timeFmt = DateFormat('HH:mm');
 
     return PremiumScaffold(
@@ -213,21 +247,16 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, OptikAdminTokens.spaceMd),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final stacked = constraints.maxWidth < 480;
-                final dateBtn = OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(df.format(_date),
-                      overflow: TextOverflow.ellipsis),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    minimumSize: Size(stacked ? double.infinity : 0, 44),
-                  ),
+                final dateBtn = PremiumDateRangeTrigger(
+                  label: _rangeLabel,
+                  onTap: _pickDate,
                 );
                 final tokoDrop = !_isPusat
                     ? null
@@ -273,7 +302,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     children: [
                       dateBtn,
                       if (tokoDrop != null) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: OptikAdminTokens.spaceMd),
                         tokoDrop,
                       ],
                     ],
@@ -283,7 +312,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   children: [
                     Expanded(child: dateBtn),
                     if (tokoDrop != null) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: OptikAdminTokens.spaceSm),
                       Expanded(child: tokoDrop),
                     ],
                   ],
@@ -302,7 +331,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _shifts.isEmpty
                     ? const Center(
-                        child: Text('Tidak ada absensi pada tanggal ini.',
+                        child: Text('Tidak ada absensi pada rentang tanggal ini.',
                             style: TextStyle(color: Colors.white54)))
                     : RefreshIndicator(
                         onRefresh: _load,

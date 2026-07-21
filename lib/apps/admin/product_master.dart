@@ -955,6 +955,19 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final totalItems = listProduk.length;
+    final totalStock = listProduk.fold<int>(
+      0,
+      (sum, item) =>
+          sum + (int.tryParse((item['total_stock'] ?? item['stock'] ?? 0).toString()) ?? 0),
+    );
+    final frameCount = listProduk
+        .where((item) => (item['kategori'] ?? '').toString() == 'Frame')
+        .length;
+    final lensaCount = listProduk
+        .where((item) => (item['kategori'] ?? '').toString() == 'Lensa')
+        .length;
+
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: "pm_title".tr(),
@@ -1265,22 +1278,35 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             ],
 
             // --- BAGIAN 2: LIST MONITOR DAFTAR INVENTORI KACAMATA ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("pm_daftar_inventori".tr(),
-                    style: const TextStyle(
-                        color: Colors.orangeAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12)),
-                Text(
-                    "pm_total_item"
-                        .tr()
-                        .replaceFirst('{}', listProduk.length.toString()),
-                    style: const TextStyle(color: Colors.grey, fontSize: 11)),
+            PremiumSectionHeader(
+              label: "pm_daftar_inventori".tr(),
+              padding: const EdgeInsets.only(bottom: 10),
+            ),
+            PremiumStatGrid(
+              padding: const EdgeInsets.only(bottom: OptikAdminTokens.spaceMd),
+              items: [
+                PremiumStatItem(
+                  label: 'Total SKU',
+                  value: '$totalItems',
+                  color: Colors.orangeAccent,
+                ),
+                PremiumStatItem(
+                  label: 'Total Stok',
+                  value: '$totalStock PCS',
+                  color: Colors.blueAccent,
+                ),
+                PremiumStatItem(
+                  label: 'Frame',
+                  value: '$frameCount',
+                  color: Colors.tealAccent,
+                ),
+                PremiumStatItem(
+                  label: 'Lensa',
+                  value: '$lensaCount',
+                  color: Colors.purpleAccent,
+                ),
               ],
             ),
-            const SizedBox(height: 15),
 
             TextField(
               controller: searchController,
@@ -1297,7 +1323,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none)),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: OptikAdminTokens.spaceMd),
 
             isLoading
                 ? const Center(
@@ -1339,13 +1365,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         displayStock = stokKetemu;
                       }
 
-                      return Card(
-                        color: OptikAdminTokens.card,
+                      return PremiumPanel(
+                        padding: EdgeInsets.zero,
+                        borderRadius: 16,
                         margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            side: BorderSide(
-                                color: Colors.white.withOpacity(0.03))),
                         child: ListTile(
                           contentPadding: const EdgeInsets.all(12),
                           leading: Container(
@@ -1445,6 +1468,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                           color: Colors.orangeAccent,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold))),
+                              const SizedBox(width: OptikAdminTokens.spaceSm),
                               IconButton(
                                   iconSize: 20,
                                   constraints: const BoxConstraints(

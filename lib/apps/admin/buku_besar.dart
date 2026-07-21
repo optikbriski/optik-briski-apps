@@ -13,6 +13,7 @@ import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/premium_date_range_picker.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -64,12 +65,56 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   int dailyDppNetto = 0;
   int dailyPpnKeluaran = 0;
 
-  // 🚀 SUNTIK BALIK: Variabel filter dan sync hulu yang terhapus
-  String selectedPeriodFilter = 'SEMUA';
   String lastSyncTime = 'Belum Sinkron';
 
-  DateTime? customStartDate;
-  DateTime? customEndDate;
+  /// Filter jurnal — sama UX Request Order (PremiumDateRangePicker).
+  bool _useDateFilter = false;
+  DateTime _filterStart =
+      DateTime.now().subtract(const Duration(days: 6));
+  DateTime _filterEnd = DateTime.now();
+  String _filterPresetId = 'last7';
+  final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  String get _filterTriggerLabel {
+    if (!_useDateFilter) return 'Semua tanggal';
+    final range = '${_dayFmt.format(_filterStart)} – ${_dayFmt.format(_filterEnd)}';
+    switch (_filterPresetId) {
+      case 'last7':
+        return '7 hari terakhir: $range';
+      case 'last30':
+        return '30 hari terakhir: $range';
+      case 'last60':
+        return '60 hari terakhir: $range';
+      case 'last90':
+        return '90 hari terakhir: $range';
+      case 'thisMonth':
+        return 'Bulan ini: $range';
+      case 'lastMonth':
+        return 'Bulan lalu: $range';
+      case 'lastYear':
+        return 'Tahun lalu: $range';
+      default:
+        return range;
+    }
+  }
+
+  Future<void> _openPeriodPicker() async {
+    final result = await showPremiumDateRangePicker(
+      context: context,
+      initialStart: _dateOnly(_filterStart),
+      initialEnd: _dateOnly(_filterEnd),
+      initialPresetId: _useDateFilter ? _filterPresetId : 'custom',
+    );
+    if (result == null) return;
+    setState(() {
+      _useDateFilter = true;
+      _filterStart = _dateOnly(result.start);
+      _filterEnd = _dateOnly(result.end);
+      _filterPresetId = result.presetId;
+    });
+  }
 
   // --- REKONSILIASI KANAL LIKUIDITAS INSTRUMEN HARIAN ---
   Map<String, int> dailyPaymentBreakdown = {
@@ -930,32 +975,17 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       itemCount: listCabangUnik.length,
       itemBuilder: (context, index) {
         String tokoId = listCabangUnik[index];
-        return Card(
-          color: OptikAdminTokens.card,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          child: ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Colors.blueAccent,
-              child: Icon(Icons.store, color: Colors.white, size: 16),
-            ),
-            title: Text(
-              tokoId == 'PUSAT'
-                  ? 'OPTIK B. RISKI - PUSAT'
-                  : 'OPTIK B. RISKI - $tokoId',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13),
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios,
-                color: Colors.white12, size: 14),
-            onTap: () {
-              setState(() => selectedTokoId = tokoId);
-              _fetchTransaksiPerCabang(tokoId);
-            },
-          ),
+        return PremiumListTile(
+          title: tokoId == 'PUSAT'
+              ? 'OPTIK B. RISKI - PUSAT'
+              : 'OPTIK B. RISKI - $tokoId',
+          subtitle: 'Buka jurnal keuangan cabang',
+          icon: Icons.store_rounded,
+          iconColor: Colors.blueAccent,
+          onTap: () {
+            setState(() => selectedTokoId = tokoId);
+            _fetchTransaksiPerCabang(tokoId);
+          },
         );
       },
     );
@@ -967,42 +997,47 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   Widget _buildStage2JurnalHarian() {
     return Column(
       children: [
-        // 📦 PANEL OVERVIEW 5 KARTU HORIZONTAL SEJAJAR (CORE TIER ATAS CORPO-STYLE)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-          child: HScroll(
-            minWidth: 680,
-            child: Row(
-              children: [
-                _buildTopOverviewCard("↓ Kas Masuk POS",
-                    _formatRupiah(totalPemasukanPOS), Colors.greenAccent),
-                const SizedBox(width: 4),
-                _buildTopOverviewCard("↑ Pengeluaran",
-                    _formatRupiah(totalPengeluaran), Colors.redAccent),
-                const SizedBox(width: 4),
-                _buildTopOverviewCard("👓 Jualan Riil",
-                    _formatRupiah(totalPenjualanRiilCabang), Colors.blueAccent),
-                const SizedBox(width: 4),
-                _buildTopOverviewCard("⏳ Belum Bayar",
-                    _formatRupiah(totalSisaTagihanCabang), Colors.orangeAccent),
-                const SizedBox(width: 4),
-                _buildTopOverviewCard("🏛 Saldo Toko",
-                    _formatRupiah(saldoTokoAkhir), Colors.white),
-              ],
+        PremiumStatGrid(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          items: [
+            PremiumStatItem(
+              label: '↓ Kas Masuk POS',
+              value: _formatRupiah(totalPemasukanPOS),
+              color: Colors.greenAccent,
             ),
-          ),
+            PremiumStatItem(
+              label: '↑ Pengeluaran',
+              value: _formatRupiah(totalPengeluaran),
+              color: Colors.redAccent,
+            ),
+            PremiumStatItem(
+              label: 'Jualan Riil',
+              value: _formatRupiah(totalPenjualanRiilCabang),
+              color: Colors.blueAccent,
+            ),
+            PremiumStatItem(
+              label: 'Belum Bayar',
+              value: _formatRupiah(totalSisaTagihanCabang),
+              color: Colors.orangeAccent,
+            ),
+            PremiumStatItem(
+              label: 'Saldo Toko',
+              value: _formatRupiah(saldoTokoAkhir),
+              color: Colors.white,
+            ),
+          ],
         ),
 
         // 🏛️ EXTENSION PANEL: DEKLARASI FISKAL PAJAK & REVENUE EFFICIENCY
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-              color: OptikAdminTokens.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white10, width: 0.5)),
-          child: Column(
-            children: [
+          child: PremiumPanel(
+            padding: const EdgeInsets.all(14),
+            borderRadius: 16,
+            borderColor: Colors.amberAccent.withOpacity(0.28),
+            child: Column(
+              children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1029,13 +1064,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 ],
               ),
             ],
+            ),
           ),
         ),
 
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
                 "Jurnal Keuangan Harian",
@@ -1044,74 +1080,37 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                     fontSize: 13,
                     fontWeight: FontWeight.bold),
               ),
-// 📦 CONTROL 1: DROPDOWN FILTER MULTI-PERIODE ENTERPRISE UPGRADED
-              DropdownButton<String>(
-                value: selectedPeriodFilter,
-                dropdownColor: OptikAdminTokens.card,
-                underline: const SizedBox(),
-                style: const TextStyle(
-                    color: Colors.blueAccent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'SEMUA', child: Text("📊 SEMUA LAPORAN")),
-                  DropdownMenuItem(
-                      value: 'HARI INI', child: Text("⏳ HARI INI")),
-                  DropdownMenuItem(
-                      value: 'MINGGU_INI', child: Text("🗓️ MINGGU INI")),
-                  DropdownMenuItem(
-                      value: '14_HARI', child: Text("🗓️ 14 HARI")),
-                  DropdownMenuItem(
-                      value: '1_BULAN', child: Text("🗓️ 1 BULAN")),
-                  DropdownMenuItem(
-                      value: '3_BULAN', child: Text("🗓️ 3 BULAN")),
-                  DropdownMenuItem(
-                      value: '6_BULAN', child: Text("🗓️ 6 BULAN")),
-                  DropdownMenuItem(
-                      value: '1_TAHUN', child: Text("🗓️ 1 TAHUN")),
-                  DropdownMenuItem(
-                      value: '2_TAHUN', child: Text("🗓️ 2 TAHUN")),
-                  DropdownMenuItem(
-                      value: '3_TAHUN', child: Text("🗓️ 3 TAHUN")),
-                  DropdownMenuItem(
-                      value: 'KUSTOM', child: Text("📅 PILIH KALENDER...")),
-                ],
-                onChanged: (val) async {
-                  if (val == 'KUSTOM') {
-                    // Memicu jendela kalender range kustom resmi material design
-                    DateTimeRange? picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2100),
-                      builder: (context, child) {
-                        return Theme(
-                          data: Theme.of(context).copyWith(
-                            colorScheme: const ColorScheme.dark(
-                              primary: Colors.blueAccent,
-                              onPrimary: Colors.white,
-                              surface: OptikAdminTokens.card,
-                              onSurface: Colors.white,
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        selectedPeriodFilter = 'KUSTOM';
-                        customStartDate = picked.start;
-                        customEndDate = picked.end;
-                      });
-                    }
-                  } else if (val != null) {
-                    setState(() {
-                      selectedPeriodFilter = val;
-                    });
-                  }
-                },
+              const SizedBox(height: OptikAdminTokens.spaceMd),
+              PremiumDateRangeTrigger(
+                label: _filterTriggerLabel,
+                onTap: _openPeriodPicker,
               ),
+              const SizedBox(height: OptikAdminTokens.spaceMd),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilterChip(
+                  selected: _useDateFilter,
+                  label: Text(
+                      _useDateFilter ? 'Pakai tanggal' : 'Semua tanggal'),
+                  onSelected: (v) => setState(() => _useDateFilter = v),
+                  selectedColor: OptikAdminTokens.accent.withOpacity(0.25),
+                  backgroundColor: OptikAdminTokens.panel,
+                  checkmarkColor: OptikAdminTokens.accentSoft,
+                  labelStyle: TextStyle(
+                    color: _useDateFilter
+                        ? OptikAdminTokens.accentSoft
+                        : OptikAdminTokens.textSecondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  side: BorderSide(
+                    color: _useDateFilter
+                        ? OptikAdminTokens.accent
+                        : OptikAdminTokens.lineStrong,
+                  ),
+                ),
+              ),
+              const SizedBox(height: OptikAdminTokens.spaceMd),
             ],
           ),
         ),
@@ -1122,65 +1121,19 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             builder: (context) {
 // Engine Akuntansi Multi-Periode untuk Rekonsiliasi Kalender
               String todayStr = DateTime.now().toIso8601String().split('T')[0];
-              DateTime now = DateTime.now();
-              DateTime todayMidnight = DateTime(now.year, now.month, now.day);
 
+              final startBound = _dateOnly(_filterStart);
+              final endBound = _dateOnly(_filterEnd);
               List<String> displayedDates = listTanggalJurnal.where((tgl) {
+                if (!_useDateFilter) return true;
                 try {
-                  DateTime itemDate = DateTime.parse(tgl);
-                  DateTime itemDateMidnight =
+                  final itemDate = DateTime.parse(tgl);
+                  final day =
                       DateTime(itemDate.year, itemDate.month, itemDate.day);
-
-                  if (selectedPeriodFilter == 'HARI INI') {
-                    return itemDateMidnight.isAtSameMomentAs(todayMidnight);
-                  } else if (selectedPeriodFilter == 'MINGGU_INI') {
-                    DateTime limit =
-                        todayMidnight.subtract(const Duration(days: 7));
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '14_HARI') {
-                    DateTime limit =
-                        todayMidnight.subtract(const Duration(days: 14));
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '1_BULAN') {
-                    DateTime limit = DateTime(now.year, now.month - 1, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '3_BULAN') {
-                    DateTime limit = DateTime(now.year, now.month - 3, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '6_BULAN') {
-                    DateTime limit = DateTime(now.year, now.month - 6, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '1_TAHUN') {
-                    DateTime limit = DateTime(now.year - 1, now.month, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '2_TAHUN') {
-                    DateTime limit = DateTime(now.year - 2, now.month, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == '3_TAHUN') {
-                    DateTime limit = DateTime(now.year - 3, now.month, now.day);
-                    return itemDateMidnight.isAfter(limit) ||
-                        itemDateMidnight.isAtSameMomentAs(limit);
-                  } else if (selectedPeriodFilter == 'KUSTOM') {
-                    if (customStartDate != null && customEndDate != null) {
-                      DateTime startStart = DateTime(customStartDate!.year,
-                          customStartDate!.month, customStartDate!.day);
-                      DateTime endEnd = DateTime(customEndDate!.year,
-                          customEndDate!.month, customEndDate!.day);
-                      return (itemDateMidnight.isAfter(startStart) ||
-                              itemDateMidnight.isAtSameMomentAs(startStart)) &&
-                          (itemDateMidnight.isBefore(endEnd) ||
-                              itemDateMidnight.isAtSameMomentAs(endEnd));
-                    }
-                  }
-                } catch (_) {}
-                return selectedPeriodFilter == 'SEMUA';
+                  return !day.isBefore(startBound) && !day.isAfter(endBound);
+                } catch (_) {
+                  return false;
+                }
               }).toList();
 
               if (displayedDates.isEmpty) {
@@ -1239,89 +1192,93 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                     netColor = Colors.tealAccent;
                   }
 
-                  return Card(
-                    color: OptikAdminTokens.card,
+                  return PremiumPanel(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    borderRadius: 16,
                     margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 8),
-                      leading: const CircleAvatar(
-                          backgroundColor: OptikAdminTokens.bgMid,
-                          child: Icon(Icons.calendar_today,
-                              color: Colors.tealAccent, size: 14)),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _formatTanggalIndonesia(tglKey).toUpperCase(),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11.5),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: tglKey == todayStr
-                                  ? Colors.amber.withOpacity(0.15)
-                                  : Colors.white10,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              tglKey == todayStr
-                                  ? "OPEN SESSION"
-                                  : "CLOSED AUDITED",
-                              style: TextStyle(
-                                color: tglKey == todayStr
-                                    ? Colors.amber
-                                    : Colors.white38,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Row(
-                          children: [
-                            Text("In: ${_formatRupiah(dayIn)}",
-                                style: const TextStyle(
-                                    color: Colors.greenAccent, fontSize: 11)),
-                            const SizedBox(width: 10),
-                            Text("Out: ${_formatRupiah(dayOut)}",
-                                style: const TextStyle(
-                                    color: Colors.redAccent, fontSize: 11)),
-                          ],
+                    onTap: () async {
+                      setState(() {
+                        selectedDateStr = tglKey;
+                      });
+                      await _loadAuditDetailHariIni(tglKey);
+                    },
+                    child: Row(
+                      children: [
+                        PremiumIconBadge(
+                          icon: Icons.calendar_today_rounded,
+                          color: Colors.tealAccent,
+                          size: 40,
                         ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text("Net: ${_formatRupiah(dayNet)}",
-                              style: TextStyle(
-                                  color: netColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_ios,
-                              color: Colors.white12, size: 12),
-                        ],
-                      ),
-                      onTap: () async {
-                        setState(() {
-                          selectedDateStr = tglKey;
-                        });
-                        await _loadAuditDetailHariIni(tglKey);
-                      },
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _formatTanggalIndonesia(tglKey)
+                                          .toUpperCase(),
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11.5),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: tglKey == todayStr
+                                          ? Colors.amber.withOpacity(0.15)
+                                          : Colors.white10,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      tglKey == todayStr
+                                          ? "OPEN SESSION"
+                                          : "CLOSED AUDITED",
+                                      style: TextStyle(
+                                        color: tglKey == todayStr
+                                            ? Colors.amber
+                                            : Colors.white38,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text("In: ${_formatRupiah(dayIn)}",
+                                      style: const TextStyle(
+                                          color: Colors.greenAccent,
+                                          fontSize: 11)),
+                                  const SizedBox(width: 10),
+                                  Text("Out: ${_formatRupiah(dayOut)}",
+                                      style: const TextStyle(
+                                          color: Colors.redAccent, fontSize: 11)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text("Net: ${_formatRupiah(dayNet)}",
+                            style: TextStyle(
+                                color: netColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right_rounded,
+                            color: OptikAdminTokens.textMuted, size: 18),
+                      ],
                     ),
                   );
                 },
@@ -1330,31 +1287,6 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildTopOverviewCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-            color: OptikAdminTokens.card,
-            borderRadius: BorderRadius.circular(8)),
-        child: Column(
-          children: [
-            Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 9),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            Text(value,
-                style: TextStyle(
-                    color: color, fontSize: 10.5, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1482,9 +1414,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.5)),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                PremiumChipWrap(
                   children: dailyPaymentBreakdown.entries.map((e) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -1936,20 +1866,22 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(
+                  color: OptikAdminTokens.accentSoft))
           : _orchestrateBukuBesarFlowLayout(),
-      floatingActionButton: selectedTokoId != null
-          ? FloatingActionButton.extended(
-              backgroundColor: Colors.blueAccent,
-              icon: const Icon(Icons.add, color: Colors.white, size: 18),
-              label: const Text("Catat Kas (COA)",
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 12)),
+      floatingActionButton: selectedTokoId == null
+          ? null
+          : FloatingActionButton.extended(
               onPressed: _showAddTransactionDialog,
-            )
-          : null,
+              backgroundColor: OptikAdminTokens.accent,
+              foregroundColor: Colors.white,
+              elevation: 6,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text(
+                'Catat Kas (COA)',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+              ),
+            ),
     );
   }
 }
