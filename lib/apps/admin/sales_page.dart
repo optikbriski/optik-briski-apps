@@ -729,8 +729,16 @@ class _SalesPageState extends State<SalesPage> {
         return false;
       case LeavePageAction.leaveDiscard:
         if (prepareLeave) {
+          // Buang draft + ulang dari awal prosedur (scan kasir lagi).
           await _clearPosDraft();
           _resetForm();
+          setState(() {
+            isPosUnlocked = false;
+            activeCashier = null;
+            namaKasir = '';
+            kasirCtrl.clear();
+            isScanningLocal = true;
+          });
         }
         return true;
       case LeavePageAction.leaveSave:
