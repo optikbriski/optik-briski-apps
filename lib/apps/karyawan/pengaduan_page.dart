@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../shared/safe_image_picker.dart';
 
 class PengaduanPage extends StatefulWidget {
   const PengaduanPage({super.key});
@@ -26,9 +26,8 @@ class _PengaduanPageState extends State<PengaduanPage> {
       ];
 
   Future<void> pilihBuktiFoto() async {
-    final picker = ImagePicker();
     final pickedFile =
-        await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+        await pickImageSafe(context: context, imageQuality: 70);
     if (pickedFile != null) {
       setState(() => buktiFoto = File(pickedFile.path));
     }

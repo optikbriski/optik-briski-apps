@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
+import '../../shared/safe_image_picker.dart';
 
 // Shortcut pintas client Supabase khusus file DO ini
 final supabase = Supabase.instance.client;
@@ -492,11 +493,13 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   // 1. FUNGSI UTAMA: PROSES JEPRET KAMERA BUKTI, UPLOAD STORAGE, DAN INSERT HISTORY MUTASI
   Future<void> _handleProcessWithPhoto() async {
     // Membuka kamera dengan kualitas terkompresi (50%) agar hemat penyimpanan bucket Supabase
-    final photo = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice
-            .rear, // Paksa kamera belakang agar tulisan surat jalan tidak mirror
-        imageQuality: 50);
+    // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
+    final photo = await pickImageSafe(
+      picker: picker,
+      context: context,
+      preferredCameraDevice: CameraDevice.rear,
+      imageQuality: 50,
+    );
     if (photo == null) return;
 
     setState(() => isProcessing = true);
@@ -1955,10 +1958,13 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
 
     try {
       // Jepret bukti foto berkas manifest kurir
-      final photo = await picker.pickImage(
-          source: ImageSource.camera,
-          preferredCameraDevice: CameraDevice.rear,
-          imageQuality: 50);
+      // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
+      final photo = await pickImageSafe(
+        picker: picker,
+        context: context,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 50,
+      );
       if (photo == null) {
         setState(() => isProcessing = false);
         if (!mounted) return;

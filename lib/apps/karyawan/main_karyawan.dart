@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'detail_pribadi_page.dart';
@@ -9,18 +10,14 @@ import 'pengaduan_page.dart';
 import 'pengingat_page.dart';
 import '../../shared/scanner_penerimaan_page.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
 import 'pengajuan_jadwal_page.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
+import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
+import '../../shared/safe_image_picker.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -34,7 +31,8 @@ class KaryawanPage extends StatefulWidget {
 
 String? _fotoProfileUrl;
 
-class KaryawanPageState extends State<KaryawanPage> {
+class KaryawanPageState extends State<KaryawanPage>
+    with WidgetsBindingObserver {
   final _homeService = KaryawanHomeService();
 
   // 1. WADAH DATA DINAMIS
@@ -58,9 +56,214 @@ class KaryawanPageState extends State<KaryawanPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _namaKaryawan = 'memuat'.tr();
     _tarikDataProfil();
     _cekUpdateApkSilent();
+    _cekHasilInstallSetelahResume();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _cekHasilInstallSetelahResume();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Auto-unduh di background saat app di-minimize (install tetap konfirmasi).
+      _mulaiAutoDownloadUpdate(silent: true);
+    }
+  }
+
+  /// Setelah user selesai/cancel installer, pastikan app lama tetap sehat
+  /// dan tampilkan sukses jika versi sudah naik.
+  Future<void> _cekHasilInstallSetelahResume() async {
+    try {
+      final outcome = await _updateService.checkPendingInstallResult();
+      if (!mounted) return;
+      if (outcome.updated) {
+        setState(() => _adaUpdateBaru = false);
+        _showPremiumSnackbar(
+          'Update berhasil',
+          'Aplikasi sekarang versi ${outcome.localVersion}. Siap dipakai.',
+          Colors.green,
+        );
+      }
+    } catch (e) {
+      debugPrint('cek hasil install: $e');
+    }
+  }
+
+  bool _autoDownloadRunning = false;
+  bool _installConfirmShown = false;
+  bool _storageDialogShown = false;
+
+  Future<void> _mulaiAutoDownloadUpdate({bool silent = false}) async {
+    if (kIsWeb || _autoDownloadRunning) return;
+    final autoOn = await _updateService.isAutoUpdateEnabled();
+    if (!autoOn) return;
+
+    _autoDownloadRunning = true;
+    try {
+      final result = await _updateService.downloadInBackground(
+        appFlavor: 'karyawan',
+      );
+      if (!mounted) return;
+
+      switch (result.status) {
+        case BackgroundDownloadStatus.readyToInstall:
+          setState(() => _adaUpdateBaru = true);
+          await _tampilkanKonfirmasiInstall(result);
+        case BackgroundDownloadStatus.insufficientStorage:
+          setState(() => _adaUpdateBaru = true);
+          await _tampilkanDialogStorageKurang(result);
+        case BackgroundDownloadStatus.downloading:
+          if (!silent) {
+            _showPremiumSnackbar(
+              'Mengunduh update',
+              'Update diunduh di belakang. App tetap bisa dipakai.',
+              Colors.blueAccent,
+            );
+          }
+        case BackgroundDownloadStatus.failed:
+          if (!silent && (result.message ?? '').isNotEmpty) {
+            _showPremiumSnackbar(
+              'Unduh update gagal',
+              result.message!,
+              Colors.orange,
+            );
+          }
+        case BackgroundDownloadStatus.skipped:
+          break;
+      }
+    } catch (e) {
+      debugPrint('auto download update: $e');
+    } finally {
+      _autoDownloadRunning = false;
+    }
+  }
+
+  Future<void> _tampilkanDialogStorageKurang(
+      BackgroundDownloadResult result) async {
+    if (_storageDialogShown || !mounted) return;
+    _storageDialogShown = true;
+    final st = result.storage;
+    final butuh = st?.requiredLabel ?? 'beberapa puluh MB';
+    final sisa = st?.freeLabel ?? '-';
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Penyimpanan kurang',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Storage internal HP tidak cukup untuk mengunduh update.\n\n'
+          'Dibutuhkan sekitar $butuh (tersedia $sisa).\n\n'
+          'Kosongkan foto, cache, atau file lain di penyimpanan internal, '
+          'lalu buka lagi aplikasi — unduhan akan dilanjutkan otomatis.',
+          style: const TextStyle(color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Mengerti',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _storageDialogShown = false;
+              _mulaiAutoDownloadUpdate();
+            },
+            child: const Text('Coba lagi'),
+          ),
+        ],
+      ),
+    );
+    _storageDialogShown = false;
+  }
+
+  Future<void> _tampilkanKonfirmasiInstall(
+      BackgroundDownloadResult result) async {
+    if (_installConfirmShown || !mounted) return;
+    final path = result.apkPath;
+    final info = result.info;
+    if (path == null || info == null) return;
+
+    _installConfirmShown = true;
+    final hardForce = info.forceUpdate;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !hardForce,
+      builder: (ctx) => PopScope(
+        canPop: !hardForce,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            hardForce ? 'Update wajib siap dipasang' : 'Update siap dipasang',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'Versi ${info.serverVersion} sudah diunduh.\n'
+            'Pasang sekarang? App lama tetap aman sampai instalasi selesai.\n\n'
+            '${info.notes ?? ''}',
+            style: const TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          actions: [
+            if (!hardForce)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Nanti',
+                    style: TextStyle(color: Colors.white54)),
+              ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await _updateService.confirmAndOpenInstaller(
+                    apkPath: path,
+                    expectedVersion: info.serverVersion,
+                  );
+                  if (!mounted) return;
+                  _showPremiumSnackbar(
+                    'Installer dibuka',
+                    'Konfirmasi di layar sistem untuk memasang update.',
+                    Colors.green,
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  final pesan = e.toString().replaceAll('Exception: ', '');
+                  if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
+                    _showPremiumSnackbar(
+                      'Izin instalasi diperlukan',
+                      'Aktifkan “Instal aplikasi tidak dikenal” untuk Optik B. Riski di Pengaturan.',
+                      Colors.orange,
+                    );
+                  } else {
+                    _showPremiumSnackbar('Gagal buka installer', pesan, Colors.red);
+                  }
+                }
+              },
+              child: const Text('Pasang sekarang'),
+            ),
+          ],
+        ),
+      ),
+    );
+    _installConfirmShown = false;
   }
 
   double _fabBottomPad(BuildContext context) =>
@@ -120,54 +323,82 @@ class KaryawanPageState extends State<KaryawanPage> {
     );
   }
 
-  // MESIN UPDATE SILUMAN
+  // MESIN UPDATE APK (in-app, tanpa kirim link)
   bool _adaUpdateBaru = false;
+  final _updateService = AppUpdateService();
+  bool _updateDialogShown = false;
 
   Future<void> _cekUpdateApkSilent() async {
     try {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      String versiLokal = packageInfo.version;
+      final info =
+          await _updateService.checkForUpdate(appFlavor: 'karyawan');
+      if (!info.hasUpdate || !mounted) return;
 
-      final dataUpdate = await Supabase.instance.client
-          .from('versi_app')
-          .select()
-          .order('id', ascending: false)
-          .limit(1)
-          .maybeSingle();
+      setState(() => _adaUpdateBaru = true);
 
-      if (dataUpdate != null) {
-        String versiServer = dataUpdate['versi_terbaru'] ?? versiLokal;
-        String urlApk = dataUpdate['url_download'] ?? "";
-
-        if (versiLokal != versiServer) {
-          if (mounted) {
-            setState(() {
-              _adaUpdateBaru = true;
-            });
-          }
-
-          SharedPreferences prefs = await SharedPreferences.getInstance();
-          bool isAutoUpdate = prefs.getBool('auto_update_karyawan') ?? false;
-
-          if (isAutoUpdate && urlApk.isNotEmpty) {
-            _downloadBackground(urlApk);
-          }
-        }
+      // Prefer auto-unduh; install tetap minta konfirmasi karyawan.
+      final autoOn = await _updateService.isAutoUpdateEnabled();
+      if (autoOn && info.urlReachable) {
+        await _mulaiAutoDownloadUpdate();
+        return;
       }
-    } catch (e) {
-      debugPrint("Gagal cek update: $e");
-    }
-  }
 
-  Future<void> _downloadBackground(String urlDownload) async {
-    try {
-      Dio dio = Dio();
-      Directory tempDir = await getTemporaryDirectory();
-      String savePath = "${tempDir.path}/update_otomatis.apk";
-      await dio.download(urlDownload, savePath);
-      OpenFile.open(savePath);
+      if (_updateDialogShown) return;
+      _updateDialogShown = true;
+
+      final hardForce = info.forceUpdate && info.urlReachable;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: !hardForce,
+        builder: (ctx) => PopScope(
+          canPop: !hardForce,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              hardForce ? 'Update wajib' : 'Update tersedia',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Versi baru ${info.serverVersion} siap '
+              '(saat ini ${info.localVersion}).\n'
+              'Unduh bisa otomatis; pemasangan tetap butuh konfirmasi Anda.\n\n'
+              '${!info.urlReachable ? '⚠️ Link unduhan belum siap. Anda tetap bisa pakai app.\n\n' : ''}'
+              '${info.notes ?? ''}',
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            actions: [
+              if (!hardForce)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Nanti',
+                      style: TextStyle(color: Colors.white54)),
+                ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SoftwareUpdatePage(
+                        autoStartDownload: info.urlReachable,
+                      ),
+                    ),
+                  );
+                },
+                child: Text(
+                    info.urlReachable ? 'Unduh update' : 'Cek update'),
+              ),
+            ],
+          ),
+        ),
+      );
     } catch (e) {
-      debugPrint("Gagal download background: $e");
+      // Jangan ganggu pemakaian app jika cek update gagal.
+      debugPrint("Gagal cek update: $e");
     }
   }
 
@@ -267,8 +498,9 @@ class KaryawanPageState extends State<KaryawanPage> {
     String jenisBukti = _daftarSOPTugas[index]['jenis_bukti'] ?? 'foto';
 
     if (jenisBukti == 'foto') {
-      final XFile? foto = await picker.pickImage(
-        source: ImageSource.camera,
+      final XFile? foto = await pickImageSafe(
+        picker: picker,
+        context: context,
         imageQuality: 50,
       );
 
@@ -284,7 +516,11 @@ class KaryawanPageState extends State<KaryawanPage> {
         context,
         MaterialPageRoute(
           builder: (context) =>
-              ScannerPenerimaanPage(cabangKaryawan: _cabangKaryawan),
+              ScannerPenerimaanPage(
+                cabangKaryawan: _cabangKaryawan,
+                karyawanId: _karyawanId,
+                karyawanNama: _namaKaryawan,
+              ),
         ),
       );
 
@@ -574,35 +810,59 @@ class KaryawanPageState extends State<KaryawanPage> {
 
     return Scaffold(
       extendBody: true,
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF4F7FB),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60),
+        preferredSize: const Size.fromHeight(64),
         child: Container(
           decoration: BoxDecoration(
+            gradient: _currentIndex == 2
+                ? const LinearGradient(
+                    colors: [Color(0xFF0A1628), Color(0xFF132F4C)],
+                  )
+                : null,
+            color: _currentIndex == 2 ? null : Colors.white,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                color: const Color(0xFF0A1628).withOpacity(0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               )
             ],
           ),
           child: AppBar(
-            title: Text(
-              _currentIndex == 0
-                  ? "halaman utama".tr()
-                  : _currentIndex == 1
-                      ? "daftar_tugas_sop".tr()
-                      : "pengaturan_akun_judul".tr(),
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  letterSpacing: 0.5),
+            title: Column(
+              children: [
+                Text(
+                  _currentIndex == 0
+                      ? "halaman utama".tr()
+                      : _currentIndex == 1
+                          ? "daftar_tugas_sop".tr()
+                          : "pengaturan_akun_judul".tr(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    letterSpacing: 0.3,
+                    color: _currentIndex == 2
+                        ? Colors.white
+                        : const Color(0xFF0A1628),
+                  ),
+                ),
+                Text(
+                  'OPTIK B. RISKI',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    letterSpacing: 1.8,
+                    fontWeight: FontWeight.w600,
+                    color: _currentIndex == 2
+                        ? const Color(0xFFD4AF37)
+                        : const Color(0xFFC4A35A),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor:
-                _currentIndex == 2 ? const Color(0xFF0F172A) : Colors.white,
+            backgroundColor: Colors.transparent,
             foregroundColor:
-                _currentIndex == 2 ? Colors.white : const Color(0xFF1E293B),
+                _currentIndex == 2 ? Colors.white : const Color(0xFF0A1628),
             elevation: 0,
             centerTitle: true,
             actions: [
@@ -616,28 +876,33 @@ class KaryawanPageState extends State<KaryawanPage> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(color: Color(0xFF1E3C72)))
           : pages[_currentIndex],
       floatingActionButton: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)]),
+            colors: [Color(0xFF1E3C72), Color(0xFF0A1628)],
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.blue.withOpacity(0.4),
-              blurRadius: 12,
+              color: const Color(0xFF1E3C72).withOpacity(0.4),
+              blurRadius: 14,
               offset: const Offset(0, 6),
             )
           ],
+          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.55), width: 1.5),
         ),
         child: FloatingActionButton(
           onPressed: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) =>
-                    ScannerPenerimaanPage(cabangKaryawan: _cabangKaryawan),
+                builder: (context) => ScannerPenerimaanPage(
+                  cabangKaryawan: _cabangKaryawan,
+                  karyawanId: _karyawanId,
+                  karyawanNama: _namaKaryawan,
+                ),
               ),
             );
           },
@@ -654,7 +919,8 @@ class KaryawanPageState extends State<KaryawanPage> {
           shape: const CircularNotchedRectangle(),
           notchMargin: 8,
           color: Colors.white,
-          elevation: 20,
+          elevation: 16,
+          shadowColor: const Color(0xFF0A1628).withOpacity(0.12),
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
             height: 70,
@@ -709,8 +975,9 @@ class KaryawanPageState extends State<KaryawanPage> {
               smallSize: 10,
               child: Icon(
                 icon,
-                color:
-                    isSelected ? const Color(0xFF2563EB) : Colors.grey.shade400,
+                color: isSelected
+                    ? const Color(0xFF1E3C72)
+                    : Colors.grey.shade400,
                 size: isSelected ? 28 : 24,
               ),
             ),
@@ -721,8 +988,9 @@ class KaryawanPageState extends State<KaryawanPage> {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color:
-                    isSelected ? const Color(0xFF2563EB) : Colors.grey.shade400,
+                color: isSelected
+                    ? const Color(0xFF1E3C72)
+                    : Colors.grey.shade400,
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
@@ -1410,7 +1678,7 @@ class KaryawanPageState extends State<KaryawanPage> {
                 _buildMenuProfil(
                     Icons.face_retouching_natural_rounded,
                     'Absensi',
-                    'Masuk/pulang: GPS toko + liveness + wajah',
+                    'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
                     true),
                 _buildMenuProfil(
                     Icons.settings_rounded,
