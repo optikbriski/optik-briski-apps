@@ -31,6 +31,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
   final _phoneCtrl = TextEditingController();
   final _logoUrlCtrl = TextEditingController();
   final _footerCtrl = TextEditingController();
+  final _googleReviewUrlCtrl = TextEditingController();
 
   // Variabel Pengaturan Desain Utama
   String _alignment = 'CENTER';
@@ -72,6 +73,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     _phoneCtrl.dispose();
     _logoUrlCtrl.dispose();
     _footerCtrl.dispose();
+    _googleReviewUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -187,6 +189,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           _phoneCtrl.text = data['phone'] ?? '';
           _logoUrlCtrl.text = data['logo_url'] ?? '';
           _footerCtrl.text = data['footer_text'] ?? '';
+          _googleReviewUrlCtrl.text = data['google_review_url'] ?? '';
           _alignment = data['header_alignment'] ?? 'CENTER';
           _fontSizeHeader = (data['font_size_header'] ?? 16).toDouble();
           _fontSizeBody = (data['font_size_body'] ?? 12).toDouble();
@@ -202,6 +205,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           _phoneCtrl.clear();
           _logoUrlCtrl.clear();
           _footerCtrl.clear();
+          _googleReviewUrlCtrl.clear();
           _alignment = 'CENTER';
           _fontSizeHeader = 16;
           _fontSizeBody = 12;
@@ -228,6 +232,9 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
         'phone': _phoneCtrl.text,
         'logo_url': _logoUrlCtrl.text,
         'footer_text': _footerCtrl.text,
+        'google_review_url': _googleReviewUrlCtrl.text.trim().isEmpty
+            ? null
+            : _googleReviewUrlCtrl.text.trim(),
         'header_alignment': _alignment,
         'font_size_header': _fontSizeHeader.toInt(),
         'font_size_body': _fontSizeBody.toInt(),
@@ -564,6 +571,17 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                         value: _showQr,
                         activeColor: Colors.blueAccent,
                         onChanged: (v) => setState(() => _showQr = v)),
+                    TextField(
+                      controller: _googleReviewUrlCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "URL Google Review (Maps / g.page)",
+                        helperText:
+                            "Tombol review di Hub QR Invoice pelanggan. Kosongkan jika belum ada.",
+                        helperMaxLines: 2,
+                      ),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 10),
                     TextField(
                         controller: _footerCtrl,
                         maxLines: 5,
