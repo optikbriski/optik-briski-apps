@@ -8,7 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/attendance/attendance_config.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
 
-/// Layar Admin: QR absensi berputar untuk clock-in karyawan di toko.
+/// Layar Admin: QR absensi berputar untuk clock-in di toko ini.
+/// Cabang → QR cabang itu. Pusat → QR kantor pusat (bukan pilih cabang).
 class AttendanceQrPage extends StatefulWidget {
   const AttendanceQrPage({super.key, required this.profile});
 
@@ -27,22 +28,11 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
   String? _error;
   AttendanceQrIssue? _issue;
   String? _tokoId;
-  List<String> _tokoOptions = [];
   int _secondsLeft = 0;
-
-  bool get _isPusat {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
 
   @override
   void initState() {
     super.initState();
-    _tokoId = _isPusat ? null : widget.profile['toko_id']?.toString();
     _bootstrap();
   }
 
@@ -53,24 +43,37 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
     super.dispose();
   }
 
+  /// Toko untuk QR = toko admin yang login.
+  /// Profile `PUSAT` (meta) → pakai `CABANG-PUSAT` jika ada di DB.
+  Future<String?> _resolveTokoId() async {
+    final profileToko =
+        (widget.profile['toko_id'] ?? '').toString().trim();
+
+    if (profileToko.isNotEmpty && profileToko != 'PUSAT') {
+      return profileToko;
+    }
+
+    try {
+      final row = await Supabase.instance.client
+          .from('toko_id')
+          .select('id')
+          .eq('id', 'CABANG-PUSAT')
+          .maybeSingle();
+      final id = row?['id']?.toString();
+      if (id != null && id.isNotEmpty) return id;
+    } catch (_) {}
+
+    if (profileToko == 'PUSAT') return 'PUSAT';
+    return profileToko.isEmpty ? null : profileToko;
+  }
+
   Future<void> _bootstrap() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      if (_isPusat) {
-        final rows = await Supabase.instance.client
-            .from('toko_id')
-            .select('id')
-            .order('id');
-        _tokoOptions = [
-          for (final r in rows) r['id']?.toString() ?? '',
-        ].where((e) => e.isNotEmpty && e != 'PUSAT').toList();
-        _tokoId ??= _tokoOptions.isNotEmpty ? _tokoOptions.first : null;
-      } else {
-        _tokoId = widget.profile['toko_id']?.toString();
-      }
+      _tokoId = await _resolveTokoId();
 
       if (_tokoId == null || _tokoId!.isEmpty) {
         setState(() {
@@ -128,16 +131,6 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
     }
   }
 
-  Future<void> _onTokoChanged(String? id) async {
-    if (id == null || id == _tokoId) return;
-    setState(() {
-      _tokoId = id;
-      _loading = true;
-      _issue = null;
-    });
-    await _rotate();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,32 +154,6 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  if (_isPusat && _tokoOptions.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      value: _tokoId,
-                      dropdownColor: const Color(0xFF1E293B),
-                      decoration: InputDecoration(
-                        labelText: 'attendance_qr_pilih_toko'.tr(),
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.white24),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              const BorderSide(color: Colors.blueAccent),
-                        ),
-                      ),
-                      style: const TextStyle(color: Colors.white),
-                      items: [
-                        for (final t in _tokoOptions)
-                          DropdownMenuItem(value: t, child: Text(t)),
-                      ],
-                      onChanged: _onTokoChanged,
-                    ),
-                  if (_isPusat && _tokoOptions.isNotEmpty)
-                    const SizedBox(height: 16),
                   Text(
                     'attendance_qr_hint'.tr(namedArgs: {
                       'toko': _tokoId ?? '-',

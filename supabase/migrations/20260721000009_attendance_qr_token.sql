@@ -4,6 +4,8 @@
 -- Token short-lived; issue baru menonaktifkan token aktif sebelumnya (anti-replay).
 -- =============================================================================
 
+create extension if not exists pgcrypto with schema extensions;
+
 create table if not exists public.attendance_qr_tokens (
   id uuid primary key default gen_random_uuid(),
   toko_id text not null references public.toko_id (id),
@@ -44,7 +46,7 @@ create or replace function public.issue_attendance_qr_token(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -92,7 +94,7 @@ begin
    where toko_id = trim(p_toko_id)
      and expires_at > now();
 
-  v_token := encode(gen_random_bytes(24), 'hex');
+  v_token := encode(extensions.gen_random_bytes(24), 'hex');
   v_expires := now() + make_interval(secs => v_ttl);
 
   insert into public.attendance_qr_tokens (toko_id, token, expires_at, created_by)
