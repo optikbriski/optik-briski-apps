@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/export/monthly_data_export_service.dart';
+import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
 
@@ -214,6 +215,28 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
           backgroundColor: Colors.orange.shade800,
         ),
       );
+      return;
+    }
+
+    // Training: non-real stub — no PDF generation / no prod export artifacts.
+    if (TrainingMode.instance.isActive) {
+      setState(() {
+        _busy = false;
+        _progress = 1;
+        _progressMsg = 'training_export_stub_done'.tr();
+        _nextSalinan = 1;
+        _lastSummaries = ['training_export_stub_summary'.tr()];
+        _lastErrors = const [];
+        _lastExportFiles = const [];
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('training_export_stub_done'.tr()),
+            backgroundColor: const Color(0xFFB45309),
+          ),
+        );
+      }
       return;
     }
 

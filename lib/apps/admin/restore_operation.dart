@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/training/training_approval_simulator.dart';
+import '../../shared/training/training_mode.dart';
+
 // Shortcut client Supabase khusus file ini
 final supabase = Supabase.instance.client;
 
@@ -124,7 +127,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
           "RET-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
 
       // Catat log ke History Mutasi Barang (Status: PENDING agar divalidasi Pusat)
-      await supabase.from('stock_move_history').insert({
+      final inserted = await supabase.from('stock_move_history').insert({
         'product_name': resiRetur,
         'dari_lokasi': widget.profile['toko_id'],
         'ke_lokasi': 'PUSAT',
@@ -133,16 +136,36 @@ class _RestoreOperationState extends State<RestoreOperation> {
         'status': 'PENDING',
         'keterangan': jsonEncode(detailReturn),
         'created_at': DateTime.now().toIso8601String(),
-      });
+      }).select('id').single();
 
       if (mounted) {
         setState(() {
           returnItems.clear();
           qtyControllers.clear();
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("retur_sukses_dikirim".tr()),
-            backgroundColor: Colors.green));
+        if (TrainingMode.instance.isActive) {
+          final outcome =
+              await TrainingApprovalSimulator.simulateStockMoveIfTraining(
+            context,
+            id: inserted['id'],
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                outcome == null
+                    ? 'retur_sukses_dikirim'.tr()
+                    : 'training_stock_move_outcome_${outcome.name}'.tr(),
+              ),
+              backgroundColor: outcome == TrainingApprovalOutcome.rejected
+                  ? Colors.orangeAccent
+                  : const Color(0xFFB45309),
+            ));
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("retur_sukses_dikirim".tr()),
+              backgroundColor: Colors.green));
+        }
         _fetchMyStock(); // Tarik ulang data stok terbaru cabang
       }
     } catch (e) {

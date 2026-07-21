@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -129,6 +130,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
           backgroundColor: Colors.green,
         ),
       );
+      if (!mounted) return;
       await _bootstrap();
     } catch (e) {
       if (!mounted) return;
@@ -379,6 +381,14 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
           const SizedBox(height: 4),
           Text(item['alasan']?.toString() ?? '-',
               style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          if ((item['reviewer_note']?.toString() ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Catatan: ${item['reviewer_note']}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ),
           if (status == 'PENDING') ...[
             const SizedBox(height: 8),
             Align(

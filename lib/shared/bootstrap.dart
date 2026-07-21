@@ -5,10 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'training/training_http_client.dart';
 
 final supabase = Supabase.instance.client;
 
 /// Shared startup for Admin / Karyawan / Member entry points.
+///
+/// Injects [TrainingHttpClient] so Admin Training Mode (entered mid-session)
+/// can intercept every Supabase REST/Storage/RPC call without re-init.
+/// Karyawan does not enter Training Mode; the client is inert when inactive.
 Future<void> bootstrapApp({
   required Widget app,
   bool quietLocalizationLogs = false,
@@ -36,6 +41,7 @@ Future<void> bootstrapApp({
   await Supabase.initialize(
     url: supabaseUrl,
     publishableKey: supabasePublishableKey,
+    httpClient: TrainingHttpClient(),
   );
 
   runApp(

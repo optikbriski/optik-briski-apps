@@ -78,14 +78,16 @@ class _PengaduanPageState extends State<PengaduanPage> {
             .getPublicUrl(path);
       }
 
-      await Supabase.instance.client.from('pengaduan').insert({
+      final row = {
         'karyawan_id': karyawan['id'],
         'toko_id': karyawan['toko_id'],
         'kategori': kategoriPilihan,
         'isi': deskripsiCtrl.text.trim(),
         'foto_url': fotoUrl,
         'status': 'OPEN',
-      });
+      };
+
+      await Supabase.instance.client.from('pengaduan').insert(row);
 
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {

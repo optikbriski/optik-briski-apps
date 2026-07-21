@@ -147,7 +147,7 @@ class RequestOrderService {
     );
   }
 
-  Future<void> sendToHq(List<int> ids) async {
+  Future<void> sendToHq(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     await _client.from('pending_requests').update({
       'status': 'SENT_TO_HQ',

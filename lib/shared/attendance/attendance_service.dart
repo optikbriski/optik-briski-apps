@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../training/training_data_client.dart';
+import '../training/training_mode.dart';
 import 'attendance_config.dart';
 import 'face_template.dart';
 import 'geofence_service.dart';
@@ -11,6 +13,10 @@ import 'liveness_result.dart';
 
 /// Absensi: GPS + AWS Face Liveness (opsional) + face template lokal.
 /// Kredensial AWS hanya di Edge Function — tidak pernah di APK.
+///
+/// Live: online Supabase writes (sync cabang ↔ pusat). Training: same UI/flow;
+/// clock-in/out (+ enroll writes) go to local sandbox only — no sync.
+/// TODO(training): keep gating any new attendance prod mutations the same way.
 class AttendanceService {
   AttendanceService({
     SupabaseClient? client,
@@ -20,6 +26,7 @@ class AttendanceService {
 
   final SupabaseClient _client;
   final GeofenceService _geofence;
+  final _training = TrainingDataClient.instance;
 
   Future<Map<String, dynamic>?> fetchKaryawan() async {
     final user = _client.auth.currentUser;
@@ -35,6 +42,14 @@ class AttendanceService {
   }
 
   Future<Map<String, dynamic>?> fetchOpenShift(String karyawanId) async {
+    if (TrainingMode.instance.isActive) {
+      return _training.selectOne(
+        'attendance_shifts',
+        where: {'karyawan_id': karyawanId, 'status': 'OPEN'},
+        orderBy: 'masuk_at',
+        ascending: false,
+      );
+    }
     return _client
         .from('attendance_shifts')
         .select()
@@ -61,12 +76,41 @@ class AttendanceService {
     required GeofenceCheckResult geo,
   }) async {
     _requireLivenessPassed(liveness);
+    TrainingMode.instance.assertSameToko(tokoId);
 
     final photoUrl = await _uploadPhoto(
       karyawanId: karyawanId,
       tipe: 'ENROLL',
       bytes: liveness.photoBytes!,
     );
+
+    // Training: local sandbox only — no AWS index, no prod karyawan update, no sync.
+    if (TrainingMode.instance.isActive) {
+      await _training.insert('karyawan_face', {
+        'id': karyawanId,
+        'karyawan_id': karyawanId,
+        'toko_id': tokoId,
+        'face_template': liveness.faceTemplate,
+        'face_photo_url': photoUrl,
+        'face_enrolled_at': DateTime.now().toIso8601String(),
+      });
+      await _training.insert('attendance_logs', {
+        'karyawan_id': karyawanId,
+        'toko_id': tokoId,
+        'tipe': 'ENROLL',
+        'photo_url': photoUrl,
+        'latitude': geo.latitude,
+        'longitude': geo.longitude,
+        'distance_meters': geo.distanceMeters,
+        'match_score': 0,
+        'liveness_ok': true,
+        'liveness_confidence': liveness.livenessConfidence,
+        'liveness_session_id': liveness.livenessSessionId,
+        'liveness_provider': liveness.livenessProvider ?? 'local',
+        'device_info': defaultTargetPlatform.name,
+      });
+      return photoUrl;
+    }
 
     String? awsFaceId;
     try {
@@ -78,6 +122,7 @@ class AttendanceService {
       debugPrint('AWS IndexFaces skip: $e');
     }
 
+    ProdWriteGuard.check('attendance.enrollFace.karyawan');
     await _client.from('karyawan').update({
       'face_template': liveness.faceTemplate,
       'face_photo_url': photoUrl,
@@ -85,6 +130,7 @@ class AttendanceService {
       if (awsFaceId != null) 'aws_face_id': awsFaceId,
     }).eq('id', karyawanId);
 
+    ProdWriteGuard.check('attendance.enrollFace.logs');
     await _client.from('attendance_logs').insert({
       'karyawan_id': karyawanId,
       'toko_id': tokoId,
@@ -113,6 +159,7 @@ class AttendanceService {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
     if (tokoId.isEmpty) throw 'Toko karyawan belum terisi.';
+    TrainingMode.instance.assertSameToko(tokoId);
 
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
@@ -125,17 +172,44 @@ class AttendanceService {
       bytes: liveness.photoBytes!,
     );
 
+    final shiftPayload = {
+      'karyawan_id': karyawanId,
+      'toko_id': tokoId,
+      'status': 'OPEN',
+      'masuk_at': DateTime.now().toIso8601String(),
+    };
+
+    // Training: local sandbox only (offline OK) — never sync to pusat.
+    if (TrainingMode.instance.isActive) {
+      final shift = await _training.insert('attendance_shifts', shiftPayload);
+      await _training.insert('attendance_logs', {
+        'shift_id': shift['id'],
+        'karyawan_id': karyawanId,
+        'toko_id': tokoId,
+        'tipe': 'MASUK',
+        'photo_url': photoUrl,
+        'latitude': geo.latitude,
+        'longitude': geo.longitude,
+        'distance_meters': geo.distanceMeters,
+        'match_score': score,
+        'liveness_ok': true,
+        'liveness_confidence': liveness.livenessConfidence,
+        'liveness_session_id': liveness.livenessSessionId,
+        'liveness_provider': liveness.livenessProvider ?? 'local',
+        'device_info': defaultTargetPlatform.name,
+        if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
+      });
+      return;
+    }
+
+    ProdWriteGuard.check('attendance.clockIn.shift');
     final shift = await _client
         .from('attendance_shifts')
-        .insert({
-          'karyawan_id': karyawanId,
-          'toko_id': tokoId,
-          'status': 'OPEN',
-          'masuk_at': DateTime.now().toIso8601String(),
-        })
+        .insert(shiftPayload)
         .select()
         .single();
 
+    ProdWriteGuard.check('attendance.clockIn.log');
     await _client.from('attendance_logs').insert({
       'shift_id': shift['id'],
       'karyawan_id': karyawanId,
@@ -162,6 +236,9 @@ class AttendanceService {
   }) async {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
+    if (tokoId.isNotEmpty) {
+      TrainingMode.instance.assertSameToko(tokoId);
+    }
 
     final open = await fetchOpenShift(karyawanId);
     if (open == null) throw 'Belum ada shift masuk hari ini.';
@@ -174,11 +251,41 @@ class AttendanceService {
       bytes: liveness.photoBytes!,
     );
 
+    if (TrainingMode.instance.isActive) {
+      await _training.update(
+        'attendance_shifts',
+        {
+          'status': 'CLOSED',
+          'pulang_at': DateTime.now().toIso8601String(),
+        },
+        where: {'id': open['id']},
+      );
+      await _training.insert('attendance_logs', {
+        'shift_id': open['id'],
+        'karyawan_id': karyawanId,
+        'toko_id': tokoId,
+        'tipe': 'PULANG',
+        'photo_url': photoUrl,
+        'latitude': geo.latitude,
+        'longitude': geo.longitude,
+        'distance_meters': geo.distanceMeters,
+        'match_score': score,
+        'liveness_ok': true,
+        'liveness_confidence': liveness.livenessConfidence,
+        'liveness_session_id': liveness.livenessSessionId,
+        'liveness_provider': liveness.livenessProvider ?? 'local',
+        'device_info': defaultTargetPlatform.name,
+      });
+      return;
+    }
+
+    ProdWriteGuard.check('attendance.clockOut.shift');
     await _client.from('attendance_shifts').update({
       'status': 'CLOSED',
       'pulang_at': DateTime.now().toIso8601String(),
     }).eq('id', open['id']);
 
+    ProdWriteGuard.check('attendance.clockOut.log');
     await _client.from('attendance_logs').insert({
       'shift_id': open['id'],
       'karyawan_id': karyawanId,
@@ -239,7 +346,9 @@ class AttendanceService {
       }
     }
 
-    if (AttendanceConfig.useAwsFaceCompare) {
+    // Training stays offline-capable: skip networked AWS compare (no sync/side effects).
+    if (AttendanceConfig.useAwsFaceCompare &&
+        !TrainingMode.instance.isActive) {
       await _awsCompareFace(
         karyawanId: karyawan['id'] as String,
         sourceImageUrl: (karyawan['face_photo_url'] ?? '').toString(),
@@ -254,6 +363,7 @@ class AttendanceService {
     required String karyawanId,
     required Uint8List imageBytes,
   }) async {
+    TrainingMode.guardProductionWrite('attendance.awsIndexFace');
     final res = await _client.functions.invoke(
       'aws-rekognition',
       body: {
@@ -274,6 +384,7 @@ class AttendanceService {
     required String sourceImageUrl,
     required Uint8List imageBytes,
   }) async {
+    TrainingMode.guardProductionWrite('attendance.awsCompareFace');
     if (sourceImageUrl.isEmpty) {
       throw 'Foto wajah terdaftar belum ada untuk perbandingan AWS.';
     }
@@ -299,6 +410,10 @@ class AttendanceService {
   }) async {
     final path =
         '$karyawanId/${tipe.toLowerCase()}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    if (TrainingMode.instance.isActive) {
+      return _training.storeFile('attendance_photos/$path', bytes);
+    }
+    ProdWriteGuard.check('attendance.uploadPhoto');
     await _client.storage.from('attendance_photos').uploadBinary(
           path,
           bytes,

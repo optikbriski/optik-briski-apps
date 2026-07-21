@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/bootstrap.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
+import '../../shared/training/training_banner.dart';
+import '../../shared/training/training_mode.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
 
@@ -20,25 +22,59 @@ const _adminRoles = {
 
 /// Admin shell: back-office + POS.
 /// Pusat vs cabang ditentukan akun login (`role` + `toko_id` di profiles).
-class AdminApp extends StatelessWidget {
+/// Training Mode uses the same dashboard/menus — banner is the only UI delta.
+class AdminApp extends StatefulWidget {
   const AdminApp({super.key});
 
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
   @override
+  State<AdminApp> createState() => _AdminAppState();
+}
+
+class _AdminAppState extends State<AdminApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Wipe orphan training dirs / crash-recovery flags before any UI write path.
+    TrainingMode.instance.recoverOnLaunch();
+  }
+
+  Future<void> _onExitTraining() async {
+    final navCtx = AdminApp.navigatorKey.currentContext ?? context;
+    final ok = await TrainingModeDialogs.confirmExit(navCtx);
+    if (!ok) return;
+    await TrainingMode.instance.exit();
+    final messengerCtx = AdminApp.navigatorKey.currentContext;
+    if (messengerCtx != null && messengerCtx.mounted) {
+      ScaffoldMessenger.of(messengerCtx).showSnackBar(
+        SnackBar(
+          content: Text('training_msg_exited'.tr()),
+          backgroundColor: Colors.blueGrey,
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Optik B. Riski — Admin',
       debugShowCheckedModeBanner: false,
-      navigatorKey: navigatorKey,
+      navigatorKey: AdminApp.navigatorKey,
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       theme: buildAdminTheme(),
       builder: (context, child) => GlobalHardwareBarcodeShell(
-        navigatorKey: navigatorKey,
-        child: child,
+        navigatorKey: AdminApp.navigatorKey,
+        child: Column(
+          children: [
+            TrainingBanner(onExitRequested: _onExitTraining),
+            Expanded(child: child ?? const SizedBox.shrink()),
+          ],
+        ),
       ),
       home: const AdminAuthWrapper(),
     );

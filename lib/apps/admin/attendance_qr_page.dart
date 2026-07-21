@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/attendance_config.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
+import '../../shared/training/training_mode.dart';
 
 /// Layar Admin: QR absensi berputar untuk clock-in di toko ini.
 /// Cabang → QR cabang itu. Pusat → QR kantor pusat (bukan pilih cabang).
@@ -166,6 +167,18 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                       fontSize: 13,
                     ),
                   ),
+                  if (TrainingMode.instance.isActive) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'training_attendance_stub_note'.tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFFFBBF24),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   if (_error != null)
                     Padding(

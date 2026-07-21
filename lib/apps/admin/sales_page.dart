@@ -26,6 +26,10 @@ import '../../shared/qr/hid_scan_intake.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/widgets/leave_page_guard.dart';
+import '../../shared/training/training_approval_simulator.dart';
+import '../../shared/training/training_mode.dart';
+import '../../shared/training/training_ops_sync.dart';
+import '../../shared/logistics/request_order_service.dart';
 import '../karyawan/absensi_page.dart';
 import 'garansi_page.dart';
 
@@ -285,7 +289,9 @@ class _SalesPageState extends State<SalesPage> {
     _restorePosDraftIfNeeded();
 
     // ⏰ SEKURITI PENGIRIMAN OTOMATIS: Jaga-jaga auto-send ke pusat setiap Jam 21.00 Malam
+    // Training: skip silent HQ send — trainee decides via simulator on explicit send.
     Timer.periodic(const Duration(minutes: 15), (timer) async {
+      if (TrainingMode.instance.isActive) return;
       final now = DateTime.now();
       // Deteksi jika waktu lokal laptop sudah menyentuh jam 9 malam (pukul 21)
       if (now.hour == 21) {
@@ -1172,7 +1178,8 @@ class _SalesPageState extends State<SalesPage> {
               try {
                 final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
 
-                await supabase.from('pending_requests').insert({
+                final inserted =
+                    await supabase.from('pending_requests').insert({
                   'toko_id': tokoId,
                   'no_invoice':
                       noInvoice, // 👈 HUBUNGKAN KE INVOICE AKTIF UNTUK TRACKING
@@ -1186,12 +1193,26 @@ class _SalesPageState extends State<SalesPage> {
                       sisaStokGudang <= 0 ? 'RESTOCK_LIMIT' : 'PRE_ORDER',
                   'status': 'PENDING',
                   'tracking_status': 'DIPROSES_DI_CABANG'
-                });
+                }).select('id').single();
 
                 Navigator.pop(context);
-                _showSnack(
-                    "✓ Berhasil mencatat $qtyNeeded pcs Pre-Order ke data pusat",
-                    Colors.green);
+                if (TrainingMode.instance.isActive && mounted) {
+                  final outcome = await TrainingApprovalSimulator
+                      .simulatePendingRequestIfTraining(
+                    context,
+                    id: inserted['id'],
+                    body: 'training_approval_sim_body_request_order'.tr(),
+                    trackingFor: RequestOrderService.trackingFor,
+                  );
+                  _showSnack(
+                    'training_ro_outcome_${outcome?.name ?? 'pending'}'.tr(),
+                    const Color(0xFFB45309),
+                  );
+                } else {
+                  _showSnack(
+                      "✓ Berhasil mencatat $qtyNeeded pcs Pre-Order ke data pusat",
+                      Colors.green);
+                }
               } catch (e) {
                 _showSnack("Gagal menyimpan request: $e", Colors.red);
               }
@@ -2654,6 +2675,28 @@ class _SalesPageState extends State<SalesPage> {
         debugPrint("Buku besar gagal mencatat pemasukan: $e");
       }
 
+      // Training: harden cross-module sync (History / Finance / Garansi / stok).
+      if (TrainingMode.instance.isActive) {
+        try {
+          final sync = await TrainingOpsSync.ensureAfterPosCheckout(
+            saleId: saleId.toString(),
+            tokoId: tokoId.toString(),
+            noInvoice: noInvoice,
+            namaPelanggan: nameCtrl.text.trim(),
+            bayar: bayar,
+            paymentStatus: paymentStatus,
+            paymentMethod: paymentMethod,
+            cartSnapshot: List<Map<String, dynamic>>.from(cartItems),
+          );
+          debugPrint(
+            '[Training] POS sync ok=${sync.allOk} '
+            'warranty=${sync.warrantyCards} errors=${sync.errors}',
+          );
+        } catch (e) {
+          debugPrint('[Training] POS sync ensure failed: $e');
+        }
+      }
+
       // 4. Kirim Nota Sultan Beserta PDF Terintegrasi ke Email Customer
       try {
         await _generateAndSharePDF(saleRes, cartItems);
@@ -3429,6 +3472,50 @@ class _SalesPageState extends State<SalesPage> {
                   ),
                 ), // Penutup ClipRRect
               ), // Penutup SizedBox
+              if (TrainingMode.instance.isActive) ...[
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: 280,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFB45309),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(Icons.school_rounded),
+                    label: Text('training_pos_unlock_cashier'.tr()),
+                    onPressed: () async {
+                      try {
+                        final res = await supabase
+                            .from('karyawan')
+                            .select()
+                            .eq('nik', 'TRAINING01')
+                            .maybeSingle();
+                        if (res == null) {
+                          _showSnack(
+                            'training_pos_unlock_missing'.tr(),
+                            Colors.red,
+                          );
+                          return;
+                        }
+                        await kameraLoginCtrl.stop();
+                        setState(() {
+                          activeCashier = res;
+                          namaKasir = res['nama']?.toString() ?? 'Kasir Latihan';
+                          kasirCtrl.text = namaKasir;
+                          isPosUnlocked = true;
+                          isScanningLocal = false;
+                        });
+                      } catch (e) {
+                        _showSnack(
+                          'training_msg_error'.tr().replaceAll('{}', '$e'),
+                          Colors.red,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -3450,6 +3537,10 @@ class _SalesPageState extends State<SalesPage> {
   // UI TERMINAL UTAMA KASIR POS
   // ==========================================================================
   void _openAbsensiFromPos() {
+    if (TrainingMode.instance.isActive) {
+      _showSnack('training_pos_absensi_blocked'.tr(), const Color(0xFFB45309));
+      return;
+    }
     // Push (bukan replace) agar keranjang/transaksi POS tetap utuh saat kembali.
     Navigator.push(
       context,
@@ -4759,7 +4850,7 @@ class _SalesPageState extends State<SalesPage> {
                                   final tokoId =
                                       widget.profile['toko_id'] ?? 'PUSAT';
 
-                                  await supabase
+                                  final inserted = await supabase
                                       .from('pending_requests')
                                       .insert({
                                     'toko_id': tokoId,
@@ -4777,7 +4868,7 @@ class _SalesPageState extends State<SalesPage> {
                                         "R: SPH ${sphRCtrl.text}/CYL ${cylRCtrl.text}/AXIS ${axisRCtrl.text}/ADD ${addRCtrl.text} | "
                                             "L: SPH ${sphLCtrl.text}/CYL ${cylLCtrl.text}/AXIS ${axisLCtrl.text}/ADD ${addLCtrl.text} | "
                                             "PD: ${pdRCtrl.text.isEmpty ? '-' : pdRCtrl.text}/${pdLCtrl.text.isEmpty ? '-' : pdLCtrl.text} mm"
-                                  });
+                                  }).select('id').single();
 
                                   setState(() {
                                     pendingLensRequests.add({
@@ -4806,9 +4897,29 @@ class _SalesPageState extends State<SalesPage> {
                                     });
                                   });
 
-                                  _showSnack(
-                                      "✓ Real-time: Laporan ukuran khusus berhasil dikirim ke database pusat!",
-                                      Colors.green);
+                                  if (TrainingMode.instance.isActive &&
+                                      mounted) {
+                                    final outcome =
+                                        await TrainingApprovalSimulator
+                                            .simulatePendingRequestIfTraining(
+                                      context,
+                                      id: inserted['id'],
+                                      body:
+                                          'training_approval_sim_body_request_order'
+                                              .tr(),
+                                      trackingFor:
+                                          RequestOrderService.trackingFor,
+                                    );
+                                    _showSnack(
+                                      'training_ro_outcome_${outcome?.name ?? 'pending'}'
+                                          .tr(),
+                                      const Color(0xFFB45309),
+                                    );
+                                  } else {
+                                    _showSnack(
+                                        "✓ Real-time: Laporan ukuran khusus berhasil dikirim ke database pusat!",
+                                        Colors.green);
+                                  }
                                 } catch (e) {
                                   _showSnack(
                                       "🛑 Gagal mengirim laporan ke pusat: $e",

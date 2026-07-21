@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'training/training_mode.dart';
+
 class AppUpdateInfo {
   const AppUpdateInfo({
     required this.localVersion,
@@ -405,6 +407,13 @@ class AppUpdateService {
     String appFlavor = 'karyawan',
     void Function(double progress)? onProgress,
   }) async {
+    // Training: Dio bypasses TrainingHttpClient — never download APKs mid-session.
+    if (TrainingMode.instance.isActive) {
+      return const BackgroundDownloadResult(
+        status: BackgroundDownloadStatus.skipped,
+        message: 'Mode Latihan — unduhan APK dinonaktifkan (anti-bocor).',
+      );
+    }
     if (kIsWeb || !Platform.isAndroid) {
       return const BackgroundDownloadResult(
         status: BackgroundDownloadStatus.skipped,

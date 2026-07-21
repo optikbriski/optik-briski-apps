@@ -1,6 +1,9 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../training/training_mode.dart';
+import '../training/training_sandbox_store.dart';
+
 class GeofenceCheckResult {
   const GeofenceCheckResult({
     required this.inside,
@@ -26,16 +29,15 @@ class GeofenceService {
   final SupabaseClient _client;
 
   Future<GeofenceCheckResult> ensureAtStore(String tokoId) async {
-    final toko = await _client
-        .from('toko_id')
-        .select('id, latitude, longitude, radius_meters, toko_id')
-        .eq('id', tokoId)
-        .maybeSingle();
+    final toko = await _resolveTokoRow(tokoId);
 
     if (toko == null) {
-      return const GeofenceCheckResult(
+      return GeofenceCheckResult(
         inside: false,
-        message: 'Data toko tidak ditemukan.',
+        message: TrainingMode.instance.isActive
+            ? 'Data toko belum tersedia offline. '
+                'Masuk Mode Latihan saat online sekali agar koordinat di-cache lokal.'
+            : 'Data toko tidak ditemukan.',
       );
     }
 
@@ -91,6 +93,42 @@ class GeofenceService {
       distanceMeters: distance,
       radiusMeters: radius,
     );
+  }
+
+  /// Training: prefer local sandbox cache (offline). Live: Supabase only.
+  Future<Map<String, dynamic>?> _resolveTokoRow(String tokoId) async {
+    if (TrainingMode.instance.isActive) {
+      TrainingMode.instance.assertSameToko(tokoId);
+      final cached = await TrainingSandboxStore.instance.selectOne(
+        'toko_id',
+        where: {'id': tokoId},
+      );
+      if (cached != null) return cached;
+      // Best-effort one-time fetch while online, then stay local.
+      try {
+        final remote = await _client
+            .from('toko_id')
+            .select('id, latitude, longitude, radius_meters, toko_id')
+            .eq('id', tokoId)
+            .maybeSingle();
+        if (remote != null) {
+          await TrainingSandboxStore.instance.insert(
+            'toko_id',
+            Map<String, dynamic>.from(remote),
+          );
+          return Map<String, dynamic>.from(remote);
+        }
+      } catch (_) {
+        return null;
+      }
+      return null;
+    }
+
+    return _client
+        .from('toko_id')
+        .select('id, latitude, longitude, radius_meters, toko_id')
+        .eq('id', tokoId)
+        .maybeSingle();
   }
 
   Future<String?> _ensurePermission() async {

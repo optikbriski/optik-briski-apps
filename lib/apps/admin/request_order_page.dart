@@ -1,8 +1,11 @@
 // ignore_for_file: use_build_context_synchronously
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/logistics/request_order_service.dart';
+import '../../shared/training/training_approval_simulator.dart';
+import '../../shared/training/training_mode.dart';
 import 'request_order_pusat_page.dart';
 
 class RequestOrderPage extends StatefulWidget {
@@ -85,10 +88,43 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
 
     setState(() => isLoading = true);
     try {
-      final List<int> idsToUpdate =
-          pendingRequestsList.map((e) => e['id'] as int).toList();
+      final idsToUpdate =
+          pendingRequestsList.map((e) => e['id']).whereType<Object>().toList();
 
+      // Training: TrainingHttpClient sandboxes this (no cabang↔pusat sync).
       await _svc.sendToHq(idsToUpdate);
+
+      if (TrainingMode.instance.isActive && mounted) {
+        final sim = await TrainingApprovalSimulator.showIfTraining(
+          context,
+          body: 'training_approval_sim_body_request_order'.tr(),
+        );
+        if (!mounted) return;
+        final outcome = sim?.outcome ?? TrainingApprovalOutcome.pending;
+        final status =
+            TrainingApprovalSimulator.requestOrderStatus(outcome);
+        for (final id in idsToUpdate) {
+          await TrainingApprovalSimulator.applySandboxOutcome(
+            table: 'pending_requests',
+            id: id,
+            outcome: outcome,
+            statusFor: TrainingApprovalSimulator.requestOrderStatus,
+            note: sim?.note,
+            noteColumn: 'detail_resep',
+            extraValues: {
+              'tracking_status': RequestOrderService.trackingFor(status),
+            },
+          );
+        }
+        _showSnack(
+          'training_ro_outcome_${outcome.name}'.tr(),
+          outcome == TrainingApprovalOutcome.rejected
+              ? Colors.redAccent
+              : const Color(0xFFB45309),
+        );
+        _loadTodayRequests();
+        return;
+      }
 
       _showSnack(
           "✓ Sukses mengirim ${idsToUpdate.length} pesanan ke Gudang Pusat!",

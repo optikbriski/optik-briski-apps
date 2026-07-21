@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'coa_approval_page.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/training/training_approval_simulator.dart';
+import '../../shared/training/training_mode.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -768,7 +770,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   : 'PENDING';
 
                           // 🗄️ KIRIM ENTRI FINAL KE SUPABASE
-                          await supabase.from('finance_transactions').insert({
+                          final inserted = await supabase
+                              .from('finance_transactions')
+                              .insert({
                             'toko_id': selectedTokoId ?? 'PUSAT',
                             'tanggal_transaksi':
                                 selectedDate.toIso8601String().split('T')[0],
@@ -783,9 +787,33 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 'Staff Optik',
                             'status_konfirmasi': statusAwalKonfirmasi,
                             'updated_at': DateTime.now().toIso8601String(),
-                          });
+                          }).select('id').single();
 
                           Navigator.pop(ctx);
+
+                          if (statusAwalKonfirmasi == 'PENDING' &&
+                              TrainingMode.instance.isActive &&
+                              mounted) {
+                            final outcome = await TrainingApprovalSimulator
+                                .simulateCoaIfTraining(
+                              context,
+                              id: inserted['id'],
+                            );
+                            if (mounted && outcome != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'training_coa_outcome_${outcome.name}'.tr(),
+                                  ),
+                                  backgroundColor: outcome ==
+                                          TrainingApprovalOutcome.rejected
+                                      ? Colors.orangeAccent
+                                      : const Color(0xFFB45309),
+                                ),
+                              );
+                            }
+                          }
+
                           _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
                         } catch (e) {
                           setInnerState(() => isSaving = false);
