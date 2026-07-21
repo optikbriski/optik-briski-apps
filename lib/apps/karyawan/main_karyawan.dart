@@ -8,7 +8,6 @@ import 'pengaturan_akun_karyawan.dart';
 import 'bantuan_page.dart';
 import 'pengaduan_page.dart';
 import 'pengingat_page.dart';
-import '../../shared/scanner_penerimaan_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
@@ -18,6 +17,11 @@ import '../../shared/karyawan/karyawan_home_service.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/qr/qr_route.dart';
+import '../../shared/qr/universal_qr_host.dart';
+import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/qr/universal_qr_scan_page.dart';
+import '../../shared/scanner_penerimaan_page.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -58,14 +62,25 @@ class KaryawanPageState extends State<KaryawanPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _namaKaryawan = 'memuat'.tr();
+    _bindQrHost();
     _tarikDataProfil();
     _cekUpdateApkSilent();
     _cekHasilInstallSetelahResume();
   }
 
+  void _bindQrHost() {
+    UniversalQrHost.bind(
+      callerRole: UniversalQrCallerRole.karyawan,
+      cabangKaryawan: _cabangKaryawan,
+      karyawanId: _karyawanId,
+      karyawanNama: _namaKaryawan,
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    UniversalQrHost.clear();
     super.dispose();
   }
 
@@ -432,6 +447,7 @@ class KaryawanPageState extends State<KaryawanPage>
         _securityScore = snap.securityScore;
         _isLoading = false;
       });
+      _bindQrHost();
 
       if (_karyawanId != null) {
         await _homeService.ensureTodayReminders(
@@ -512,15 +528,25 @@ class KaryawanPageState extends State<KaryawanPage>
             "sop_batal".tr(), "sop_foto_batal".tr(), Colors.orange);
       }
     } else if (jenisBukti == 'scan') {
+      // Pakai scanner universal yang sama (bukan menu scanner terpisah).
+      final routed = await UniversalQrScanPage.scanRouted(
+        context,
+        allowedTypes: {QrPayloadType.receiveStock},
+      );
+      if (routed == null || !mounted) {
+        _showPremiumSnackbar(
+            "sop_batal".tr(), "sop_scan_batal_msg".tr(), Colors.orange);
+        return;
+      }
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              ScannerPenerimaanPage(
-                cabangKaryawan: _cabangKaryawan,
-                karyawanId: _karyawanId,
-                karyawanNama: _namaKaryawan,
-              ),
+          builder: (context) => ScannerPenerimaanPage(
+            cabangKaryawan: _cabangKaryawan,
+            karyawanId: _karyawanId,
+            karyawanNama: _namaKaryawan,
+            initialQr: routed.raw,
+          ),
         ),
       );
 
@@ -894,16 +920,14 @@ class KaryawanPageState extends State<KaryawanPage>
           border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.55), width: 1.5),
         ),
         child: FloatingActionButton(
+          tooltip: 'scan_qr'.tr(),
           onPressed: () {
-            Navigator.push(
+            UniversalQrNav.open(
               context,
-              MaterialPageRoute(
-                builder: (context) => ScannerPenerimaanPage(
-                  cabangKaryawan: _cabangKaryawan,
-                  karyawanId: _karyawanId,
-                  karyawanNama: _namaKaryawan,
-                ),
-              ),
+              callerRole: UniversalQrCallerRole.karyawan,
+              cabangKaryawan: _cabangKaryawan,
+              karyawanId: _karyawanId,
+              karyawanNama: _namaKaryawan,
             );
           },
           backgroundColor: Colors.transparent,

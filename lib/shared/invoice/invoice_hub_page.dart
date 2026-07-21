@@ -2,11 +2,12 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../apps/admin/garansi_page.dart';
 import '../../apps/admin/sales_page.dart';
+import '../qr/qr_route.dart';
+import '../qr/universal_qr_scan_page.dart';
 import 'invoice_hub_service.dart';
 import 'invoice_link.dart';
 
@@ -26,16 +27,18 @@ class InvoiceHubPage extends StatefulWidget {
   final String? rawScan;
   final Map<String, dynamic>? profile;
 
-  /// Buka scanner lalu hub.
+  /// Buka scanner universal (hanya invoice) lalu hub.
   static Future<void> openScanner(BuildContext context,
       {Map<String, dynamic>? profile}) async {
-    final raw = await Navigator.push<String>(
+    final result = await UniversalQrScanPage.scanRouted(
       context,
-      MaterialPageRoute(builder: (_) => const _HubQrScannerPage()),
+      allowedTypes: {QrPayloadType.invoice},
+      titleKey: 'scan_qr',
+      hintKey: 'universal_qr_scan_hint',
     );
-    if (raw == null || !context.mounted) return;
-    final inv = InvoiceLink.parse(raw);
-    if (inv == null) {
+    if (result == null || !context.mounted) return;
+    final inv = result.invoiceNo ?? InvoiceLink.parse(result.raw);
+    if (inv == null || inv.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('invoice_hub_not_invoice'.tr())),
       );
@@ -640,39 +643,6 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           icon: Icon(icon, size: 20),
           label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
         ),
-      ),
-    );
-  }
-}
-
-class _HubQrScannerPage extends StatefulWidget {
-  const _HubQrScannerPage();
-
-  @override
-  State<_HubQrScannerPage> createState() => _HubQrScannerPageState();
-}
-
-class _HubQrScannerPageState extends State<_HubQrScannerPage> {
-  bool _done = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('invoice_hub_scan'.tr()),
-      ),
-      body: MobileScanner(
-        onDetect: (capture) {
-          if (_done) return;
-          final barcodes = capture.barcodes;
-          if (barcodes.isEmpty) return;
-          final raw = barcodes.first.rawValue;
-          if (raw == null || raw.isEmpty) return;
-          _done = true;
-          Navigator.pop(context, raw);
-        },
       ),
     );
   }

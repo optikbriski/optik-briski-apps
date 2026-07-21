@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'qr/hid_scan_intake.dart';
+import 'qr/qr_route.dart';
 import 'responsive.dart';
 import 'logistics/receive_scan_service.dart';
 
@@ -9,11 +11,15 @@ class ScannerPenerimaanPage extends StatefulWidget {
   final String? karyawanId;
   final String? karyawanNama;
 
+  /// Jika diisi (dari scanner universal), proses langsung tanpa scan ulang.
+  final String? initialQr;
+
   const ScannerPenerimaanPage({
     super.key,
     required this.cabangKaryawan,
     this.karyawanId,
     this.karyawanNama,
+    this.initialQr,
   });
 
   @override
@@ -23,8 +29,24 @@ class ScannerPenerimaanPage extends StatefulWidget {
 class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
   bool _isScanning = true;
   bool _isProcessing = false;
+  /// true = sudah di-scan lewat UniversalQrScanPage; halaman ini hanya proses hasil.
+  late final bool _fromUniversalScan;
   final MobileScannerController cameraController = MobileScannerController();
   final _service = ReceiveScanService();
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialQr?.trim();
+    _fromUniversalScan = initial != null && initial.isNotEmpty;
+    if (_fromUniversalScan) {
+      _isScanning = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _validasiBarangMasuk(initial!);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -33,12 +55,15 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
   }
 
   Future<void> _validasiBarangMasuk(String dataDariQR) async {
-    if (!_isScanning || _isProcessing) return;
+    if (_isProcessing) return;
+    if (!_fromUniversalScan && !_isScanning) return;
     setState(() {
       _isScanning = false;
       _isProcessing = true;
     });
-    await cameraController.stop();
+    if (!_fromUniversalScan) {
+      await cameraController.stop();
+    }
 
     final id = (widget.karyawanId ?? '').trim();
     final nama = (widget.karyawanNama ?? '').trim();
@@ -146,6 +171,10 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                       if (sukses) {
                         if (!mounted) return;
                         Navigator.pop(context, popWithResult);
+                      } else if (_fromUniversalScan) {
+                        // Kembali ke caller; scan ulang lewat Scan QR universal.
+                        if (!mounted) return;
+                        Navigator.pop(context);
                       } else {
                         setState(() => _isScanning = true);
                         cameraController.start();
@@ -168,8 +197,48 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
     );
   }
 
+  Future<bool> _tryHandleReceiveQr(QrRouteResult result) async {
+    if (result.type != QrPayloadType.receiveStock) return false;
+    await _validasiBarangMasuk(result.raw);
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
+    return HidScanIntake(
+      tryHandleKnown: _tryHandleReceiveQr,
+      child: _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    // Hasil routing dari Scan QR universal — tanpa kamera kedua.
+    if (_fromUniversalScan) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0F172A),
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text('scan_qr'.tr(),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold)),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: _isProcessing
+              ? const CircularProgressIndicator(color: Colors.blueAccent)
+              : Text(
+                  '${widget.cabangKaryawan} · ${widget.karyawanNama ?? '-'}',
+                  style: const TextStyle(color: Colors.white54),
+                ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -179,7 +248,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text("scan_title".tr(),
+        title: Text('scan_qr'.tr(),
             style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,

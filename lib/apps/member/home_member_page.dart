@@ -1,9 +1,10 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/qr/universal_qr_nav.dart';
 import 'member_rating_page.dart';
 
-/// Home Member: rating karyawan + placeholder fitur lain.
+/// Home Member: satu Scan QR + rating + placeholder fitur lain.
 class HomeMemberPage extends StatelessWidget {
   const HomeMemberPage({super.key});
 
@@ -30,6 +31,16 @@ class HomeMemberPage extends StatelessWidget {
             style: const TextStyle(color: Colors.black54, height: 1.4),
           ),
           const SizedBox(height: 24),
+          _card(
+            context,
+            icon: Icons.qr_code_scanner_rounded,
+            title: 'scan_qr'.tr(),
+            subtitle: 'member_scan_qr_sub'.tr(),
+            onTap: () => UniversalQrNav.open(
+              context,
+              callerRole: UniversalQrCallerRole.member,
+            ),
+          ),
           _card(
             context,
             icon: Icons.star_rate_rounded,

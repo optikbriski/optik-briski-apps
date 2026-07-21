@@ -7,7 +7,6 @@ import 'inventory.dart';
 import 'product_master.dart';
 import 'buku_besar.dart';
 import '../../shared/admin_approval_page.dart';
-import 'barcode_scanner.dart' hide RiwayatTransaksiPage;
 import 'riwayat_transaksi_page.dart';
 import 'request_order_page.dart';
 import 'invoice_config_page.dart';
@@ -16,7 +15,8 @@ import 'attendance_qr_page.dart';
 import 'jadwal_kerja_page.dart';
 import 'monthly_export_page.dart';
 import 'garansi_page.dart';
-import '../../shared/invoice/invoice_hub_page.dart';
+import '../../shared/qr/universal_qr_host.dart';
+import '../../shared/qr/universal_qr_nav.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -34,8 +34,18 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
+    UniversalQrHost.bind(
+      callerRole: UniversalQrCallerRole.admin,
+      profile: widget.profile,
+    );
     _fetchTodayStats();
     _fetchFotoProfil();
+  }
+
+  @override
+  void dispose() {
+    UniversalQrHost.clear();
+    super.dispose();
   }
 
   // 1. FUNGSI TARIK FOTO PROFIL KARYAWAN REAL-TIME
@@ -412,15 +422,16 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ),
 
-                  // 12. SCAN QR INVOICE HUB
+                  // 12. SATU-SATUNYA Scan QR (invoice / absensi / dll.)
                   _menuCard(
                     context,
-                    'dash_menu_invoice_hub'.tr(),
-                    Icons.qr_code_2_rounded,
+                    'scan_qr'.tr(),
+                    Icons.qr_code_scanner_rounded,
                     Colors.deepOrangeAccent,
-                    () => InvoiceHubPage.openScanner(
+                    () => UniversalQrNav.open(
                       context,
                       profile: widget.profile,
+                      callerRole: UniversalQrCallerRole.admin,
                     ),
                   ),
                 ],

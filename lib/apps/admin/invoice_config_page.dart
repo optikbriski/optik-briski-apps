@@ -5,7 +5,9 @@ import 'dart:typed_data'; // Untuk konversi data binary Uint8List gambar hasil c
 import 'package:image_picker/image_picker.dart'; // Driver mengambil berkas dari galeri/file explorer
 import 'package:crop_your_image/crop_your_image.dart'; // Engine pemotong citra logo secara real-time
 import 'dart:convert';
+import '../../shared/qr/hid_scan_intake.dart';
 import '../../shared/responsive.dart';
+import '../../shared/widgets/leave_page_guard.dart';
 
 class InvoiceConfigPage extends StatefulWidget {
   final Map<String, dynamic>
@@ -20,6 +22,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _leaving = false;
+  String? _baselineSnapshot;
 
   // Manajemen Cabang Multi-Branch POS
   String _selectedTokoId = 'PUSAT';
@@ -196,6 +200,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           _showQr = data['show_qr_invoice'] ?? true;
           _previewSale = saleRes;
           _previewSaleItems = itemsRes;
+          _baselineSnapshot = _formSnapshot();
         });
       } else {
         setState(() {
@@ -212,10 +217,45 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           _showQr = true;
           _previewSale = saleRes;
           _previewSaleItems = itemsRes;
+          _baselineSnapshot = _formSnapshot();
         });
       }
     } catch (e) {
       debugPrint("Gagal memuat konfigurasi dari database: $e");
+    }
+  }
+
+  String _formSnapshot() {
+    return [
+      _selectedTokoId,
+      _shopNameCtrl.text,
+      _addressCtrl.text,
+      _phoneCtrl.text,
+      _logoUrlCtrl.text,
+      _footerCtrl.text,
+      _googleReviewUrlCtrl.text,
+      _alignment,
+      _fontSizeHeader.toString(),
+      _fontSizeBody.toString(),
+      _showQr.toString(),
+    ].join('|');
+  }
+
+  bool get _hasEdits =>
+      _baselineSnapshot != null && _formSnapshot() != _baselineSnapshot;
+
+  Future<void> _requestLeaveInvoiceConfig() async {
+    if (_leaving) return;
+    _leaving = true;
+    try {
+      final ok = await LeavePageGuard.handlePop(
+        context,
+        hasEdits: _hasEdits,
+        onSave: _saveSettings,
+      );
+      if (ok && mounted) Navigator.of(context).pop();
+    } finally {
+      _leaving = false;
     }
   }
 
@@ -243,6 +283,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
       });
 
       if (!mounted) return;
+      setState(() => _baselineSnapshot = _formSnapshot());
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
             "🎉 Konfigurasi layout $_selectedTokoId sukses disimpan dan disinkronkan ke unit POS!"),
@@ -421,10 +462,23 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
         item['nama_produk'].toString().toLowerCase().contains('lensa') ||
         item['nama_produk'].toString().toLowerCase().contains('progresif'));
 
-    return Scaffold(
+    return HidScanIntake(
+      isDirty: () => _hasEdits,
+      onSaveBeforeLeave: _saveSettings,
+      child: PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _requestLeaveInvoiceConfig();
+      },
+      child: Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: _requestLeaveInvoiceConfig,
+        ),
         title: const Text("INVOICE DESIGN ADJUSTER (MULTI-BRANCH)",
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
         centerTitle: true,
@@ -1265,6 +1319,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
               : Row(children: panels);
         },
       ),
+    ),
+    ),
     );
   }
 }

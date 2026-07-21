@@ -2,7 +2,6 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../shared/attendance/attendance_config.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
@@ -11,10 +10,16 @@ import '../../shared/attendance/aws_face_liveness_page.dart';
 import '../../shared/attendance/face_from_image.dart';
 import '../../shared/attendance/liveness_result.dart';
 import '../../shared/liveness_camera_page.dart';
+import '../../shared/qr/hid_scan_intake.dart';
+import '../../shared/qr/qr_route.dart';
+import '../../shared/qr/universal_qr_scan_page.dart';
 
 /// Absensi karyawan: GPS toko + QR Admin (masuk) + liveness + face match.
 class AbsensiPage extends StatefulWidget {
-  const AbsensiPage({super.key});
+  const AbsensiPage({super.key, this.initialAttendanceRaw});
+
+  /// Payload OBRATT dari scanner universal (opsional) — lanjut clock-in.
+  final String? initialAttendanceRaw;
 
   @override
   State<AbsensiPage> createState() => _AbsensiPageState();
@@ -30,6 +35,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
   String? _error;
 
   bool get _faceEnrolled => _service.isFaceEnrolled(_karyawan);
+
+  bool _startedFromInitialQr = false;
 
   @override
   void initState() {
@@ -57,6 +64,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           _error = 'Data karyawan tidak ditemukan untuk akun ini.';
         }
       });
+      _maybeContinueFromInitialQr();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -66,7 +74,26 @@ class _AbsensiPageState extends State<AbsensiPage> {
     }
   }
 
-  Future<void> _runFlow({required String action}) async {
+  void _maybeContinueFromInitialQr() {
+    if (_startedFromInitialQr) return;
+    final raw = widget.initialAttendanceRaw?.trim();
+    if (raw == null || raw.isEmpty) return;
+    if (_karyawan == null || _openShift != null || _busy) return;
+    if (!AttendanceQrPayload.looksLike(raw)) {
+      _snack('universal_qr_need_attendance'.tr(), Colors.orange);
+      return;
+    }
+    _startedFromInitialQr = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _runFlow(action: 'MASUK', preScannedAttendanceRaw: raw);
+    });
+  }
+
+  Future<void> _runFlow({
+    required String action,
+    String? preScannedAttendanceRaw,
+  }) async {
     if (kIsWeb) {
       _snack('Absensi wajah hanya tersedia di HP (bukan web).', Colors.orange);
       return;
@@ -93,12 +120,20 @@ class _AbsensiPageState extends State<AbsensiPage> {
       String? qrTokenId;
       if (action == 'MASUK') {
         if (!mounted) return;
-        final raw = await Navigator.push<String>(
-          context,
-          MaterialPageRoute(builder: (_) => const _AttendanceQrScannerPage()),
-        );
+        final raw = (preScannedAttendanceRaw ?? '').trim().isNotEmpty
+            ? preScannedAttendanceRaw!.trim()
+            : await UniversalQrScanPage.scanRaw(
+                context,
+                allowedTypes: {QrPayloadType.attendance},
+                titleKey: 'scan_qr',
+                hintKey: 'attendance_qr_scan_hint',
+              );
         if (raw == null || raw.trim().isEmpty) {
           _snack('attendance_qr_scan_cancelled'.tr(), Colors.orange);
+          return;
+        }
+        if (!AttendanceQrPayload.looksLike(raw)) {
+          _snack('universal_qr_need_attendance'.tr(), Colors.orange);
           return;
         }
         final validated = await _qrService.validatePayload(raw);
@@ -245,11 +280,28 @@ class _AbsensiPageState extends State<AbsensiPage> {
     );
   }
 
+  Future<bool> _tryHandleAttendanceQr(QrRouteResult result) async {
+    if (result.type != QrPayloadType.attendance) return false;
+    if (_busy) return true;
+    if (_openShift != null) {
+      _snack('Shift sudah aktif.', Colors.blueAccent);
+      return true;
+    }
+    if (_karyawan == null || !_faceEnrolled) {
+      _snack('Lengkapi data/wajah dulu, lalu absen masuk.', Colors.orange);
+      return true;
+    }
+    await _runFlow(action: 'MASUK', preScannedAttendanceRaw: result.raw);
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd MMM yyyy • HH:mm', 'id_ID');
 
-    return Scaffold(
+    return HidScanIntake(
+      tryHandleKnown: _tryHandleAttendanceQr,
+      child: Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         title: const Text('Absensi'),
@@ -370,6 +422,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                 ],
               ),
             ),
+      ),
     );
   }
 
@@ -422,55 +475,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
             style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AttendanceQrScannerPage extends StatefulWidget {
-  const _AttendanceQrScannerPage();
-
-  @override
-  State<_AttendanceQrScannerPage> createState() =>
-      _AttendanceQrScannerPageState();
-}
-
-class _AttendanceQrScannerPageState extends State<_AttendanceQrScannerPage> {
-  bool _done = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('attendance_qr_scan_title'.tr()),
-      ),
-      body: Stack(
-        alignment: Alignment.center,
-        children: [
-          MobileScanner(
-            onDetect: (capture) {
-              if (_done) return;
-              final barcodes = capture.barcodes;
-              if (barcodes.isEmpty) return;
-              final raw = barcodes.first.rawValue;
-              if (raw == null || raw.isEmpty) return;
-              _done = true;
-              Navigator.pop(context, raw);
-            },
-          ),
-          Positioned(
-            bottom: 48,
-            left: 24,
-            right: 24,
-            child: Text(
-              'attendance_qr_scan_hint'.tr(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, height: 1.4),
-            ),
-          ),
-        ],
       ),
     );
   }

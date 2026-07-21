@@ -22,6 +22,10 @@ import '../../shared/pos_print_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/garansi/garansi_service.dart';
 import '../../shared/invoice/invoice_link.dart';
+import '../../shared/qr/hid_scan_intake.dart';
+import '../../shared/qr/qr_route.dart';
+import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/widgets/leave_page_guard.dart';
 import '../karyawan/absensi_page.dart';
 import 'garansi_page.dart';
 
@@ -200,6 +204,8 @@ class _SalesPageState extends State<SalesPage> {
   final TextEditingController phoneCtrl = TextEditingController();
   final TextEditingController addressCtrl = TextEditingController();
   final TextEditingController emailCtrl = TextEditingController();
+  /// Kolom scan SKU global (juga menerima HID saat field fokusokus).
+  final TextEditingController skuScanCtrl = TextEditingController();
 
   // KERANJANG BELANJA & DISKON GLOBAL
   List<Map<String, dynamic>> restockQueue = [];
@@ -264,6 +270,11 @@ class _SalesPageState extends State<SalesPage> {
   bool isProcessing = false;
   String noInvoice = "";
   final TextEditingController kasirCtrl = TextEditingController();
+  bool _leavingPos = false;
+
+  String get _tokoId => widget.profile['toko_id']?.toString() ?? 'PUSAT';
+
+  String get _posDraftPrefsKey => 'pos_draft_transaksi_$_tokoId';
 
   @override
   void initState() {
@@ -271,6 +282,7 @@ class _SalesPageState extends State<SalesPage> {
     _fetchMerkLensa();
     _generateInvoice();
     _cekStatusOpenStore();
+    _restorePosDraftIfNeeded();
 
     // ⏰ SEKURITI PENGIRIMAN OTOMATIS: Jaga-jaga auto-send ke pusat setiap Jam 21.00 Malam
     Timer.periodic(const Duration(minutes: 15), (timer) async {
@@ -311,6 +323,7 @@ class _SalesPageState extends State<SalesPage> {
     phoneCtrl.dispose();
     addressCtrl.dispose();
     emailCtrl.dispose();
+    skuScanCtrl.dispose();
     discountCtrl.dispose();
     paidCtrl.dispose();
     kasirCtrl.dispose();
@@ -672,6 +685,200 @@ class _SalesPageState extends State<SalesPage> {
     } finally {
       // 🎯 FIX: Ini status loading diturunkan biar aplikasi ga nge-hang
       if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  /// Scan dari kolom SKU (kamera / HID / Enter): routing QR dulu, lalu SKU.
+  Future<void> _onPosScanSubmitted(String value) async {
+    final raw = value.trim();
+    if (raw.isEmpty) return;
+    skuScanCtrl.clear();
+
+    final routed = QrRouter.classify(raw);
+    if (routed.isKnown) {
+      final proceed = await _guardPosLeaveForKnownQr(routed);
+      if (!proceed || !mounted) return;
+      await UniversalQrNav.dispatch(
+        context,
+        routed,
+        profile: widget.profile,
+        callerRole: UniversalQrCallerRole.admin,
+      );
+      return;
+    }
+    await _cariProdukBySKU(raw);
+  }
+
+  /// QR non-produk yang akan membuka halaman lain → dialog 3 opsi dulu.
+  Future<bool> _guardPosLeaveForKnownQr(QrRouteResult result) async {
+    if (!UniversalQrNav.wouldNavigate(
+      result,
+      callerRole: UniversalQrCallerRole.admin,
+    )) {
+      return true;
+    }
+    return _confirmPosLeave(prepareLeave: true);
+  }
+
+  /// Dialog keluar POS: Batalkan / buang draft / simpan draft.
+  Future<bool> _confirmPosLeave({required bool prepareLeave}) async {
+    final action = await LeavePageGuard.confirmPos(context);
+    switch (action) {
+      case null:
+      case LeavePageAction.cancel:
+        return false;
+      case LeavePageAction.leaveDiscard:
+        if (prepareLeave) {
+          await _clearPosDraft();
+          _resetForm();
+        }
+        return true;
+      case LeavePageAction.leaveSave:
+        if (prepareLeave) {
+          await _savePosDraft();
+          _resetForm();
+        }
+        return true;
+    }
+  }
+
+  Future<void> _requestLeavePos() async {
+    if (_leavingPos) return;
+    _leavingPos = true;
+    try {
+      final ok = await _confirmPosLeave(prepareLeave: true);
+      if (ok && mounted) Navigator.of(context).pop();
+    } finally {
+      _leavingPos = false;
+    }
+  }
+
+  Future<void> _savePosDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final payload = <String, dynamic>{
+        'saved_at': DateTime.now().toIso8601String(),
+        'no_invoice': noInvoice,
+        'cart': cartItems,
+        'customer': {
+          'name': nameCtrl.text,
+          'phone': phoneCtrl.text,
+          'address': addressCtrl.text,
+          'email': emailCtrl.text,
+        },
+        'discount': discountCtrl.text,
+        'payment_method': paymentMethod,
+        'payment_status': paymentStatus,
+        'paid': paidCtrl.text,
+        'lens': {
+          'sph_r': sphRCtrl.text,
+          'sph_l': sphLCtrl.text,
+          'cyl_r': cylRCtrl.text,
+          'cyl_l': cylLCtrl.text,
+          'add_r': addRCtrl.text,
+          'add_l': addLCtrl.text,
+          'axis_r': axisRCtrl.text,
+          'axis_l': axisLCtrl.text,
+          'pd_r': pdRCtrl.text,
+          'pd_l': pdLCtrl.text,
+          'old_active': isInputKacamataLamaActive,
+          'sph_old_r': sphOldRCtrl.text,
+          'cyl_old_r': cylOldRCtrl.text,
+          'axis_old_r': axisOldRCtrl.text,
+          'sph_old_l': sphOldLCtrl.text,
+          'cyl_old_l': cylOldLCtrl.text,
+          'axis_old_l': axisOldLCtrl.text,
+        },
+      };
+      await prefs.setString(_posDraftPrefsKey, jsonEncode(payload));
+      if (mounted) {
+        _showSnack('pos_draft_saved'.tr(), Colors.green);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('${'pos_draft_save_err'.tr()}$e', Colors.redAccent);
+      }
+    }
+  }
+
+  Future<void> _clearPosDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_posDraftPrefsKey);
+    } catch (_) {}
+  }
+
+  Future<void> _restorePosDraftIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_posDraftPrefsKey);
+      if (raw == null || raw.isEmpty) return;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final map = Map<String, dynamic>.from(decoded);
+
+      final cartRaw = map['cart'];
+      final List<Map<String, dynamic>> restoredCart = [];
+      if (cartRaw is List) {
+        for (final item in cartRaw) {
+          if (item is Map) {
+            restoredCart.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+
+      // Jangan timpa sesi keranjang yang masih hidup di memori.
+      if (cartItems.isNotEmpty) return;
+
+      final customer = map['customer'] is Map
+          ? Map<String, dynamic>.from(map['customer'] as Map)
+          : <String, dynamic>{};
+      final lens = map['lens'] is Map
+          ? Map<String, dynamic>.from(map['lens'] as Map)
+          : <String, dynamic>{};
+
+      if (!mounted) return;
+      setState(() {
+        cartItems
+          ..clear()
+          ..addAll(restoredCart);
+        final inv = (map['no_invoice'] ?? '').toString();
+        if (inv.isNotEmpty) noInvoice = inv;
+        nameCtrl.text = (customer['name'] ?? '').toString();
+        phoneCtrl.text = (customer['phone'] ?? '').toString();
+        addressCtrl.text = (customer['address'] ?? '').toString();
+        emailCtrl.text = (customer['email'] ?? '').toString();
+        discountCtrl.text = (map['discount'] ?? '0').toString();
+        paymentMethod = (map['payment_method'] ?? paymentMethod).toString();
+        paymentStatus = (map['payment_status'] ?? paymentStatus).toString();
+        paidCtrl.text = (map['paid'] ?? '').toString();
+        sphRCtrl.text = (lens['sph_r'] ?? sphRCtrl.text).toString();
+        sphLCtrl.text = (lens['sph_l'] ?? sphLCtrl.text).toString();
+        cylRCtrl.text = (lens['cyl_r'] ?? cylRCtrl.text).toString();
+        cylLCtrl.text = (lens['cyl_l'] ?? cylLCtrl.text).toString();
+        addRCtrl.text = (lens['add_r'] ?? addRCtrl.text).toString();
+        addLCtrl.text = (lens['add_l'] ?? addLCtrl.text).toString();
+        axisRCtrl.text = (lens['axis_r'] ?? axisRCtrl.text).toString();
+        axisLCtrl.text = (lens['axis_l'] ?? axisLCtrl.text).toString();
+        pdRCtrl.text = (lens['pd_r'] ?? pdRCtrl.text).toString();
+        pdLCtrl.text = (lens['pd_l'] ?? pdLCtrl.text).toString();
+        isInputKacamataLamaActive = lens['old_active'] == true;
+        sphOldRCtrl.text = (lens['sph_old_r'] ?? sphOldRCtrl.text).toString();
+        cylOldRCtrl.text = (lens['cyl_old_r'] ?? cylOldRCtrl.text).toString();
+        axisOldRCtrl.text = (lens['axis_old_r'] ?? axisOldRCtrl.text).toString();
+        sphOldLCtrl.text = (lens['sph_old_l'] ?? sphOldLCtrl.text).toString();
+        cylOldLCtrl.text = (lens['cyl_old_l'] ?? cylOldLCtrl.text).toString();
+        axisOldLCtrl.text = (lens['axis_old_l'] ?? axisOldLCtrl.text).toString();
+      });
+
+      if (restoredCart.isNotEmpty ||
+          nameCtrl.text.trim().isNotEmpty ||
+          phoneCtrl.text.trim().isNotEmpty) {
+        _showSnack('pos_draft_restored'.tr(), Colors.blueAccent);
+      }
+    } catch (e) {
+      debugPrint('POS draft restore failed: $e');
     }
   }
 
@@ -2454,7 +2661,8 @@ class _SalesPageState extends State<SalesPage> {
         MaterialPageRoute(
           builder: (context) => InvoiceDetailPage(saleId: saleId.toString()),
         ),
-      ).then((_) {
+      ).then((_) async {
+        await _clearPosDraft();
         _resetForm();
         setState(() {
           isPosUnlocked = false;
@@ -2954,21 +3162,26 @@ class _SalesPageState extends State<SalesPage> {
 
     if (!isStoreOpen) {
       currentUI = _buildClosedStoreUI();
+    } else if (isPosUnlocked && activeCashier != null) {
+      // HID global di shell; intake lokal: SKU → cart, invoice → dialog draft POS.
+      currentUI = HidScanIntake(
+        onUnknown: (raw) async {
+          await _cariProdukBySKU(raw);
+          return true;
+        },
+        onBeforeNavigate: _guardPosLeaveForKnownQr,
+        child: _buildSalesMainUI(),
+      );
     } else {
-      currentUI = isPosUnlocked && activeCashier != null
-          ? _buildSalesMainUI()
-          : _buildBarcodeScannerLayar();
+      currentUI = _buildBarcodeScannerLayar();
     }
 
-    // 🎯 SUNTIKAN SAKTI 2: Bungkus dengan PopScope untuk menjinakkan tombol back Chrome & swipe Mac
+    // Back / swipe: dialog 3 opsi draft saat sesi toko buka.
     return PopScope(
-      canPop:
-          !isStoreOpen, // Jika sesi toko buka, canPop = false (tombol back terkunci mati!)
+      canPop: !isStoreOpen,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _showSnack(
-            "Sesi kasir aktif! Gunakan menu internal/closing untuk navigasi.",
-            Colors.orange);
+        _requestLeavePos();
       },
       child: currentUI,
     );
@@ -3107,10 +3320,8 @@ class _SalesPageState extends State<SalesPage> {
               color: Colors.white, size: 20),
           tooltip: "Kembali ke Dashboard",
           onPressed: () async {
-            await kameraLoginCtrl
-                .stop(); // 📸 Matikan aliran video kamera laptop/tablet biar gak bocor memory & lampu indikator mati
-            Navigator.pop(
-                context); // ➔ Tendang balik kasir ke halaman dashboard utama admin lo
+            await kameraLoginCtrl.stop();
+            await _requestLeavePos();
           },
         ),
       ),
@@ -3243,6 +3454,11 @@ class _SalesPageState extends State<SalesPage> {
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          tooltip: 'leave_title_pos'.tr(),
+          onPressed: _requestLeavePos,
+        ),
         title: Text(
           "pos_title".tr(),
           style: const TextStyle(
@@ -3555,8 +3771,9 @@ class _SalesPageState extends State<SalesPage> {
                             "pos_input_barang".tr(), Icons.inventory),
                         const SizedBox(height: 15),
 
-                        // 1. KOLOM SCANNER GLOBAL
+                        // 1. KOLOM SCANNER GLOBAL (HID → field jika fokusokus; else HardwareBarcodeListener)
                         TextField(
+                          controller: skuScanCtrl,
                           style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             labelText: "pos_scan_global".tr(),
@@ -3569,7 +3786,11 @@ class _SalesPageState extends State<SalesPage> {
                               child: IconButton(
                                 icon: const Icon(Icons.qr_code_scanner,
                                     color: Colors.blueAccent),
-                                onPressed: () => _scanBarcode(),
+                                onPressed: () async {
+                                  final code = await _scanBarcode();
+                                  if (code == null || code.isEmpty) return;
+                                  await _onPosScanSubmitted(code);
+                                },
                               ),
                             ),
                             filled: true,
@@ -3579,7 +3800,7 @@ class _SalesPageState extends State<SalesPage> {
                               borderSide: BorderSide.none,
                             ),
                           ),
-                          onSubmitted: (value) => _cariProdukBySKU(value),
+                          onSubmitted: _onPosScanSubmitted,
                         ),
                         const SizedBox(height: 20),
 

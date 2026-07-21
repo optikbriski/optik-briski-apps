@@ -1,13 +1,13 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../shared/invoice/invoice_hub_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/invoice/invoice_rating_card.dart';
 
 /// Rating kasir + pembuat kacamata — khusus APK Member (bukan Hub Invoice).
+/// Scan QR masuk lewat menu tunggal di [HomeMemberPage] → [UniversalQrNav].
 class MemberRatingPage extends StatefulWidget {
   const MemberRatingPage({super.key, this.initialInvoice});
 
@@ -37,17 +37,6 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
   void dispose() {
     _invoiceCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _scan() async {
-    final raw = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (_) => const _MemberInvoiceScanner()),
-    );
-    if (raw == null || !mounted) return;
-    final inv = InvoiceLink.parse(raw) ?? raw.trim();
-    setState(() => _invoiceCtrl.text = inv);
-    await _load();
   }
 
   Future<void> _load() async {
@@ -133,13 +122,9 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
           const SizedBox(height: 16),
           TextField(
             controller: _invoiceCtrl,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'No. Invoice',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                onPressed: _scan,
-                icon: const Icon(Icons.qr_code_scanner),
-              ),
+              border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _load(),
           ),
@@ -203,39 +188,6 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
             ],
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _MemberInvoiceScanner extends StatefulWidget {
-  const _MemberInvoiceScanner();
-
-  @override
-  State<_MemberInvoiceScanner> createState() => _MemberInvoiceScannerState();
-}
-
-class _MemberInvoiceScannerState extends State<_MemberInvoiceScanner> {
-  bool _done = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('invoice_hub_scan'.tr()),
-      ),
-      body: MobileScanner(
-        onDetect: (capture) {
-          if (_done) return;
-          final barcodes = capture.barcodes;
-          if (barcodes.isEmpty) return;
-          final raw = barcodes.first.rawValue;
-          if (raw == null || raw.isEmpty) return;
-          _done = true;
-          Navigator.pop(context, raw);
-        },
       ),
     );
   }
