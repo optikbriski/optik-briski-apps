@@ -1,12 +1,18 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../shared/attendance/attendance_config.dart';
+import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/attendance/attendance_service.dart';
+import '../../shared/attendance/aws_face_liveness_page.dart';
+import '../../shared/attendance/face_from_image.dart';
 import '../../shared/attendance/liveness_result.dart';
 import '../../shared/liveness_camera_page.dart';
 
-/// Absensi karyawan: harus di toko (GPS) + liveness + face match.
+/// Absensi karyawan: GPS toko + QR Admin (masuk) + liveness + face match.
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
 
@@ -16,6 +22,7 @@ class AbsensiPage extends StatefulWidget {
 
 class _AbsensiPageState extends State<AbsensiPage> {
   final _service = AttendanceService();
+  final _qrService = AttendanceQrService();
   bool _loading = true;
   bool _busy = false;
   Map<String, dynamic>? _karyawan;
@@ -82,27 +89,46 @@ class _AbsensiPageState extends State<AbsensiPage> {
       }
       _snack(geo.message, Colors.green);
 
-      // 2) Liveness + capture wajah
-      if (!mounted) return;
-      final raw = await Navigator.push<Object?>(
-        context,
-        MaterialPageRoute(builder: (_) => const LivenessCameraPage()),
-      );
+      // 2) Clock-in: wajib scan QR berputar di layar Admin toko
+      String? qrTokenId;
+      if (action == 'MASUK') {
+        if (!mounted) return;
+        final raw = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(builder: (_) => const _AttendanceQrScannerPage()),
+        );
+        if (raw == null || raw.trim().isEmpty) {
+          _snack('attendance_qr_scan_cancelled'.tr(), Colors.orange);
+          return;
+        }
+        final validated = await _qrService.validatePayload(raw);
+        if (validated.tokoId != tokoId) {
+          _snack(
+            'attendance_qr_wrong_toko'.tr(namedArgs: {
+              'qr': validated.tokoId,
+              'akun': tokoId,
+            }),
+            Colors.redAccent,
+          );
+          return;
+        }
+        qrTokenId = validated.tokenId;
+        _snack('attendance_qr_ok'.tr(), Colors.green);
+      }
 
-      final liveness = _asLiveness(raw);
+      // 3) Liveness + capture wajah
+      if (!mounted) return;
+      final liveness = await _captureLiveness();
       if (liveness == null || !liveness.success) {
-        _snack('Liveness dibatalkan / gagal.', Colors.orange);
+        _snack('aws_liveness_cancelled'.tr(), Colors.orange);
         return;
       }
       if (liveness.faceTemplate == null || liveness.photoBytes == null) {
-        _snack(
-          'Wajah tidak terbaca jelas. Coba lagi dengan cahaya lebih baik.',
-          Colors.redAccent,
-        );
+        _snack('aws_liveness_face_unclear'.tr(), Colors.redAccent);
         return;
       }
 
-      // 3) Aksi
+      // 4) Aksi
       if (action == 'ENROLL') {
         await _service.enrollFace(
           karyawanId: _karyawan!['id'] as String,
@@ -116,6 +142,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           karyawan: _karyawan!,
           liveness: liveness,
           geo: geo,
+          qrTokenId: qrTokenId,
         );
         _snack('Absen masuk berhasil. Shift dimulai.', Colors.green);
       } else if (action == 'PULANG') {
@@ -135,10 +162,78 @@ class _AbsensiPageState extends State<AbsensiPage> {
     }
   }
 
+  Future<LivenessCaptureResult?> _captureLiveness() async {
+    if (AttendanceConfig.useAwsFaceLiveness) {
+      final raw = await Navigator.push<Object?>(
+        context,
+        MaterialPageRoute(builder: (_) => const AwsFaceLivenessPage()),
+      );
+      var result = _asLiveness(raw);
+      if (result == null || !result.success) return result;
+
+      // Reference image AWS kadang belum cukup untuk template lokal → fallback kamera.
+      if (result.faceTemplate == null && result.photoBytes != null) {
+        final tpl = await faceTemplateFromJpeg(result.photoBytes!);
+        if (tpl != null) {
+          result = LivenessCaptureResult(
+            success: true,
+            photoBytes: result.photoBytes,
+            faceTemplate: tpl,
+            livenessProvider: result.livenessProvider,
+            livenessSessionId: result.livenessSessionId,
+            livenessConfidence: result.livenessConfidence,
+          );
+        }
+      }
+      if (result.faceTemplate == null) {
+        if (!mounted) return null;
+        _snack('aws_liveness_need_local_face'.tr(), Colors.blueAccent);
+        final localRaw = await Navigator.push<Object?>(
+          context,
+          MaterialPageRoute(builder: (_) => const LivenessCameraPage()),
+        );
+        final local = _asLiveness(localRaw);
+        if (local == null ||
+            !local.success ||
+            local.faceTemplate == null ||
+            local.photoBytes == null) {
+          return null;
+        }
+        return LivenessCaptureResult(
+          success: true,
+          photoBytes: local.photoBytes,
+          faceTemplate: local.faceTemplate,
+          livenessProvider: 'aws',
+          livenessSessionId: result.livenessSessionId,
+          livenessConfidence: result.livenessConfidence,
+        );
+      }
+      return result;
+    }
+
+    final raw = await Navigator.push<Object?>(
+      context,
+      MaterialPageRoute(builder: (_) => const LivenessCameraPage()),
+    );
+    final local = _asLiveness(raw);
+    if (local == null) return null;
+    return LivenessCaptureResult(
+      success: local.success,
+      photoBytes: local.photoBytes,
+      faceTemplate: local.faceTemplate,
+      livenessProvider: 'local',
+      livenessConfidence: local.success ? 100 : 0,
+    );
+  }
+
   LivenessCaptureResult? _asLiveness(Object? raw) {
     if (raw is LivenessCaptureResult) return raw;
     if (raw == true) {
-      return const LivenessCaptureResult(success: true);
+      return const LivenessCaptureResult(
+        success: true,
+        livenessProvider: 'local',
+        livenessConfidence: 100,
+      );
     }
     return null;
   }
@@ -228,12 +323,11 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ),
                   const SizedBox(height: 12),
                   _card(
-                    child: const Text(
-                      'Syarat absen:\n'
-                      '1. Device berada di radius toko (GPS)\n'
-                      '2. Liveness (senyum)\n'
-                      '3. Wajah cocok dengan data terdaftar (lokal)',
-                      style: TextStyle(color: Colors.white70, height: 1.5),
+                    child: Text(
+                      AttendanceConfig.useAwsFaceLiveness
+                          ? 'absensi_syarat_aws'.tr()
+                          : 'absensi_syarat_local'.tr(),
+                      style: const TextStyle(color: Colors.white70, height: 1.5),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -328,6 +422,55 @@ class _AbsensiPageState extends State<AbsensiPage> {
             style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AttendanceQrScannerPage extends StatefulWidget {
+  const _AttendanceQrScannerPage();
+
+  @override
+  State<_AttendanceQrScannerPage> createState() =>
+      _AttendanceQrScannerPageState();
+}
+
+class _AttendanceQrScannerPageState extends State<_AttendanceQrScannerPage> {
+  bool _done = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text('attendance_qr_scan_title'.tr()),
+      ),
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          MobileScanner(
+            onDetect: (capture) {
+              if (_done) return;
+              final barcodes = capture.barcodes;
+              if (barcodes.isEmpty) return;
+              final raw = barcodes.first.rawValue;
+              if (raw == null || raw.isEmpty) return;
+              _done = true;
+              Navigator.pop(context, raw);
+            },
+          ),
+          Positioned(
+            bottom: 48,
+            left: 24,
+            right: 24,
+            child: Text(
+              'attendance_qr_scan_hint'.tr(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -12,7 +12,11 @@ import 'riwayat_transaksi_page.dart';
 import 'request_order_page.dart';
 import 'invoice_config_page.dart';
 import 'attendance_monitor_page.dart';
+import 'attendance_qr_page.dart';
 import 'jadwal_kerja_page.dart';
+import 'monthly_export_page.dart';
+import 'garansi_page.dart';
+import '../../shared/invoice/invoice_hub_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -210,7 +214,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (c) => const AdminApprovalPage()))),
+                                builder: (c) => AdminApprovalPage(
+                                      roleAdmin:
+                                          widget.profile['role']?.toString() ??
+                                              '',
+                                      cabangAdmin: widget.profile['toko_id']
+                                              ?.toString() ??
+                                          '',
+                                    )))),
 
                   // 2. MENU ABSENSI — monitor shift/log (clock-in di APK Karyawan)
                   _menuCard(
@@ -225,6 +236,21 @@ class _DashboardPageState extends State<DashboardPage> {
                                   profile: widget.profile),
                             ),
                           )),
+
+                  // 2a. QR ABSENSI BERPUTAR — layar toko untuk clock-in karyawan
+                  _menuCard(
+                    context,
+                    'dash_menu_attendance_qr'.tr(),
+                    Icons.qr_code_2_rounded,
+                    Colors.deepPurpleAccent,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AttendanceQrPage(profile: widget.profile),
+                      ),
+                    ),
+                  ),
 
                   // 2b. JADWAL KERJA — pusat pilih cabang; toko atur cabangnya
                   if (widget.profile['toko_id'] == 'PUSAT' ||
@@ -356,6 +382,47 @@ class _DashboardPageState extends State<DashboardPage> {
                         );
                       },
                     ),
+
+                  // 10. LAPORAN EKSPOR OPERASIONAL (PDF)
+                  _menuCard(
+                    context,
+                    'dash_menu_export'.tr(),
+                    Icons.picture_as_pdf_rounded,
+                    Colors.cyanAccent,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            MonthlyExportPage(profile: widget.profile),
+                      ),
+                    ),
+                  ),
+
+                  // 11. GARANSI FRAME + LENSA
+                  _menuCard(
+                    context,
+                    'dash_menu_garansi'.tr(),
+                    Icons.verified_rounded,
+                    Colors.lightGreenAccent,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => GaransiPage(profile: widget.profile),
+                      ),
+                    ),
+                  ),
+
+                  // 12. SCAN QR INVOICE HUB
+                  _menuCard(
+                    context,
+                    'dash_menu_invoice_hub'.tr(),
+                    Icons.qr_code_2_rounded,
+                    Colors.deepOrangeAccent,
+                    () => InvoiceHubPage.openScanner(
+                      context,
+                      profile: widget.profile,
+                    ),
+                  ),
                 ],
                   );
                 },

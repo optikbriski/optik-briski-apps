@@ -8,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/logistics/request_order_service.dart';
+import '../../shared/safe_image_picker.dart';
 
 // ============================================================================
 // MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
@@ -322,10 +323,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
   // FUNGSI 2: PROSES UPDATE DATABASE, BUKTI BIOMETRIK & REKONSILIASI STOK CABANG
   Future<void> _prosesTerimaPaket(dynamic task) async {
     // FORCE REAR CAMERA: Kamera belakang diaktifkan untuk mencegah foto bukti terbalik/mirror
-    final photo = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        imageQuality: 50);
+    // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
+    final photo = await pickImageSafe(
+      picker: picker,
+      context: context,
+      preferredCameraDevice: CameraDevice.rear,
+      imageQuality: 50,
+    );
     if (photo == null) return;
 
     setState(() => isLoading = true);
@@ -345,10 +349,22 @@ class _StockMoveReportState extends State<StockMoveReport> {
       String rawItems = task['keterangan'] ?? '';
 
       // Eksekusi mutasi status data di tabel riwayat pusat
-      await supabase
-          .from('stock_move_history')
-          .update({'status': 'SUCCESS', 'bukti_foto_penerima': imgUrl}).eq(
-              'id', task['id']);
+      final verifierId =
+          widget.profile['id']?.toString() ??
+              widget.profile['user_id']?.toString() ??
+              supabase.auth.currentUser?.id ??
+              '';
+      final verifierName = widget.profile['nama']?.toString() ??
+          widget.profile['full_name']?.toString() ??
+          'Admin';
+
+      await supabase.from('stock_move_history').update({
+        'status': 'SUCCESS',
+        'bukti_foto_penerima': imgUrl,
+        'verified_by': verifierId,
+        'verified_by_name': verifierName,
+        'verified_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', task['id']);
 
       // Sinkron Request Order yang tertaut ke mutasi ini → SUCCESS
       try {
@@ -474,6 +490,27 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   style: const TextStyle(fontSize: 10, color: Colors.white38)),
               const SizedBox(height: 5),
               _buildFotoBox(item['bukti_foto_penerima']),
+              if ((item['verified_by_name'] ?? '')
+                      .toString()
+                      .trim()
+                      .isNotEmpty ||
+                  item['verified_at'] != null) ...[
+                const SizedBox(height: 12),
+                _detailRow(
+                  'Diterima oleh',
+                  item['verified_by_name']?.toString() ?? '-',
+                ),
+                _detailRow(
+                  'Waktu terima',
+                  () {
+                    final raw = item['verified_at']?.toString();
+                    if (raw == null || raw.isEmpty) return '-';
+                    final dt = DateTime.tryParse(raw)?.toLocal();
+                    if (dt == null) return raw;
+                    return DateFormat('dd/MM/yyyy HH:mm').format(dt);
+                  }(),
+                ),
+              ],
             ],
           ),
         ),
@@ -766,7 +803,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             fontSize: 12, fontWeight: FontWeight.w600)),
                   ),
                 const Spacer(),
-                if ((status == 'TRANSIT' || status == 'PENDING') &&
+                if ((status == 'WAITING' ||
+                        status == 'TRANSIT' ||
+                        status == 'PENDING') &&
                     amITheReceiver)
                   FilledButton.icon(
                     onPressed: () => _confirmTerima(item),

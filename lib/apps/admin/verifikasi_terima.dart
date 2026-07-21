@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/safe_image_picker.dart';
 
 // ✅ MANTRA PENGAMAN: Definisikan ulang shortcut client Supabase di file ini
 final supabase = Supabase.instance.client;
@@ -53,8 +54,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   Future<void> _prosesVerifikasi(dynamic task) async {
     if (isLoading) return;
 
-    // 1. Ambil Foto Bukti
-    final photo = await picker.pickImage(source: ImageSource.camera);
+    // 1. Ambil Foto Bukti (desktop/web: fall back ke galeri)
+    final photo = await pickImageSafe(picker: picker, context: context);
     if (photo == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

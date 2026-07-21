@@ -20,6 +20,10 @@ import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart'; // Pastikan import ini ada
 import '../../shared/pos_print_service.dart';
 import '../../shared/responsive.dart';
+import '../../shared/garansi/garansi_service.dart';
+import '../../shared/invoice/invoice_link.dart';
+import '../karyawan/absensi_page.dart';
+import 'garansi_page.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -2298,6 +2302,8 @@ class _SalesPageState extends State<SalesPage> {
             'no_invoice': noInvoice,
             'toko_id': tokoId,
             'kasir_id': supabase.auth.currentUser!.id,
+            // Karyawan yang unlock POS (untuk rating QR) — fallback auth admin
+            'kasir_karyawan_id': activeCashier?['id'],
             'nama_kasir': activeCashier?['nama'] ?? widget.profile['nama'],
             'nama_pelanggan': nameCtrl.text.trim(),
             'no_wa': phoneCtrl.text.trim(),
@@ -2319,8 +2325,9 @@ class _SalesPageState extends State<SalesPage> {
             'status_pembayaran':
                 paymentStatus, // "Lunas" atau "DP" murni dari input tombol kasir
             'metode_pembayaran': paymentMethod,
+            // Lunas = siap diambil; garansi baru jalan setelah scan ambil + foto hasil
             'tracking_status':
-                paymentStatus == "Lunas" ? 'CLEAR' : 'PENDING_PO',
+                paymentStatus == "Lunas" ? 'SIAP_DIAMBIL' : 'PENDING_PO',
           })
           .select()
           .single();
@@ -2403,6 +2410,15 @@ class _SalesPageState extends State<SalesPage> {
             }
           }
         }
+      }
+
+      // 2b. Kartu garansi otomatis untuk item Frame / Lensa
+      try {
+        final nKartu =
+            await GaransiService().createKartuFromSale(saleId.toString());
+        debugPrint('Garansi: $nKartu kartu dibuat untuk sale $saleId');
+      } catch (e) {
+        debugPrint('Garansi kartu gagal (sale tetap OK): $e');
       }
 
       // 3. Masukkan ke Buku Besar Keuangan (Finance Jurnal Otomatis)
@@ -2780,7 +2796,9 @@ class _SalesPageState extends State<SalesPage> {
                               width: 44,
                               child: pw.BarcodeWidget(
                                   barcode: pw.Barcode.qrCode(),
-                                  data: sale['no_invoice'] ?? 'EMPTY',
+                                  data: InvoiceLink.encode(
+                                      sale['no_invoice']?.toString() ??
+                                          'EMPTY'),
                                   padding: pw.EdgeInsets.zero)),
                       ],
                     ),
@@ -3212,6 +3230,14 @@ class _SalesPageState extends State<SalesPage> {
   // ==========================================================================
   // UI TERMINAL UTAMA KASIR POS
   // ==========================================================================
+  void _openAbsensiFromPos() {
+    // Push (bukan replace) agar keranjang/transaksi POS tetap utuh saat kembali.
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AbsensiPage()),
+    );
+  }
+
   Widget _buildSalesMainUI() {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -3223,7 +3249,13 @@ class _SalesPageState extends State<SalesPage> {
               fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2),
         ),
         actions: [
-          if (R.isNarrow(context))
+          if (R.isNarrow(context)) ...[
+            IconButton(
+              icon: const Icon(Icons.face_retouching_natural_rounded,
+                  color: Colors.cyanAccent),
+              tooltip: "pos_ttip_absen".tr(),
+              onPressed: _openAbsensiFromPos,
+            ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white70),
               color: const Color(0xFF1E293B),
@@ -3286,13 +3318,34 @@ class _SalesPageState extends State<SalesPage> {
                   ),
                 ),
               ],
-            )
-          else
+            ),
+          ] else
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Tooltip(
+                  message: "pos_ttip_absen".tr(),
+                  child: TextButton.icon(
+                    onPressed: _openAbsensiFromPos,
+                    icon: const Icon(Icons.face_retouching_natural_rounded,
+                        color: Colors.cyanAccent, size: 20),
+                    label: Text(
+                      "pos_btn_absen".tr(),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.cyanAccent),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.power_settings_new_rounded,
                       color: Colors.redAccent),
@@ -5433,7 +5486,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                               width: 55,
                               child: pw.BarcodeWidget(
                                   barcode: pw.Barcode.qrCode(),
-                                  data: sale['no_invoice'] ?? '',
+                                  data: InvoiceLink.encode(
+                                      sale['no_invoice']?.toString() ?? ''),
                                   padding: pw.EdgeInsets.zero)),
                       ],
                     ),
@@ -6034,7 +6088,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                     height: 55,
                                     width: 55,
                                     child: QrImageView(
-                                        data: sale['no_invoice'] ?? '',
+                                        data: InvoiceLink.encode(
+                                            sale['no_invoice']?.toString() ??
+                                                ''),
                                         version: QrVersions.auto,
                                         padding: EdgeInsets.zero),
                                   ),
@@ -6121,7 +6177,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               ),
               const SizedBox(height: 20),
 
-              // INDIKATOR KONTROL TOMBOL: PEMBAYARAN LUNAS -> BAGI KONDISI CLEAR VS PENDING PO
+              // Lunas: SIAP_DIAMBIL → scan barcode + foto di Garansi untuk DIAMBIL (mulai 7 hari)
               if (sale['status_pembayaran'] == 'Lunas') ...[
                 Container(
                   constraints: const BoxConstraints(maxWidth: 420),
@@ -6129,41 +6185,83 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                   decoration: BoxDecoration(
                       color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(10)),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: currentTrackingStatus == 'CLEAR'
-                                  ? Colors.green
-                                  : Colors.grey.shade800),
-                          onPressed: isPrinting
-                              ? null
-                              : () => _updateTrackingStatus('CLEAR',
-                                  "✓ Sukses! Pesanan dinyatakan Selesai (CLEAR)."),
-                          icon: const Icon(Icons.done_all, size: 16),
-                          label: const Text("CLEAR",
-                              style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.bold)),
+                      Text(
+                        'Status: $currentTrackingStatus'
+                        '${sale['diambil_at'] != null ? ' · sudah diambil' : ''}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  currentTrackingStatus == 'PENDING_PO'
-                                      ? Colors.orange
-                                      : Colors.grey.shade800),
-                          onPressed: isPrinting
-                              ? null
-                              : () => _updateTrackingStatus('PENDING_PO',
-                                  "✓ Sukses! Pesanan dinyatakan Tertunda (PENDING PO)."),
-                          icon: const Icon(Icons.hourglass_empty, size: 16),
-                          label: const Text("PENDING PO",
-                              style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    currentTrackingStatus == 'DIAMBIL' ||
+                                            sale['diambil_at'] != null
+                                        ? Colors.green
+                                        : const Color(0xFFE8C872),
+                                foregroundColor: const Color(0xFF0F172A),
+                              ),
+                              onPressed: isPrinting ||
+                                      sale['diambil_at'] != null ||
+                                      currentTrackingStatus == 'DIAMBIL'
+                                  ? null
+                                  : () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              GaransiKonfirmasiAmbilPage(
+                                            profile: {
+                                              'toko_id': sale['toko_id'],
+                                              'role': 'admin_toko',
+                                            },
+                                            prefillInvoice:
+                                                sale['no_invoice']?.toString(),
+                                          ),
+                                        ),
+                                      );
+                                      await _fetchNota();
+                                    },
+                              icon: const Icon(Icons.qr_code_scanner, size: 16),
+                              label: Text(
+                                sale['diambil_at'] != null
+                                    ? 'SUDAH DIAMBIL'
+                                    : 'SCAN AMBIL + FOTO',
+                                style: const TextStyle(
+                                    fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      currentTrackingStatus == 'PENDING_PO'
+                                          ? Colors.orange
+                                          : Colors.grey.shade800),
+                              onPressed: isPrinting
+                                  ? null
+                                  : () => _updateTrackingStatus('PENDING_PO',
+                                      "✓ Sukses! Pesanan dinyatakan Tertunda (PENDING PO)."),
+                              icon:
+                                  const Icon(Icons.hourglass_empty, size: 16),
+                              label: const Text("PENDING PO",
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

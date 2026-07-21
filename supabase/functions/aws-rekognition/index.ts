@@ -1,6 +1,12 @@
 // @ts-ignore
 declare const Deno: any;
 
+/**
+ * AWS Rekognition CompareFaces / IndexFaces untuk absensi.
+ * Face Liveness (anti-spoof) ada di Edge Function terpisah: aws-face-liveness.
+ *
+ * Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
   CompareFacesCommand,

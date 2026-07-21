@@ -1,32 +1,32 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:dio/dio.dart';
-import 'package:open_file/open_file.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
+
+import '../../shared/app_update_service.dart';
 
 class SoftwareUpdatePage extends StatefulWidget {
-  const SoftwareUpdatePage({super.key});
+  const SoftwareUpdatePage({super.key, this.autoStartDownload = false});
+
+  /// Mulai unduh otomatis (install tetap konfirmasi).
+  final bool autoStartDownload;
 
   @override
   State<SoftwareUpdatePage> createState() => _SoftwareUpdatePageState();
 }
 
 class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
-  bool _isAutoUpdateOn = false;
+  final _service = AppUpdateService();
+
+  bool _isAutoUpdateOn = true;
   bool _isLoading = true;
   bool _isDownloading = false;
+  bool _readyToInstall = false;
+  String? _readyApkPath;
   double _downloadProgress = 0.0;
+  String? _statusHint;
 
-  String _versiLokal = "";
-  String _versiServer = "";
-  String _urlDownload = "";
-  bool _adaUpdate = false;
+  AppUpdateInfo? _info;
 
   @override
   void initState() {
@@ -35,45 +35,52 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
   }
 
   Future<void> _inisialisasiData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    _isAutoUpdateOn = prefs.getBool('auto_update_karyawan') ?? false;
-
-    PackageInfo packageInfo = await PackageInfo.fromPlatform();
-    _versiLokal = packageInfo.version;
-
+    _isAutoUpdateOn = await _service.isAutoUpdateEnabled();
     try {
-      final data = await Supabase.instance.client
-          .from('versi_app')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-
-      if (data != null) {
-        _versiServer = data['versi_terbaru'] ?? _versiLokal;
-        _urlDownload = data['url_download'] ?? "";
-
-        if (_versiServer != _versiLokal && _urlDownload.isNotEmpty) {
-          _adaUpdate = true;
-        }
+      _info = await _service.checkForUpdate(appFlavor: 'karyawan');
+      final readyPath = await _service.readyApkPath();
+      final readyVer = await _service.readyApkVersion();
+      if (readyPath != null &&
+          readyVer != null &&
+          _info != null &&
+          readyVer == _info!.serverVersion) {
+        _readyToInstall = true;
+        _readyApkPath = readyPath;
+        _statusHint =
+            'Update ${_info!.serverVersion} sudah diunduh. Konfirmasi untuk memasang.';
       }
     } catch (e) {
-      debugPrint("${"update_debug_cek_versi".tr()} $e");
+      debugPrint('cek versi: $e');
     }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+    if (widget.autoStartDownload &&
+        (_info?.hasUpdate ?? false) &&
+        (_info?.urlReachable ?? false) &&
+        !_readyToInstall &&
+        !kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _unduhUpdate();
+      });
+    } else if (widget.autoStartDownload &&
+        (_info?.hasUpdate ?? false) &&
+        !(_info?.urlReachable ?? true)) {
+      setState(() {
+        _statusHint =
+            'Link APK belum bisa diakses. App lama tetap aman. Periksa URL di versi_app.';
+      });
     }
   }
 
-  Future<void> _downloadDanInstall() async {
-    // 1. SENSOR PENJAGA WEB CHROME
+  Future<void> _unduhUpdate() async {
+    final info = _info;
+    if (info == null || !info.hasUpdate || _isDownloading) return;
+
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            "Format APK tidak bisa dipasang di Browser Web Chrome. Silakan uji coba fitur ini di HP Android asli atau Emulator!"),
+        content: Text('Update APK hanya di HP Android (bukan browser).'),
         backgroundColor: Colors.orange,
-        duration: Duration(seconds: 5),
       ));
       return;
     }
@@ -81,104 +88,163 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
+      _statusHint = 'Mengunduh… App yang terpasang tidak dihapus.';
+      _readyToInstall = false;
     });
 
     try {
-      // 2. PASTIKAN SISTEM OPERASI ADALAH ANDROID
-      if (!Platform.isAndroid) {
-        throw Exception(
-            "Fitur instalasi langsung hanya didukung pada perangkat Android.");
-      }
-
-      Dio dio = Dio();
-      var dir = await getExternalStorageDirectory() ??
-          await getApplicationDocumentsDirectory();
-      String savePath = "${dir.path}/Optik_B_Riski_Update.apk";
-
-      // 3. PROSES UNDUH FILE APK
-      await dio.download(
-        _urlDownload,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
+      final result = await _service.downloadInBackground(
+        appFlavor: 'karyawan',
+        onProgress: (p) {
+          if (mounted) setState(() => _downloadProgress = p);
         },
       );
+      if (!mounted) return;
 
-      // 4. PROSES MENGEKSEKUSI PEMASANGAN APK KE SISTEM ANDROID
-      final result = await OpenFile.open(savePath,
-          type: "application/vnd.android.package-archive");
-
-      // 5. NOTIFIKASI JIKA EKSEKUSI FILE GAGAL
-      if (result.type != ResultType.done) {
-        throw Exception(
-            "Sistem menolak membuka installer. Alasan: ${result.message}");
-      }
-    } catch (e) {
-      // 6. POP-UP NOTIFIKASI PINTAR UNTUK USER
-      if (mounted) {
-        String pesanError = e.toString();
-
-        // Jika error disebabkan karena izin install apk belum dinyalakan di HP
-        if (pesanError.contains("REQUEST_INSTALL_PACKAGES")) {
-          showDialog(
+      switch (result.status) {
+        case BackgroundDownloadStatus.readyToInstall:
+          setState(() {
+            _readyToInstall = true;
+            _readyApkPath = result.apkPath;
+            _statusHint = result.message ??
+                'Update siap. Tekan “Pasang sekarang” untuk konfirmasi.';
+          });
+        case BackgroundDownloadStatus.insufficientStorage:
+          final st = result.storage;
+          setState(() {
+            _statusHint = result.message;
+          });
+          await showDialog<void>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (ctx) => AlertDialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15)),
-              title: const Row(
-                children: [
-                  Icon(Icons.security_rounded, color: Colors.orange, size: 28),
-                  SizedBox(width: 10),
-                  Text("Izin Pemasangan Diperlukan"),
-                ],
-              ),
-              content: const Text(
-                "HP Anda memblokir instalasi otomatis. Mohon buka Pengaturan HP -> Akses Aplikasi Khusus -> Instal Aplikasi Tidak Dikenal -> Lalu aktifkan izin untuk aplikasi Optik B. Riski.",
-                style: TextStyle(fontSize: 14),
+              title: const Text('Penyimpanan kurang'),
+              content: Text(
+                'Kosongkan storage internal HP sampai tersedia sekitar '
+                '${st?.requiredLabel ?? 'beberapa puluh MB'} '
+                '(sekarang ${st?.freeLabel ?? '-'}).\n\n'
+                'Setelah ada ruang cukup, unduhan bisa dilanjutkan.',
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Dimengerti",
-                      style: TextStyle(
-                          color: Colors.blueAccent,
-                          fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Mengerti'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _unduhUpdate();
+                  },
+                  child: const Text('Coba lagi'),
                 ),
               ],
             ),
           );
-        } else {
-          // Jika error disebabkan hal lain (misal internet putus)
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                "Gagal Memperbarui: ${pesanError.replaceAll('Exception:', '')}"),
-            backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 5),
-          ));
-        }
+        case BackgroundDownloadStatus.failed:
+        case BackgroundDownloadStatus.skipped:
+        case BackgroundDownloadStatus.downloading:
+          setState(() => _statusHint = result.message);
+          if ((result.message ?? '').isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(result.message!),
+              backgroundColor: Colors.orange,
+            ));
+          }
       }
     } finally {
-      // 7. RESET STATE DOWNLOADING
-      if (mounted) {
-        setState(() {
-          _isDownloading = false;
-        });
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  Future<void> _pasangUpdate() async {
+    final info = _info;
+    final path = _readyApkPath;
+    if (info == null || path == null) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text('Pasang update?'),
+        content: Text(
+          'Versi ${info.serverVersion} akan dipasang.\n'
+          'Konfirmasi lagi di layar sistem Android setelah ini.\n\n'
+          'App lama tetap aman jika Anda batalkan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Pasang'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await _service.confirmAndOpenInstaller(
+        apkPath: path,
+        expectedVersion: info.serverVersion,
+      );
+      if (!mounted) return;
+      setState(() {
+        _statusHint =
+            'Installer terbuka. Selesaikan di layar sistem.\n'
+            'Jika dibatalkan, app lama tetap bisa dipakai.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Konfirmasi instalasi di layar sistem Android.'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 5),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      final pesan = e.toString().replaceAll('Exception: ', '');
+      setState(() => _statusHint = pesan);
+
+      if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            title: const Text('Izin instalasi diperlukan'),
+            content: const Text(
+              'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal → aktifkan untuk Optik B. Riski, lalu coba lagi.\n\nApp yang terpasang tidak rusak.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Mengerti'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Gagal buka installer: $pesan'),
+          backgroundColor: Colors.redAccent,
+        ));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final info = _info;
+    final adaUpdate = info?.hasUpdate ?? false;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF0B1220),
       appBar: AppBar(
         title: Text("update_title".tr(),
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF121A2B),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -188,127 +254,173 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
           : Column(
               children: [
                 Container(
-                  color: const Color(0xFF1E293B),
+                  color: const Color(0xFF121A2B),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("update_auto".tr(),
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 16)),
-                      Row(
-                        children: [
-                          Text(
-                              _isAutoUpdateOn
-                                  ? "update_on".tr()
-                                  : "update_off".tr(),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("update_auto".tr(),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 15)),
+                            const Text(
+                              'Auto-unduh di background; pasang tetap perlu konfirmasi',
                               style: TextStyle(
-                                  color: _isAutoUpdateOn
-                                      ? Colors.greenAccent
-                                      : Colors.grey,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 10),
-                          CupertinoSwitch(
-                            value: _isAutoUpdateOn,
-                            activeColor: Colors.blueAccent,
-                            onChanged: (val) async {
-                              SharedPreferences prefs =
-                                  await SharedPreferences.getInstance();
-                              await prefs.setBool('auto_update_karyawan', val);
-                              setState(() => _isAutoUpdateOn = val);
-                            },
-                          ),
-                        ],
-                      )
+                                  color: Colors.white54, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                          _isAutoUpdateOn
+                              ? "update_on".tr()
+                              : "update_off".tr(),
+                          style: TextStyle(
+                              color: _isAutoUpdateOn
+                                  ? Colors.greenAccent
+                                  : Colors.grey,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 10),
+                      CupertinoSwitch(
+                        value: _isAutoUpdateOn,
+                        activeColor: Colors.blueAccent,
+                        onChanged: (val) async {
+                          await _service.setAutoUpdateEnabled(val);
+                          setState(() => _isAutoUpdateOn = val);
+                        },
+                      ),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (!_adaUpdate) ...[
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                shape: BoxShape.circle),
-                            child: const Icon(
-                                Icons.check_circle_outline_rounded,
-                                size: 45,
-                                color: Colors.greenAccent),
-                          ),
-                          const SizedBox(height: 25),
-                          Text("update_up_to_date".tr(),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text("${"update_version".tr()} $_versiLokal",
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (!adaUpdate) ...[
+                            const Icon(Icons.check_circle_outline_rounded,
+                                size: 64, color: Colors.greenAccent),
+                            const SizedBox(height: 20),
+                            Text("update_up_to_date".tr(),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            Text(
+                                "${"update_version".tr()} ${info?.localVersion ?? '-'}",
+                                style: TextStyle(
+                                    color: Colors.grey.shade500, fontSize: 14)),
+                          ] else ...[
+                            const Icon(Icons.system_update_rounded,
+                                size: 64, color: Colors.blueAccent),
+                            const SizedBox(height: 20),
+                            Text("update_available".tr(),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${info!.localVersion} → ${info.serverVersion}',
                               style: TextStyle(
-                                  color: Colors.grey.shade500, fontSize: 14)),
-                        ] else ...[
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                                color: Colors.blueAccent.withOpacity(0.2),
-                                shape: BoxShape.circle),
-                            child: const Icon(Icons.system_update_rounded,
-                                size: 45, color: Colors.blueAccent),
-                          ),
-                          const SizedBox(height: 25),
-                          Text("update_available".tr(),
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text(
-                              "${"update_version".tr()} $_versiServer ${"update_ready".tr()}",
-                              style: TextStyle(
-                                  color: Colors.grey.shade500, fontSize: 14)),
-                          const SizedBox(height: 40),
-                          if (_isDownloading)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 50),
-                              child: Column(
+                                  color: Colors.grey.shade400, fontSize: 14),
+                            ),
+                            if (!info.urlReachable) ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Link unduhan belum siap. App yang terpasang tetap aman dipakai.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.orangeAccent, height: 1.35),
+                              ),
+                            ],
+                            if ((info.notes ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              Text(
+                                info.notes!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white70, height: 1.4),
+                              ),
+                            ],
+                            const SizedBox(height: 28),
+                            if (_isDownloading)
+                              Column(
                                 children: [
                                   LinearProgressIndicator(
-                                      value: _downloadProgress,
-                                      backgroundColor: Colors.grey.shade800,
-                                      color: Colors.blueAccent,
-                                      minHeight: 6,
-                                      borderRadius: BorderRadius.circular(3)),
+                                    value: _downloadProgress > 0
+                                        ? _downloadProgress
+                                        : null,
+                                    backgroundColor: Colors.grey.shade800,
+                                    color: Colors.blueAccent,
+                                    minHeight: 6,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
                                   const SizedBox(height: 12),
                                   Text(
-                                      "${"update_downloading".tr()} ${(_downloadProgress * 100).toStringAsFixed(0)}%",
-                                      style: TextStyle(
-                                          color: Colors.grey.shade400)),
+                                    '${"update_downloading".tr()} ${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade400),
+                                  ),
                                 ],
-                              ),
-                            )
-                          else
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
+                              )
+                            else if (_readyToInstall)
+                              FilledButton.icon(
+                                onPressed: _pasangUpdate,
+                                icon: const Icon(Icons.install_mobile_rounded),
+                                label: const Text('Pasang sekarang'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 28, vertical: 14),
+                                ),
+                              )
+                            else
+                              FilledButton.icon(
+                                onPressed: info.urlReachable
+                                    ? _unduhUpdate
+                                    : null,
+                                icon: const Icon(Icons.download_rounded),
+                                label: Text("update_btn_download".tr()),
+                                style: FilledButton.styleFrom(
                                   backgroundColor: Colors.blueAccent,
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 30, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20))),
-                              onPressed: _downloadDanInstall,
-                              child: Text("update_btn_download".tr(),
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold)),
+                                      horizontal: 28, vertical: 14),
+                                ),
+                              ),
+                          ],
+                          if (_statusHint != null) ...[
+                            const SizedBox(height: 20),
+                            Text(
+                              _statusHint!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 12.5,
+                                  height: 1.4),
                             ),
-                        ]
-                      ],
+                          ],
+                          const SizedBox(height: 28),
+                          TextButton.icon(
+                            onPressed: _isDownloading
+                                ? null
+                                : () async {
+                                    setState(() => _isLoading = true);
+                                    await _inisialisasiData();
+                                  },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Cek ulang'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

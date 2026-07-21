@@ -73,10 +73,44 @@ ThemeData buildAdminTheme() {
 }
 
 ThemeData buildKaryawanTheme() {
+  const navy = Color(0xFF0A1628);
+  const navyMid = Color(0xFF1E3C72);
+  const gold = Color(0xFFC4A35A);
   return ThemeData(
     useMaterial3: true,
-    primarySwatch: Colors.blue,
-    fontFamily: 'Poppins',
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: const Color(0xFFF4F7FB),
+    colorScheme: const ColorScheme.light(
+      primary: navyMid,
+      secondary: gold,
+      surface: Colors.white,
+      onPrimary: Colors.white,
+      onSecondary: navy,
+    ),
+    appBarTheme: const AppBarTheme(
+      elevation: 0,
+      centerTitle: true,
+      backgroundColor: Colors.white,
+      foregroundColor: navy,
+      titleTextStyle: TextStyle(
+        color: navy,
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.3,
+      ),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: navyMid,
+      foregroundColor: Colors.white,
+    ),
+    bottomAppBarTheme: const BottomAppBarThemeData(
+      color: Colors.white,
+      elevation: 12,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
   );
 }
 

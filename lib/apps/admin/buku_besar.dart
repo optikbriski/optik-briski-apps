@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'coa_approval_page.dart';
 import '../../shared/responsive.dart';
+import '../../shared/safe_image_picker.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -575,10 +576,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
                         InkWell(
                           onTap: () async {
-                            final ImagePicker picker = ImagePicker();
-                            // Membuka kamera laptop/HP secara native di browser
-                            final XFile? image = await picker.pickImage(
-                                source: ImageSource.camera, imageQuality: 70);
+                            // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
+                            final XFile? image = await pickImageSafe(
+                              context: context,
+                              imageQuality: 70,
+                            );
                             if (image != null) {
                               setInnerState(() => fileBuktiFoto = image);
                             }
