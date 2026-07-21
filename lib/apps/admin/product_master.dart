@@ -390,24 +390,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return "Rp$hasilFormat";
   }
 
-// 🎯 HUBUNGKAN KE HALAMAN REQUEST ORDER MILIK BOS NATAN
-  void _bukaRequestOrder(dynamic item) {
-    final dataBarang = {
-      'nama': item['nama'],
-      'kategori': item['kategori'],
-      'sub_kategori': item['sub_kategori'],
-      'barcode': item['barcode'],
-      'harga_modal': item['harga_modal'],
-    };
-
-    // 🎯 FIX: Cetak ke console log biar variabelnya terpakai & lolos sensor compiler
-    debugPrint("Log Request Order Cabang: $dataBarang");
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text("🛒 Membuka Request Order untuk: ${item['nama']}"),
-      backgroundColor: Colors.orangeAccent,
-    ));
-  }
+  // Request Order hanya lewat menu Logistik (bukan pintasan Master Data).
 
   // 2. FUNGSI POP-UP DETAIL KARTU PRODUK DAN PRATINJAU QR CODE BARCODE
   void showProductDetail(dynamic item) {
@@ -1430,8 +1413,6 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   onSelected: (action) {
                                     if (action == 'detail') {
                                       showProductDetail(item);
-                                    } else if (action == 'order') {
-                                      _bukaRequestOrder(item);
                                     }
                                   },
                                   itemBuilder: (_) => [
@@ -1449,19 +1430,6 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                         ],
                                       ),
                                     ),
-                                    if (!isCanEdit)
-                                      const PopupMenuItem(
-                                        value: 'order',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.shopping_basket_rounded,
-                                                color: Colors.orangeAccent,
-                                                size: 18),
-                                            SizedBox(width: 8),
-                                            Text('Minta Stok'),
-                                          ],
-                                        ),
-                                      ),
                                   ],
                                 )
                               : Row(
@@ -1488,17 +1456,6 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   icon: const Icon(Icons.qr_code_2_rounded,
                                       color: Colors.blueAccent, size: 20),
                                   onPressed: () => showProductDetail(item)),
-                              if (!isCanEdit)
-                                IconButton(
-                                  iconSize: 20,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 36, minHeight: 36),
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.shopping_basket_rounded,
-                                      color: Colors.orangeAccent, size: 20),
-                                  tooltip: "Minta Stok",
-                                  onPressed: () => _bukaRequestOrder(item),
-                                ),
                             ],
                           ),
                           // 🎯 REVISI KLIK: Jika dia admin pusat buka form edit, jika dia cabang buka pop-up detail produk!

@@ -79,6 +79,15 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   bool get _showInfraBanner =>
       _salinanSchemaMissing || _historySchemaMissing;
 
+  bool get _isPusatExportAllowed {
+    final toko = (widget.profile['toko_id'] ?? '').toString();
+    final role = (widget.profile['role'] ?? '').toString();
+    return toko == 'PUSAT' ||
+        toko == 'CABANG-PUSAT' ||
+        role == 'owner' ||
+        role == 'admin_pusat';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +97,16 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
     // Jangan setState dari initState (sync path _loadHistory dulu error di debug).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (!_isPusatExportAllowed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('export_pusat_only'.tr()),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+        Navigator.pop(context);
+        return;
+      }
       _bootstrap();
     });
   }

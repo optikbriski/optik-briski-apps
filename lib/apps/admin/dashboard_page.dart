@@ -11,9 +11,7 @@ import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
 import 'riwayat_transaksi_page.dart';
-import 'request_order_page.dart';
 import 'invoice_config_page.dart';
-import 'attendance_monitor_page.dart';
 import 'attendance_qr_page.dart';
 import 'jadwal_kerja_page.dart';
 import 'monthly_export_page.dart';
@@ -128,7 +126,11 @@ class _DashboardPageState extends State<DashboardPage> {
       if ((profile['role'] ?? '').toString().trim().isEmpty) {
         throw 'training_err_no_admin_profile'.tr();
       }
-      await TrainingMode.instance.enter(profile);
+      // Premium enter: ≥2s loading overlay while sandbox is prepared.
+      await TrainingModeDialogs.runEnterWithLoading(
+        context,
+        () => TrainingMode.instance.enter(profile),
+      );
       if (!mounted) return;
       _snack('training_msg_entered'.tr(), const Color(0xFFB45309));
       setState(() {});
@@ -292,8 +294,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisSpacing: 12,
                         childAspectRatio: ratio,
                         children: [
+                          // Manajemen Karyawan (+ monitor absensi di dalamnya)
                           if (!training &&
-                              widget.profile['toko_id'] == 'PUSAT')
+                              (widget.profile['toko_id'] == 'PUSAT' ||
+                                  widget.profile['toko_id'] ==
+                                      'CABANG-PUSAT' ||
+                                  widget.profile['role'] == 'owner' ||
+                                  widget.profile['role'] == 'admin_pusat' ||
+                                  widget.profile['role'] == 'admin_toko'))
                             _menuCard(
                               context,
                               "dash_menu_management".tr(),
@@ -309,31 +317,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                     cabangAdmin: widget.profile['toko_id']
                                             ?.toString() ??
                                         '',
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training)
-                            _menuCard(
-                              context,
-                              "hr_tab_absen".tr(),
-                              Icons.face_retouching_natural_rounded,
-                              Colors.purpleAccent,
-                              () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AttendanceMonitorPage(
                                     profile: widget.profile,
                                   ),
                                 ),
                               ),
                             ),
 
+                          // Satu pintu Absen: QR toko → karyawan scan → face di APK
                           if (!training)
                             _menuCard(
                               context,
-                              'dash_menu_attendance_qr'.tr(),
+                              'dash_menu_absen'.tr(),
                               Icons.qr_code_2_rounded,
                               Colors.deepPurpleAccent,
                               () => Navigator.push(
@@ -383,22 +377,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Live: separate RO tile. Training: RO via Logistics hub.
-                          if (!training)
-                            _menuCard(
-                              context,
-                              "Request Order",
-                              Icons.local_shipping_rounded,
-                              Colors.orangeAccent,
-                              () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (c) => RequestOrderPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
+                          // Request Order: only via Logistics hub (not a dashboard tile).
 
                           if (TrainingCurriculum.allows('history_dp'))
                             _menuCard(
@@ -493,7 +472,13 @@ class _DashboardPageState extends State<DashboardPage> {
                               },
                             ),
 
-                          if (!training)
+                          // PDF export: pusat / owner only (bukan cabang).
+                          if (!training &&
+                              (widget.profile['toko_id'] == 'PUSAT' ||
+                                  widget.profile['toko_id'] ==
+                                      'CABANG-PUSAT' ||
+                                  widget.profile['role'] == 'owner' ||
+                                  widget.profile['role'] == 'admin_pusat'))
                             _menuCard(
                               context,
                               'dash_menu_export'.tr(),

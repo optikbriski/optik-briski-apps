@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
+import '../apps/admin/attendance_monitor_page.dart';
 import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
@@ -10,10 +11,14 @@ class AdminApprovalPage extends StatefulWidget {
   final String roleAdmin;
   final String cabangAdmin;
 
+  /// Used for attendance monitor (toko/role scope).
+  final Map<String, dynamic>? profile;
+
   const AdminApprovalPage({
     super.key,
     this.roleAdmin = '',
     this.cabangAdmin = '',
+    this.profile,
   });
 
   @override
@@ -636,6 +641,26 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             ],
           ),
           actions: [
+            TextButton.icon(
+              onPressed: () {
+                final profile = widget.profile ??
+                    <String, dynamic>{
+                      'role': widget.roleAdmin,
+                      'toko_id': widget.cabangAdmin,
+                    };
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AttendanceMonitorPage(profile: profile),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.fact_check_rounded, size: 18),
+              label: Text('appr_monitor_absensi'.tr()),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.purpleAccent,
+              ),
+            ),
             IconButton(
               tooltip: "appr_tooltip_refresh".tr(),
               icon: const Icon(Icons.refresh_rounded, color: Colors.white),

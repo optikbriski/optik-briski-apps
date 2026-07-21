@@ -137,7 +137,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        title: Text('attendance_qr_title'.tr()),
+        title: Text('dash_menu_absen'.tr()),
         backgroundColor: const Color(0xFF0F172A),
         actions: [
           IconButton(
@@ -156,15 +156,25 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
               child: Column(
                 children: [
                   Text(
+                    'dash_absen_flow_hint'.tr(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      height: 1.45,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
                     'attendance_qr_hint'.tr(namedArgs: {
                       'toko': _tokoId ?? '-',
                       'detik': '${AttendanceConfig.qrTtlSeconds}',
                     }),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: Colors.white70,
-                      height: 1.45,
-                      fontSize: 13,
+                      color: Colors.white54,
+                      height: 1.4,
+                      fontSize: 12,
                     ),
                   ),
                   if (TrainingMode.instance.isActive) ...[
