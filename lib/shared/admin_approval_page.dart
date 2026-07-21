@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
+import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
 
@@ -25,11 +26,20 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   List<dynamic> _listKaryawanPending = [];
   bool _isLoading = true;
 
+  static const _pendingStatuses = [
+    'Pending',
+    'Menunggu OTP',
+    'Menunggu Persetujuan',
+  ];
+
   // Cek apakah admin pusat atau owner agar bisa memantau seluruh cabang
-  bool get _isPusat =>
-      widget.cabangAdmin == 'PUSAT' ||
-      widget.roleAdmin == 'owner' ||
-      widget.roleAdmin == 'admin_pusat';
+  bool get _isPusat {
+    final cabang = widget.cabangAdmin.toUpperCase();
+    return cabang == 'PUSAT' ||
+        cabang == 'CABANG-PUSAT' ||
+        widget.roleAdmin == 'owner' ||
+        widget.roleAdmin == 'admin_pusat';
+  }
 
   @override
   void initState() {
@@ -47,7 +57,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
       var query = supabase
           .from('karyawan')
           .select()
-          .inFilter('status_approval', ['Aktif', 'Pending', 'Menunggu OTP']);
+          .inFilter('status_approval', ['Aktif', ..._pendingStatuses]);
 
       if (!_isPusat && widget.cabangAdmin.isNotEmpty) {
         query = query.eq('toko_id', widget.cabangAdmin);
@@ -62,8 +72,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 
           _listKaryawanPending = data
               .where((e) =>
-                  e['status_approval'] == 'Pending' ||
-                  e['status_approval'] == 'Menunggu OTP')
+                  _pendingStatuses.contains(e['status_approval']?.toString()))
               .toList();
 
           _isLoading = false;
@@ -76,48 +85,6 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("${'appr_err_umum'.tr()}$e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // 2. FUNGSI EKSEKUSI DATABASE
-  Future<void> _prosesPendaftaran(
-      String idKaryawan, String statusBaru, String nama) async {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text("appr_memproses".tr(args: [nama])),
-      backgroundColor: Colors.blueAccent,
-    ));
-
-    try {
-      await supabase
-          .from('karyawan')
-          .update({'status_approval': statusBaru}).eq('id', idKaryawan);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              statusBaru == 'Aktif'
-                  ? "appr_sukses_setuju".tr(args: [nama])
-                  : "appr_sukses_tolak".tr(args: [nama]),
-            ),
-            backgroundColor:
-                statusBaru == 'Aktif' ? Colors.green : Colors.redAccent,
-          ),
-        );
-        _tarikDataKaryawan();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("${'appr_gagal'.tr()}$e"),
             backgroundColor: Colors.red,
           ),
         );
@@ -158,223 +125,159 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // UI PREMIUM & RESPONSIVE POP-UP
+  // UI PREMIUM & RESPONSIVE POP-UP (tanpa Flexible di scroll — hindari crash)
   void _tampilkanDetailKaryawan(Map<String, dynamic> data) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: R.dialogMaxWidth(context, 950),
-            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
-          ),
-          child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+      builder: (ctx) {
+        final maxH = MediaQuery.sizeOf(ctx).height * 0.9;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: R.dialogMaxWidth(ctx, 950),
+              maxHeight: maxH,
+            ),
+            child: Material(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(20),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.badge_rounded,
-                        color: Colors.blueAccent),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        "appr_detail_title".tr(),
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded,
-                          color: Colors.redAccent),
-                      onPressed: () => Navigator.pop(context),
-                    )
-                  ],
-                ),
-                const SizedBox(height: 25),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final bool isMobile = constraints.maxWidth < 750;
-
-                    return Flex(
-                      direction: isMobile ? Axis.vertical : Axis.horizontal,
-                      crossAxisAlignment: isMobile
-                          ? CrossAxisAlignment.center
-                          : CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        _buildVirtualIDCard(data),
-                        SizedBox(
-                            width: isMobile ? 0 : 40,
-                            height: isMobile ? 30 : 0),
-                        Flexible(
-                          fit: isMobile ? FlexFit.loose : FlexFit.tight,
-                          child: SizedBox(
-                            width: isMobile ? double.infinity : 550,
-                            child: Column(
-                              children: [
-                                if (isMobile) ...[
-                                  _buildDataSection("hr_data_pribadi".tr(), [
-                                    _buildInfoRow("profil_label_nik".tr(),
-                                        data['nik'] ?? '-'),
-                                    _buildInfoRow("appr_email".tr(),
-                                        data['email'] ?? '-'),
-                                    _buildInfoRow("appr_nomor_wa".tr(),
-                                        data['wa'] ?? '-',
-                                        valColor: Colors.greenAccent),
-                                    _buildInfoRow("appr_gender".tr(),
-                                        data['gender'] ?? '-'),
-                                    _buildInfoRow(
-                                        "profil_label_umur".tr(),
-                                        "appr_tahun".tr(args: [
-                                          (data['umur'] ?? '-').toString()
-                                        ])),
-                                    _buildInfoRow("appr_alamat".tr(),
-                                        data['alamat_lengkap'] ?? '-'),
-                                  ]),
-                                  const SizedBox(height: 16),
-                                  _buildDataSection("hr_kepegawaian".tr(), [
-                                    _buildInfoRow(
-                                        "appr_tgl_mulai".tr(),
-                                        data['tanggal_mulai'] != null
-                                            ? data['tanggal_mulai']
-                                                .toString()
-                                                .split('T')[0]
-                                            : '-'),
-                                    if (_isPusat)
-                                      _buildInfoRow(
-                                          "appr_pin_absensi".tr(),
-                                          data['pin_absensi']?.toString() ??
-                                              '-',
-                                          valColor: Colors.redAccent),
-                                    _buildInfoRow("appr_status".tr(),
-                                        data['status_approval'] ?? '-',
-                                        valColor: Colors.greenAccent),
-                                  ]),
-                                  const SizedBox(height: 16),
-                                  _buildDataSection("appr_data_payroll".tr(), [
-                                    _buildInfoRow("hr_reg_bank".tr(),
-                                        data['nama_bank'] ?? 'BCA'),
-                                    _buildInfoRow("appr_no_rekening".tr(),
-                                        data['no_rekening'] ?? '-',
-                                        valColor: Colors.blueAccent),
-                                  ]),
-                                  const SizedBox(height: 16),
-                                  _buildDataSection("hr_kontak_darurat".tr(), [
-                                    _buildInfoRow("appr_nama_kontak".tr(),
-                                        data['darurat_nama'] ?? '-'),
-                                    if (_isPusat)
-                                      _buildInfoRow(
-                                          "hr_reg_wa_darurat".tr(),
-                                          data['darurat_wa'] ?? '-',
-                                          valColor: Colors.orangeAccent),
-                                  ]),
-                                ] else ...[
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: _buildDataSection(
-                                          "hr_data_pribadi".tr(), [
-                                        _buildInfoRow("profil_label_nik".tr(),
-                                            data['nik'] ?? '-'),
-                                        _buildInfoRow("appr_email".tr(),
-                                            data['email'] ?? '-'),
-                                        _buildInfoRow("appr_nomor_wa".tr(),
-                                            data['wa'] ?? '-',
-                                            valColor: Colors.greenAccent),
-                                        _buildInfoRow("appr_gender".tr(),
-                                            data['gender'] ?? '-'),
-                                        _buildInfoRow(
-                                            "profil_label_umur".tr(),
-                                            "appr_tahun".tr(args: [
-                                              (data['umur'] ?? '-').toString()
-                                            ])),
-                                        _buildInfoRow("appr_alamat".tr(),
-                                            data['alamat_lengkap'] ?? '-'),
-                                      ]),
-                                    ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: _buildDataSection(
-                                          "hr_kepegawaian".tr(), [
-                                        _buildInfoRow(
-                                            "appr_tgl_mulai".tr(),
-                                            data['tanggal_mulai'] != null
-                                                ? data['tanggal_mulai']
-                                                    .toString()
-                                                    .split('T')[0]
-                                                : '-'),
-                                        _isPusat
-                                            ? _buildInfoRow(
-                                                "appr_pin_absensi".tr(),
-                                                data['pin_absensi']
-                                                        ?.toString() ??
-                                                    '-',
-                                                valColor: Colors.redAccent)
-                                            : const SizedBox(),
-                                        _buildInfoRow("appr_status".tr(),
-                                            data['status_approval'] ?? '-',
-                                            valColor: Colors.greenAccent),
-                                      ]),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: _buildDataSection(
-                                          "appr_data_payroll".tr(), [
-                                        _buildInfoRow("hr_reg_bank".tr(),
-                                            data['nama_bank'] ?? 'BCA'),
-                                        _buildInfoRow("appr_no_rekening".tr(),
-                                            data['no_rekening'] ?? '-',
-                                            valColor: Colors.blueAccent),
-                                      ]),
-                                    ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: _buildDataSection(
-                                          "hr_kontak_darurat".tr(), [
-                                        _buildInfoRow("appr_nama_kontak".tr(),
-                                            data['darurat_nama'] ?? '-'),
-                                        _isPusat
-                                            ? _buildInfoRow(
-                                                "hr_reg_wa_darurat".tr(),
-                                                data['darurat_wa'] ?? '-',
-                                                valColor: Colors.orangeAccent)
-                                            : const SizedBox(),
-                                      ]),
-                                    ),
-                                  ],
-                                ),
-                                ],
-                              ],
-                            ),
+                        const Icon(Icons.badge_rounded,
+                            color: Colors.blueAccent),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            "appr_detail_title".tr(),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold),
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded,
+                              color: Colors.redAccent),
+                          onPressed: () => Navigator.pop(ctx),
                         )
                       ],
-                    );
-                  },
-                )
-              ],
+                    ),
+                    const SizedBox(height: 25),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobile = constraints.maxWidth < 750;
+                        final detailBlocks = _buildDetailDataBlocks(data, isMobile);
+
+                        if (isMobile) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildVirtualIDCard(data),
+                              const SizedBox(height: 30),
+                              detailBlocks,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildVirtualIDCard(data),
+                            const SizedBox(width: 40),
+                            Expanded(child: detailBlocks),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailDataBlocks(Map<String, dynamic> data, bool isMobile) {
+    final pribadi = _buildDataSection("hr_data_pribadi".tr(), [
+      _buildInfoRow("profil_label_nik".tr(), data['nik'] ?? '-'),
+      _buildInfoRow("appr_email".tr(), data['email'] ?? '-'),
+      _buildInfoRow("appr_nomor_wa".tr(), data['wa'] ?? '-',
+          valColor: Colors.greenAccent),
+      _buildInfoRow("appr_gender".tr(), data['gender'] ?? '-'),
+      _buildInfoRow(
+          "profil_label_umur".tr(),
+          "appr_tahun".tr(args: [(data['umur'] ?? '-').toString()])),
+      _buildInfoRow("appr_alamat".tr(), data['alamat_lengkap'] ?? '-'),
+    ]);
+    final kepegawaian = _buildDataSection("hr_kepegawaian".tr(), [
+      _buildInfoRow(
+          "appr_tgl_mulai".tr(),
+          data['tanggal_mulai'] != null
+              ? data['tanggal_mulai'].toString().split('T')[0]
+              : '-'),
+      if (_isPusat)
+        _buildInfoRow("appr_pin_absensi".tr(),
+            data['pin_absensi']?.toString() ?? '-',
+            valColor: Colors.redAccent),
+      _buildInfoRow("appr_status".tr(), data['status_approval'] ?? '-',
+          valColor: Colors.greenAccent),
+    ]);
+    final payroll = _buildDataSection("appr_data_payroll".tr(), [
+      _buildInfoRow("hr_reg_bank".tr(), data['nama_bank'] ?? 'BCA'),
+      _buildInfoRow("appr_no_rekening".tr(), data['no_rekening'] ?? '-',
+          valColor: Colors.blueAccent),
+    ]);
+    final darurat = _buildDataSection("hr_kontak_darurat".tr(), [
+      _buildInfoRow("appr_nama_kontak".tr(), data['darurat_nama'] ?? '-'),
+      if (_isPusat)
+        _buildInfoRow("hr_reg_wa_darurat".tr(), data['darurat_wa'] ?? '-',
+            valColor: Colors.orangeAccent),
+    ]);
+
+    if (isMobile) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pribadi,
+          const SizedBox(height: 16),
+          kepegawaian,
+          const SizedBox(height: 16),
+          payroll,
+          const SizedBox(height: 16),
+          darurat,
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: pribadi),
+            const SizedBox(width: 20),
+            Expanded(child: kepegawaian),
+          ],
         ),
-      ),
-    ),
+        const SizedBox(height: 20),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: payroll),
+            const SizedBox(width: 20),
+            Expanded(child: darurat),
+          ],
+        ),
+      ],
     );
   }
 
@@ -480,7 +383,10 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               width: 100,
               child: BarcodeWidget(
                 barcode: Barcode.qrCode(),
-                data: data['nik'] ?? '000000',
+                data: () {
+                  final nik = data['nik']?.toString().trim() ?? '';
+                  return nik.isEmpty ? '0000000000000000' : nik;
+                }(),
                 color: Colors.black,
                 drawText: false,
               ),
@@ -546,136 +452,46 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     );
   }
 
-  // 3. POP-UP KONFIRMASI SETUJU
-  void _tampilkanDialogSetuju(String id, String nama) {
-    showDialog(
-      context: context,
-      builder: (context) => R.constrainedDialog(
-        context: context,
-        child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "appr_tanya_setuju".tr(),
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+  /// Satu pintu: buka HALAMAN DETAIL → pilih data valid → baru Tolak/Approve.
+  Future<void> _bukaReviewVerifikasi(Map karyawan) async {
+    try {
+      final data = <String, dynamic>{
+        for (final e in karyawan.entries) e.key.toString(): e.value,
+      };
+      final result = await Navigator.push<KtpReviewResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KtpApprovalReviewPage(karyawan: data),
         ),
+      );
+      if (!mounted || result == null || result == KtpReviewResult.cancelled) {
+        return;
+      }
+      final nama = data['nama']?.toString() ?? '-';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          "appr_desc_setuju".tr(args: [nama]),
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
+          result == KtpReviewResult.approved
+              ? "appr_sukses_setuju".tr(args: [nama])
+              : "appr_sukses_tolak".tr(args: [nama]),
         ),
-        actionsPadding: const EdgeInsets.only(right: 16, bottom: 16),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("appr_btn_batal".tr(),
-                style: const TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8))),
-            onPressed: () {
-              Navigator.pop(context);
-              _prosesPendaftaran(id, 'Aktif', nama);
-            },
-            child: Text(
-              "appr_btn_ya_setuju".tr(),
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          )
-        ],
-      ),
-      ),
-    );
+        backgroundColor:
+            result == KtpReviewResult.approved ? Colors.green : Colors.redAccent,
+      ));
+      await _tarikDataKaryawan();
+    } catch (e, st) {
+      debugPrint('Review verifikasi error: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal buka detail verifikasi: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 
-  // 4. POP-UP KONFIRMASI TOLAK (PAKAI ALASAN)
-  void _tampilkanDialogTolak(String id, String nama) {
-    TextEditingController alasanCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => R.constrainedDialog(
-        context: context,
-        child: AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "appr_tanya_tolak".tr(),
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "appr_desc_tolak".tr(args: [nama]),
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: alasanCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: "appr_hint_tolak".tr(),
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              maxLines: 3,
-            )
-          ],
-        ),
-        actionsPadding: const EdgeInsets.only(right: 16, bottom: 16),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("appr_btn_batal".tr(),
-                style: const TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8))),
-            onPressed: () {
-              if (alasanCtrl.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text("appr_err_tolak".tr()),
-                  backgroundColor: Colors.orange,
-                ));
-                return;
-              }
-              Navigator.pop(context);
-              _prosesPendaftaran(
-                  id, 'Ditolak: ${alasanCtrl.text.trim()}', nama);
-            },
-            child: Text(
-              "appr_btn_tolak_kirim".tr(),
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          )
-        ],
-      ),
-      ),
-    );
-  }
-
-  // 5. WIDGET CARD KARYAWAN PENDING
+  // 5. WIDGET CARD KARYAWAN PENDING — tanpa Tolak/Approve di luar
   Widget _buildCardKaryawanPending(Map<String, dynamic> k) {
-    final String id = k['id'] ?? '';
-    final String nama = k['nama'] ?? '-';
+    final String nama = k['nama']?.toString() ?? '-';
+    final hasKtp = (k['ktp_photo_url']?.toString() ?? '').isNotEmpty;
 
     return Card(
       elevation: 0,
@@ -685,110 +501,81 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: Colors.amber.withOpacity(0.3), width: 1),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(
-                  backgroundColor: Colors.amber,
-                  child:
-                      Icon(Icons.person_outline_rounded, color: Colors.black),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(nama,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontSize: 16)),
-                      const SizedBox(height: 4),
-                      Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 13)),
-                    ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: Colors.amber,
+                    child: Icon(Icons.person_outline_rounded,
+                        color: Colors.black),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(nama,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 16)),
+                        const SizedBox(height: 4),
+                        Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13)),
+                        Text(
+                          hasKtp
+                              ? 'Ada foto KTP + jejak OCR'
+                              : 'Belum ada foto KTP',
+                          style: TextStyle(
+                            color:
+                                hasKtp ? Colors.greenAccent : Colors.orange,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded,
+                      color: Colors.blueAccent),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () =>
+                      _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+                  icon: const Icon(Icons.fact_check_rounded, size: 18),
+                  label: const Text(
+                    'Buka detail & putuskan',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.info_outline_rounded,
-                      color: Colors.blueAccent),
-                  onPressed: () => _tampilkanDetailKaryawan(k),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            R.isNarrow(context)
-                ? Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () => _tampilkanDialogTolak(id, nama),
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          label: Text("appr_btn_tolak".tr()),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () => _tampilkanDialogSetuju(id, nama),
-                          icon: const Icon(Icons.check_rounded, size: 18),
-                          label: Text("appr_btn_setuju".tr()),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () => _tampilkanDialogTolak(id, nama),
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          label: Text("appr_btn_tolak".tr()),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () => _tampilkanDialogSetuju(id, nama),
-                          icon: const Icon(Icons.check_rounded, size: 18),
-                          label: Text("appr_btn_setuju".tr()),
-                        ),
-                      ),
-                    ],
-                  )
-          ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Tolak / Approve hanya setelah review data di dalam detail.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
+          ),
         ),
       ),
     );
