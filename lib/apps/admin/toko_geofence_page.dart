@@ -1,9 +1,11 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
+import 'dart:async';
 import 'dart:math' show Point;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -30,18 +32,35 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   final _mapCtrl = MapController();
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
+  final _coordsCtrl = TextEditingController();
+  final _coordsFocus = FocusNode();
   final _radiusCtrl = TextEditingController(text: '100');
   final _radiusFocus = FocusNode();
 
   bool _loading = true;
   bool _saving = false;
   bool _searching = false;
+  bool _reversing = false;
+  bool _satellite = false;
   String? _error;
   String? _searchFeedback;
+  String? _coordsFeedback;
+  String? _reverseLabel;
   String? _radiusError;
   List<Map<String, dynamic>> _tokoList = [];
   String? _selectedTokoId;
   List<OsmAddressHit> _searchHits = [];
+
+  /// Pin sementara dari pencarian / tempel koordinat (bukan geofence).
+  LatLng? _previewTarget;
+  LatLng? _reversePoint;
+
+  Timer? _searchDebounce;
+  Timer? _reverseDebounce;
+  http.Client? _searchClient;
+  http.Client? _reverseClient;
+  int _searchGen = 0;
+  int _reverseGen = 0;
 
   _FenceDrawMode _mode = _FenceDrawMode.circle;
   double? _lat;
@@ -52,9 +71,16 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   bool _draggingMarker = false;
 
   static const _defaultCenter = LatLng(-6.9175, 107.6191);
-  static const _searchZoom = 17.0;
+  static const _searchZoom = 18.5;
   static const _minRadius = 10;
   static const _maxRadius = 500;
+  static const _autocompleteMinChars = 3;
+  static const _autocompleteDebounce = Duration(milliseconds: 350);
+  static const _reverseDebounceMs = Duration(milliseconds: 450);
+  static const _osmTiles =
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const _esriSatelliteTiles =
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
   bool get _isPusat {
     final t = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
@@ -74,16 +100,78 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _reverseDebounce?.cancel();
+    _cancelInFlightSearch();
+    _cancelInFlightReverse();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _coordsCtrl.dispose();
+    _coordsFocus.dispose();
     _radiusCtrl.dispose();
     _radiusFocus.dispose();
     _mapCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _searchAddress() async {
-    final q = _searchCtrl.text.trim();
+  LatLng get _mapBias {
+    try {
+      return _mapCtrl.camera.center;
+    } catch (_) {
+      if (_lat != null && _lng != null) return LatLng(_lat!, _lng!);
+      return _defaultCenter;
+    }
+  }
+
+  void _cancelInFlightSearch() {
+    _searchClient?.close();
+    _searchClient = null;
+  }
+
+  void _cancelInFlightReverse() {
+    _reverseClient?.close();
+    _reverseClient = null;
+  }
+
+  void _invalidateSearch() {
+    _cancelInFlightSearch();
+    _searchGen++;
+  }
+
+  void _invalidateReverse() {
+    _reverseDebounce?.cancel();
+    _cancelInFlightReverse();
+    _reverseGen++;
+  }
+
+  void _onSearchTextChanged(String value) {
+    // Rebuild agar tombol clear muncul/hilang.
+    setState(() {});
+    _searchDebounce?.cancel();
+
+    final q = value.trim();
+    if (q.length < _autocompleteMinChars) {
+      _invalidateSearch();
+      setState(() {
+        _searching = false;
+        _searchHits = [];
+        if (q.isEmpty) _searchFeedback = null;
+      });
+      return;
+    }
+
+    _searchDebounce = Timer(_autocompleteDebounce, () {
+      if (!mounted) return;
+      unawaited(_fetchAddressSuggestions(q, commitFirst: false));
+    });
+  }
+
+  /// [commitFirst]=true: Enter / ikon cari — pindah ke hasil pertama.
+  Future<void> _fetchAddressSuggestions(
+    String query, {
+    required bool commitFirst,
+  }) async {
+    final q = query.trim();
     if (q.isEmpty) {
       setState(() {
         _searchHits = [];
@@ -91,62 +179,211 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       });
       return;
     }
-    if (_searching) return;
+
+    _cancelInFlightSearch();
+    final client = http.Client();
+    final gen = ++_searchGen;
+    _searchClient = client;
 
     setState(() {
       _searching = true;
       _searchFeedback = null;
-      _searchHits = [];
+      if (commitFirst) _searchHits = [];
     });
-    _searchFocus.unfocus();
+    if (commitFirst) _searchFocus.unfocus();
 
     try {
       final hits = await OsmAddressSearch.search(
         q,
-        bias: _defaultCenter,
-        limit: 5,
+        bias: _mapBias,
+        limit: 8,
+        client: client,
       );
-      if (!mounted) return;
+      if (!mounted || gen != _searchGen) return;
+
       if (hits.isEmpty) {
         setState(() {
           _searching = false;
+          _searchHits = [];
           _searchFeedback = 'Alamat tidak ditemukan. Coba kata kunci lain.';
         });
         return;
       }
+
       setState(() {
         _searching = false;
         _searchHits = hits;
         _searchFeedback = null;
       });
-      // Hasil pertama langsung dipakai untuk geser peta (tanpa ubah geofence).
-      _goToSearchHit(hits.first, keepResults: hits.length > 1);
+
+      if (commitFirst) {
+        // Hasil pertama langsung dipakai untuk geser peta (tanpa ubah geofence).
+        _goToSearchHit(hits.first, keepResults: hits.length > 1);
+      }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _searchGen) return;
+      // Client ditutup saat keystroke baru / dispose — bukan error UI.
+      if (e is http.ClientException) return;
       setState(() {
         _searching = false;
         _searchFeedback = 'Gagal mencari alamat. Coba lagi.';
       });
+    } finally {
+      if (identical(_searchClient, client)) {
+        client.close();
+        _searchClient = null;
+      }
     }
   }
 
+  Future<void> _searchAddress() async {
+    _searchDebounce?.cancel();
+    await _fetchAddressSuggestions(
+      _searchCtrl.text,
+      commitFirst: true,
+    );
+  }
+
   void _goToSearchHit(OsmAddressHit hit, {bool keepResults = false}) {
+    _searchDebounce?.cancel();
+    _invalidateSearch();
     try {
       _mapCtrl.move(hit.point, _searchZoom);
     } catch (_) {}
+    _searchCtrl.value = TextEditingValue(
+      text: hit.displayName,
+      selection: TextSelection.collapsed(offset: hit.displayName.length),
+    );
     setState(() {
+      _searching = false;
+      _previewTarget = hit.point;
       if (!keepResults) _searchHits = [];
       _searchFeedback =
           'Peta dipindah ke lokasi. Ketuk peta untuk set geofence.';
+      _coordsFeedback = null;
     });
+    _scheduleReverse(hit.point, immediate: true);
   }
 
   void _clearSearch() {
+    _searchDebounce?.cancel();
+    _invalidateSearch();
     _searchCtrl.clear();
     setState(() {
+      _searching = false;
       _searchHits = [];
       _searchFeedback = null;
     });
+  }
+
+  void _goToPastedCoords() {
+    final parsed = OsmCoordinatePaste.parse(_coordsCtrl.text);
+    if (parsed == null) {
+      setState(() {
+        _coordsFeedback =
+            'Format tidak dikenali. Contoh: -6.915146, 107.613528';
+      });
+      return;
+    }
+    _coordsFocus.unfocus();
+    final point = parsed.point;
+    try {
+      _mapCtrl.move(point, _searchZoom);
+    } catch (_) {}
+    _coordsCtrl.value = TextEditingValue(
+      text:
+          '${parsed.lat.toStringAsFixed(6)}, ${parsed.lng.toStringAsFixed(6)}',
+      selection: TextSelection.collapsed(
+        offset:
+            '${parsed.lat.toStringAsFixed(6)}, ${parsed.lng.toStringAsFixed(6)}'
+                .length,
+      ),
+    );
+    setState(() {
+      _previewTarget = point;
+      _searchHits = [];
+      _coordsFeedback = 'Koordinat dipasang. Ketuk peta untuk set geofence.';
+      _searchFeedback = null;
+    });
+    _scheduleReverse(point, immediate: true);
+  }
+
+  /// Titik yang ditampilkan di label reverse (preview → pusat / sudut).
+  LatLng? get _activeReversePoint {
+    if (_previewTarget != null) return _previewTarget;
+    if (_mode == _FenceDrawMode.circle && _lat != null && _lng != null) {
+      return LatLng(_lat!, _lng!);
+    }
+    if (_mode == _FenceDrawMode.corners4) {
+      if (_selectedCorner != null &&
+          _selectedCorner! >= 0 &&
+          _selectedCorner! < _corners.length) {
+        return _corners[_selectedCorner!];
+      }
+      if (_lat != null && _lng != null) return LatLng(_lat!, _lng!);
+      if (_corners.isNotEmpty) return _corners.first;
+    }
+    return null;
+  }
+
+  void _scheduleReverse(LatLng point, {bool immediate = false}) {
+    _reverseDebounce?.cancel();
+    _reversePoint = point;
+    if (immediate) {
+      unawaited(_fetchReverseLabel(point));
+      return;
+    }
+    _reverseDebounce = Timer(_reverseDebounceMs, () {
+      if (!mounted) return;
+      unawaited(_fetchReverseLabel(point));
+    });
+  }
+
+  void _refreshReverseForActivePoint({bool immediate = false}) {
+    final p = _activeReversePoint;
+    if (p == null) {
+      _invalidateReverse();
+      setState(() {
+        _reverseLabel = null;
+        _reversePoint = null;
+        _reversing = false;
+      });
+      return;
+    }
+    _scheduleReverse(p, immediate: immediate);
+  }
+
+  Future<void> _fetchReverseLabel(LatLng point) async {
+    _cancelInFlightReverse();
+    final client = http.Client();
+    final gen = ++_reverseGen;
+    _reverseClient = client;
+
+    setState(() {
+      _reversing = true;
+      _reversePoint = point;
+    });
+
+    try {
+      final hit = await OsmAddressSearch.reverse(point, client: client);
+      if (!mounted || gen != _reverseGen) return;
+      setState(() {
+        _reversing = false;
+        _reverseLabel = hit?.displayName;
+      });
+    } catch (e) {
+      if (!mounted || gen != _reverseGen) return;
+      if (e is http.ClientException) return;
+      setState(() {
+        _reversing = false;
+        _reverseLabel = null;
+      });
+    } finally {
+      if (identical(_reverseClient, client)) {
+        client.close();
+        _reverseClient = null;
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -207,6 +444,11 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     setState(() {
       _selectedTokoId = id;
       _selectedCorner = null;
+      _previewTarget = null;
+      _reverseLabel = null;
+      _searchHits = [];
+      _searchFeedback = null;
+      _coordsFeedback = null;
       _corners
         ..clear()
         ..addAll(poly.map((p) => LatLng(p.lat, p.lng)));
@@ -231,6 +473,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       try {
         _mapCtrl.move(cam, _zoomForRadius(_radiusMeters));
       } catch (_) {}
+      _refreshReverseForActivePoint(immediate: true);
     });
   }
 
@@ -308,7 +551,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         _lat = point.latitude;
         _lng = point.longitude;
         _selectedCorner = null;
+        _previewTarget = null;
       });
+      _scheduleReverse(point, immediate: true);
       return;
     }
     if (_corners.length >= 4) {
@@ -320,10 +565,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       return;
     }
     setState(() {
-      _selectedCorner = null;
+      _selectedCorner = _corners.length; // sudut baru yang baru ditambah
+      _previewTarget = null;
       _corners.add(point);
       if (_corners.length >= 3) _syncCentroidFromCorners();
     });
+    _scheduleReverse(point, immediate: true);
   }
 
   void _undoCorner() {
@@ -335,13 +582,16 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         _syncCentroidFromCorners();
       }
     });
+    _refreshReverseForActivePoint(immediate: true);
   }
 
   void _resetCorners() {
     setState(() {
       _corners.clear();
       _selectedCorner = null;
+      _previewTarget = null;
     });
+    _refreshReverseForActivePoint(immediate: true);
   }
 
   void _deleteCorner(int index) {
@@ -353,6 +603,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         _syncCentroidFromCorners();
       }
     });
+    _refreshReverseForActivePoint(immediate: true);
   }
 
   void _beginMarkerDrag() {
@@ -364,10 +615,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     if (!_draggingMarker) return;
     setState(() {
       _draggingMarker = false;
+      _previewTarget = null;
       if (_mode == _FenceDrawMode.corners4 && _corners.length >= 3) {
         _syncCentroidFromCorners();
       }
     });
+    // Debounce: jangan reverse tiap pixel, hanya setelah drag selesai.
+    _refreshReverseForActivePoint();
   }
 
   LatLng? _offsetLatLng(LatLng origin, Offset delta) {
@@ -479,6 +733,19 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
+
+    if (_previewTarget != null) {
+      markers.add(
+        Marker(
+          point: _previewTarget!,
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          child: const _PreviewTargetMarker(),
+        ),
+      );
+    }
+
     if (_mode == _FenceDrawMode.circle && _lat != null && _lng != null) {
       markers.add(
         Marker(
@@ -506,9 +773,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           height: selected ? 48 : 40,
           alignment: Alignment.center,
           child: _DraggableMapMarker(
-            onTap: () => setState(() {
-              _selectedCorner = selected ? null : i;
-            }),
+            onTap: () {
+              setState(() {
+                _selectedCorner = selected ? null : i;
+                _previewTarget = null;
+              });
+              _refreshReverseForActivePoint(immediate: true);
+            },
             onDragStart: () {
               _beginMarkerDrag();
               setState(() => _selectedCorner = i);
@@ -573,34 +844,27 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 )
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    // Panel kontrol ringkas; peta mengisi sisa tinggi (dominan).
-                    final controlsMaxH =
-                        (constraints.maxHeight * 0.30).clamp(140.0, 260.0);
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            OptikAdminTokens.spaceLg,
-                            OptikAdminTokens.spaceSm,
-                            OptikAdminTokens.spaceLg,
-                            6,
+                    // Tinggi peta generosa (~58vh), halaman di-scroll — tidak dipaksa satu layar.
+                    final mapH =
+                        (constraints.maxHeight * 0.58).clamp(420.0, 560.0);
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        OptikAdminTokens.spaceLg,
+                        OptikAdminTokens.spaceSm,
+                        OptikAdminTokens.spaceLg,
+                        OptikAdminTokens.spaceLg,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          PremiumPanel(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                            borderRadius: OptikAdminTokens.radiusLg,
+                            child: _buildControlsPanel(),
                           ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(maxHeight: controlsMaxH),
-                            child: PremiumPanel(
-                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                              borderRadius: OptikAdminTokens.radiusLg,
-                              child: SingleChildScrollView(
-                                child: _buildControlsPanel(),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: OptikAdminTokens.spaceLg,
-                            ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: mapH,
                             child: PremiumPanel(
                               padding: EdgeInsets.zero,
                               borderRadius: OptikAdminTokens.radiusLg,
@@ -623,8 +887,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                       ),
                                       children: [
                                         TileLayer(
-                                          urlTemplate:
-                                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                          urlTemplate: _satellite
+                                              ? _esriSatelliteTiles
+                                              : _osmTiles,
                                           userAgentPackageName:
                                               'com.optikbriski.admin',
                                           maxZoom: 19,
@@ -690,6 +955,69 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                       right: 10,
                                       child: _buildAddressSearchOverlay(),
                                     ),
+                                    Positioned(
+                                      right: 12,
+                                      bottom: _mode ==
+                                                  _FenceDrawMode.corners4 &&
+                                              _selectedCorner != null
+                                          ? 64
+                                          : 12,
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: OptikAdminTokens.bgMid
+                                                .withOpacity(0.94),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: OptikAdminTokens.lineStrong,
+                                            ),
+                                          ),
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            onTap: () => setState(
+                                              () => _satellite = !_satellite,
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 8,
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    _satellite
+                                                        ? Icons.map_rounded
+                                                        : Icons
+                                                            .satellite_alt_rounded,
+                                                    size: 16,
+                                                    color: OptikAdminTokens
+                                                        .warning,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    _satellite
+                                                        ? 'Peta'
+                                                        : 'Satelit',
+                                                    style: const TextStyle(
+                                                      color: OptikAdminTokens
+                                                          .textSecondary,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                     if (_mode == _FenceDrawMode.corners4 &&
                                         _selectedCorner != null)
                                       Positioned(
@@ -703,22 +1031,15 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               ),
                             ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            OptikAdminTokens.spaceLg,
-                            8,
-                            OptikAdminTokens.spaceLg,
-                            OptikAdminTokens.spaceMd,
-                          ),
-                          child: PremiumPrimaryButton(
+                          const SizedBox(height: 14),
+                          PremiumPrimaryButton(
                             label: 'Simpan geofence',
                             icon: Icons.save_rounded,
                             loading: _saving,
                             onPressed: _saving ? null : _save,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -831,6 +1152,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     _mode = s.first;
                     _selectedCorner = null;
                   });
+                  _refreshReverseForActivePoint(immediate: true);
                 },
               ),
             ),
@@ -1021,9 +1343,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   final p = _corners[i];
                   final selected = _selectedCorner == i;
                   return InkWell(
-                    onTap: () => setState(
-                      () => _selectedCorner = selected ? null : i,
-                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedCorner = selected ? null : i;
+                        _previewTarget = null;
+                      });
+                      _refreshReverseForActivePoint(immediate: true);
+                    },
                     borderRadius: BorderRadius.circular(6),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1140,6 +1466,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   }
 
   Widget _buildAddressSearchOverlay() {
+    final showSuggestions = _searchHits.isNotEmpty;
+    final reversePoint = _reversePoint ?? _activeReversePoint;
+    final coordsLine = reversePoint == null
+        ? null
+        : '${reversePoint.latitude.toStringAsFixed(6)}, '
+            '${reversePoint.longitude.toStringAsFixed(6)}';
+
     return Material(
       color: Colors.transparent,
       child: Column(
@@ -1159,67 +1492,125 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 ),
               ],
             ),
-            child: TextField(
-              controller: _searchCtrl,
-              focusNode: _searchFocus,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _searchAddress(),
-              decoration: InputDecoration(
-                hintText: 'Cari alamat (mis. Braga, Bandung)…',
-                hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
-                  fontSize: 13.5,
-                ),
-                prefixIcon: _searching
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _searchCtrl,
+                  focusNode: _searchFocus,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _searchAddress(),
+                  onChanged: _onSearchTextChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Cari alamat (mis. Jl. Braga No. 1, Bandung)…',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withOpacity(0.4),
+                      fontSize: 13.5,
+                    ),
+                    prefixIcon: _searching
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: OptikAdminTokens.warning,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.search_rounded,
                             color: OptikAdminTokens.warning,
                           ),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchCtrl.text.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Hapus',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: Colors.white54,
+                          ),
+                        IconButton(
+                          tooltip: 'Cari',
+                          onPressed: _searching ? null : _searchAddress,
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                          color: OptikAdminTokens.warning,
                         ),
-                      )
-                    : const Icon(
-                        Icons.search_rounded,
-                        color: OptikAdminTokens.warning,
-                      ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_searchCtrl.text.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Hapus',
-                        onPressed: _searching ? null : _clearSearch,
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        color: Colors.white54,
-                      ),
-                    IconButton(
-                      tooltip: 'Cari',
-                      onPressed: _searching ? null : _searchAddress,
-                      icon: const Icon(Icons.arrow_forward_rounded),
-                      color: OptikAdminTokens.warning,
+                      ],
                     ),
-                  ],
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
                 ),
-                filled: true,
-                fillColor: Colors.transparent,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-              ),
-              onChanged: (_) {
-                // Rebuild agar tombol clear muncul/hilang.
-                setState(() {});
-              },
+                const Divider(height: 1, color: OptikAdminTokens.line),
+                TextField(
+                  controller: _coordsCtrl,
+                  focusNode: _coordsFocus,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  textInputAction: TextInputAction.go,
+                  onSubmitted: (_) => _goToPastedCoords(),
+                  onChanged: (_) {
+                    if (_coordsFeedback != null) {
+                      setState(() => _coordsFeedback = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Tempel koordinat / link Maps…',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withOpacity(0.4),
+                      fontSize: 12.5,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.my_location_rounded,
+                      color: OptikAdminTokens.accentSoft,
+                      size: 20,
+                    ),
+                    suffixIcon: IconButton(
+                      tooltip: 'Pakai koordinat',
+                      onPressed: _goToPastedCoords,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                      color: OptikAdminTokens.accentSoft,
+                    ),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_searchFeedback != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Belum ketemu di pencarian? Buka Google Maps → bagikan/salin '
+            'koordinat → tempel di sini.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.55),
+              fontSize: 10.5,
+              height: 1.25,
+            ),
+          ),
+          if (_searchFeedback != null || _coordsFeedback != null) ...[
             const SizedBox(height: 6),
             DecoratedBox(
               decoration: BoxDecoration(
@@ -1231,7 +1622,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Text(
-                  _searchFeedback!,
+                  _coordsFeedback ?? _searchFeedback!,
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -1241,15 +1632,91 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               ),
             ),
           ],
-          if (_searchHits.length > 1) ...[
+          if (reversePoint != null) ...[
+            const SizedBox(height: 6),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: OptikAdminTokens.panel.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: OptikAdminTokens.line),
+              ),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_reversing)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2, right: 8),
+                        child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: OptikAdminTokens.accentSoft,
+                          ),
+                        ),
+                      )
+                    else
+                      const Padding(
+                        padding: EdgeInsets.only(top: 1, right: 8),
+                        child: Icon(
+                          Icons.place_rounded,
+                          size: 16,
+                          color: OptikAdminTokens.accentSoft,
+                        ),
+                      ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _reversing
+                                ? 'Mencari alamat di titik ini…'
+                                : (_reverseLabel ??
+                                    'Alamat tidak tersedia (tetap pakai koordinat).'),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            coordsLine!,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.45),
+                              fontSize: 11,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (showSuggestions) ...[
             const SizedBox(height: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 180),
+              constraints: const BoxConstraints(maxHeight: 200),
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: OptikAdminTokens.bgMid.withOpacity(0.96),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: OptikAdminTokens.lineStrong),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: ListView.separated(
                   shrinkWrap: true,
@@ -1261,8 +1728,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   ),
                   itemBuilder: (context, i) {
                     final hit = _searchHits[i];
+                    final subtitle = hit.subtitle;
                     return ListTile(
                       dense: true,
+                      isThreeLine: subtitle != null,
                       leading: Icon(
                         i == 0 ? Icons.place_rounded : Icons.place_outlined,
                         color: i == 0
@@ -1271,15 +1740,28 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         size: 20,
                       ),
                       title: Text(
-                        hit.displayName,
+                        hit.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12.5,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                           height: 1.3,
                         ),
                       ),
+                      subtitle: subtitle == null
+                          ? null
+                          : Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.55),
+                                fontSize: 11.5,
+                                height: 1.3,
+                              ),
+                            ),
                       onTap: () => _goToSearchHit(hit),
                     );
                   },
@@ -1388,6 +1870,58 @@ class _CornerMarkerChip extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pin sementara hasil cari alamat / tempel koordinat (belum jadi geofence).
+class _PreviewTargetMarker extends StatelessWidget {
+  const _PreviewTargetMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Target sementara · ketuk peta untuk set geofence di sini',
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: OptikAdminTokens.accentSoft.withOpacity(0.28),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: OptikAdminTokens.accentSoft.withOpacity(0.95),
+                  width: 2,
+                ),
+              ),
+            ),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),
+            // Crosshair tipis.
+            Container(
+              width: 22,
+              height: 1.5,
+              color: Colors.white.withOpacity(0.7),
+            ),
+            Container(
+              width: 1.5,
+              height: 22,
+              color: Colors.white.withOpacity(0.7),
             ),
           ],
         ),
