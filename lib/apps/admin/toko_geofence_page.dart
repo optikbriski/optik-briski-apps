@@ -1,7 +1,8 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:async';
-import 'dart:math' show Point;
+import 'dart:math' show Point, max;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -842,11 +843,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     ),
                   ),
                 )
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Tinggi peta generosa (~58vh), halaman di-scroll — tidak dipaksa satu layar.
-                    final mapH =
-                        (constraints.maxHeight * 0.58).clamp(420.0, 560.0);
+              : Builder(
+                  builder: (context) {
+                    // Peta tinggi tetap (~72vh, min 560) — halaman di-scroll,
+                    // bukan dipaksa muat satu viewport dengan Expanded.
+                    final mapH = max(
+                      560.0,
+                      MediaQuery.sizeOf(context).height * 0.72,
+                    );
                     return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(
                         OptikAdminTokens.spaceLg,
@@ -863,6 +867,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             child: _buildControlsPanel(),
                           ),
                           const SizedBox(height: 12),
+                          // Cari / tempel / reverse di atas peta — tidak menutupi area peta.
+                          _buildLocationToolsPanel(),
+                          const SizedBox(height: 12),
                           SizedBox(
                             height: mapH,
                             child: PremiumPanel(
@@ -872,161 +879,180 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                 borderRadius: BorderRadius.circular(
                                   OptikAdminTokens.radiusLg,
                                 ),
-                                child: Stack(
-                                  children: [
-                                    FlutterMap(
-                                      mapController: _mapCtrl,
-                                      options: MapOptions(
-                                        initialCenter: center,
-                                        initialZoom:
-                                            _zoomForRadius(_radiusMeters),
-                                        onTap: _onMapTap,
-                                        interactionOptions: InteractionOptions(
-                                          flags: mapFlags,
-                                        ),
-                                      ),
-                                      children: [
-                                        TileLayer(
-                                          urlTemplate: _satellite
-                                              ? _esriSatelliteTiles
-                                              : _osmTiles,
-                                          userAgentPackageName:
-                                              'com.optikbriski.admin',
-                                          maxZoom: 19,
-                                        ),
-                                        if (_mode == _FenceDrawMode.circle &&
-                                            _lat != null &&
-                                            _lng != null)
-                                          CircleLayer(
-                                            circles: [
-                                              CircleMarker(
-                                                point: LatLng(_lat!, _lng!),
-                                                radius:
-                                                    _radiusMeters.toDouble(),
-                                                useRadiusInMeter: true,
-                                                color: OptikAdminTokens.accent
-                                                    .withOpacity(0.22),
-                                                borderColor:
-                                                    OptikAdminTokens.accentSoft,
-                                                borderStrokeWidth: 2.5,
-                                              ),
-                                            ],
+                                // Serap scroll wheel di atas peta agar halaman
+                                // tidak ikut bergeser saat pan/zoom di map.
+                                child: Listener(
+                                  onPointerSignal: (event) {
+                                    if (event is PointerScrollEvent) {
+                                      GestureBinding.instance
+                                          .pointerSignalResolver
+                                          .register(event, (_) {});
+                                    }
+                                  },
+                                  child: Stack(
+                                    children: [
+                                      FlutterMap(
+                                        mapController: _mapCtrl,
+                                        options: MapOptions(
+                                          initialCenter: center,
+                                          initialZoom:
+                                              _zoomForRadius(_radiusMeters),
+                                          onTap: _onMapTap,
+                                          interactionOptions:
+                                              InteractionOptions(
+                                            flags: mapFlags,
                                           ),
-                                        if (_mode ==
-                                                _FenceDrawMode.corners4 &&
-                                            _corners.length >= 2)
-                                          PolylineLayer(
-                                            polylines: [
-                                              Polyline(
-                                                points: [
-                                                  ..._corners,
-                                                  if (_corners.length >= 3)
-                                                    _corners.first,
-                                                ],
-                                                color:
-                                                    OptikAdminTokens.accentSoft,
-                                                strokeWidth: 2.5,
-                                              ),
-                                            ],
+                                        ),
+                                        children: [
+                                          TileLayer(
+                                            urlTemplate: _satellite
+                                                ? _esriSatelliteTiles
+                                                : _osmTiles,
+                                            userAgentPackageName:
+                                                'com.optikbriski.admin',
+                                            maxZoom: 19,
                                           ),
-                                        if (_mode ==
-                                                _FenceDrawMode.corners4 &&
-                                            _corners.length >= 3)
-                                          PolygonLayer(
-                                            polygons: [
-                                              Polygon(
-                                                points: List<LatLng>.from(
-                                                  _corners,
+                                          if (_mode ==
+                                                  _FenceDrawMode.circle &&
+                                              _lat != null &&
+                                              _lng != null)
+                                            CircleLayer(
+                                              circles: [
+                                                CircleMarker(
+                                                  point: LatLng(_lat!, _lng!),
+                                                  radius: _radiusMeters
+                                                      .toDouble(),
+                                                  useRadiusInMeter: true,
+                                                  color: OptikAdminTokens
+                                                      .accent
+                                                      .withOpacity(0.22),
+                                                  borderColor:
+                                                      OptikAdminTokens
+                                                          .accentSoft,
+                                                  borderStrokeWidth: 2.5,
                                                 ),
-                                                color: OptikAdminTokens.accent
-                                                    .withOpacity(0.22),
-                                                borderColor:
-                                                    OptikAdminTokens.accentSoft,
-                                                borderStrokeWidth: 2.5,
-                                              ),
-                                            ],
-                                          ),
-                                        MarkerLayer(markers: _buildMarkers()),
-                                      ],
-                                    ),
-                                    Positioned(
-                                      top: 10,
-                                      left: 10,
-                                      right: 10,
-                                      child: _buildAddressSearchOverlay(),
-                                    ),
-                                    Positioned(
-                                      right: 12,
-                                      bottom: _mode ==
+                                              ],
+                                            ),
+                                          if (_mode ==
                                                   _FenceDrawMode.corners4 &&
-                                              _selectedCorner != null
-                                          ? 64
-                                          : 12,
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            color: OptikAdminTokens.bgMid
-                                                .withOpacity(0.94),
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                            border: Border.all(
-                                              color: OptikAdminTokens.lineStrong,
+                                              _corners.length >= 2)
+                                            PolylineLayer(
+                                              polylines: [
+                                                Polyline(
+                                                  points: [
+                                                    ..._corners,
+                                                    if (_corners.length >= 3)
+                                                      _corners.first,
+                                                  ],
+                                                  color: OptikAdminTokens
+                                                      .accentSoft,
+                                                  strokeWidth: 2.5,
+                                                ),
+                                              ],
                                             ),
+                                          if (_mode ==
+                                                  _FenceDrawMode.corners4 &&
+                                              _corners.length >= 3)
+                                            PolygonLayer(
+                                              polygons: [
+                                                Polygon(
+                                                  points: List<LatLng>.from(
+                                                    _corners,
+                                                  ),
+                                                  color: OptikAdminTokens
+                                                      .accent
+                                                      .withOpacity(0.22),
+                                                  borderColor:
+                                                      OptikAdminTokens
+                                                          .accentSoft,
+                                                  borderStrokeWidth: 2.5,
+                                                ),
+                                              ],
+                                            ),
+                                          MarkerLayer(
+                                            markers: _buildMarkers(),
                                           ),
-                                          child: InkWell(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                            onTap: () => setState(
-                                              () => _satellite = !_satellite,
-                                            ),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 8,
+                                        ],
+                                      ),
+                                      Positioned(
+                                        right: 12,
+                                        bottom: _mode ==
+                                                    _FenceDrawMode
+                                                        .corners4 &&
+                                                _selectedCorner != null
+                                            ? 64
+                                            : 12,
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: OptikAdminTokens.bgMid
+                                                  .withOpacity(0.94),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: OptikAdminTokens
+                                                    .lineStrong,
                                               ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    _satellite
-                                                        ? Icons.map_rounded
-                                                        : Icons
-                                                            .satellite_alt_rounded,
-                                                    size: 16,
-                                                    color: OptikAdminTokens
-                                                        .warning,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    _satellite
-                                                        ? 'Peta'
-                                                        : 'Satelit',
-                                                    style: const TextStyle(
+                                            ),
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              onTap: () => setState(
+                                                () =>
+                                                    _satellite = !_satellite,
+                                              ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 8,
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      _satellite
+                                                          ? Icons.map_rounded
+                                                          : Icons
+                                                              .satellite_alt_rounded,
+                                                      size: 16,
                                                       color: OptikAdminTokens
-                                                          .textSecondary,
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w700,
+                                                          .warning,
                                                     ),
-                                                  ),
-                                                ],
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      _satellite
+                                                          ? 'Peta'
+                                                          : 'Satelit',
+                                                      style: const TextStyle(
+                                                        color:
+                                                            OptikAdminTokens
+                                                                .textSecondary,
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    if (_mode == _FenceDrawMode.corners4 &&
-                                        _selectedCorner != null)
-                                      Positioned(
-                                        bottom: 12,
-                                        left: 12,
-                                        right: 12,
-                                        child: _buildSelectedCornerBar(),
-                                      ),
-                                  ],
+                                      if (_mode ==
+                                              _FenceDrawMode.corners4 &&
+                                          _selectedCorner != null)
+                                        Positioned(
+                                          bottom: 12,
+                                          left: 12,
+                                          right: 12,
+                                          child: _buildSelectedCornerBar(),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -1465,7 +1491,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     );
   }
 
-  Widget _buildAddressSearchOverlay() {
+  /// Cari alamat / tempel koordinat / reverse — di atas peta (bukan overlay).
+  Widget _buildLocationToolsPanel() {
     final showSuggestions = _searchHits.isNotEmpty;
     final reversePoint = _reversePoint ?? _activeReversePoint;
     final coordsLine = reversePoint == null
@@ -1473,24 +1500,18 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         : '${reversePoint.latitude.toStringAsFixed(6)}, '
             '${reversePoint.longitude.toStringAsFixed(6)}';
 
-    return Material(
-      color: Colors.transparent,
+    return PremiumPanel(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      borderRadius: OptikAdminTokens.radiusLg,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              color: OptikAdminTokens.bgMid.withOpacity(0.94),
+              color: Colors.white.withOpacity(0.04),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: OptikAdminTokens.lineStrong),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black45,
-                  blurRadius: 10,
-                  offset: Offset(0, 3),
-                ),
-              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1600,7 +1621,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               ],
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             'Belum ketemu di pencarian? Buka Google Maps → bagikan/salin '
             'koordinat → tempel di sini.',
@@ -1611,10 +1632,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             ),
           ),
           if (_searchFeedback != null || _coordsFeedback != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: OptikAdminTokens.panel.withOpacity(0.95),
+                color: Colors.white.withOpacity(0.04),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
@@ -1633,10 +1654,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             ),
           ],
           if (reversePoint != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: OptikAdminTokens.panel.withOpacity(0.95),
+                color: Colors.white.withOpacity(0.04),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
@@ -1702,24 +1723,18 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             ),
           ],
           if (showSuggestions) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200),
+              constraints: const BoxConstraints(maxHeight: 220),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: OptikAdminTokens.bgMid.withOpacity(0.96),
+                  color: Colors.white.withOpacity(0.04),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: OptikAdminTokens.lineStrong),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black45,
-                      blurRadius: 10,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
                 ),
                 child: ListView.separated(
                   shrinkWrap: true,
+                  primary: false,
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: _searchHits.length,
                   separatorBuilder: (_, __) => const Divider(
