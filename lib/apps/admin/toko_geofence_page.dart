@@ -1,7 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/geofence_geometry.dart';
@@ -10,7 +10,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 
 enum _FenceDrawMode { circle, corners4 }
 
-/// Editor geofence absensi di **Google Maps** (koordinat GPS nyata).
+/// Editor geofence absensi di **OpenStreetMap** (koordinat WGS84 = GPS HP).
 /// Mode: lingkaran (tap pusat + radius) atau **4 tap sudut**.
 class TokoGeofencePage extends StatefulWidget {
   const TokoGeofencePage({super.key, required this.profile});
@@ -23,7 +23,7 @@ class TokoGeofencePage extends StatefulWidget {
 
 class _TokoGeofencePageState extends State<TokoGeofencePage> {
   final _db = Supabase.instance.client;
-  GoogleMapController? _mapCtrl;
+  final _mapCtrl = MapController();
 
   bool _loading = true;
   bool _saving = false;
@@ -55,22 +55,19 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _mapCtrl?.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final rows = await _db.from('toko_id').select(
+      final rows = await _db
+          .from('toko_id')
+          .select(
             'id, toko_id, latitude, longitude, radius_meters, '
             'geofence_mode, geofence_polygon',
-          ).order('id');
+          )
+          .order('id');
       var list = (rows as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
@@ -135,11 +132,22 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         ? LatLng(_lat!, _lng!)
         : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(cam, 17));
+      if (!mounted) return;
+      try {
+        _mapCtrl.move(cam, _zoomForRadius(_radiusMeters));
+      } catch (_) {}
     });
   }
 
-  void _onMapTap(LatLng point) {
+  double _zoomForRadius(int meters) {
+    if (meters <= 30) return 18;
+    if (meters <= 80) return 17;
+    if (meters <= 150) return 16;
+    if (meters <= 300) return 15;
+    return 14;
+  }
+
+  void _onMapTap(TapPosition tap, LatLng point) {
     if (_mode == _FenceDrawMode.circle) {
       setState(() {
         _lat = point.latitude;
@@ -147,7 +155,6 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       });
       return;
     }
-    // 4 sudut
     setState(() {
       if (_corners.length >= 4) {
         _corners
@@ -175,70 +182,17 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     setState(() => _corners.clear());
   }
 
-  Set<Marker> get _markers {
-    if (_mode == _FenceDrawMode.circle) {
-      if (_lat == null || _lng == null) return {};
-      return {
-        Marker(
-          markerId: const MarkerId('center'),
-          position: LatLng(_lat!, _lng!),
-          infoWindow: const InfoWindow(title: 'Pusat radius'),
-        ),
-      };
-    }
-    return {
-      for (var i = 0; i < _corners.length; i++)
-        Marker(
-          markerId: MarkerId('c$i'),
-          position: _corners[i],
-          infoWindow: InfoWindow(title: 'Sudut ${i + 1}/4'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueAzure + (i * 15),
-          ),
-        ),
-    };
-  }
-
-  Set<Circle> get _circles {
-    if (_mode != _FenceDrawMode.circle || _lat == null || _lng == null) {
-      return {};
-    }
-    return {
-      Circle(
-        circleId: const CircleId('fence'),
-        center: LatLng(_lat!, _lng!),
-        radius: _radiusMeters.toDouble(),
-        fillColor: const Color(0xFF3B82F6).withOpacity(0.22),
-        strokeColor: const Color(0xFF60A5FA),
-        strokeWidth: 2,
-      ),
-    };
-  }
-
-  Set<Polygon> get _polygons {
-    if (_mode != _FenceDrawMode.corners4 || _corners.length < 3) return {};
-    return {
-      Polygon(
-        polygonId: const PolygonId('fence'),
-        points: List<LatLng>.from(_corners),
-        fillColor: const Color(0xFF3B82F6).withOpacity(0.22),
-        strokeColor: const Color(0xFF60A5FA),
-        strokeWidth: 2,
-      ),
-    };
-  }
-
   Future<void> _save() async {
     final id = _selectedTokoId;
     if (id == null) return;
 
     if (_mode == _FenceDrawMode.circle) {
       if (_lat == null || _lng == null) {
-        _toast('Ketuk peta Google untuk menaruh titik pusat.', Colors.orange);
+        _toast('Ketuk peta untuk menaruh titik pusat.', Colors.orange);
         return;
       }
     } else if (_corners.length != 4) {
-      _toast('Ketuk tepat 4 sudut di peta Google dulu.', Colors.orange);
+      _toast('Ketuk tepat 4 sudut di peta dulu.', Colors.orange);
       return;
     }
 
@@ -254,9 +208,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         patch['radius_meters'] = _radiusMeters;
         patch['geofence_polygon'] = null;
       } else {
-        final pts = _corners
-            .map((e) => GeoPoint(e.latitude, e.longitude))
-            .toList();
+        final pts =
+            _corners.map((e) => GeoPoint(e.latitude, e.longitude)).toList();
         patch['geofence_polygon'] = GeofenceGeometry.polygonToJson(pts);
         final c = GeofenceGeometry.centroid(pts);
         if (c != null) {
@@ -301,10 +254,51 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         ? LatLng(_lat!, _lng!)
         : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
 
+    final markers = <Marker>[];
+    if (_mode == _FenceDrawMode.circle && _lat != null && _lng != null) {
+      markers.add(
+        Marker(
+          point: LatLng(_lat!, _lng!),
+          width: 40,
+          height: 40,
+          child: const Icon(
+            Icons.location_on_rounded,
+            color: OptikAdminTokens.warning,
+            size: 40,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+          ),
+        ),
+      );
+    } else {
+      for (var i = 0; i < _corners.length; i++) {
+        markers.add(
+          Marker(
+            point: _corners[i],
+            width: 36,
+            height: 36,
+            child: Tooltip(
+              message: 'Sudut ${i + 1}',
+              child: CircleAvatar(
+                backgroundColor: OptikAdminTokens.accent,
+                child: Text(
+                  '${i + 1}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: 'Geofence Toko',
-        subtitle: 'Google Maps · lat/lng GPS nyata',
+        subtitle: 'OpenStreetMap · koordinat GPS (WGS84)',
         actions: [
           IconButton(
             tooltip: 'Muat ulang',
@@ -375,8 +369,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                           const SizedBox(height: 8),
                           Text(
                             _mode == _FenceDrawMode.circle
-                                ? 'Ketuk peta Google untuk titik pusat, atur radius (meter).'
-                                : 'Ketuk 4 sudut berurutan di peta Google '
+                                ? 'Ketuk peta untuk titik pusat, atur radius (meter).'
+                                : 'Ketuk 4 sudut berurutan '
                                     '(${_corners.length}/4). Area tertutup otomatis.',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.55),
@@ -384,17 +378,6 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               height: 1.35,
                             ),
                           ),
-                          if (kIsWeb)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Butuh GOOGLE_MAPS_API_KEY di Vercel / web/index.html.',
-                                style: TextStyle(
-                                  color: Colors.orange.withOpacity(0.75),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
                           if (_mode == _FenceDrawMode.circle) ...[
                             const SizedBox(height: 6),
                             Row(
@@ -411,6 +394,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                     activeColor: OptikAdminTokens.accentSoft,
                                     onChanged: (v) => setState(
                                         () => _radiusMeters = v.round()),
+                                    onChangeEnd: (v) {
+                                      if (_lat != null && _lng != null) {
+                                        _mapCtrl.move(
+                                          LatLng(_lat!, _lng!),
+                                          _zoomForRadius(v.round()),
+                                        );
+                                      }
+                                    },
                                   ),
                                 ),
                                 Text(
@@ -471,20 +462,55 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: GoogleMap(
-                            initialCameraPosition: CameraPosition(
-                              target: center,
-                              zoom: 17,
+                          child: FlutterMap(
+                            mapController: _mapCtrl,
+                            options: MapOptions(
+                              initialCenter: center,
+                              initialZoom: _zoomForRadius(_radiusMeters),
+                              onTap: _onMapTap,
+                              interactionOptions: const InteractionOptions(
+                                flags: InteractiveFlag.all &
+                                    ~InteractiveFlag.rotate,
+                              ),
                             ),
-                            onMapCreated: (c) => _mapCtrl = c,
-                            onTap: _onMapTap,
-                            markers: _markers,
-                            circles: _circles,
-                            polygons: _polygons,
-                            mapType: MapType.hybrid,
-                            myLocationButtonEnabled: false,
-                            zoomControlsEnabled: true,
-                            compassEnabled: true,
+                            children: [
+                              TileLayer(
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'com.optikbriski.admin',
+                                maxZoom: 19,
+                              ),
+                              if (_mode == _FenceDrawMode.circle &&
+                                  _lat != null &&
+                                  _lng != null)
+                                CircleLayer(
+                                  circles: [
+                                    CircleMarker(
+                                      point: LatLng(_lat!, _lng!),
+                                      radius: _radiusMeters.toDouble(),
+                                      useRadiusInMeter: true,
+                                      color: OptikAdminTokens.accent
+                                          .withOpacity(0.22),
+                                      borderColor: OptikAdminTokens.accentSoft,
+                                      borderStrokeWidth: 2.5,
+                                    ),
+                                  ],
+                                ),
+                              if (_mode == _FenceDrawMode.corners4 &&
+                                  _corners.length >= 3)
+                                PolygonLayer(
+                                  polygons: [
+                                    Polygon(
+                                      points: List<LatLng>.from(_corners),
+                                      color: OptikAdminTokens.accent
+                                          .withOpacity(0.22),
+                                      borderColor: OptikAdminTokens.accentSoft,
+                                      borderStrokeWidth: 2.5,
+                                    ),
+                                  ],
+                                ),
+                              MarkerLayer(markers: markers),
+                            ],
                           ),
                         ),
                       ),
