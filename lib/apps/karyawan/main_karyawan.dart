@@ -1,4 +1,5 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import 'software_update_page.dart';
 import 'absensi_page.dart';
 import 'pengajuan_jadwal_page.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/attendance/attendance_service.dart';
+import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
@@ -44,6 +47,7 @@ class KaryawanPageState extends State<KaryawanPage>
   String _jabatanKaryawan = "...";
   String _cabangKaryawan = "...";
   String? _karyawanId;
+  String? _tokoId;
   bool _isLoading = true;
 
   // 2. JADWAL MINGGUAN (dari Supabase)
@@ -88,10 +92,34 @@ class KaryawanPageState extends State<KaryawanPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _cekHasilInstallSetelahResume();
+      _syncGeofenceMonitorIfOpenShift();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // Auto-unduh di background saat app di-minimize (install tetap konfirmasi).
       _mulaiAutoDownloadUpdate(silent: true);
+    }
+  }
+
+  /// Resume / cold start: pantau geofence lagi jika shift OPEN masih ada.
+  /// [askPermissions]: true hanya di cold start profil (hindari dialog tiap resume).
+  Future<void> _syncGeofenceMonitorIfOpenShift({
+    bool askPermissions = false,
+  }) async {
+    if (kIsWeb) return;
+    final kid = _karyawanId;
+    final tid = _tokoId;
+    if (kid == null || kid.isEmpty || tid == null || tid.isEmpty) return;
+    try {
+      final shift = await AttendanceService().fetchOpenShift(kid);
+      await GeofenceExitMonitor.instance.syncFromOpenShift(
+        karyawanId: kid,
+        tokoId: tid,
+        hasOpenShift: shift != null,
+        permissionContext:
+            askPermissions && mounted ? context : null,
+      );
+    } catch (e) {
+      debugPrint('sync geofence monitor: $e');
     }
   }
 
@@ -429,6 +457,7 @@ class KaryawanPageState extends State<KaryawanPage>
       if (!mounted) return;
       setState(() {
         _karyawanId = snap.karyawan['id']?.toString();
+        _tokoId = snap.karyawan['toko_id']?.toString();
         _namaKaryawan =
             snap.karyawan['nama']?.toString() ?? 'default_karyawan'.tr();
         _jabatanKaryawan =
@@ -456,6 +485,7 @@ class KaryawanPageState extends State<KaryawanPage>
           sopTasks: _daftarSOPTugas,
         );
       }
+      unawaited(_syncGeofenceMonitorIfOpenShift(askPermissions: true));
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       debugPrint("Gagal menarik data profil: $e");

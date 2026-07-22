@@ -75,6 +75,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
             karyawanId: kid,
             tokoId: tid,
             hasOpenShift: shift != null,
+            permissionContext: mounted ? context : null,
           ),
         );
       }
@@ -199,9 +200,14 @@ class _AbsensiPageState extends State<AbsensiPage> {
           await GeofenceExitMonitor.instance.start(
             karyawanId: kid,
             tokoId: tid,
+            permissionContext: mounted ? context : null,
           );
         }
-        _snack('Absen masuk berhasil. Shift dimulai.', Colors.green);
+        _snack(
+          'Absen masuk berhasil. Shift dimulai — lokasi dipantau '
+          '(termasuk di background jika izin selalu diberikan).',
+          Colors.green,
+        );
       } else if (action == 'PULANG') {
         await _service.clockOut(
           karyawan: _karyawan!,
@@ -420,6 +426,20 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     ),
                   ],
                   if (_faceEnrolled && _openShift != null) ...[
+                    _card(
+                      child: const Text(
+                        'Shift aktif: lokasi dipantau (~setiap 75 dtk), termasuk '
+                        'saat app di belakang jika izin lokasi “selalu” + '
+                        'notifikasi diizinkan. Force-stop atau cabut izin dapat '
+                        'menghentikan pantauan.',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          height: 1.45,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     _actionButton(
                       label: 'Absen pulang',
                       color: Colors.orangeAccent,

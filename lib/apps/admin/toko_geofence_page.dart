@@ -741,12 +741,33 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     return id.isEmpty ? '-' : id;
   }
 
+  /// Circle: lat/lng + radius > 0. Polygon: mode polygon + ≥3 titik.
+  bool _tokoHasGeofence(Map<String, dynamic> row) {
+    final mode = (row['geofence_mode'] ?? 'circle').toString().toLowerCase();
+    if (mode == 'polygon') {
+      final poly = GeofenceGeometry.parsePolygon(row['geofence_polygon']);
+      return poly.length >= 3;
+    }
+    final lat = (row['latitude'] as num?)?.toDouble();
+    final lng = (row['longitude'] as num?)?.toDouble();
+    final radius = (row['radius_meters'] as num?)?.toInt() ?? 0;
+    return lat != null && lng != null && radius > 0;
+  }
+
+  Map<String, dynamic>? get _selectedTokoRow {
+    final id = _selectedTokoId;
+    if (id == null) return null;
+    for (final t in _tokoList) {
+      if (t['id']?.toString() == id) return t;
+    }
+    return null;
+  }
+
   String get _selectedTokoLabel {
     final id = _selectedTokoId;
     if (id == null) return 'Pilih toko…';
-    for (final t in _tokoList) {
-      if (t['id']?.toString() == id) return _tokoLabel(t);
-    }
+    final row = _selectedTokoRow;
+    if (row != null) return _tokoLabel(row);
     return id;
   }
 
@@ -863,6 +884,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                   final t = filtered[i];
                                   final id = t['id']?.toString() ?? '';
                                   final selected = id == _selectedTokoId;
+                                  final registered = _tokoHasGeofence(t);
                                   return ListTile(
                                     dense: true,
                                     selected: selected,
@@ -889,13 +911,22 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                         fontSize: 13,
                                       ),
                                     ),
-                                    trailing: selected
-                                        ? const Icon(
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _GeofenceRegBadge(
+                                          registered: registered,
+                                        ),
+                                        if (selected) ...[
+                                          const SizedBox(width: 8),
+                                          const Icon(
                                             Icons.check_circle_rounded,
                                             color: OptikAdminTokens.warning,
                                             size: 18,
-                                          )
-                                        : null,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     onTap: () => Navigator.pop(ctx, id),
                                   );
                                 },
@@ -1284,6 +1315,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
   Widget _buildTokoSelector() {
     final canPick = _isPusat && _tokoList.length > 1;
+    final selected = _selectedTokoRow;
+    final registered = selected != null && _tokoHasGeofence(selected);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1329,16 +1362,24 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         height: 1.2,
                       ),
                     ),
-                    if (canPick) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        '${_tokoList.length} cabang · ketuk untuk ganti',
-                        style: TextStyle(
-                          color: OptikAdminTokens.textMuted.withOpacity(0.9),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _GeofenceRegBadge(registered: registered),
+                        if (canPick)
+                          Text(
+                            '${_tokoList.length} cabang · ketuk untuk ganti',
+                            style: TextStyle(
+                              color:
+                                  OptikAdminTokens.textMuted.withOpacity(0.9),
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -2025,6 +2066,47 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     );
   }
 
+}
+
+/// Chip status geofence toko di picker / selector.
+class _GeofenceRegBadge extends StatelessWidget {
+  const _GeofenceRegBadge({required this.registered});
+
+  final bool registered;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        registered ? OptikAdminTokens.success : OptikAdminTokens.warning;
+    final label = registered ? 'Terdaftar' : 'Belum';
+    final icon = registered
+        ? Icons.check_circle_outline_rounded
+        : Icons.radio_button_unchecked_rounded;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(registered ? 0.16 : 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.55)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Marker chip bernomor — fill semi-transparan + titik pusat solid di LatLng.

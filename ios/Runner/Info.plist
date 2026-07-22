@@ -33,7 +33,13 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko selama shift.</string>
+	<string>Lokasi dipantau selama shift absensi aktif agar sistem dapat memberi peringatan jika Anda keluar area toko, termasuk saat aplikasi di belakang. Pantauan berhenti setelah absen pulang.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Lokasi dipantau selama shift absensi aktif agar sistem dapat memberi peringatan jika Anda keluar area toko, termasuk saat aplikasi di belakang. Pantauan berhenti setelah absen pulang.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
