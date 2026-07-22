@@ -16,6 +16,7 @@ import 'attendance_qr_page.dart';
 import 'jadwal_kerja_page.dart';
 import 'monthly_export_page.dart';
 import 'garansi_page.dart';
+import 'toko_geofence_page.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/theme.dart';
@@ -355,6 +356,21 @@ class _DashboardPageState extends State<DashboardPage> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => AttendanceQrPage(
+                                    profile: widget.profile,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          if (!training)
+                            PremiumMenuTile(
+                              title: 'Geofence Toko',
+                              icon: Icons.radar_rounded,
+                              color: OptikAdminTokens.warning,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TokoGeofencePage(
                                     profile: widget.profile,
                                   ),
                                 ),

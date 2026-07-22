@@ -16,7 +16,6 @@ import 'liveness_result.dart';
 ///
 /// Live: online Supabase writes (sync cabang ↔ pusat). Training: same UI/flow;
 /// clock-in/out (+ enroll writes) go to local sandbox only — no sync.
-/// TODO(training): keep gating any new attendance prod mutations the same way.
 class AttendanceService {
   AttendanceService({
     SupabaseClient? client,
@@ -347,8 +346,7 @@ class AttendanceService {
     }
 
     // Training stays offline-capable: skip networked AWS compare (no sync/side effects).
-    if (AttendanceConfig.useAwsFaceCompare &&
-        !TrainingMode.instance.isActive) {
+    if (AttendanceConfig.useAwsFaceCompare && !TrainingMode.instance.isActive) {
       await _awsCompareFace(
         karyawanId: karyawan['id'] as String,
         sourceImageUrl: (karyawan['face_photo_url'] ?? '').toString(),

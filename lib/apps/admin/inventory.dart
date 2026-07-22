@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'delivery_order.dart';
+import 'logistics_tracking_page.dart';
 import 'stock_move_report.dart';
 import 'barcode_scanner.dart';
 import 'restore_operation.dart';
@@ -206,6 +207,23 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                       MaterialPageRoute(
                         builder: (c) =>
                             StockMoveReport(profile: widget.profile),
+                      ),
+                    );
+                  },
+                ),
+
+                PremiumListTile(
+                  title: 'Tracking Logistics',
+                  subtitle:
+                      'Peta OSM gratis · status DO/RO/Retur · assign kurir',
+                  icon: Icons.map_rounded,
+                  iconColor: OptikAdminTokens.warning,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) =>
+                            LogisticsTrackingPage(profile: widget.profile),
                       ),
                     );
                   },

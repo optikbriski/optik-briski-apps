@@ -269,7 +269,11 @@ class RequestOrderService {
   }
 
   /// Potong stok Pusat + buat stock_move TRANSIT + lepas reservasi.
-  Future<String> ship(Map<String, dynamic> req) async {
+  Future<String> ship(
+    Map<String, dynamic> req, {
+    String? kurirKaryawanId,
+    String? kurirNama,
+  }) async {
     final id = req['id'] as int;
     final status = (req['status'] ?? '').toString().toUpperCase();
     if (status != 'PREPARING' && status != 'APPROVED') {
@@ -315,6 +319,8 @@ class RequestOrderService {
       }
     ]);
 
+    final kurirId = (kurirKaryawanId ?? '').trim();
+    final kurirNm = (kurirNama ?? '').trim();
     final move = await _client
         .from('stock_move_history')
         .insert({
@@ -327,6 +333,8 @@ class RequestOrderService {
           'keterangan':
               'RequestOrder#$id | Invoice ${req['no_invoice'] ?? '-'} | $itemJson',
           'created_at': DateTime.now().toIso8601String(),
+          if (kurirId.isNotEmpty) 'kurir_karyawan_id': kurirId,
+          if (kurirNm.isNotEmpty) 'kurir_nama': kurirNm,
         })
         .select('id')
         .single();

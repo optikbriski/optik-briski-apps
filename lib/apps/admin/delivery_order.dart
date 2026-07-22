@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap fo
 import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
+import '../../shared/logistics/kurir_pick_dialog.dart';
+import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/safe_image_picker.dart';
@@ -520,6 +522,18 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           .from('attendance_photos')
           .getPublicUrl(path);
 
+      if (!mounted) return;
+      final kurirPick = await showKurirPickDialog(
+        context,
+        service: LogisticsTrackingService(),
+        pusatOnly: true,
+        title: 'Pilih kurir DO (opsional)',
+      );
+      if (kurirPickCancelled(kurirPick)) {
+        setState(() => isProcessing = false);
+        return;
+      }
+
       // Loop pengaman: Validasi & eksekusi pemotongan stok di Gudang Pusat secara real-time
       for (var entry in selectedItems.entries) {
         final current = await Supabase.instance.client
@@ -552,6 +566,10 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         'bukti_foto_pengirim': imgUrl,
         'keterangan': buildCartJson(),
         'created_at': DateTime.now().toIso8601String(),
+        if (!kurirPickSkipped(kurirPick)) ...{
+          'kurir_karyawan_id': kurirPick!['id'],
+          'kurir_nama': kurirPick['nama'],
+        },
       });
 
       if (!mounted) return; // Pelindung async gap build context
@@ -2011,6 +2029,18 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         tujuan: widget.draft['tujuan']?.toString(),
       );
 
+      if (!mounted) return;
+      final kurirPick = await showKurirPickDialog(
+        context,
+        service: LogisticsTrackingService(),
+        pusatOnly: true,
+        title: 'Pilih kurir DO (opsional)',
+      );
+      if (kurirPickCancelled(kurirPick)) {
+        setState(() => isProcessing = false);
+        return;
+      }
+
       // Lepas data draf menjadi riwayat mutasi aktif berstatus WAITING / TRANSIT
       await Supabase.instance.client.from('stock_move_history').insert({
         'product_name': resiDO,
@@ -2022,6 +2052,10 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         'bukti_foto_pengirim': imgUrl,
         'keterangan': jsonEncode(localItems),
         'created_at': DateTime.now().toIso8601String(),
+        if (!kurirPickSkipped(kurirPick)) ...{
+          'kurir_karyawan_id': kurirPick!['id'],
+          'kurir_nama': kurirPick['nama'],
+        },
       });
 
       // Hapus lembaran draf penampungan sementara

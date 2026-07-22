@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/logistics/kurir_pick_dialog.dart';
+import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/theme.dart';
@@ -128,6 +130,18 @@ class _RestoreOperationState extends State<RestoreOperation> {
       String resiRetur =
           "RET-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
 
+      if (!mounted) return;
+      final kurirPick = await showKurirPickDialog(
+        context,
+        service: LogisticsTrackingService(),
+        tokoId: widget.profile['toko_id']?.toString(),
+        title: 'Pilih kurir retur (opsional)',
+      );
+      if (kurirPickCancelled(kurirPick)) {
+        setState(() => isProcessing = false);
+        return;
+      }
+
       // Catat log ke History Mutasi Barang (Status: PENDING agar divalidasi Pusat)
       final inserted = await supabase.from('stock_move_history').insert({
         'product_name': resiRetur,
@@ -138,6 +152,10 @@ class _RestoreOperationState extends State<RestoreOperation> {
         'status': 'PENDING',
         'keterangan': jsonEncode(detailReturn),
         'created_at': DateTime.now().toIso8601String(),
+        if (!kurirPickSkipped(kurirPick)) ...{
+          'kurir_karyawan_id': kurirPick!['id'],
+          'kurir_nama': kurirPick['nama'],
+        },
       }).select('id').single();
 
       if (mounted) {

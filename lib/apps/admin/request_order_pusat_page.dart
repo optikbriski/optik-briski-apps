@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/logistics/kurir_pick_dialog.dart';
+import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
@@ -530,8 +532,24 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       ),
     );
     if (ok != true) return;
+    if (!mounted) return;
+    final kurirPick = await showKurirPickDialog(
+      context,
+      service: LogisticsTrackingService(),
+      pusatOnly: true,
+      title: 'Pilih kurir RO (opsional)',
+    );
+    if (kurirPickCancelled(kurirPick) || !mounted) return;
     try {
-      final resi = await _svc.ship(req);
+      final resi = await _svc.ship(
+        req,
+        kurirKaryawanId: kurirPickSkipped(kurirPick)
+            ? null
+            : kurirPick!['id']?.toString(),
+        kurirNama: kurirPickSkipped(kurirPick)
+            ? null
+            : kurirPick!['nama']?.toString(),
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

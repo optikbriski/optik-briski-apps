@@ -35,6 +35,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JavaScript API — required for Admin Geofence editor (web).
+    Build/Vercel replaces __GOOGLE_MAPS_API_KEY__ from env GOOGLE_MAPS_API_KEY.
+    Enable Maps JavaScript API + billing on Google Cloud.
+  -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__"></script>
 </head>
 <body>
   <!--

@@ -5,6 +5,7 @@ set -euo pipefail
 # Set in Vercel → Project → Settings → Environment Variables (Production + Preview):
 #   SUPABASE_URL
 #   SUPABASE_ANON_KEY
+#   GOOGLE_MAPS_API_KEY   (Maps JavaScript API — Admin geofence editor)
 
 FLUTTER_CHANNEL="${FLUTTER_CHANNEL:-stable}"
 FLUTTER_DIR="${FLUTTER_DIR:-$HOME/flutter-sdk}"
@@ -32,11 +33,20 @@ flutter --version
 flutter precache --web
 flutter pub get
 
+# Inject Google Maps key into web/index.html before build (optional but needed for geofence map).
+if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
+  sed -i.bak "s/__GOOGLE_MAPS_API_KEY__/${GOOGLE_MAPS_API_KEY}/g" web/index.html
+  rm -f web/index.html.bak
+else
+  echo "WARN: GOOGLE_MAPS_API_KEY not set — Geofence Google Map akan gagal load di web."
+fi
+
 flutter build web --release \
   -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=admin \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-  --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+  --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
 
 test -f build/web/index.html
 echo "OK: build/web ready"

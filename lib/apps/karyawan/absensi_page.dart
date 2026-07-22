@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +10,7 @@ import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/aws_face_liveness_page.dart';
 import '../../shared/attendance/face_from_image.dart';
+import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/attendance/liveness_result.dart';
 import '../../shared/liveness_camera_page.dart';
 import '../../shared/qr/hid_scan_intake.dart';
@@ -64,6 +67,17 @@ class _AbsensiPageState extends State<AbsensiPage> {
           _error = 'Data karyawan tidak ditemukan untuk akun ini.';
         }
       });
+      final kid = karyawan?['id']?.toString();
+      final tid = karyawan?['toko_id']?.toString();
+      if (kid != null && tid != null) {
+        unawaited(
+          GeofenceExitMonitor.instance.syncFromOpenShift(
+            karyawanId: kid,
+            tokoId: tid,
+            hasOpenShift: shift != null,
+          ),
+        );
+      }
       _maybeContinueFromInitialQr();
     } catch (e) {
       if (!mounted) return;
@@ -179,6 +193,14 @@ class _AbsensiPageState extends State<AbsensiPage> {
           geo: geo,
           qrTokenId: qrTokenId,
         );
+        final kid = _karyawan!['id']?.toString();
+        final tid = _karyawan!['toko_id']?.toString();
+        if (kid != null && tid != null) {
+          await GeofenceExitMonitor.instance.start(
+            karyawanId: kid,
+            tokoId: tid,
+          );
+        }
         _snack('Absen masuk berhasil. Shift dimulai.', Colors.green);
       } else if (action == 'PULANG') {
         await _service.clockOut(
@@ -186,6 +208,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           liveness: liveness,
           geo: geo,
         );
+        GeofenceExitMonitor.instance.stop();
         _snack('Absen pulang berhasil. Shift ditutup.', Colors.green);
       }
 
