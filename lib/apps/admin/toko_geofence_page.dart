@@ -732,6 +732,196 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     );
   }
 
+  String _tokoLabel(Map<String, dynamic> row) {
+    final id = (row['id'] ?? '').toString();
+    final nama = (row['toko_id'] ?? '').toString();
+    if (nama.isNotEmpty && nama.toUpperCase() != id.toUpperCase()) {
+      return '$id · $nama';
+    }
+    return id.isEmpty ? '-' : id;
+  }
+
+  String get _selectedTokoLabel {
+    final id = _selectedTokoId;
+    if (id == null) return 'Pilih toko…';
+    for (final t in _tokoList) {
+      if (t['id']?.toString() == id) return _tokoLabel(t);
+    }
+    return id;
+  }
+
+  /// Compact picker (bukan DropdownButtonFormField yang meledak di web).
+  Future<void> _pickToko() async {
+    if (!_isPusat || _tokoList.length <= 1) return;
+
+    var query = '';
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            final q = query.trim().toLowerCase();
+            final filtered = _tokoList.where((t) {
+              if (q.isEmpty) return true;
+              final id = (t['id'] ?? '').toString().toLowerCase();
+              final nama = (t['toko_id'] ?? '').toString().toLowerCase();
+              return id.contains(q) || nama.contains(q);
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: OptikAdminTokens.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+              ),
+              title: const Text(
+                'Pilih toko',
+                style: TextStyle(
+                  color: OptikAdminTokens.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              content: SizedBox(
+                width: 420,
+                height: 440,
+                child: Column(
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.textPrimary,
+                        fontSize: 14,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Cari kode / nama toko…',
+                        hintStyle: TextStyle(
+                          color: OptikAdminTokens.textMuted.withOpacity(0.85),
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search_rounded,
+                          color: OptikAdminTokens.accentSoft,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            OptikAdminTokens.radiusSm,
+                          ),
+                          borderSide:
+                              const BorderSide(color: OptikAdminTokens.line),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            OptikAdminTokens.radiusSm,
+                          ),
+                          borderSide:
+                              const BorderSide(color: OptikAdminTokens.line),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            OptikAdminTokens.radiusSm,
+                          ),
+                          borderSide: const BorderSide(
+                            color: OptikAdminTokens.accentSoft,
+                            width: 1.4,
+                          ),
+                        ),
+                      ),
+                      onChanged: (v) => setModal(() => query = v),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Tidak ada toko cocok.',
+                                style: TextStyle(
+                                  color: OptikAdminTokens.textMuted,
+                                ),
+                              ),
+                            )
+                          : DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.03),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: OptikAdminTokens.line,
+                                ),
+                              ),
+                              child: ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) => const Divider(
+                                  height: 1,
+                                  color: OptikAdminTokens.line,
+                                ),
+                                itemBuilder: (_, i) {
+                                  final t = filtered[i];
+                                  final id = t['id']?.toString() ?? '';
+                                  final selected = id == _selectedTokoId;
+                                  return ListTile(
+                                    dense: true,
+                                    selected: selected,
+                                    selectedTileColor: OptikAdminTokens.accent
+                                        .withOpacity(0.14),
+                                    leading: Icon(
+                                      selected
+                                          ? Icons.storefront_rounded
+                                          : Icons.storefront_outlined,
+                                      size: 20,
+                                      color: selected
+                                          ? OptikAdminTokens.warning
+                                          : OptikAdminTokens.textMuted,
+                                    ),
+                                    title: Text(
+                                      _tokoLabel(t),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: OptikAdminTokens.textPrimary,
+                                        fontWeight: selected
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    trailing: selected
+                                        ? const Icon(
+                                            Icons.check_circle_rounded,
+                                            color: OptikAdminTokens.warning,
+                                            size: 18,
+                                          )
+                                        : null,
+                                    onTap: () => Navigator.pop(ctx, id),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (picked != null && picked != _selectedTokoId) {
+      _applyToko(picked);
+    }
+  }
+
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
 
@@ -852,24 +1042,44 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       MediaQuery.sizeOf(context).height * 0.72,
                     );
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(
-                        OptikAdminTokens.spaceLg,
-                        OptikAdminTokens.spaceSm,
-                        OptikAdminTokens.spaceLg,
-                        OptikAdminTokens.spaceLg,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          PremiumPanel(
-                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                            borderRadius: OptikAdminTokens.radiusLg,
-                            child: _buildControlsPanel(),
+                          const PremiumSectionHeader(
+                            label: 'Toko',
+                            padding: EdgeInsets.only(bottom: 10, left: 2),
                           ),
-                          const SizedBox(height: 12),
-                          // Cari / tempel / reverse di atas peta — tidak menutupi area peta.
+                          PremiumPanel(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                            borderRadius: OptikAdminTokens.radiusLg,
+                            borderColor:
+                                OptikAdminTokens.accent.withOpacity(0.28),
+                            child: _buildTokoSelector(),
+                          ),
+                          const SizedBox(height: 18),
+                          const PremiumSectionHeader(
+                            label: 'Mode geofence',
+                            padding: EdgeInsets.only(bottom: 10, left: 2),
+                          ),
+                          PremiumPanel(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                            borderRadius: OptikAdminTokens.radiusLg,
+                            child: _buildModePanel(),
+                          ),
+                          const SizedBox(height: 18),
+                          const PremiumSectionHeader(
+                            label: 'Cari lokasi',
+                            padding: EdgeInsets.only(bottom: 10, left: 2),
+                          ),
                           _buildLocationToolsPanel(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 18),
+                          const PremiumSectionHeader(
+                            label: 'Peta workspace',
+                            padding: EdgeInsets.only(bottom: 10, left: 2),
+                          ),
                           SizedBox(
                             height: mapH,
                             child: PremiumPanel(
@@ -1057,7 +1267,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
                           PremiumPrimaryButton(
                             label: 'Simpan geofence',
                             icon: Icons.save_rounded,
@@ -1072,150 +1282,164 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     );
   }
 
-  Widget _buildControlsPanel() {
+  Widget _buildTokoSelector() {
+    final canPick = _isPusat && _tokoList.length > 1;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: canPick ? _pickToko : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Colors.white.withOpacity(0.04),
+            border: Border.all(color: OptikAdminTokens.lineStrong),
+          ),
+          child: Row(
+            children: [
+              const PremiumIconBadge(
+                icon: Icons.storefront_rounded,
+                color: OptikAdminTokens.accentSoft,
+                size: 40,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      canPick ? 'TOKO AKTIF' : 'TOKO',
+                      style: TextStyle(
+                        color: OptikAdminTokens.accentSoft.withOpacity(0.95),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _selectedTokoLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.textPrimary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        height: 1.2,
+                      ),
+                    ),
+                    if (canPick) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_tokoList.length} cabang · ketuk untuk ganti',
+                        style: TextStyle(
+                          color: OptikAdminTokens.textMuted.withOpacity(0.9),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (canPick)
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: OptikAdminTokens.textMuted.withOpacity(0.95),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModePanel() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: _isPusat && _tokoList.length > 1
-                  ? DropdownButtonFormField<String>(
-                      value: _selectedTokoId,
-                      isDense: true,
-                      dropdownColor: OptikAdminTokens.bgMid,
-                      style: const TextStyle(
-                        color: OptikAdminTokens.textPrimary,
-                        fontSize: 13.5,
-                      ),
-                      decoration: _fieldDeco('Toko').copyWith(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                      items: _tokoList
-                          .map(
-                            (t) => DropdownMenuItem(
-                              value: t['id']?.toString(),
-                              child: Text(t['id']?.toString() ?? '-'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) _applyToko(v);
-                      },
-                    )
-                  : Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius:
-                            BorderRadius.circular(OptikAdminTokens.radiusSm),
-                        border: Border.all(color: OptikAdminTokens.line),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.storefront_rounded,
-                            size: 16,
-                            color: OptikAdminTokens.accentSoft,
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Toko: ${_selectedTokoId ?? '-'}',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: OptikAdminTokens.textSecondary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+        SegmentedButton<_FenceDrawMode>(
+          style: ButtonStyle(
+            visualDensity: VisualDensity.comfortable,
+            tapTargetSize: MaterialTapTargetSize.padded,
+            side: const WidgetStatePropertyAll(
+              BorderSide(color: OptikAdminTokens.lineStrong),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 6,
-              child: SegmentedButton<_FenceDrawMode>(
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: WidgetStatePropertyAll(
-                    BorderSide(color: OptikAdminTokens.lineStrong),
-                  ),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return OptikAdminTokens.textPrimary;
-                    }
-                    return OptikAdminTokens.textMuted;
-                  }),
-                ),
-                segments: const [
-                  ButtonSegment(
-                    value: _FenceDrawMode.circle,
-                    label: Text('Lingkaran', style: TextStyle(fontSize: 12)),
-                    icon: Icon(Icons.radio_button_checked, size: 14),
-                  ),
-                  ButtonSegment(
-                    value: _FenceDrawMode.corners4,
-                    label: Text('4 sudut', style: TextStyle(fontSize: 12)),
-                    icon: Icon(Icons.crop_free, size: 14),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (s) {
-                  setState(() {
-                    _mode = s.first;
-                    _selectedCorner = null;
-                  });
-                  _refreshReverseForActivePoint(immediate: true);
-                },
-              ),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return OptikAdminTokens.textPrimary;
+              }
+              return OptikAdminTokens.textMuted;
+            }),
+          ),
+          segments: const [
+            ButtonSegment(
+              value: _FenceDrawMode.circle,
+              label: Text('Lingkaran', style: TextStyle(fontSize: 13)),
+              icon: Icon(Icons.radio_button_checked, size: 16),
+            ),
+            ButtonSegment(
+              value: _FenceDrawMode.corners4,
+              label: Text('4 sudut', style: TextStyle(fontSize: 13)),
+              icon: Icon(Icons.crop_free, size: 16),
             ),
           ],
+          selected: {_mode},
+          onSelectionChanged: (s) {
+            setState(() {
+              _mode = s.first;
+              _selectedCorner = null;
+            });
+            _refreshReverseForActivePoint(immediate: true);
+          },
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 10),
         Text(
           _mode == _FenceDrawMode.circle
               ? 'Ketuk peta / geser pin pusat · atur radius di bawah.'
               : 'Ketuk hingga 4 sudut (${_corners.length}/4) · '
                   'geser penanda · ketuk penanda untuk hapus.',
           style: TextStyle(
-            color: OptikAdminTokens.warning.withOpacity(0.85),
-            fontSize: 11.5,
-            height: 1.25,
+            color: OptikAdminTokens.warning.withOpacity(0.9),
+            fontSize: 12,
+            height: 1.35,
           ),
         ),
         if (_mode == _FenceDrawMode.circle) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const Text(
                 'Radius',
                 style: TextStyle(
                   color: OptikAdminTokens.textMuted,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              const Spacer(),
+              Text(
+                '$_minRadius–$_maxRadius m',
+                style: TextStyle(
+                  color: OptikAdminTokens.textMuted.withOpacity(0.85),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
               Expanded(
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
+                    trackHeight: 3.5,
                     overlayShape: SliderComponentShape.noOverlay,
                     thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 8,
+                      enabledThumbRadius: 9,
                     ),
                   ),
                   child: Slider(
@@ -1241,8 +1465,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               SizedBox(
-                width: 78,
+                width: 84,
                 child: TextField(
                   controller: _radiusCtrl,
                   focusNode: _radiusFocus,
@@ -1255,7 +1480,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   style: const TextStyle(
                     color: OptikAdminTokens.warning,
                     fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                    fontSize: 15,
                   ),
                   onChanged: _onRadiusTextChanged,
                   onEditingComplete: _commitRadiusField,
@@ -1272,7 +1497,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     fillColor: Colors.white.withOpacity(0.06),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 8,
+                      vertical: 10,
                     ),
                     border: OutlineInputBorder(
                       borderRadius:
@@ -1281,8 +1506,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius:
                           BorderRadius.circular(OptikAdminTokens.radiusSm),
-                      borderSide:
-                          const BorderSide(color: OptikAdminTokens.lineStrong),
+                      borderSide: const BorderSide(
+                        color: OptikAdminTokens.lineStrong,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius:
@@ -1305,26 +1531,30 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           ),
           if (_radiusError != null)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
                 _radiusError!,
                 style: const TextStyle(
                   color: OptikAdminTokens.danger,
-                  fontSize: 11,
+                  fontSize: 11.5,
                 ),
               ),
             )
           else if (_lat != null && _lng != null)
-            Text(
-              'Pusat: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}'
-              ' · $_minRadius–$_maxRadius m',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.38),
-                fontSize: 10.5,
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Pusat: ${_lat!.toStringAsFixed(6)}, '
+                '${_lng!.toStringAsFixed(6)}',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 11,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
         ] else ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           PremiumChipWrap(
             children: [
               PremiumActionChip(
@@ -1346,9 +1576,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             ],
           ),
           if (_corners.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 initiallyExpanded: _corners.length < 4,
                 tilePadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1361,7 +1592,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   'Koordinat sudut (${_corners.length}/4)',
                   style: const TextStyle(
                     color: OptikAdminTokens.textMuted,
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1380,7 +1611,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 4,
-                        vertical: 3,
+                        vertical: 4,
                       ),
                       child: Row(
                         children: [
@@ -1392,11 +1623,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               color: selected
                                   ? OptikAdminTokens.warning
                                   : Colors.white38,
-                              fontSize: 10.5,
+                              fontSize: 11,
                               fontWeight: selected
                                   ? FontWeight.w700
                                   : FontWeight.w400,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
                           const Spacer(),
@@ -1501,7 +1734,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             '${reversePoint.longitude.toStringAsFixed(6)}';
 
     return PremiumPanel(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       borderRadius: OptikAdminTokens.radiusLg,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1510,7 +1743,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           DecoratedBox(
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: OptikAdminTokens.lineStrong),
             ),
             child: Column(
@@ -1519,7 +1752,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 TextField(
                   controller: _searchCtrl,
                   focusNode: _searchFocus,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.textPrimary,
+                    fontSize: 14,
+                  ),
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _searchAddress(),
                   onChanged: _onSearchTextChanged,
@@ -1567,7 +1803,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     fillColor: Colors.transparent,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 12,
+                      vertical: 14,
                     ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -1579,8 +1815,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   controller: _coordsCtrl,
                   focusNode: _coordsFocus,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
+                    color: OptikAdminTokens.textPrimary,
+                    fontSize: 13.5,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                   textInputAction: TextInputAction.go,
@@ -1594,7 +1830,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     hintText: 'Tempel koordinat / link Maps…',
                     hintStyle: TextStyle(
                       color: Colors.white.withOpacity(0.4),
-                      fontSize: 12.5,
+                      fontSize: 13,
                     ),
                     prefixIcon: const Icon(
                       Icons.my_location_rounded,
@@ -1611,7 +1847,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     fillColor: Colors.transparent,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 10,
+                      vertical: 12,
                     ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -1621,14 +1857,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             'Belum ketemu di pencarian? Buka Google Maps → bagikan/salin '
             'koordinat → tempel di sini.',
             style: TextStyle(
               color: Colors.white.withOpacity(0.55),
-              fontSize: 10.5,
-              height: 1.25,
+              fontSize: 11,
+              height: 1.3,
             ),
           ),
           if (_searchFeedback != null || _coordsFeedback != null) ...[
@@ -1789,15 +2025,6 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     );
   }
 
-  InputDecoration _fieldDeco(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        ),
-      );
 }
 
 /// Marker chip bernomor — fill semi-transparan + titik pusat solid di LatLng.
