@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../qr/obr_codes.dart';
 import 'invoice_link.dart';
 
 class InvoiceHubService {
@@ -67,13 +68,62 @@ class InvoiceHubService {
       'sisa_tagihan': sale['sisa_tagihan'],
       'metode_pembayaran': sale['metode_pembayaran'],
       'no_wa': sale['no_wa'],
+      'email_pelanggan': sale['email_pelanggan'],
+      'alamat': sale['alamat'],
       'items': items,
       'garansi': garansi,
+      'garansi_claimable': (garansi as List).any((raw) {
+        final g = Map<String, dynamic>.from(raw as Map);
+        if (g['status']?.toString() != 'aktif') return false;
+        if (g['klaim_digunakan'] == true) return false;
+        final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
+        if (akhir == null) return false;
+        final today = DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+        );
+        return !DateTime(akhir.year, akhir.month, akhir.day).isBefore(today);
+      }),
+      'qr_dp_ready':
+          sale['qr_dp_token'] != null && sale['qr_dp_used_at'] == null,
+      'qr_lunas_ready':
+          sale['qr_lunas_token'] != null && sale['qr_lunas_used_at'] == null,
+      'qr_claim_ready':
+          sale['qr_claim_token'] != null && sale['qr_claim_used_at'] == null,
+      'qr_dp_used': sale['qr_dp_used_at'] != null,
+      'qr_lunas_used': sale['qr_lunas_used_at'] != null,
+      'qr_claim_used': sale['qr_claim_used_at'] != null,
     };
   }
 
   static bool isStaffView(Map<String, dynamic> hub) =>
       hub['role_view']?.toString() == 'staff';
+
+  /// Belum lunas (DP / sisa tagihan).
+  static bool isDpOpen(Map<String, dynamic> hub) {
+    final st = ObrInvoice.normalizePayStatus(
+      hub['status_pembayaran']?.toString(),
+    );
+    final sisa = int.tryParse(hub['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    if (sisa > 0) return true;
+    return st == 'DP';
+  }
+
+  static bool isLunas(Map<String, dynamic> hub) => !isDpOpen(hub);
+
+  static bool sudahDiambil(Map<String, dynamic> hub) =>
+      hub['diambil_at'] != null ||
+      (hub['tracking_status']?.toString().toUpperCase() == 'DIAMBIL');
+
+  static bool isGaransiClaimable(Map<String, dynamic> hub) =>
+      hub['garansi_claimable'] == true;
+
+  static bool isCaseClosed(Map<String, dynamic> hub) {
+    if (!sudahDiambil(hub)) return false;
+    if (hub['qr_claim_used'] == true) return true;
+    return !isGaransiClaimable(hub);
+  }
 
   static String statusLabel(Map<String, dynamic> hub) {
     if (hub['diambil_at'] != null) return 'Sudah diambil';

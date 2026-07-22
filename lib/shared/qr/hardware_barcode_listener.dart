@@ -164,6 +164,7 @@ class _HardwareBarcodeListenerState extends State<HardwareBarcodeListener> {
       cabangKaryawan: _cabang,
       karyawanId: _karyawanId,
       karyawanNama: _karyawanNama,
+      fromAdminHidScanner: _role == UniversalQrCallerRole.admin,
     );
   }
 

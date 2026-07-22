@@ -4,8 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'request_order_page.dart';
+import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -43,13 +44,38 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   String? selectedJenisLensa;
   String filterUnit = 'SEMUA';
   String filterKat = 'SEMUA';
+  String filterSubKat = 'SEMUA';
+  /// `SEMUA` or exact harga as string, e.g. `100000`.
+  String filterHarga = 'SEMUA';
+  /// `none` | `harga` | `sub`
+  String groupMode = 'none';
+  bool filtersOpen = false;
+  /// Collapsed group keys when [groupMode] is harga/sub.
+  final Set<String> _collapsedGroups = <String>{};
+
+  bool get _hasActiveFilters =>
+      filterKat != 'SEMUA' ||
+      filterSubKat != 'SEMUA' ||
+      filterHarga != 'SEMUA' ||
+      groupMode != 'none';
+
+  void _toggleGroupCollapsed(String key) {
+    setState(() {
+      if (_collapsedGroups.contains(key)) {
+        _collapsedGroups.remove(key);
+      } else {
+        _collapsedGroups.add(key);
+      }
+    });
+  }
 
   // 🎯 SELEKSI MODE BARCODE BARU
   String barcodeMode =
       'AUTOMATIC'; // Pilihan: 'AUTOMATIC' atau 'MANUAL_PRODUCT'
 
   List<String> units = ['SEMUA'];
-  List<dynamic> listProduk = [];
+  /// Full merged catalog from last fetch (before search/filter).
+  List<dynamic> listProdukAll = [];
   bool isLoading = true;
   PlatformFile? foto;
   String? editId;
@@ -137,16 +163,6 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       final data = await q.order('created_at', ascending: false);
       List<dynamic> rawList = data as List<dynamic>;
 
-      String queryText = searchController.text.toLowerCase().trim();
-      if (queryText.isNotEmpty) {
-        rawList = rawList.where((item) {
-          final namaProd = (item['nama'] ?? '').toString().toLowerCase();
-          final barcodeProd = (item['barcode'] ?? '').toString().toLowerCase();
-          return namaProd.contains(queryText) ||
-              barcodeProd.contains(queryText);
-        }).toList();
-      }
-
       Map<String, Map<String, dynamic>> mapGabung = {};
       for (var item in rawList) {
         String namaKey = item['nama'].toString().trim();
@@ -174,7 +190,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
       if (mounted) {
         setState(() {
-          listProduk = mapGabung.values.toList();
+          listProdukAll = mapGabung.values.toList();
           isLoading = false;
         });
       }
@@ -182,6 +198,130 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       debugPrint("Fetch data error: $e");
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  bool _productMatchesQuery(Map item, String query) {
+    if (query.isEmpty) return true;
+    final haystacks = <String>[
+      (item['nama'] ?? '').toString(),
+      (item['barcode'] ?? '').toString(),
+      (item['sku'] ?? '').toString(),
+      (item['kategori'] ?? '').toString(),
+      (item['sub_kategori'] ?? '').toString(),
+      (item['warna'] ?? '').toString(),
+      (item['jenis_lensa'] ?? '').toString(),
+      (item['toko_id'] ?? '').toString(),
+      _formatRupiahLocal(item['harga']),
+      (item['harga'] ?? '').toString(),
+    ];
+    return haystacks.any((s) => s.toLowerCase().contains(query));
+  }
+
+  List<dynamic> get _filteredProduk {
+    final query = searchController.text.toLowerCase().trim();
+    return listProdukAll.where((raw) {
+      final item = raw as Map;
+      if (!_productMatchesQuery(item, query)) return false;
+      if (filterKat != 'SEMUA' &&
+          (item['kategori'] ?? '').toString() != filterKat) {
+        return false;
+      }
+      if (filterSubKat != 'SEMUA') {
+        final sub = (item['sub_kategori'] ?? '').toString().trim();
+        if (sub.toLowerCase() != filterSubKat.toLowerCase()) return false;
+      }
+      if (filterHarga != 'SEMUA') {
+        final h = int.tryParse((item['harga'] ?? 0).toString()) ?? 0;
+        if (h.toString() != filterHarga) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<int> get _hargaOptions {
+    final set = <int>{};
+    for (final raw in listProdukAll) {
+      final h = int.tryParse((raw['harga'] ?? 0).toString()) ?? 0;
+      if (h > 0) set.add(h);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<String> get _subKatOptions {
+    final set = <String>{};
+    for (final raw in listProdukAll) {
+      final s = (raw['sub_kategori'] ?? '').toString().trim();
+      if (s.isNotEmpty) set.add(s);
+    }
+    final list = set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  /// Groups filtered products. Key = section title.
+  List<MapEntry<String, List<dynamic>>> get _groupedProduk {
+    final items = _filteredProduk;
+    if (groupMode == 'none') {
+      return [MapEntry('', items)];
+    }
+
+    final map = <String, List<dynamic>>{};
+    for (final item in items) {
+      String key;
+      if (groupMode == 'harga') {
+        key = _formatRupiahLocal(item['harga']);
+      } else {
+        final sub = (item['sub_kategori'] ?? '').toString().trim();
+        key = sub.isEmpty ? 'Tanpa Sub Kategori' : sub;
+      }
+      map.putIfAbsent(key, () => []).add(item);
+    }
+
+    final entries = map.entries.toList();
+    if (groupMode == 'harga') {
+      entries.sort((a, b) {
+        final ha = int.tryParse(
+                (a.value.first['harga'] ?? 0).toString()) ??
+            0;
+        final hb = int.tryParse(
+                (b.value.first['harga'] ?? 0).toString()) ??
+            0;
+        return ha.compareTo(hb);
+      });
+    } else {
+      entries.sort(
+          (a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+    }
+    return entries;
+  }
+
+  Widget _filterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: Colors.orangeAccent.withOpacity(0.22),
+      checkmarkColor: Colors.orangeAccent,
+      backgroundColor: OptikAdminTokens.card,
+      side: BorderSide(
+        color: selected
+            ? Colors.orangeAccent.withOpacity(0.7)
+            : OptikAdminTokens.lineStrong,
+      ),
+      labelStyle: TextStyle(
+        color: selected ? Colors.orangeAccent : OptikAdminTokens.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
+    );
   }
 
   // Memilih Foto
@@ -271,8 +411,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         'harga': int.tryParse(hargaController.text.replaceAll('.', '')) ?? 0,
         'kategori': inputKat,
         'sub_kategori': subRapi,
-        'barcode':
-            finalBarcode, // 🎯 Mengunci string barcode hasil kalkulasi mode di atas
+        'barcode': finalBarcode,
+        'sku': finalBarcode, // SKU produk = barcode (bukan QR payload)
         'warna': inputKat == 'Frame' ? _toTitleCase(warnaCtrl.text) : null,
         'jenis_lensa': inputKat == 'Lensa' ? selectedJenisLensa : null,
         'sph_r': inputKat == 'Lensa' ? double.tryParse(sphCtrl.text) : null,
@@ -392,9 +532,91 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return "Rp$hasilFormat";
   }
 
+  /// Produk: 1D + 2D berisi payload khusus produk ([ProductCode]), bukan invoice/DO.
+  Widget _buildProductCodes(String sku, {String? productId}) {
+    final payload = ProductCode.encode(sku: sku, productId: productId);
+    if (payload.isEmpty) return const SizedBox.shrink();
+
+    Widget panel({required String title, required Widget child}) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.black54,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        panel(
+          title: 'BARCODE 1D · PRODUK',
+          child: SizedBox(
+            width: 260,
+            height: 72,
+            child: BarcodeWidget(
+              barcode: Barcode.code128(),
+              data: payload,
+              drawText: false,
+              color: Colors.black,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        panel(
+          title: 'QR 2D · PRODUK',
+          child: SizedBox(
+            width: 140,
+            height: 140,
+            child: BarcodeWidget(
+              barcode: Barcode.qrCode(),
+              data: payload,
+              drawText: false,
+              color: Colors.black,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'SKU: ${sku.trim()}',
+          style: const TextStyle(
+            color: Colors.orangeAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          payload,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
   // Request Order hanya lewat menu Logistik (bukan pintasan Master Data).
 
-  // 2. FUNGSI POP-UP DETAIL KARTU PRODUK DAN PRATINJAU QR CODE BARCODE
+  // 2. FUNGSI POP-UP DETAIL PRODUK + PRATINJAU BARCODE
   void showProductDetail(dynamic item) {
     // 🔍 Deteksi otomatis siapa akun yang sedang melihat detail
     String userToko =
@@ -442,15 +664,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         fontSize: 12,
                         letterSpacing: 1.5)),
                 const SizedBox(height: 20),
-                if (item['barcode'] != null &&
-                    item['barcode'].toString().isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: QrImageView(
-                        data: item['barcode'].toString(), size: 140),
+                if ((item['barcode'] ?? item['sku']) != null &&
+                    (item['barcode'] ?? item['sku']).toString().isNotEmpty)
+                  _buildProductCodes(
+                    (item['sku'] ?? item['barcode']).toString(),
+                    productId: item['id']?.toString(),
                   ),
                 const SizedBox(height: 15),
                 Text(_toTitleCase(item['nama'] ?? '-'),
@@ -953,8 +1171,205 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     );
   }
 
+  Widget _buildProductCard(dynamic item) {
+    String namaRapi = _toTitleCase(item['nama']?.toString() ?? '-');
+
+    String userToko =
+        widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
+    bool isHakAksesPusat = userToko == 'PUSAT' ||
+        widget.profile['role'] == 'owner' ||
+        widget.profile['role'] == 'admin_pusat';
+
+    int displayStock = item['total_stock'] ?? item['stock'] ?? 0;
+    String labelStok = "Total Stock: ";
+
+    if (!isHakAksesPusat && item['breakdown_stok'] != null) {
+      labelStok = "Stok Cabang: ";
+      int stokKetemu = 0;
+      for (var b in item['breakdown_stok']) {
+        if (b['cabang'].toString().toUpperCase() == userToko) {
+          stokKetemu = int.tryParse(b['stok'].toString()) ?? 0;
+          break;
+        }
+      }
+      displayStock = stokKetemu;
+    }
+
+    return PremiumPanel(
+      padding: EdgeInsets.zero,
+      borderRadius: 16,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(12),
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+              color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+          child: (item['image_url'] != null &&
+                  item['image_url'].toString().isNotEmpty &&
+                  item['image_url'].toString() != '-')
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(item['image_url'], fit: BoxFit.cover))
+              : const Icon(Icons.image, color: Colors.white10),
+        ),
+        title: Text(namaRapi,
+            style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text("${item['kategori']} | ${item['sub_kategori'] ?? '-'}",
+                style: const TextStyle(color: Colors.grey, fontSize: 11)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.location_on,
+                    color: Colors.blueAccent, size: 11),
+                const SizedBox(width: 3),
+                Text(
+                  !isHakAksesPusat ? "CABANG $userToko" : "PUSAT",
+                  style: const TextStyle(
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(_formatRupiahLocal(item['harga']),
+                style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12)),
+          ],
+        ),
+        trailing: R.isCompact(context)
+            ? PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert,
+                    color: Colors.white54, size: 20),
+                color: OptikAdminTokens.card,
+                onSelected: (action) {
+                  if (action == 'detail') {
+                    showProductDetail(item);
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'detail',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.view_week_rounded,
+                            color: Colors.blueAccent, size: 18),
+                        const SizedBox(width: 8),
+                        Text('$labelStok$displayStock Pcs',
+                            style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: Colors.orangeAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text("$labelStok$displayStock Pcs",
+                          style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold))),
+                  const SizedBox(width: OptikAdminTokens.spaceSm),
+                  IconButton(
+                      iconSize: 20,
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.view_week_rounded,
+                          color: Colors.blueAccent, size: 20),
+                      onPressed: () => showProductDetail(item)),
+                ],
+              ),
+        onTap: isCanEdit
+            ? () {
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  if (!mounted) return;
+                  if (editId == item['id'].toString()) {
+                    _reset();
+                  } else {
+                    setState(() {
+                      editId = item['id'].toString();
+                      nameController.text = item['nama'] ?? '';
+                      hargaController.text = _formatRupiahLocal(item['harga'] ?? 0)
+                          .replaceAll('Rp', '')
+                          .replaceAll('.', '')
+                          .trim();
+                      hargaModalController.text =
+                          item['harga_modal']?.toString() ?? '0';
+                      stokController.text = item['stock']?.toString() ?? '0';
+                      barcodeController.text = item['barcode'] ?? '';
+                      warnaCtrl.text = item['warna'] ?? '';
+                      barcodeMode = 'MANUAL_PRODUCT';
+                      inputKat = item['kategori'] ?? 'Frame';
+                      String rawSub =
+                          item['sub_kategori']?.toString().trim() ?? '';
+                      if (inputKat == 'Frame') {
+                        inputSub = [
+                          'Plastik',
+                          'Besi',
+                          'Kayu',
+                          'Titanium'
+                        ].contains(rawSub)
+                            ? rawSub
+                            : 'Plastik';
+                        selectedJenisLensa = null;
+                      } else if (inputKat == 'Lensa') {
+                        inputSub = [
+                          'Supersin',
+                          'Blueray',
+                          'Photochromic',
+                          'Bluechromic',
+                          'Night Driving',
+                          'Antifog'
+                        ].contains(rawSub)
+                            ? rawSub
+                            : 'Supersin';
+                        String rawJenis =
+                            item['jenis_lensa']?.toString() ?? '';
+                        selectedJenisLensa = [
+                          'Standar',
+                          'Progresif',
+                          'Kryptok'
+                        ].contains(rawJenis)
+                            ? rawJenis
+                            : 'Standar';
+                        sphCtrl.text = _formatOptic(item['sph_r']);
+                        cylCtrl.text = _formatOptic(item['cyl_r']);
+                        addCtrl.text = _formatOptic(item['add_r']);
+                      } else {
+                        inputSub = null;
+                        selectedJenisLensa = null;
+                      }
+                    });
+                  }
+                });
+              }
+            : () => showProductDetail(item),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final listProduk = _filteredProduk;
     final totalItems = listProduk.length;
     final totalStock = listProduk.fold<int>(
       0,
@@ -967,6 +1382,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final lensaCount = listProduk
         .where((item) => (item['kategori'] ?? '').toString() == 'Lensa')
         .length;
+    final grouped = _groupedProduk;
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
@@ -996,13 +1412,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 Center(
                   child: Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10)),
-                        child: QrImageView(
-                            data: barcodeController.text, size: 120),
+                      _buildProductCodes(
+                        barcodeController.text,
+                        productId: editId,
                       ),
                       const SizedBox(height: 10),
                       Text("pm_barcode_sistem".tr(),
@@ -1310,260 +1722,251 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
             TextField(
               controller: searchController,
-              onChanged: (v) => _fetch(),
+              onChanged: (_) => setState(() {}),
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
-                  hintText: "pm_cari".tr(),
+                  hintText: 'Cari nama, sub kategori, warna, SKU…',
                   hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
                   prefixIcon: const Icon(Icons.search,
                       color: Colors.orangeAccent, size: 18),
+                  suffixIcon: searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close,
+                              color: Colors.white38, size: 18),
+                          onPressed: () {
+                            searchController.clear();
+                            setState(() {});
+                          },
+                        ),
                   filled: true,
                   fillColor: Colors.white.withOpacity(0.03),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none)),
             ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => filtersOpen = !filtersOpen),
+                icon: Icon(
+                  filtersOpen
+                      ? Icons.filter_alt_off_outlined
+                      : Icons.filter_alt_outlined,
+                  size: 18,
+                  color: _hasActiveFilters || filtersOpen
+                      ? Colors.orangeAccent
+                      : OptikAdminTokens.textSecondary,
+                ),
+                label: Text(
+                  filtersOpen ? 'Tutup filter' : 'Filter',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _hasActiveFilters || filtersOpen
+                        ? Colors.orangeAccent
+                        : OptikAdminTokens.textSecondary,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  foregroundColor: Colors.orangeAccent,
+                ),
+              ),
+            ),
+            if (filtersOpen) ...[
+              const SizedBox(height: OptikAdminTokens.spaceSm),
+              Text('Grup tampilan',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              PremiumChipWrap(
+                children: [
+                  _filterChip(
+                    label: 'Tanpa grup',
+                    selected: groupMode == 'none',
+                    onTap: () => setState(() {
+                      groupMode = 'none';
+                      _collapsedGroups.clear();
+                    }),
+                  ),
+                  _filterChip(
+                    label: 'Grup harga',
+                    selected: groupMode == 'harga',
+                    onTap: () => setState(() {
+                      groupMode = 'harga';
+                      _collapsedGroups.clear();
+                    }),
+                  ),
+                  _filterChip(
+                    label: 'Grup sub kategori',
+                    selected: groupMode == 'sub',
+                    onTap: () => setState(() {
+                      groupMode = 'sub';
+                      _collapsedGroups.clear();
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: OptikAdminTokens.spaceMd),
+              Text('Filter kategori',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              PremiumChipWrap(
+                children: [
+                  for (final k in const ['SEMUA', 'Frame', 'Lensa', 'Lainnya'])
+                    _filterChip(
+                      label: k == 'SEMUA' ? 'Semua' : k,
+                      selected: filterKat == k,
+                      onTap: () => setState(() => filterKat = k),
+                    ),
+                ],
+              ),
+              if (_hargaOptions.isNotEmpty) ...[
+                const SizedBox(height: OptikAdminTokens.spaceMd),
+                Text('Filter harga',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                PremiumChipWrap(
+                  children: [
+                    _filterChip(
+                      label: 'Semua',
+                      selected: filterHarga == 'SEMUA',
+                      onTap: () => setState(() => filterHarga = 'SEMUA'),
+                    ),
+                    for (final h in _hargaOptions)
+                      _filterChip(
+                        label: _formatRupiahLocal(h),
+                        selected: filterHarga == h.toString(),
+                        onTap: () =>
+                            setState(() => filterHarga = h.toString()),
+                      ),
+                  ],
+                ),
+              ],
+              if (_subKatOptions.isNotEmpty) ...[
+                const SizedBox(height: OptikAdminTokens.spaceMd),
+                Text('Filter sub kategori',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                PremiumChipWrap(
+                  children: [
+                    _filterChip(
+                      label: 'Semua',
+                      selected: filterSubKat == 'SEMUA',
+                      onTap: () => setState(() => filterSubKat = 'SEMUA'),
+                    ),
+                    for (final s in _subKatOptions)
+                      _filterChip(
+                        label: s,
+                        selected:
+                            filterSubKat.toLowerCase() == s.toLowerCase(),
+                        onTap: () => setState(() => filterSubKat = s),
+                      ),
+                  ],
+                ),
+              ],
+            ],
             const SizedBox(height: OptikAdminTokens.spaceMd),
 
             isLoading
                 ? const Center(
                     child:
                         CircularProgressIndicator(color: Colors.orangeAccent))
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: listProduk.length,
-                    itemBuilder: (c, i) {
-                      final item = listProduk[i];
-                      String namaRapi =
-                          _toTitleCase(item['nama']?.toString() ?? '-');
-
-                      // 1. Ambil Profil Wilayah Login
-                      String userToko =
-                          widget.profile['toko_id']?.toString().toUpperCase() ??
-                              'PUSAT';
-                      bool isHakAksesPusat = userToko == 'PUSAT' ||
-                          widget.profile['role'] == 'owner' ||
-                          widget.profile['role'] == 'admin_pusat';
-
-                      int displayStock =
-                          item['total_stock'] ?? item['stock'] ?? 0;
-                      String labelStok = "Total Stock: ";
-
-                      // 2. Filter Stok Menggunakan Loop Tradisional (Aman dari Masalah Type-Subtype Dart Web)
-                      if (!isHakAksesPusat && item['breakdown_stok'] != null) {
-                        labelStok = "Stok Cabang: ";
-                        int stokKetemu = 0;
-                        for (var b in item['breakdown_stok']) {
-                          if (b['cabang'].toString().toUpperCase() ==
-                              userToko) {
-                            stokKetemu =
-                                int.tryParse(b['stok'].toString()) ?? 0;
-                            break;
-                          }
-                        }
-                        displayStock = stokKetemu;
-                      }
-
-                      return PremiumPanel(
-                        padding: EdgeInsets.zero,
-                        borderRadius: 16,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          leading: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                                color: Colors.black26,
-                                borderRadius: BorderRadius.circular(10)),
-                            child: (item['image_url'] != null &&
-                                    item['image_url'].toString().isNotEmpty &&
-                                    item['image_url'].toString() != '-')
-                                ? ClipRRect(
+                : listProduk.isEmpty
+                    ? PremiumEmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        message: searchController.text.trim().isEmpty
+                            ? 'Belum ada data inventori.'
+                            : 'Tidak ada yang cocok dengan pencarian/filter.',
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final group in grouped) ...[
+                            if (group.key.isNotEmpty)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 4, bottom: 6),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
                                     borderRadius: BorderRadius.circular(10),
-                                    child: Image.network(item['image_url'],
-                                        fit: BoxFit.cover))
-                                : const Icon(Icons.image,
-                                    color: Colors.white10),
-                          ),
-                          title: Text(namaRapi,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                  "${item['kategori']} | ${item['sub_kategori'] ?? '-'}",
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(Icons.location_on,
-                                      color: Colors.blueAccent, size: 11),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    !isHakAksesPusat
-                                        ? "CABANG $userToko"
-                                        : "PUSAT",
-                                    style: const TextStyle(
-                                        color: Colors.blueAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(_formatRupiahLocal(item['harga']),
-                                  style: const TextStyle(
-                                      color: Colors.greenAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                            ],
-                          ),
-                          trailing: R.isCompact(context)
-                              ? PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert,
-                                      color: Colors.white54, size: 20),
-                                  color: OptikAdminTokens.card,
-                                  onSelected: (action) {
-                                    if (action == 'detail') {
-                                      showProductDetail(item);
-                                    }
-                                  },
-                                  itemBuilder: (_) => [
-                                    PopupMenuItem(
-                                      value: 'detail',
+                                    onTap: () =>
+                                        _toggleGroupCollapsed(group.key),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: OptikAdminTokens.card
+                                            .withOpacity(0.55),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: OptikAdminTokens.lineStrong,
+                                        ),
+                                      ),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.qr_code_2_rounded,
-                                              color: Colors.blueAccent,
-                                              size: 18),
-                                          const SizedBox(width: 8),
-                                          Text('$labelStok$displayStock Pcs',
-                                              style: const TextStyle(
-                                                  fontSize: 12)),
+                                          Icon(
+                                            _collapsedGroups
+                                                    .contains(group.key)
+                                                ? Icons.chevron_right_rounded
+                                                : Icons
+                                                    .expand_more_rounded,
+                                            color: Colors.orangeAccent,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              '${group.key.toUpperCase()}  (${group.value.length})',
+                                              style: TextStyle(
+                                                color: OptikAdminTokens
+                                                    .textMuted
+                                                    .withOpacity(0.95),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.8,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            _collapsedGroups
+                                                    .contains(group.key)
+                                                ? 'Buka'
+                                                : 'Tutup',
+                                            style: TextStyle(
+                                              color: Colors.white
+                                                  .withOpacity(0.45),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                  ],
-                                )
-                              : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                      color:
-                                          Colors.orangeAccent.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8)),
-                                  child: Text(
-                                      "$labelStok$displayStock Pcs",
-                                      style: const TextStyle(
-                                          color: Colors.orangeAccent,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold))),
-                              const SizedBox(width: OptikAdminTokens.spaceSm),
-                              IconButton(
-                                  iconSize: 20,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 36, minHeight: 36),
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.qr_code_2_rounded,
-                                      color: Colors.blueAccent, size: 20),
-                                  onPressed: () => showProductDetail(item)),
-                            ],
-                          ),
-                          // 🎯 REVISI KLIK: Jika dia admin pusat buka form edit, jika dia cabang buka pop-up detail produk!
-                          onTap: isCanEdit
-                              ? () {
-                                  Future.delayed(
-                                      const Duration(milliseconds: 150), () {
-                                    if (!mounted) return;
-                                    if (editId == item['id'].toString()) {
-                                      _reset();
-                                    } else {
-                                      setState(() {
-                                        editId = item['id'].toString();
-                                        nameController.text =
-                                            item['nama'] ?? '';
-                                        hargaController.text =
-                                            _formatRupiahLocal(
-                                                    item['harga'] ?? 0)
-                                                .replaceAll('Rp', '')
-                                                .replaceAll('.', '')
-                                                .trim();
-                                        hargaModalController.text =
-                                            item['harga_modal']?.toString() ??
-                                                '0';
-                                        stokController.text =
-                                            item['stock']?.toString() ?? '0';
-                                        barcodeController.text =
-                                            item['barcode'] ?? '';
-                                        warnaCtrl.text = item['warna'] ?? '';
-                                        // 🎯 Buka field input manual agar barcode lamanya kelihatan pas diedit
-                                        barcodeMode = 'MANUAL_PRODUCT';
-                                        inputKat = item['kategori'] ?? 'Frame';
-                                        String rawSub = item['sub_kategori']
-                                                ?.toString()
-                                                .trim() ??
-                                            '';
-                                        if (inputKat == 'Frame') {
-                                          inputSub = [
-                                            'Plastik',
-                                            'Besi',
-                                            'Kayu',
-                                            'Titanium'
-                                          ].contains(rawSub)
-                                              ? rawSub
-                                              : 'Plastik';
-                                          selectedJenisLensa = null;
-                                        } else if (inputKat == 'Lensa') {
-                                          inputSub = [
-                                            'Supersin',
-                                            'Blueray',
-                                            'Photochromic',
-                                            'Bluechromic',
-                                            'Night Driving',
-                                            'Antifog'
-                                          ].contains(rawSub)
-                                              ? rawSub
-                                              : 'Supersin';
-                                          String rawJenis =
-                                              item['jenis_lensa']?.toString() ??
-                                                  '';
-                                          selectedJenisLensa = [
-                                            'Standar',
-                                            'Progresif',
-                                            'Kryptok'
-                                          ].contains(rawJenis)
-                                              ? rawJenis
-                                              : 'Standar';
-                                          sphCtrl.text =
-                                              _formatOptic(item['sph_r']);
-                                          cylCtrl.text =
-                                              _formatOptic(item['cyl_r']);
-                                          addCtrl.text =
-                                              _formatOptic(item['add_r']);
-                                        } else {
-                                          inputSub = null;
-                                          selectedJenisLensa = null;
-                                        }
-                                      });
-                                    }
-                                  });
-                                }
-                              : () => showProductDetail(
-                                  item), // <-- Cabang langsung diarahkan ngebuka pop-up detail!
-                        ),
-                      );
-                    },
-                  ),
+                                  ),
+                                ),
+                              ),
+                            if (!_collapsedGroups.contains(group.key))
+                              for (final item in group.value)
+                                _buildProductCard(item),
+                          ],
+                        ],
+                      ),
           ],
         ),
       ),

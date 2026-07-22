@@ -9,6 +9,7 @@ import 'barcode_scanner.dart';
 import 'restore_operation.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
+import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -260,19 +261,44 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 // 🔥 FUNGSI CEK DATA STOK REAL-TIME KORPORAT BERBASIS FINANCIAL AUDIT HARGA MODAL & MARGIN PROFIT
   Future<void> _handleQuickCheck(BuildContext context, String code) async {
     try {
-      final res = await supabase
-          .from('products')
-          .select()
-          .eq('sku',
-              code) // 🎯 FIX SAKTI: Ganti dari 'barcode' ke 'sku' agar sinkron dengan database harian lo!
-          .eq('toko_id', widget.profile['toko_id'])
-          .maybeSingle();
+      final parsed = ProductCode.parse(code);
+      final sku = (parsed?.sku ?? ProductCode.resolveSku(code) ?? '').trim();
+      final productId = parsed?.productId;
+      final tokoId = widget.profile['toko_id'];
+
+      Map<String, dynamic>? res;
+      if (productId != null && productId.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('id', productId)
+            .eq('toko_id', tokoId)
+            .maybeSingle();
+      }
+      if (res == null && sku.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('sku', sku)
+            .eq('toko_id', tokoId)
+            .maybeSingle();
+      }
+      if (res == null && sku.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('barcode', sku)
+            .eq('toko_id', tokoId)
+            .maybeSingle();
+      }
 
       if (!context.mounted) return;
 
-      if (res != null) {
-        int modal = int.tryParse(res['harga_modal']?.toString() ?? '0') ?? 0;
-        int jual = int.tryParse(res['harga_jual']?.toString() ?? '0') ?? 0;
+      final product = res;
+      if (product != null) {
+        int modal =
+            int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
+        int jual = int.tryParse(product['harga_jual']?.toString() ?? '0') ?? 0;
         int marginItem = jual - modal;
         double pctMargin = jual > 0 ? (marginItem / jual) * 100 : 0.0;
 
@@ -288,7 +314,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     color: Colors.blueAccent, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: Text(res['nama'] ?? 'inv_detail_produk'.tr(),
+                    child: Text(product['nama'] ?? 'inv_detail_produk'.tr(),
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
@@ -304,8 +330,8 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _infoRow("inv_stok_saat_ini".tr(),
-                        "${res['stock'] ?? 0} PCS", Colors.greenAccent),
-                    _infoRow("inv_kategori".tr(), res['kategori'] ?? '-',
+                        "${product['stock'] ?? 0} PCS", Colors.greenAccent),
+                    _infoRow("inv_kategori".tr(), product['kategori'] ?? '-',
                         Colors.white70),
                     const Divider(color: Colors.white10, height: 16),
                     const Text("📊 STRUKTUR AKUNTANSI ASSET PROD",
@@ -328,26 +354,28 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                             ? Colors.greenAccent
                             : Colors.orangeAccent),
                     const Divider(color: Colors.white10, height: 16),
-                    if (res['kategori'] == 'Frame' && res['warna'] != null)
-                      _infoRow("inv_warna_frame".tr(), res['warna'],
+                    if (product['kategori'] == 'Frame' &&
+                        product['warna'] != null)
+                      _infoRow("inv_warna_frame".tr(), product['warna'],
                           Colors.orangeAccent),
-                    if (res['kategori'] == 'Lensa') ...[
+                    if (product['kategori'] == 'Lensa') ...[
                       _infoRow("inv_jenis_lensa".tr(),
-                          res['jenis_lensa'] ?? '-', Colors.orangeAccent),
-                      _infoRow("SPH", _formatOpticLocal(res['sph_r']),
+                          product['jenis_lensa'] ?? '-', Colors.orangeAccent),
+                      _infoRow("SPH", _formatOpticLocal(product['sph_r']),
                           Colors.cyanAccent),
-                      _infoRow("CYL", _formatOpticLocal(res['cyl_r']),
+                      _infoRow("CYL", _formatOpticLocal(product['cyl_r']),
                           Colors.cyanAccent),
-                      if (res['jenis_lensa'] == 'Progresif' ||
-                          res['jenis_lensa'] == 'Kryptok')
-                        _infoRow("ADD", _formatOpticLocal(res['add_r']),
+                      if (product['jenis_lensa'] == 'Progresif' ||
+                          product['jenis_lensa'] == 'Kryptok')
+                        _infoRow("ADD", _formatOpticLocal(product['add_r']),
                             Colors.purpleAccent),
                     ],
                     const SizedBox(height: 12),
-                    if (res['image_url'] != null && res['image_url'] != '-')
+                    if (product['image_url'] != null &&
+                        product['image_url'] != '-')
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(res['image_url'],
+                        child: Image.network(product['image_url'],
                             height: 110,
                             width: double.infinity,
                             fit: BoxFit.cover,

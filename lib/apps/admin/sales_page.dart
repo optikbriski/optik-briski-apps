@@ -21,8 +21,12 @@ import 'package:file_picker/file_picker.dart'; // Pastikan import ini ada
 import '../../shared/pos_print_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/garansi/garansi_service.dart';
+import '../../shared/invoice/invoice_hub_page.dart';
+import '../../shared/invoice/invoice_lifecycle_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/qr/hid_scan_intake.dart';
+import '../../shared/qr/obr_codes.dart';
+import '../../shared/qr/product_code.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/widgets/leave_page_guard.dart';
@@ -696,6 +700,75 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
+  void _applyObrCustomer(QrRouteResult routed) {
+    setState(() {
+      if ((routed.customerNama ?? '').isNotEmpty) {
+        nameCtrl.text = routed.customerNama!;
+      }
+      if ((routed.customerPhone ?? '').isNotEmpty) {
+        phoneCtrl.text = routed.customerPhone!;
+      }
+      if ((routed.customerEmail ?? '').isNotEmpty) {
+        emailCtrl.text = routed.customerEmail!;
+      }
+    });
+    _showSnack('Data pelanggan terisi dari QR OBRCUS.', Colors.green);
+  }
+
+  void _showCustomerQrDialog() {
+    final payload = ObrCustomer.encode(
+      nama: nameCtrl.text,
+      phone: phoneCtrl.text,
+      email: emailCtrl.text,
+    );
+    if (payload.isEmpty) {
+      _showSnack('Isi nama pelanggan dulu sebelum buat QR.', Colors.orange);
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('QR Pelanggan (OBRCUS)',
+            style: TextStyle(color: Colors.white, fontSize: 14)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(
+                data: payload,
+                size: 180,
+                version: QrVersions.auto,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              payload,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.65),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Scan dari kolom SKU (kamera / HID / Enter): routing QR dulu, lalu SKU.
   Future<void> _onPosScanSubmitted(String value) async {
     final raw = value.trim();
@@ -703,6 +776,17 @@ class _SalesPageState extends State<SalesPage> {
     skuScanCtrl.clear();
 
     final routed = QrRouter.classify(raw);
+
+    // Produk / pelanggan: dikonsumsi di POS (tidak leave ke halaman lain).
+    if (routed.type == QrPayloadType.product || ProductCode.looksLike(raw)) {
+      await _cariProdukBySKU(raw);
+      return;
+    }
+    if (routed.type == QrPayloadType.customer) {
+      _applyObrCustomer(routed);
+      return;
+    }
+
     if (routed.isKnown) {
       final proceed = await _guardPosLeaveForKnownQr(routed);
       if (!proceed || !mounted) return;
@@ -898,28 +982,58 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
-  Future<void> _cariProdukBySKU(String sku) async {
+  Future<void> _cariProdukBySKU(String rawScan) async {
     setState(() => isProcessing = true);
     try {
       final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+      final parsed = ProductCode.parse(rawScan);
+      final sku = (parsed?.sku ?? ProductCode.resolveSku(rawScan) ?? '').trim();
+      final productId = parsed?.productId;
 
-      // 1. Cari Master Produk
-      final res =
-          await supabase.from('products').select().eq('sku', sku).maybeSingle();
+      if (sku.isEmpty && (productId == null || productId.isEmpty)) {
+        _showSnack("pos_err_sku_tidak_terdaftar".tr(), Colors.orange);
+        return;
+      }
+
+      // 1. Cari Master Produk — prioritas id tertanam di QR/barcode produk
+      Map<String, dynamic>? res;
+      if (productId != null && productId.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('id', productId)
+            .maybeSingle();
+      }
+      if (res == null && sku.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('sku', sku)
+            .maybeSingle();
+      }
+      if (res == null && sku.isNotEmpty) {
+        res = await supabase
+            .from('products')
+            .select()
+            .eq('barcode', sku)
+            .maybeSingle();
+      }
 
       if (res != null) {
+        final stockSku = (res['sku'] ?? res['barcode'] ?? sku).toString();
         // 2. Cek Stok di Cabang Tersebut
         final stockRes = await supabase
             .from('inventory_stocks')
             .select('stok')
             .eq('toko_id', tokoId)
-            .eq('sku', sku)
+            .eq('sku', stockSku)
             .maybeSingle();
 
         int stokAktif = stockRes != null ? (stockRes['stok'] ?? 0) : 0;
 
         if (stokAktif <= 0) {
-          _showSnack("${"pos_stok_kosong".tr()} SKU: $sku", Colors.redAccent);
+          _showSnack(
+              "${"pos_stok_kosong".tr()} SKU: $stockSku", Colors.redAccent);
           return;
         }
 
@@ -2530,6 +2644,13 @@ class _SalesPageState extends State<SalesPage> {
       int sisa = total - bayar;
       if (sisa < 0) sisa = 0;
 
+      final isDpCheckout = paymentStatus == "DP" || sisa > 0;
+      final statusNorm = isDpCheckout ? 'DP' : 'LUNAS';
+      final qrDpToken =
+          isDpCheckout ? InvoiceLifecycleService.newToken() : null;
+      final qrLunasToken =
+          isDpCheckout ? null : InvoiceLifecycleService.newToken();
+
       debugPrint(
           "DEBUG KASIR ID: ${activeCashier?['id'] ?? widget.profile['id']}");
 
@@ -2560,12 +2681,15 @@ class _SalesPageState extends State<SalesPage> {
                         total) -
                     total
                 : 0,
-            'status_pembayaran':
-                paymentStatus, // "Lunas" atau "DP" murni dari input tombol kasir
+            'status_pembayaran': statusNorm,
             'metode_pembayaran': paymentMethod,
             // Lunas = siap diambil; garansi baru jalan setelah scan ambil + foto hasil
             'tracking_status':
-                paymentStatus == "Lunas" ? 'SIAP_DIAMBIL' : 'PENDING_PO',
+                isDpCheckout ? 'PENDING_PO' : 'SIAP_DIAMBIL',
+            if (!isDpCheckout)
+              'lunas_at': DateTime.now().toUtc().toIso8601String(),
+            if (qrDpToken != null) 'qr_dp_token': qrDpToken,
+            if (qrLunasToken != null) 'qr_lunas_token': qrLunasToken,
           })
           .select()
           .single();
@@ -2669,7 +2793,7 @@ class _SalesPageState extends State<SalesPage> {
           'kategori': 'Penjualan Kasir',
           'deskripsi': 'Penjualan Kasir POS: $noInvoice ($namaPasienForm)',
           'nominal': bayar,
-          'status_pembayaran': paymentStatus == "Lunas" ? 'LUNAS' : 'DP',
+          'status_pembayaran': statusNorm,
           'metode_pembayaran': paymentMethod,
           'updated_at': DateTime.now().toIso8601String(),
         });
@@ -2737,6 +2861,16 @@ class _SalesPageState extends State<SalesPage> {
   Future<void> _generateAndSharePDF(
       Map<String, dynamic> sale, List<dynamic> items) async {
     try {
+      // Pastikan token QR pelanggan ada (nota lama / sebelum migrasi).
+      try {
+        final sid = sale['id']?.toString();
+        if (sid != null && sid.isNotEmpty) {
+          sale = await InvoiceLifecycleService().ensureTokens(sid);
+        }
+      } catch (e) {
+        debugPrint('ensureTokens QR invoice: $e');
+      }
+
       final pdf = pw.Document();
 
       final bool hasLensa = items.any((item) =>
@@ -3057,9 +3191,8 @@ class _SalesPageState extends State<SalesPage> {
                               width: 44,
                               child: pw.BarcodeWidget(
                                   barcode: pw.Barcode.qrCode(),
-                                  data: InvoiceLink.encode(
-                                      sale['no_invoice']?.toString() ??
-                                          'EMPTY'),
+                                  data: InvoiceLink.encodeFromSale(
+                                      Map<String, dynamic>.from(sale as Map)),
                                   padding: pw.EdgeInsets.zero)),
                       ],
                     ),
@@ -3218,6 +3351,17 @@ class _SalesPageState extends State<SalesPage> {
     } else if (isPosUnlocked && activeCashier != null) {
       // HID global di shell; intake lokal: SKU → cart, invoice → dialog draft POS.
       currentUI = HidScanIntake(
+        tryHandleKnown: (result) async {
+          if (result.type == QrPayloadType.product) {
+            await _cariProdukBySKU(result.raw);
+            return true;
+          }
+          if (result.type == QrPayloadType.customer) {
+            _applyObrCustomer(result);
+            return true;
+          }
+          return false;
+        },
         onUnknown: (raw) async {
           await _cariProdukBySKU(raw);
           return true;
@@ -3811,8 +3955,27 @@ class _SalesPageState extends State<SalesPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildCardTitle(
-                            "pos_data_pelanggan".tr(), Icons.person_pin),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildCardTitle(
+                                  "pos_data_pelanggan".tr(), Icons.person_pin),
+                            ),
+                            TextButton.icon(
+                              onPressed: _showCustomerQrDialog,
+                              icon: const Icon(Icons.qr_code_2_rounded,
+                                  size: 18, color: Colors.orangeAccent),
+                              label: const Text(
+                                'QR pelanggan',
+                                style: TextStyle(
+                                  color: Colors.orangeAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         TextField(
                           controller: nameCtrl,
                           textCapitalization: TextCapitalization.words,
@@ -5365,11 +5528,12 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
 
   Future<void> _fetchNota() async {
     try {
-      final resSale = await supabase
-          .from('sales')
-          .select()
-          .eq('id', widget.saleId)
-          .single();
+      Map<String, dynamic> resSale = Map<String, dynamic>.from(
+        await supabase.from('sales').select().eq('id', widget.saleId).single(),
+      );
+      try {
+        resSale = await InvoiceLifecycleService().ensureTokens(widget.saleId);
+      } catch (_) {}
       final resItems = await supabase
           .from('sales_items')
           .select()
@@ -5843,8 +6007,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                               width: 55,
                               child: pw.BarcodeWidget(
                                   barcode: pw.Barcode.qrCode(),
-                                  data: InvoiceLink.encode(
-                                      sale['no_invoice']?.toString() ?? ''),
+                                  data: InvoiceLink.encodeFromSale(
+                                      Map<String, dynamic>.from(sale as Map)),
                                   padding: pw.EdgeInsets.zero)),
                       ],
                     ),
@@ -6436,9 +6600,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                     height: 55,
                                     width: 55,
                                     child: QrImageView(
-                                        data: InvoiceLink.encode(
-                                            sale['no_invoice']?.toString() ??
-                                                ''),
+                                        data: InvoiceLink.encodeFromSale(
+                                            Map<String, dynamic>.from(
+                                                sale as Map)),
                                         version: QrVersions.auto,
                                         padding: EdgeInsets.zero),
                                   ),
@@ -6450,6 +6614,21 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
+                              if (config['show_qr_invoice'] == true)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 4),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'QR pelanggan',
+                                      style: TextStyle(
+                                        color: Colors.black45,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
@@ -6525,8 +6704,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               ),
               const SizedBox(height: 20),
 
-              // Lunas: SIAP_DIAMBIL → scan barcode + foto di Garansi untuk DIAMBIL (mulai 7 hari)
-              if (sale['status_pembayaran'] == 'Lunas') ...[
+              // Lunas: scan QR LUNAS (hub) → serah terima + garansi; scan ke-2 → klaim
+              if ((sale['status_pembayaran']?.toString().toLowerCase() ?? '') ==
+                  'lunas') ...[
                 Container(
                   constraints: const BoxConstraints(maxWidth: 420),
                   padding: const EdgeInsets.all(10),
@@ -6538,11 +6718,14 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     children: [
                       Text(
                         'Status: $currentTrackingStatus'
-                        '${sale['diambil_at'] != null ? ' · sudah diambil' : ''}',
+                        '${sale['diambil_at'] != null ? ' · sudah diambil' : ''}\n'
+                        'Aksi lifecycle: scan QR pelanggan (DP/LUNAS/CLAIM) '
+                        'dengan scanner toko yang terhubung ke web admin.',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
+                          height: 1.35,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6551,40 +6734,34 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    currentTrackingStatus == 'DIAMBIL' ||
-                                            sale['diambil_at'] != null
-                                        ? Colors.green
-                                        : const Color(0xFFE8C872),
-                                foregroundColor: OptikAdminTokens.bgMid,
+                                backgroundColor: OptikAdminTokens.card,
+                                foregroundColor: Colors.white70,
                               ),
-                              onPressed: isPrinting ||
-                                      sale['diambil_at'] != null ||
-                                      currentTrackingStatus == 'DIAMBIL'
+                              onPressed: isPrinting
                                   ? null
                                   : () async {
+                                      final inv =
+                                          sale['no_invoice']?.toString() ?? '';
+                                      if (inv.isEmpty) return;
                                       await Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) =>
-                                              GaransiKonfirmasiAmbilPage(
+                                          builder: (_) => InvoiceHubPage(
+                                            noInvoice: inv,
+                                            viewOnly: true,
                                             profile: {
                                               'toko_id': sale['toko_id'],
                                               'role': 'admin_toko',
                                             },
-                                            prefillInvoice:
-                                                sale['no_invoice']?.toString(),
                                           ),
                                         ),
                                       );
                                       await _fetchNota();
                                     },
-                              icon: const Icon(Icons.qr_code_scanner, size: 16),
-                              label: Text(
-                                sale['diambil_at'] != null
-                                    ? 'SUDAH DIAMBIL'
-                                    : 'SCAN AMBIL + FOTO',
-                                style: const TextStyle(
+                              icon: const Icon(Icons.receipt_long, size: 16),
+                              label: const Text(
+                                'LIHAT DETAIL INVOICE',
+                                style: TextStyle(
                                     fontSize: 11, fontWeight: FontWeight.bold),
                               ),
                             ),

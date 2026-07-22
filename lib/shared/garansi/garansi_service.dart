@@ -199,10 +199,17 @@ class GaransiService {
     return uploadFotoHasil(saleId: saleId, bytes: bytes, ext: ext);
   }
 
-  /// Kasir scan barcode invoice + foto hasil → customer sudah ambil, garansi 7 hari mulai.
+  static bool isSaleLunas(Map<String, dynamic> sale) {
+    final st = (sale['status_pembayaran'] ?? '').toString().trim().toLowerCase();
+    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    return st == 'lunas' && sisa <= 0;
+  }
+
+  /// Scan QR LUNAS ke-1: konfirmasi serah terima + aktifkan garansi 7 hari.
+  /// [fotoHasilUrl] opsional (boleh kosong jika konfirmasi hanya lewat scan QR).
   Future<Map<String, dynamic>> konfirmasiAmbil({
     required String noInvoice,
-    required String fotoHasilUrl,
+    String? fotoHasilUrl,
     String? tokoId,
     bool isPusat = false,
   }) async {
@@ -213,16 +220,14 @@ class GaransiService {
     );
     if (sale == null) throw 'Invoice tidak ditemukan.';
 
-    final statusBayar = sale['status_pembayaran']?.toString() ?? '';
-    if (statusBayar.toLowerCase() != 'lunas') {
+    if (!isSaleLunas(sale)) {
       throw 'Transaksi belum Lunas. Selesaikan pembayaran dulu.';
     }
     if (sale['diambil_at'] != null) {
       throw 'Barang sudah dikonfirmasi diambil sebelumnya.';
     }
-    if (fotoHasilUrl.trim().isEmpty) {
-      throw 'Foto hasil pengerjaan wajib diunggah sebagai bukti.';
-    }
+
+    final foto = (fotoHasilUrl ?? '').trim();
 
     // Pastikan ada kartu frame/lensa
     var n = await _db
@@ -238,31 +243,33 @@ class GaransiService {
     final akhir = mulai.add(const Duration(days: garansiHari));
     final uid = _db.auth.currentUser?.id;
 
-    await _db.from('sales').update({
+    final salePatch = <String, dynamic>{
       'diambil_at': now.toUtc().toIso8601String(),
-      'foto_hasil_url': fotoHasilUrl,
       'diambil_oleh': uid,
       'tracking_status': 'DIAMBIL',
-    }).eq('id', sale['id']);
+    };
+    if (foto.isNotEmpty) salePatch['foto_hasil_url'] = foto;
 
-    await _db.from('garansi_kartu').update({
+    await _db.from('sales').update(salePatch).eq('id', sale['id']);
+
+    final kartuPatch = <String, dynamic>{
       'status': 'aktif',
       'tanggal_mulai': formatDate(mulai),
       'tanggal_akhir': formatDate(akhir),
       'diambil_at': now.toUtc().toIso8601String(),
-      'foto_hasil_url': fotoHasilUrl,
-    }).eq('sale_id', sale['id']).eq('status', 'menunggu_ambil');
+    };
+    if (foto.isNotEmpty) kartuPatch['foto_hasil_url'] = foto;
+
+    await _db
+        .from('garansi_kartu')
+        .update(kartuPatch)
+        .eq('sale_id', sale['id'])
+        .eq('status', 'menunggu_ambil');
 
     // Juga aktifkan yang mungkin masih null tanggal
     await _db
         .from('garansi_kartu')
-        .update({
-          'status': 'aktif',
-          'tanggal_mulai': formatDate(mulai),
-          'tanggal_akhir': formatDate(akhir),
-          'diambil_at': now.toUtc().toIso8601String(),
-          'foto_hasil_url': fotoHasilUrl,
-        })
+        .update(kartuPatch)
         .eq('sale_id', sale['id'])
         .isFilter('tanggal_mulai', null);
 

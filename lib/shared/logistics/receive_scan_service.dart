@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../qr/obr_codes.dart';
 import 'request_order_service.dart';
 
 class ReceiveScanResult {
@@ -33,6 +34,18 @@ class ReceiveScanService {
 
   static Map<String, dynamic> parseQrPayload(String raw) {
     final trimmed = raw.trim();
+
+    // OBRDO|v1|<resi>|<tujuan> / OBRRO|v1|<resi>|<tujuan>
+    final obr = parseObrLogistics(trimmed);
+    if (obr != null) {
+      return {
+        'resi': obr.resi,
+        if (obr.tujuan != null) 'tujuan': obr.tujuan,
+        'kind': obr.kind,
+      };
+    }
+
+    // Legacy JSON: {"resi":"DO-…","tujuan":"…"}
     try {
       final decoded = jsonDecode(trimmed);
       if (decoded is Map) {

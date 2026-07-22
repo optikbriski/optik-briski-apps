@@ -31,6 +31,7 @@ class UniversalQrNav {
       allowedTypes: allowedTypes,
     );
     if (result == null || !context.mounted) return;
+    // Kamera HP / Scan QR — bukan scanner HID web admin → lifecycle view-only.
     await dispatch(
       context,
       result,
@@ -39,6 +40,7 @@ class UniversalQrNav {
       cabangKaryawan: cabangKaryawan,
       karyawanId: karyawanId,
       karyawanNama: karyawanNama,
+      fromAdminHidScanner: false,
     );
   }
 
@@ -56,6 +58,8 @@ class UniversalQrNav {
       case QrPayloadType.receiveStock:
         if (callerRole != UniversalQrCallerRole.karyawan) return false;
         return (cabangKaryawan ?? '').trim().isNotEmpty;
+      case QrPayloadType.product:
+      case QrPayloadType.customer:
       case QrPayloadType.unknown:
         return false;
     }
@@ -69,6 +73,8 @@ class UniversalQrNav {
     String? cabangKaryawan,
     String? karyawanId,
     String? karyawanNama,
+    /// True hanya dari USB/Bluetooth HID yang terhubung ke web admin.
+    bool fromAdminHidScanner = false,
   }) async {
     void snack(String msg, {Color? color}) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,10 +98,21 @@ class UniversalQrNav {
           );
           return;
         }
+        // Lifecycle (lunasi / serah terima / klaim) hanya scanner HID + role admin.
+        final lifecycleOk = fromAdminHidScanner &&
+            callerRole == UniversalQrCallerRole.admin &&
+            result.invoiceCustomerLifecycle &&
+            !result.invoiceViewOnly;
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => InvoiceHubPage(noInvoice: inv, profile: profile),
+            builder: (_) => InvoiceHubPage(
+              noInvoice: inv,
+              rawScan: result.raw,
+              profile: profile,
+              viewOnly: !lifecycleOk,
+              fromAdminHidScanner: lifecycleOk,
+            ),
           ),
         );
         return;
@@ -142,6 +159,15 @@ class UniversalQrNav {
             ),
           ),
         );
+        return;
+
+      case QrPayloadType.product:
+        snack('Scan produk di POS / cek stok inventori.', color: Colors.blueAccent);
+        return;
+
+      case QrPayloadType.customer:
+        snack('Scan QR pelanggan di layar POS untuk mengisi data.',
+            color: Colors.blueAccent);
         return;
 
       case QrPayloadType.unknown:

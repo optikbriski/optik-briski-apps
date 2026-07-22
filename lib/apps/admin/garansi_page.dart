@@ -13,7 +13,17 @@ import '../../shared/widgets/admin/admin_premium.dart';
 
 class GaransiPage extends StatefulWidget {
   final Map<String, dynamic> profile;
-  const GaransiPage({super.key, required this.profile});
+
+  /// Prefill pencarian + (opsional) buka tab klaim setelah load.
+  final String? initialInvoice;
+  final bool openKlaimTab;
+
+  const GaransiPage({
+    super.key,
+    required this.profile,
+    this.initialInvoice,
+    this.openKlaimTab = false,
+  });
 
   @override
   State<GaransiPage> createState() => _GaransiPageState();
@@ -47,7 +57,31 @@ class _GaransiPageState extends State<GaransiPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: _isPusat ? 3 : 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+    final inv = (widget.initialInvoice ?? '').trim();
+    if (inv.isNotEmpty) {
+      _searchCtrl.text = inv;
+      _invoiceCtrl.text = inv;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _reload();
+      if (!mounted) return;
+      if (widget.openKlaimTab && _tabs.length > 1) {
+        _tabs.animateTo(1);
+      }
+      // Buka kartu pertama untuk invoice ini (siap klaim).
+      if (inv.isNotEmpty && _kartu.isNotEmpty) {
+        Map<String, dynamic>? match;
+        for (final k in _kartu) {
+          if ((k['no_invoice']?.toString() ?? '').toUpperCase() ==
+              inv.toUpperCase()) {
+            match = k;
+            break;
+          }
+        }
+        match ??= _kartu.first;
+        await _openKartu(match);
+      }
+    });
   }
 
   @override

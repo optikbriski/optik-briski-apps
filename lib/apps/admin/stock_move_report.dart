@@ -8,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/logistics/request_order_service.dart';
+import '../../shared/qr/obr_codes.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -467,10 +468,18 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12)),
                         child: QrImageView(
-                          data: jsonEncode({
-                            "resi": item['product_name'],
-                            "tujuan": item['ke_lokasi']
-                          }),
+                          data: () {
+                            final resi =
+                                item['product_name']?.toString() ?? '';
+                            final tujuan =
+                                item['ke_lokasi']?.toString();
+                            final kind = _moveKind(item);
+                            if (kind == 'request') {
+                              return ObrRo.encode(
+                                  resi: resi, tujuan: tujuan);
+                            }
+                            return ObrDo.encode(resi: resi, tujuan: tujuan);
+                          }(),
                           version: QrVersions.auto,
                           size: 130.0,
                           backgroundColor: Colors.white,

@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
+import '../../shared/qr/obr_codes.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -2005,8 +2006,10 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         totalQty += int.tryParse(itm['qty'].toString()) ?? 0;
       }
 
-      String qrPayload =
-          jsonEncode({"resi": resiDO, "tujuan": widget.draft['tujuan']});
+      final String qrPayload = ObrDo.encode(
+        resi: resiDO,
+        tujuan: widget.draft['tujuan']?.toString(),
+      );
 
       // Lepas data draf menjadi riwayat mutasi aktif berstatus WAITING / TRANSIT
       await Supabase.instance.client.from('stock_move_history').insert({
