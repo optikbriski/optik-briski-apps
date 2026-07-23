@@ -31,7 +31,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Kamera dipakai untuk absensi wajah dan liveness.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko.</string>
+	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko, dan untuk memantau area selama shift aktif.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Lokasi dipantau selama shift absensi aktif agar sistem dapat memberi peringatan jika Anda keluar area toko, termasuk saat aplikasi di belakang. Pantauan berhenti setelah absen pulang.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

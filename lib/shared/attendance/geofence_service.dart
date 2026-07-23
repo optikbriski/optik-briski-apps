@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -13,6 +14,8 @@ class GeofenceCheckResult {
     this.longitude,
     this.distanceMeters,
     this.radiusMeters,
+    this.accuracyMeters,
+    this.gpsSkipped = false,
   });
 
   final bool inside;
@@ -21,6 +24,10 @@ class GeofenceCheckResult {
   final double? longitude;
   final double? distanceMeters;
   final int? radiusMeters;
+  final double? accuracyMeters;
+
+  /// True bila cek GPS dilewati (mis. Absensi Toko web / Mac tanpa GPS chip).
+  final bool gpsSkipped;
 }
 
 class GeofenceService {
@@ -29,7 +36,19 @@ class GeofenceService {
 
   final SupabaseClient _client;
 
-  Future<GeofenceCheckResult> ensureAtStore(String tokoId) async {
+  /// Cap buffer native (meter) — GPS HP biasanya lebih akurat.
+  static const double nativeMaxAccuracyBufferMeters = 35;
+
+  /// Ambang GPS akurat di web (meter). Di bawah ini boleh enforce fence ketat.
+  /// Di atas ini (Wi‑Fi/IP) dianggap tidak andal — jangan pakai buffer longgar.
+  static const double webHighAccuracyMeters = 30;
+
+  /// [webKiosk]: Absensi Toko di browser (Mac/PC kasir) — lewati GPS Wi‑Fi
+  /// yang tidak andal; hanya enforce jika ada GPS akurat (&lt;30 m).
+  Future<GeofenceCheckResult> ensureAtStore(
+    String tokoId, {
+    bool webKiosk = false,
+  }) async {
     final toko = await _resolveTokoRow(tokoId);
 
     if (toko == null) {
@@ -40,6 +59,10 @@ class GeofenceService {
                 'Masuk Mode Latihan saat online sekali agar koordinat di-cache lokal.'
             : 'Data toko tidak ditemukan.',
       );
+    }
+
+    if (webKiosk && kIsWeb) {
+      return _ensureAtStoreWebKiosk(toko);
     }
 
     final permission = await _ensurePermission();
@@ -58,6 +81,44 @@ class GeofenceService {
       toko: toko,
       latitude: pos.latitude,
       longitude: pos.longitude,
+      accuracyMeters: pos.accuracy.isFinite ? pos.accuracy : null,
+    );
+  }
+
+  /// Web kiosk: Mac/PC umumnya tanpa chip GPS. Percaya admin + toko dipilih
+  /// (+ wajah di UI). Jika kebetulan ada GPS akurat &lt;30 m, enforce ketat.
+  Future<GeofenceCheckResult> _ensureAtStoreWebKiosk(
+    Map<String, dynamic> toko,
+  ) async {
+    try {
+      final permission = await _ensurePermission();
+      if (permission == null) {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+            timeLimit: Duration(seconds: 12),
+          ),
+        );
+        final acc = pos.accuracy.isFinite ? pos.accuracy : null;
+        if (acc != null && acc > 0 && acc < webHighAccuracyMeters) {
+          return evaluatePosition(
+            toko: toko,
+            latitude: pos.latitude,
+            longitude: pos.longitude,
+            accuracyMeters: acc,
+          );
+        }
+      }
+    } catch (_) {
+      // Izin ditolak / timeout / Wi‑Fi kasar — lanjut skip GPS.
+    }
+
+    return const GeofenceCheckResult(
+      inside: true,
+      gpsSkipped: true,
+      message:
+          'Lokasi GPS dilewati (Mac/PC tidak punya GPS bawaan). '
+          'Absensi Toko web memakai toko yang dipilih + verifikasi wajah.',
     );
   }
 
@@ -66,12 +127,21 @@ class GeofenceService {
     required Map<String, dynamic> toko,
     required double latitude,
     required double longitude,
+    double? accuracyMeters,
   }) {
     final mode = (toko['geofence_mode'] ?? 'circle').toString().toLowerCase();
     final polygon = GeofenceGeometry.parsePolygon(toko['geofence_polygon']);
+    final buffer = accuracyBufferMeters(accuracyMeters);
 
     if (mode == 'polygon' && polygon.length >= 3) {
-      final inside = GeofenceGeometry.contains(polygon, latitude, longitude);
+      final inside = GeofenceGeometry.containsWithBuffer(
+        polygon,
+        latitude,
+        longitude,
+        bufferMeters: buffer,
+      );
+      final edgeDist =
+          GeofenceGeometry.distanceToPolygon(polygon, latitude, longitude);
       final c = GeofenceGeometry.centroid(polygon);
       double? dist;
       if (c != null) {
@@ -85,12 +155,16 @@ class GeofenceService {
       if (!inside) {
         return GeofenceCheckResult(
           inside: false,
-          message:
-              'Anda di luar area toko (batas 4 sudut). '
-              'Absen / tetap di dalam area yang digambar admin.',
+          message: _outsidePolygonMessage(
+            latitude: latitude,
+            longitude: longitude,
+            accuracyMeters: accuracyMeters,
+            edgeDistanceMeters: edgeDist,
+          ),
           latitude: latitude,
           longitude: longitude,
-          distanceMeters: dist,
+          distanceMeters: dist ?? edgeDist,
+          accuracyMeters: accuracyMeters,
         );
       }
       return GeofenceCheckResult(
@@ -101,6 +175,7 @@ class GeofenceService {
         latitude: latitude,
         longitude: longitude,
         distanceMeters: dist,
+        accuracyMeters: accuracyMeters,
       );
     }
 
@@ -123,16 +198,21 @@ class GeofenceService {
       longitude,
     );
 
-    if (distance > radius) {
+    if (distance > radius + buffer) {
       return GeofenceCheckResult(
         inside: false,
-        message:
-            'Anda di luar area toko (${distance.toStringAsFixed(0)} m). '
-            'Absen hanya boleh dalam radius $radius m.',
+        message: _outsideCircleMessage(
+          latitude: latitude,
+          longitude: longitude,
+          accuracyMeters: accuracyMeters,
+          distanceMeters: distance,
+          radiusMeters: radius,
+        ),
         latitude: latitude,
         longitude: longitude,
         distanceMeters: distance,
         radiusMeters: radius,
+        accuracyMeters: accuracyMeters,
       );
     }
 
@@ -143,6 +223,7 @@ class GeofenceService {
       longitude: longitude,
       distanceMeters: distance,
       radiusMeters: radius,
+      accuracyMeters: accuracyMeters,
     );
   }
 
@@ -150,37 +231,129 @@ class GeofenceService {
       _resolveTokoRow(tokoId);
 
   /// Training: prefer local sandbox cache (offline). Live: Supabase only.
+  /// Alias PUSAT ↔ CABANG-PUSAT: pakai baris yang punya geofence terisi.
   Future<Map<String, dynamic>?> _resolveTokoRow(String tokoId) async {
     const cols =
         'id, latitude, longitude, radius_meters, toko_id, geofence_mode, geofence_polygon';
 
-    if (TrainingMode.instance.isActive) {
-      TrainingMode.instance.assertSameToko(tokoId);
-      final cached = await TrainingSandboxStore.instance.selectOne(
-        'toko_id',
-        where: {'id': tokoId},
-      );
-      if (cached != null) return cached;
-      try {
-        final remote = await _client
-            .from('toko_id')
-            .select(cols)
-            .eq('id', tokoId)
-            .maybeSingle();
-        if (remote != null) {
-          await TrainingSandboxStore.instance.insert(
-            'toko_id',
-            Map<String, dynamic>.from(remote),
-          );
-          return Map<String, dynamic>.from(remote);
+    Future<Map<String, dynamic>?> fetch(
+      String id, {
+      bool enforceTrainingToko = true,
+    }) async {
+      if (TrainingMode.instance.isActive) {
+        if (enforceTrainingToko) {
+          TrainingMode.instance.assertSameToko(id);
         }
-      } catch (_) {
+        final cached = await TrainingSandboxStore.instance.selectOne(
+          'toko_id',
+          where: {'id': id},
+        );
+        if (cached != null) return cached;
+        try {
+          final remote = await _client
+              .from('toko_id')
+              .select(cols)
+              .eq('id', id)
+              .maybeSingle();
+          if (remote != null) {
+            await TrainingSandboxStore.instance.insert(
+              'toko_id',
+              Map<String, dynamic>.from(remote),
+            );
+            return Map<String, dynamic>.from(remote);
+          }
+        } catch (_) {
+          return null;
+        }
         return null;
       }
-      return null;
+      return _client.from('toko_id').select(cols).eq('id', id).maybeSingle();
     }
 
-    return _client.from('toko_id').select(cols).eq('id', tokoId).maybeSingle();
+    final primary = await fetch(tokoId);
+    if (_hasUsableGeofence(primary)) return primary;
+
+    final alias = _pusatAlias(tokoId);
+    if (alias != null) {
+      // Alias PUSAT/CABANG-PUSAT: jangan gagal training scope.
+      final alt = await fetch(alias, enforceTrainingToko: false);
+      if (_hasUsableGeofence(alt)) return alt;
+    }
+    return primary;
+  }
+
+  static String? _pusatAlias(String tokoId) {
+    final id = tokoId.trim().toUpperCase();
+    if (id == 'PUSAT') return 'CABANG-PUSAT';
+    if (id == 'CABANG-PUSAT') return 'PUSAT';
+    return null;
+  }
+
+  static bool _hasUsableGeofence(Map<String, dynamic>? toko) {
+    if (toko == null) return false;
+    final mode = (toko['geofence_mode'] ?? 'circle').toString().toLowerCase();
+    if (mode == 'polygon') {
+      return GeofenceGeometry.parsePolygon(toko['geofence_polygon']).length >=
+          3;
+    }
+    final lat = (toko['latitude'] as num?)?.toDouble();
+    final lng = (toko['longitude'] as num?)?.toDouble();
+    return lat != null && lng != null;
+  }
+
+  /// Buffer agar lingkaran ketidakpastian GPS boleh bersinggungan dengan fence.
+  /// Ketat untuk GPS nyata (HP/tablet) — bukan workaround Wi‑Fi Mac.
+  @visibleForTesting
+  static double accuracyBufferMeters(double? accuracyMeters) {
+    if (accuracyMeters == null ||
+        !accuracyMeters.isFinite ||
+        accuracyMeters <= 0) {
+      return 8;
+    }
+    final raw = accuracyMeters * 0.4;
+    if (raw <= 0) return 0;
+    return raw > nativeMaxAccuracyBufferMeters
+        ? nativeMaxAccuracyBufferMeters
+        : raw;
+  }
+
+  String _fmtCoord(double v) => v.toStringAsFixed(6);
+
+  String _gpsDebugLine({
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+  }) {
+    final acc = accuracyMeters != null && accuracyMeters.isFinite
+        ? ' (±${accuracyMeters.toStringAsFixed(0)} m)'
+        : '';
+    return 'GPS perangkat: ${_fmtCoord(latitude)}, ${_fmtCoord(longitude)}$acc.';
+  }
+
+  String _outsidePolygonMessage({
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+    required double edgeDistanceMeters,
+  }) {
+    final edge = edgeDistanceMeters.isFinite
+        ? ' ~${edgeDistanceMeters.toStringAsFixed(0)} m di luar batas.'
+        : '';
+    return 'Anda di luar area toko (batas 4 sudut).$edge '
+        '${_gpsDebugLine(latitude: latitude, longitude: longitude, accuracyMeters: accuracyMeters)} '
+        'Pastikan perangkat benar-benar di dalam area yang digambar admin.';
+  }
+
+  String _outsideCircleMessage({
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+    required double distanceMeters,
+    required int radiusMeters,
+  }) {
+    return 'Anda di luar area toko (${distanceMeters.toStringAsFixed(0)} m; '
+        'batas $radiusMeters m). '
+        '${_gpsDebugLine(latitude: latitude, longitude: longitude, accuracyMeters: accuracyMeters)}';
   }
 
   Future<String?> _ensurePermission() async {

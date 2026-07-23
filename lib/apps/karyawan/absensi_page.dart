@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/attendance/attendance_config.dart';
+import '../../shared/attendance/attendance_geo_unlock_service.dart';
 import '../../shared/attendance/attendance_liveness.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/attendance/attendance_service.dart';
@@ -15,12 +16,12 @@ import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
 
 /// Absensi karyawan di HP pribadi.
-/// Jika [AttendanceConfig.faceMatchOnStoreDeviceOnly]: face match masuk/pulang
-/// hanya di perangkat Admin toko; di sini enroll wajah + lihat status shift.
+/// Mode toko: scan QR Absensi + GPS geofence → geo unlock untuk Admin.
+/// Masuk: face match di Admin. Pulang: QR + geofence saja (tanpa face).
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key, this.initialAttendanceRaw});
 
-  /// Payload OBRATT dari scanner universal (opsional) — lanjut clock-in.
+  /// Payload OBRATT dari scanner universal (opsional) — lanjut verifikasi lokasi.
   final String? initialAttendanceRaw;
 
   @override
@@ -30,11 +31,15 @@ class AbsensiPage extends StatefulWidget {
 class _AbsensiPageState extends State<AbsensiPage> {
   final _service = AttendanceService();
   final _qrService = AttendanceQrService();
+  final _unlockService = AttendanceGeoUnlockService();
   bool _loading = true;
   bool _busy = false;
   Map<String, dynamic>? _karyawan;
   Map<String, dynamic>? _openShift;
   String? _error;
+  String? _lastUnlockMsg;
+  Timer? _shiftWatchTimer;
+  int _shiftWatchTicks = 0;
 
   bool get _faceEnrolled => _service.isFaceEnrolled(_karyawan);
 
@@ -47,6 +52,12 @@ class _AbsensiPageState extends State<AbsensiPage> {
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _shiftWatchTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -95,12 +106,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     if (_startedFromInitialQr) return;
     final raw = widget.initialAttendanceRaw?.trim();
     if (raw == null || raw.isEmpty) return;
-    if (_karyawan == null || _openShift != null || _busy) return;
-    if (_storeDeviceOnly) {
-      _startedFromInitialQr = true;
-      _snack('absensi_hp_pakai_perangkat_toko'.tr(), Colors.orange);
-      return;
-    }
+    if (_karyawan == null || _busy) return;
     if (!AttendanceQrPayload.looksLike(raw)) {
       _snack('universal_qr_need_attendance'.tr(), Colors.orange);
       return;
@@ -108,7 +114,150 @@ class _AbsensiPageState extends State<AbsensiPage> {
     _startedFromInitialQr = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _runFlow(action: 'MASUK', preScannedAttendanceRaw: raw);
+      if (_storeDeviceOnly) {
+        unawaited(_runGeoUnlock(preScannedAttendanceRaw: raw));
+      } else {
+        unawaited(_runFlow(action: 'MASUK', preScannedAttendanceRaw: raw));
+      }
+    });
+  }
+
+  /// Scan QR Admin + GPS di geofence → tulis unlock singkat untuk Admin web.
+  Future<void> _runGeoUnlock({String? preScannedAttendanceRaw}) async {
+    if (kIsWeb) {
+      _snack('Absensi lokasi hanya tersedia di HP (bukan web).', Colors.orange);
+      return;
+    }
+    if (_karyawan == null) return;
+
+    final tokoId = (_karyawan!['toko_id'] ?? '').toString();
+    if (tokoId.isEmpty) {
+      _snack('Toko karyawan belum terisi.', Colors.red);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      if (!mounted) return;
+      final raw = (preScannedAttendanceRaw ?? '').trim().isNotEmpty
+          ? preScannedAttendanceRaw!.trim()
+          : await UniversalQrScanPage.scanRaw(
+              context,
+              allowedTypes: {QrPayloadType.attendance},
+              titleKey: 'scan_qr',
+              hintKey: 'attendance_qr_scan_hint',
+            );
+      if (raw == null || raw.trim().isEmpty) {
+        _snack('attendance_qr_scan_cancelled'.tr(), Colors.orange);
+        return;
+      }
+      if (!AttendanceQrPayload.looksLike(raw)) {
+        _snack('universal_qr_need_attendance'.tr(), Colors.orange);
+        return;
+      }
+
+      final validated = await _qrService.validatePayload(raw);
+      if (validated.tokoId != tokoId) {
+        _snack(
+          'attendance_qr_wrong_toko'.tr(namedArgs: {
+            'qr': validated.tokoId,
+            'akun': tokoId,
+          }),
+          Colors.redAccent,
+        );
+        return;
+      }
+
+      // Strict: QR valid saja TIDAK cukup — GPS HP harus di dalam geofence.
+      final geo = await _service.checkGeofence(tokoId);
+      if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+        final detail = geo.message.trim();
+        _snack(
+          detail.isNotEmpty
+              ? 'absensi_hp_geo_outside_detail'.tr(namedArgs: {
+                  'detail': detail,
+                })
+              : 'absensi_hp_geo_outside'.tr(),
+          Colors.redAccent,
+        );
+        return;
+      }
+
+      final hadOpenShift = _openShift != null;
+      await _unlockService.createUnlock(
+        karyawanId: _karyawan!['id'] as String,
+        tokoId: tokoId,
+        geo: geo,
+        qrTokenId: validated.tokenId,
+        source: hadOpenShift ? 'qr+gps:pulang' : 'qr+gps:masuk',
+      );
+
+      // Pulang: Admin auto tanpa face. Masuk: lanjut wajah di Admin.
+      final msg = hadOpenShift
+          ? 'absensi_hp_lokasi_ok_pulang'.tr()
+          : 'absensi_hp_lokasi_ok_ke_admin'.tr();
+      if (!mounted) return;
+      setState(() => _lastUnlockMsg = msg);
+      _snack(msg, Colors.green);
+      // Pantau Admin menyelesaikan masuk (face) atau pulang (auto).
+      _armShiftWatchAfterUnlock();
+    } catch (e) {
+      _snack('$e', Colors.redAccent);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Setelah unlock: tunggu Admin menyelesaikan face match, lalu start/stop
+  /// [GeofenceExitMonitor] sesuai status shift OPEN.
+  void _armShiftWatchAfterUnlock() {
+    _shiftWatchTimer?.cancel();
+    _shiftWatchTicks = 0;
+    final kid = _karyawan?['id']?.toString();
+    final tid = _karyawan?['toko_id']?.toString();
+    if (kid == null || tid == null) return;
+
+    final hadOpen = _openShift != null;
+    _shiftWatchTimer = Timer.periodic(const Duration(seconds: 4), (t) async {
+      _shiftWatchTicks++;
+      if (_shiftWatchTicks > 90) {
+        t.cancel();
+        return;
+      }
+      try {
+        final shift = await _service.fetchOpenShift(kid);
+        final open = shift != null;
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() => _openShift = shift);
+        await GeofenceExitMonitor.instance.syncFromOpenShift(
+          karyawanId: kid,
+          tokoId: tid,
+          hasOpenShift: open,
+          permissionContext: open && !hadOpen && mounted ? context : null,
+        );
+        // Perubahan status (masuk atau pulang) → cukup.
+        if (open != hadOpen) {
+          t.cancel();
+          if (open) {
+            if (!mounted) return;
+            setState(() {
+              _lastUnlockMsg = 'absensi_hp_masuk_tercatat'.tr();
+            });
+            _snack('absensi_hp_monitor_started'.tr(), Colors.teal);
+          } else {
+            if (!mounted) return;
+            setState(() {
+              _lastUnlockMsg = 'absensi_hp_pulang_tercatat'.tr();
+            });
+            _snack('absensi_hp_monitor_stopped'.tr(), Colors.blueGrey);
+          }
+        }
+      } catch (e) {
+        debugPrint('shift watch after unlock: $e');
+      }
     });
   }
 
@@ -124,7 +273,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
 
     // Masuk/pulang face match hanya di perangkat toko.
     if (_storeDeviceOnly && action != 'ENROLL') {
-      _snack('absensi_hp_pakai_perangkat_toko'.tr(), Colors.orange);
+      await _runGeoUnlock(preScannedAttendanceRaw: preScannedAttendanceRaw);
       return;
     }
 
@@ -136,7 +285,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
 
     setState(() => _busy = true);
     try {
-      // 1) Harus di radius toko
       final geo = await _service.checkGeofence(tokoId);
       if (!geo.inside) {
         _snack(geo.message, Colors.redAccent);
@@ -144,7 +292,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
       }
       _snack(geo.message, Colors.green);
 
-      // 2) Clock-in: wajib scan QR berputar di layar Admin toko
       String? qrTokenId;
       if (action == 'MASUK') {
         if (!mounted) return;
@@ -179,7 +326,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
         _snack('attendance_qr_ok'.tr(), Colors.green);
       }
 
-      // 3) Liveness + capture wajah
       if (!mounted) return;
       final liveness = await captureAttendanceLiveness(
         context,
@@ -194,7 +340,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
         return;
       }
 
-      // 4) Aksi
       if (action == 'ENROLL') {
         await _service.enrollFace(
           karyawanId: _karyawan!['id'] as String,
@@ -253,7 +398,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     if (result.type != QrPayloadType.attendance) return false;
     if (_busy) return true;
     if (_storeDeviceOnly) {
-      _snack('absensi_hp_pakai_perangkat_toko'.tr(), Colors.orange);
+      await _runGeoUnlock(preScannedAttendanceRaw: result.raw);
       return true;
     }
     if (_openShift != null) {
@@ -358,6 +503,18 @@ class _AbsensiPageState extends State<AbsensiPage> {
                             const TextStyle(color: Colors.white70, height: 1.5),
                       ),
                     ),
+                    if (_lastUnlockMsg != null) ...[
+                      const SizedBox(height: 12),
+                      _card(
+                        child: Text(
+                          _lastUnlockMsg!,
+                          style: const TextStyle(
+                            color: Colors.greenAccent,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     if (!_faceEnrolled)
                       _actionButton(
@@ -375,7 +532,25 @@ class _AbsensiPageState extends State<AbsensiPage> {
                           ),
                         ),
                       ),
+                      if (_openShift != null) ...[
+                        const SizedBox(height: 12),
+                        _card(
+                          child: Text(
+                            'absensi_hp_monitor_active_note'.tr(),
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              height: 1.45,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
+                      _actionButton(
+                        label: 'absensi_hp_scan_qr_lokasi'.tr(),
+                        color: Colors.teal,
+                        onTap: _busy ? null : () => _runGeoUnlock(),
+                      ),
                     ] else ...[
                       if (_faceEnrolled && _openShift == null) ...[
                         _actionButton(
@@ -387,12 +562,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       ],
                       if (_faceEnrolled && _openShift != null) ...[
                         _card(
-                          child: const Text(
-                            'Shift aktif: lokasi dipantau (~setiap 75 dtk), termasuk '
-                            'saat app di belakang jika izin lokasi “selalu” + '
-                            'notifikasi diizinkan. Force-stop atau cabut izin dapat '
-                            'menghentikan pantauan.',
-                            style: TextStyle(
+                          child: Text(
+                            'absensi_hp_monitor_active_note'.tr(),
+                            style: const TextStyle(
                               color: Colors.white60,
                               height: 1.45,
                               fontSize: 12.5,

@@ -1,20 +1,27 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/attendance_config.dart';
+import '../../shared/attendance/attendance_geo_unlock_service.dart';
 import '../../shared/attendance/attendance_liveness.dart';
+import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/attendance/attendance_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
-/// Absensi kiosk di perangkat Admin toko (tablet Android / browser Admin web).
-/// Alur: pilih/cari karyawan → (PIN opsional) → liveness + face match → masuk/pulang.
-/// Geofence = lokasi perangkat toko. Tidak memakai HP pribadi karyawan.
-/// Web: challenge kamera browser + pencocokan foto referensi (tanpa AWS).
+/// Absensi Toko (Admin web / perangkat toko) — cabang atau Pusat.
+/// Alur: tampilkan QR → karyawan scan+GPS di geofence →
+/// - belum shift OPEN: Admin face match → masuk
+/// - sudah shift OPEN: Admin auto pulang tanpa face → kembali ke QR.
+/// Tanpa GPS di perangkat Admin (Mac OK).
+/// Owner / admin_toko di PUSAT → toko_id operasional CABANG-PUSAT (fallback PUSAT).
 class AbsensiTokoPage extends StatefulWidget {
   const AbsensiTokoPage({super.key, required this.profile});
 
@@ -24,17 +31,31 @@ class AbsensiTokoPage extends StatefulWidget {
   State<AbsensiTokoPage> createState() => _AbsensiTokoPageState();
 }
 
+enum _TokoAbsensiPhase { waitingQr, faceMatch }
+
 class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
   final _service = AttendanceService();
-  final _searchCtrl = TextEditingController();
+  final _qrService = AttendanceQrService();
+  final _unlockService = AttendanceGeoUnlockService();
+
+  Timer? _rotateTimer;
+  Timer? _tickTimer;
+  Timer? _pollTimer;
+  RealtimeChannel? _realtime;
 
   bool _loading = true;
   bool _busy = false;
   String? _error;
   String? _tokoId;
-  List<Map<String, dynamic>> _staff = const [];
+  AttendanceQrIssue? _issue;
+  int _secondsLeft = 0;
+
+  _TokoAbsensiPhase _phase = _TokoAbsensiPhase.waitingQr;
+  AttendanceGeoUnlock? _activeUnlock;
   Map<String, dynamic>? _selected;
-  Map<String, dynamic>? _openShift;
+  String? _statusLine;
+
+  final Set<String> _handledUnlockIds = {};
 
   bool get _faceEnrolled => _service.isFaceEnrolled(_selected);
 
@@ -46,15 +67,23 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
+    _stopWaitingListeners();
+    _rotateTimer?.cancel();
+    _tickTimer?.cancel();
     super.dispose();
   }
 
+  /// Cabang: toko_id profile. Pusat (owner / admin_toko PUSAT): CABANG-PUSAT → PUSAT.
   Future<String?> _resolveTokoId() async {
-    final profileToko = (widget.profile['toko_id'] ?? '').toString().trim();
-    if (profileToko.isNotEmpty && profileToko != 'PUSAT') {
+    final profileToko = AttendanceAdminScope.tokoOf(widget.profile);
+    final pusatKiosk =
+        AttendanceAdminScope.usesPusatKioskToko(widget.profile);
+
+    if (!pusatKiosk) {
+      if (profileToko.isEmpty) return null;
       return profileToko;
     }
+
     try {
       final row = await Supabase.instance.client
           .from('toko_id')
@@ -64,8 +93,17 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
       final id = row?['id']?.toString();
       if (id != null && id.isNotEmpty) return id;
     } catch (_) {}
-    if (profileToko == 'PUSAT') return 'PUSAT';
-    return profileToko.isEmpty ? null : profileToko;
+
+    if (profileToko == 'CABANG-PUSAT') return 'CABANG-PUSAT';
+    return 'PUSAT';
+  }
+
+  String get _kioskTitle {
+    final pusat = AttendanceAdminScope.isPusatKioskLabel(widget.profile) ||
+        AttendanceAdminScope.isPusatTokoId(_tokoId);
+    return pusat
+        ? 'dash_menu_absensi_pusat_kiosk'.tr()
+        : 'dash_menu_absensi_kiosk'.tr();
   }
 
   Future<void> _bootstrap() async {
@@ -82,12 +120,11 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         });
         return;
       }
-      final staff = await _service.listKaryawanForToko(_tokoId!);
+      await _rotateQr();
+      _startQrTimers();
+      _startWaitingListeners();
       if (!mounted) return;
-      setState(() {
-        _staff = staff;
-        _loading = false;
-      });
+      setState(() => _loading = false);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -97,46 +134,232 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     }
   }
 
-  Future<void> _selectStaff(Map<String, dynamic> row) async {
-    setState(() {
-      _busy = true;
-      _selected = row;
-      _openShift = null;
+  void _startQrTimers() {
+    _rotateTimer?.cancel();
+    _tickTimer?.cancel();
+    _rotateTimer = Timer.periodic(
+      Duration(seconds: AttendanceConfig.qrRotateSeconds),
+      (_) {
+        if (_phase == _TokoAbsensiPhase.waitingQr && !_busy) {
+          unawaited(_rotateQr());
+        }
+      },
+    );
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final exp = _issue?.expiresAt;
+      if (exp == null) return;
+      final left = exp.difference(DateTime.now()).inSeconds;
+      if (!mounted) return;
+      setState(() => _secondsLeft = left < 0 ? 0 : left);
     });
+  }
+
+  Future<void> _rotateQr() async {
+    final toko = _tokoId;
+    if (toko == null || toko.isEmpty) return;
     try {
-      // Ambil ulang agar face_template lengkap.
-      final full = await _service.fetchKaryawanById(row['id'].toString());
-      final shift = full == null
-          ? null
-          : await _service.fetchOpenShift(full['id'] as String);
+      final issue = await _qrService.issueToken(tokoId: toko);
       if (!mounted) return;
       setState(() {
-        _selected = full ?? row;
-        _openShift = shift;
+        _issue = issue;
+        _secondsLeft = issue.expiresAt.difference(DateTime.now()).inSeconds;
+        _error = null;
       });
     } catch (e) {
-      _snack('$e', Colors.redAccent);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (!mounted) return;
+      setState(() => _error = '$e');
     }
   }
 
-  void _clearSelection() {
-    setState(() {
-      _selected = null;
-      _openShift = null;
+  void _startWaitingListeners() {
+    _stopWaitingListeners();
+    final toko = _tokoId;
+    if (toko == null || toko.isEmpty) return;
+
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+      if (_phase != _TokoAbsensiPhase.waitingQr || _busy) return;
+      unawaited(_pollLatestUnlock());
     });
+
+    try {
+      _realtime = Supabase.instance.client
+          .channel('attendance-geo-unlock-$toko')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'attendance_geo_unlocks',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'toko_id',
+              value: toko,
+            ),
+            callback: (payload) {
+              if (_phase != _TokoAbsensiPhase.waitingQr || _busy) return;
+              final map = payload.newRecord;
+              if (map.isEmpty) return;
+              try {
+                final unlock = AttendanceGeoUnlock.fromJson(
+                  Map<String, dynamic>.from(map),
+                );
+                unawaited(_onUnlockDetected(unlock));
+              } catch (_) {
+                unawaited(_pollLatestUnlock());
+              }
+            },
+          )
+          .subscribe();
+    } catch (_) {
+      // Poll tetap jalan jika Realtime gagal.
+    }
+
+    unawaited(_pollLatestUnlock());
   }
 
-  List<Map<String, dynamic>> get _filtered {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _staff;
-    return _staff.where((k) {
-      final nama = (k['nama'] ?? '').toString().toLowerCase();
-      final nik = (k['nik'] ?? '').toString().toLowerCase();
-      final jabatan = (k['jabatan'] ?? '').toString().toLowerCase();
-      return nama.contains(q) || nik.contains(q) || jabatan.contains(q);
-    }).toList();
+  void _stopWaitingListeners() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    final ch = _realtime;
+    _realtime = null;
+    if (ch != null) {
+      unawaited(Supabase.instance.client.removeChannel(ch));
+    }
+  }
+
+  Future<void> _pollLatestUnlock() async {
+    final toko = _tokoId;
+    if (toko == null || toko.isEmpty) return;
+    if (_phase != _TokoAbsensiPhase.waitingQr || _busy) return;
+    try {
+      final unlock = await _unlockService.fetchLatestForToko(toko);
+      if (unlock == null || !mounted) return;
+      await _onUnlockDetected(unlock);
+    } catch (_) {
+      // Diam saat poll gagal sementara.
+    }
+  }
+
+  Future<void> _onUnlockDetected(AttendanceGeoUnlock unlock) async {
+    if (!mounted) return;
+    if (_phase != _TokoAbsensiPhase.waitingQr || _busy) return;
+    if (_handledUnlockIds.contains(unlock.id)) return;
+    if (!unlock.isValid) return;
+    if (_tokoId != null &&
+        !AttendanceAdminScope.sameTokoId(unlock.tokoId, _tokoId)) {
+      return;
+    }
+
+    _handledUnlockIds.add(unlock.id);
+    _stopWaitingListeners();
+
+    setState(() {
+      _busy = true;
+      _activeUnlock = unlock;
+      _statusLine = 'absensi_toko_lokasi_ok_auto'.tr();
+    });
+
+    try {
+      // Geofence wajib di bukti unlock (QR saja tidak cukup).
+      if (unlock.latitude == null || unlock.longitude == null) {
+        _snack('absensi_toko_unlock_no_gps'.tr(), Colors.redAccent);
+        await _returnToQr(consume: true);
+        return;
+      }
+
+      final full = await _service.fetchKaryawanById(unlock.karyawanId);
+      if (!mounted) return;
+      if (full == null) {
+        _snack('absensi_toko_karyawan_not_found'.tr(), Colors.redAccent);
+        await _returnToQr(consume: true);
+        return;
+      }
+
+      final karyawanToko = (full['toko_id'] ?? '').toString();
+      if (karyawanToko.isNotEmpty &&
+          _tokoId != null &&
+          !AttendanceAdminScope.sameTokoId(karyawanToko, _tokoId)) {
+        _snack(
+          'absensi_toko_wrong_toko'.tr(namedArgs: {
+            'karyawan': karyawanToko,
+            'perangkat': _tokoId!,
+          }),
+          Colors.redAccent,
+        );
+        await _returnToQr(consume: true);
+        return;
+      }
+
+      final shift = await _service.fetchOpenShift(full['id'] as String);
+      if (!mounted) return;
+      setState(() => _selected = full);
+
+      // Shift OPEN → pulang QR-only (tanpa face). Belum masuk → face match.
+      if (shift != null) {
+        await _runAutoPulang();
+        return;
+      }
+
+      setState(() {
+        _phase = _TokoAbsensiPhase.faceMatch;
+        _busy = false;
+        _statusLine = 'absensi_toko_lokasi_ok_auto'.tr();
+      });
+      await _runFaceClock('MASUK');
+    } catch (e) {
+      _snack('$e', Colors.redAccent);
+      await _returnToQr(consume: true);
+    }
+  }
+
+  /// Pulang: bukti QR + GPS geofence saja — tanpa PIN / face match.
+  Future<void> _runAutoPulang() async {
+    final karyawan = _selected;
+    final unlock = _activeUnlock;
+    if (karyawan == null || unlock == null) {
+      await _returnToQr(consume: true);
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _statusLine = 'absensi_toko_pulang_auto_running'.tr(
+        namedArgs: {'nama': (karyawan['nama'] ?? '-').toString()},
+      );
+    });
+
+    try {
+      final geo = unlock.toGeofenceResult();
+      await _service.clockOutByGeoUnlock(
+        karyawan: karyawan,
+        geo: geo,
+        storeKiosk: true,
+        qrTokenId: unlock.qrTokenId,
+      );
+      if (!mounted) return;
+      _snack('absensi_toko_pulang_ok'.tr(), Colors.green);
+      await _returnToQr(consume: true);
+    } catch (e) {
+      _snack('$e', Colors.redAccent);
+      await _returnToQr(consume: true);
+    }
+  }
+
+  Future<void> _returnToQr({required bool consume}) async {
+    final unlock = _activeUnlock;
+    if (consume && unlock != null) {
+      try {
+        await _unlockService.consumeUnlock(unlock.id);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _phase = _TokoAbsensiPhase.waitingQr;
+      _activeUnlock = null;
+      _selected = null;
+      _busy = false;
+      _statusLine = null;
+    });
+    _startWaitingListeners();
+    unawaited(_rotateQr());
   }
 
   Future<bool> _confirmPinIfNeeded() async {
@@ -190,63 +413,93 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     return true;
   }
 
-  Future<void> _runAction(String action) async {
+  Future<void> _runFaceClock(String action) async {
     final karyawan = _selected;
     final tokoId = _tokoId;
-    if (karyawan == null || tokoId == null) return;
-
-    final karyawanToko = (karyawan['toko_id'] ?? '').toString();
-    if (karyawanToko.isNotEmpty && karyawanToko != tokoId) {
-      _snack(
-        'absensi_toko_wrong_toko'.tr(namedArgs: {
-          'karyawan': karyawanToko,
-          'perangkat': tokoId,
-        }),
-        Colors.redAccent,
-      );
-      return;
-    }
+    final unlock = _activeUnlock;
+    if (karyawan == null || tokoId == null || unlock == null) return;
 
     if (action != 'ENROLL' && !_faceEnrolled) {
-      _snack('absensi_toko_need_enroll'.tr(), Colors.orange);
+      // Belum enroll: daftarkan dulu, lalu kembali ke QR untuk absen berikutnya.
+      final enrollOk = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: Text(
+            'absensi_toko_need_enroll'.tr(),
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'absensi_toko_enroll_now_hint'.tr(),
+            style: const TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('appr_btn_batal'.tr()),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('absensi_toko_enroll'.tr()),
+            ),
+          ],
+        ),
+      );
+      if (enrollOk == true) {
+        await _runFaceClock('ENROLL');
+      } else {
+        await _returnToQr(consume: true);
+      }
       return;
     }
 
-    // Absensi web butuh foto referensi (face_photo_url) untuk face match.
     if (action != 'ENROLL' &&
         kIsWeb &&
         (karyawan['face_photo_url'] ?? '').toString().trim().isEmpty) {
       _snack('absensi_toko_need_photo_reenroll'.tr(), Colors.orange);
+      await _returnToQr(consume: true);
       return;
     }
 
     setState(() => _busy = true);
     try {
-      if (!await _confirmPinIfNeeded()) return;
-
-      // Geofence perangkat toko (bukan HP karyawan).
-      final geo = await _service.checkGeofence(tokoId);
-      if (!geo.inside) {
-        _snack(geo.message, Colors.redAccent);
+      if (!await _confirmPinIfNeeded()) {
+        await _returnToQr(consume: true);
         return;
       }
-      _snack(geo.message, Colors.green);
+
+      // Lokasi dari unlock HP karyawan — tanpa GPS Admin/Mac.
+      if (unlock.latitude == null || unlock.longitude == null) {
+        _snack('absensi_toko_unlock_no_gps'.tr(), Colors.redAccent);
+        await _returnToQr(consume: true);
+        return;
+      }
+      final geo = unlock.toGeofenceResult();
 
       if (!mounted) return;
+      setState(() {
+        _statusLine = 'absensi_toko_face_match_running'.tr(
+          namedArgs: {'nama': (karyawan['nama'] ?? '-').toString()},
+        );
+      });
+
       final liveness = await captureAttendanceLiveness(
         context,
         onInfo: (key) => _snack(key.tr(), Colors.blueAccent),
       );
       if (liveness == null || !liveness.success) {
         _snack('aws_liveness_cancelled'.tr(), Colors.orange);
+        await _returnToQr(consume: true);
         return;
       }
       if (liveness.photoBytes == null) {
         _snack('aws_liveness_face_unclear'.tr(), Colors.redAccent);
+        await _returnToQr(consume: true);
         return;
       }
       if (!kIsWeb && liveness.faceTemplate == null) {
         _snack('aws_liveness_face_unclear'.tr(), Colors.redAccent);
+        await _returnToQr(consume: true);
         return;
       }
 
@@ -258,29 +511,22 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           geo: geo,
         );
         _snack('absensi_toko_enroll_ok'.tr(), Colors.green);
-      } else if (action == 'MASUK') {
+      } else {
+        // Face phase hanya untuk masuk; pulang lewat _runAutoPulang (QR+geo).
         await _service.clockIn(
           karyawan: karyawan,
           liveness: liveness,
           geo: geo,
           storeKiosk: true,
+          qrTokenId: unlock.qrTokenId,
         );
         _snack('absensi_toko_masuk_ok'.tr(), Colors.green);
-      } else if (action == 'PULANG') {
-        await _service.clockOut(
-          karyawan: karyawan,
-          liveness: liveness,
-          geo: geo,
-          storeKiosk: true,
-        );
-        _snack('absensi_toko_pulang_ok'.tr(), Colors.green);
       }
 
-      await _selectStaff(karyawan);
+      await _returnToQr(consume: true);
     } catch (e) {
       _snack('$e', Colors.redAccent);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      await _returnToQr(consume: true);
     }
   }
 
@@ -293,115 +539,192 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat('dd MMM yyyy • HH:mm', 'id_ID');
-
     return PremiumScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('absensi_toko_title'.tr()),
+        title: Text(_kioskTitle),
         actions: [
-          IconButton(
-            onPressed: _busy ? null : _bootstrap,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'attendance_qr_refresh'.tr(),
-          ),
+          if (_phase == _TokoAbsensiPhase.waitingQr)
+            IconButton(
+              onPressed: _busy ? null : _rotateQr,
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'attendance_qr_refresh'.tr(),
+            ),
+          if (_phase == _TokoAbsensiPhase.faceMatch)
+            TextButton(
+              onPressed: _busy ? null : () => _returnToQr(consume: true),
+              child: Text('absensi_toko_batal_kembali_qr'.tr()),
+            ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              children: [
-                if (kIsWeb)
-                  _banner(
-                    'absensi_toko_web_hint'.tr(),
-                    OptikAdminTokens.warning,
-                  ),
-                if (_error != null) ...[
-                  _banner(_error!, Colors.redAccent),
-                  const SizedBox(height: 12),
-                ],
-                _banner(
-                  'absensi_toko_hint'.tr(namedArgs: {
-                    'toko': _tokoId ?? '-',
-                  }),
-                  OptikAdminTokens.accentSoft,
-                ),
-                const SizedBox(height: 16),
-                if (_selected == null) ...[
-                  TextField(
-                    controller: _searchCtrl,
-                    onChanged: (_) => setState(() {}),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'absensi_toko_search_hint'.tr(),
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.search_rounded,
-                          color: Colors.white54),
-                      filled: true,
-                      fillColor: const Color(0xFF1E293B),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
+          : _phase == _TokoAbsensiPhase.waitingQr
+              ? _buildWaitingQr()
+              : _buildFacePhase(),
+    );
+  }
+
+  Widget _buildWaitingQr() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      children: [
+        _banner(
+          'absensi_toko_qr_first_banner'.tr(),
+          OptikAdminTokens.accentSoft,
+        ),
+        const SizedBox(height: 10),
+        _banner(
+          'absensi_toko_web_no_gps_banner'.tr(),
+          OptikAdminTokens.warning,
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          _banner(_error!, Colors.redAccent),
+        ],
+        const SizedBox(height: 16),
+        Text(
+          _tokoId ?? '-',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'attendance_qr_hint'.tr(namedArgs: {
+            'toko': _tokoId ?? '-',
+            'detik': '${AttendanceConfig.qrTtlSeconds}',
+          }),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white54, height: 1.4),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: _issue == null
+              ? Text(
+                  'attendance_qr_waiting'.tr(),
+                  style: const TextStyle(color: Colors.white54),
+                )
+              : Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: QrImageView(
+                        data: _issue!.payload,
+                        version: QrVersions.auto,
+                        size: 260,
+                        backgroundColor: Colors.white,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_filtered.isEmpty)
+                    const SizedBox(height: 16),
                     Text(
-                      'absensi_toko_empty'.tr(),
-                      style: const TextStyle(color: Colors.white54),
-                    )
-                  else
-                    ..._filtered.map((k) => _staffTile(k)),
-                ] else ...[
-                  _selectedCard(df),
-                  const SizedBox(height: 16),
-                  if (!_faceEnrolled)
-                    _actionButton(
-                      label: 'absensi_toko_enroll'.tr(),
-                      color: Colors.purpleAccent,
-                      onTap: _busy ? null : () => _runAction('ENROLL'),
-                    ),
-                  if (_faceEnrolled && _openShift == null)
-                    _actionButton(
-                      label: 'absensi_toko_masuk'.tr(),
-                      color: Colors.green,
-                      onTap: _busy ? null : () => _runAction('MASUK'),
-                    ),
-                  if (_faceEnrolled && _openShift != null)
-                    _actionButton(
-                      label: 'absensi_toko_pulang'.tr(),
-                      color: Colors.orangeAccent,
-                      onTap: _busy ? null : () => _runAction('PULANG'),
-                    ),
-                  if (_faceEnrolled)
-                    TextButton(
-                      onPressed: _busy ? null : () => _runAction('ENROLL'),
-                      child: Text(
-                        'absensi_toko_reenroll'.tr(),
-                        style: const TextStyle(color: Colors.white54),
+                      'attendance_qr_countdown'.tr(
+                        namedArgs: {'detik': '$_secondsLeft'},
+                      ),
+                      style: TextStyle(
+                        color: _secondsLeft <= 8
+                            ? Colors.orangeAccent
+                            : Colors.tealAccent,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  TextButton(
-                    onPressed: _busy ? null : _clearSelection,
-                    child: Text('absensi_toko_ganti'.tr()),
-                  ),
-                ],
-                if (_busy) ...[
-                  const SizedBox(height: 20),
-                  const Center(child: CircularProgressIndicator()),
-                ],
-                if (!AttendanceConfig.kioskSkipAdminQr) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'absensi_toko_qr_note'.tr(),
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Text(
+                      _busy && _statusLine != null
+                          ? _statusLine!
+                          : 'absensi_toko_waiting_scan'.tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        height: 1.4,
+                      ),
+                    ),
+                    if (_busy) ...[
+                      const SizedBox(height: 20),
+                      const CircularProgressIndicator(),
+                    ],
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFacePhase() {
+    final nama = (_selected?['nama'] ?? '-').toString();
+    // Face phase hanya untuk masuk (pulang sudah auto tanpa UI wajah).
+    const action = 'MASUK';
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      children: [
+        _banner(
+          'absensi_toko_lokasi_ok_auto'.tr(),
+          Colors.greenAccent,
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                nama,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_selected?['jabatan'] ?? '-'} • ${_selected?['toko_id'] ?? '-'}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'absensi_toko_akan_masuk'.tr(),
+                style: const TextStyle(color: Colors.tealAccent),
+              ),
+              if (_statusLine != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _statusLine!,
+                  style: const TextStyle(color: Colors.white54, height: 1.35),
+                ),
               ],
-            ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_busy)
+          const Center(child: CircularProgressIndicator())
+        else ...[
+          _actionButton(
+            label: 'absensi_toko_masuk'.tr(),
+            color: Colors.green,
+            onTap: () => _runFaceClock(action),
+          ),
+          TextButton(
+            onPressed: () => _returnToQr(consume: true),
+            child: Text('absensi_toko_batal_kembali_qr'.tr()),
+          ),
+        ],
+      ],
     );
   }
 
@@ -414,112 +737,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
-      child: Text(
-        text,
-        style: TextStyle(color: color, height: 1.45),
-      ),
-    );
-  }
-
-  Widget _staffTile(Map<String, dynamic> k) {
-    final enrolled = _service.isFaceEnrolled(k);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(14),
-        child: ListTile(
-          onTap: _busy ? null : () => _selectStaff(k),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          title: Text(
-            (k['nama'] ?? '-').toString(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          subtitle: Text(
-            '${k['jabatan'] ?? '-'} • NIK ${k['nik'] ?? '-'}',
-            style: const TextStyle(color: Colors.white60),
-          ),
-          trailing: Icon(
-            enrolled ? Icons.face_retouching_natural : Icons.face_outlined,
-            color: enrolled ? Colors.greenAccent : Colors.white38,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _selectedCard(DateFormat df) {
-    final k = _selected!;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            (k['nama'] ?? '-').toString(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${k['jabatan'] ?? '-'} • ${k['toko_id'] ?? '-'}',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          Text(
-            'NIK: ${k['nik'] ?? '-'}',
-            style: const TextStyle(color: Colors.white54),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _chip(
-                _faceEnrolled
-                    ? 'absensi_toko_face_ok'.tr()
-                    : 'absensi_toko_face_no'.tr(),
-                _faceEnrolled ? Colors.greenAccent : Colors.orange,
-              ),
-              _chip(
-                _openShift == null
-                    ? 'absensi_toko_shift_off'.tr()
-                    : 'absensi_toko_shift_on'.tr(namedArgs: {
-                        'waktu': df.format(
-                          DateTime.parse(_openShift!['masuk_at'].toString()),
-                        ),
-                      }),
-                _openShift == null ? Colors.blueAccent : Colors.tealAccent,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 12)),
+      child: Text(text, style: TextStyle(color: color, height: 1.45)),
     );
   }
 

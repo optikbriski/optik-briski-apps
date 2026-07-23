@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import '../apps/admin/attendance_monitor_page.dart';
+import '../apps/admin/tinjauan_mencurigakan_page.dart';
+import 'attendance/attendance_admin_scope.dart';
 import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
@@ -608,26 +610,59 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             ],
           ),
           actions: [
-            TextButton.icon(
-              onPressed: () {
-                final profile = widget.profile ??
-                    <String, dynamic>{
-                      'role': widget.roleAdmin,
-                      'toko_id': widget.cabangAdmin,
-                    };
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AttendanceMonitorPage(profile: profile),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.fact_check_rounded, size: 18),
-              label: Text('appr_monitor_absensi'.tr()),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.purpleAccent,
+            if (AttendanceAdminScope.canOpenStoreMonitor(
+              widget.profile ??
+                  <String, dynamic>{
+                    'role': widget.roleAdmin,
+                    'toko_id': widget.cabangAdmin,
+                  },
+            ))
+              TextButton.icon(
+                onPressed: () {
+                  final profile = widget.profile ??
+                      <String, dynamic>{
+                        'role': widget.roleAdmin,
+                        'toko_id': widget.cabangAdmin,
+                      };
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AttendanceMonitorPage(profile: profile),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.fact_check_rounded, size: 18),
+                label: Text('dash_menu_monitor_absensi'.tr()),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.purpleAccent,
+                ),
               ),
-            ),
+            if (AttendanceAdminScope.canOpenStoreMonitor(
+              widget.profile ??
+                  <String, dynamic>{
+                    'role': widget.roleAdmin,
+                    'toko_id': widget.cabangAdmin,
+                  },
+            ))
+              IconButton(
+                tooltip: 'appr_tinjauan_mencurigakan'.tr(),
+                icon: const Icon(Icons.warning_amber_rounded,
+                    color: Colors.amberAccent),
+                onPressed: () {
+                  final profile = widget.profile ??
+                      <String, dynamic>{
+                        'role': widget.roleAdmin,
+                        'toko_id': widget.cabangAdmin,
+                      };
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          TinjauanMencurigakanPage(profile: profile),
+                    ),
+                  );
+                },
+              ),
             IconButton(
               tooltip: "appr_tooltip_refresh".tr(),
               icon: const Icon(Icons.refresh_rounded, color: Colors.white),

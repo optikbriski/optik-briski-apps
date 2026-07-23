@@ -29,6 +29,9 @@
 -keep class io.flutter.plugins.** { *; }
 -keep class com.example.toko_kacamata_natan.** { *; }
 
+# Geolocator foreground location service (shift OPEN monitoring)
+-keep class com.baseflow.geolocator.** { *; }
+
 # Supabase / OkHttp / Gson-style serializers
 -keepattributes Signature
 -keepattributes *Annotation*

@@ -13,11 +13,13 @@ import '../../shared/training/training_mode.dart';
 import 'riwayat_transaksi_page.dart';
 import 'invoice_config_page.dart';
 import 'absensi_toko_page.dart';
-import 'attendance_qr_page.dart';
+import 'attendance_monitor_page.dart';
 import 'jadwal_kerja_page.dart';
 import 'monthly_export_page.dart';
 import 'garansi_page.dart';
 import 'toko_geofence_page.dart';
+import 'tinjauan_mencurigakan_page.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/theme.dart';
@@ -320,7 +322,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisSpacing: 12,
                         childAspectRatio: ratio,
                         children: [
-                          // Manajemen Karyawan (+ monitor absensi): pusat only.
+                          // Manajemen Karyawan: pusat / owner / admin_pusat (standalone).
                           if (!training &&
                               (widget.profile['toko_id'] == 'PUSAT' ||
                                   widget.profile['toko_id'] ==
@@ -347,12 +349,36 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Absensi Toko: face match di perangkat Admin toko (Android).
-                          if (!training)
+                          // Monitor Absensi (tile sendiri): admin_pusat cabang + owner semua.
+                          if (!training &&
+                              AttendanceAdminScope.canOpenStoreMonitor(
+                                  widget.profile))
                             PremiumMenuTile(
-                              title: 'dash_menu_absen'.tr(),
-                              icon: Icons.face_retouching_natural_rounded,
+                              title: 'dash_menu_monitor_absensi'.tr(),
+                              icon: Icons.fact_check_rounded,
                               color: Colors.deepPurpleAccent,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AttendanceMonitorPage(
+                                    profile: widget.profile,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          // Absensi kiosk (QR→geo→face): admin_toko (cabang/Pusat)
+                          // + owner (Pusat). Bukan admin_pusat (mereka pakai Monitor).
+                          if (!training &&
+                              AttendanceAdminScope.canOpenStoreKiosk(
+                                  widget.profile))
+                            PremiumMenuTile(
+                              title: AttendanceAdminScope.isPusatKioskLabel(
+                                      widget.profile)
+                                  ? 'dash_menu_absensi_pusat_kiosk'.tr()
+                                  : 'dash_menu_absensi_kiosk'.tr(),
+                              icon: Icons.face_retouching_natural_rounded,
+                              color: Colors.purpleAccent,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -363,16 +389,18 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Cadangan: QR berputar (jika faceMatchOnStoreDeviceOnly dimatikan).
-                          if (!training)
+                          // Antrean tinjauan lanjut — hanya role yang boleh monitor.
+                          if (!training &&
+                              AttendanceAdminScope.canOpenStoreMonitor(
+                                  widget.profile))
                             PremiumMenuTile(
-                              title: 'dash_menu_attendance_qr'.tr(),
-                              icon: Icons.qr_code_2_rounded,
-                              color: Colors.purple,
+                              title: 'dash_menu_tinjauan_mencurigakan'.tr(),
+                              icon: Icons.warning_amber_rounded,
+                              color: OptikAdminTokens.warning,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => AttendanceQrPage(
+                                  builder: (_) => TinjauanMencurigakanPage(
                                     profile: widget.profile,
                                   ),
                                 ),

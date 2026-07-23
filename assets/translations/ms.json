@@ -600,7 +600,10 @@
   "absensi_syarat_aws": "Syarat kehadiran:\n1. Peranti dalam radius GPS kedai\n2. Masuk: imbas QR pada skrin Admin kedai\n3. AWS Face Liveness (anti-spoof)\n4. Wajah sepadan dengan data berdaftar (tempatan)\nPulang: tiada QR Admin",
   "absensi_syarat_local": "Syarat kehadiran:\n1. Peranti dalam radius GPS kedai\n2. Masuk: imbas QR pada skrin Admin kedai\n3. Liveness (senyum)\n4. Wajah sepadan dengan data berdaftar (tempatan)\nPulang: tiada QR Admin",
   "dash_menu_attendance_qr": "QR Kehadiran Kedai",
-  "dash_menu_absen": "Absen",
+  "dash_menu_absen": "Absensi",
+  "dash_menu_absensi_kiosk": "Absensi",
+  "dash_menu_absensi_pusat_kiosk": "Absensi Pusat",
+  "dash_menu_monitor_absensi": "Monitor Kehadiran",
   "dash_absen_flow_hint": "Papar QR ini di kedai. Pekerja imbas di APK → face liveness. Pantau kehadiran di Pengurusan Pekerja.",
   "appr_monitor_absensi": "Monitor Kehadiran",
   "attendance_qr_title": "QR Kehadiran Kedai",
@@ -964,5 +967,9 @@
   "training_pengajuan_outcome_approved": "Simulasi: permohonan DILULUSKAN (APPROVED). Lihat status dalam sejarah.",
   "training_pengajuan_outcome_rejected": "Simulasi: permohonan DITOLAK (REJECTED). Lihat status dalam sejarah.",
   "training_pengajuan_outcome_rejected_note": "Simulasi: permohonan DITOLAK. Catatan: {}",
-  "training_pengajuan_outcome_pending": "Simulasi: permohonan kekal MENUNGGU (PENDING). Lihat status dalam sejarah."
+  "training_pengajuan_outcome_pending": "Simulasi: permohonan kekal MENUNGGU (PENDING). Lihat status dalam sejarah.",
+  "dash_menu_verifikasi_absensi": "Pengesahan Kehadiran",
+  "dash_menu_tinjauan_mencurigakan": "Semakan Mencurigakan",
+  "appr_verifikasi_absensi": "Pengesahan Kehadiran",
+  "appr_tinjauan_mencurigakan": "Semakan Mencurigakan"
 }

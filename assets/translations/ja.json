@@ -716,5 +716,13 @@
   "training_approval_sim_got_it": "了解",
   "training_ro_outcome_approved": "シミュレーション：本部承認 — ステータス PREPARING（サンドボックス）。",
   "training_ro_outcome_rejected": "シミュレーション：本部が RO を却下（サンドボックス）。",
-  "training_ro_outcome_pending": "シミュレーション：RO は本部承認待ちのまま（SENT_TO_HQ、サンドボックス）。"
+  "training_ro_outcome_pending": "シミュレーション：RO は本部承認待ちのまま（SENT_TO_HQ、サンドボックス）。",
+  "dash_menu_verifikasi_absensi": "出勤顔認証",
+  "dash_menu_tinjauan_mencurigakan": "不審レビュー",
+  "dash_menu_monitor_absensi": "出勤モニター",
+  "dash_menu_absensi_kiosk": "出勤",
+  "dash_menu_absensi_pusat_kiosk": "本部出勤",
+  "appr_verifikasi_absensi": "出勤顔認証",
+  "appr_tinjauan_mencurigakan": "不審レビュー",
+  "appr_monitor_absensi": "出勤モニター"
 }

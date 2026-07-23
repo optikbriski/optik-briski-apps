@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
 import 'attendance_config.dart';
+import 'attendance_verification_service.dart';
 import 'face_template.dart';
 import 'geofence_service.dart';
 import 'liveness_result.dart';
@@ -96,8 +97,12 @@ class AttendanceService {
         .maybeSingle();
   }
 
-  Future<GeofenceCheckResult> checkGeofence(String tokoId) {
-    return _geofence.ensureAtStore(tokoId);
+  /// [webKiosk]: Absensi Toko di browser — lewati GPS Wi‑Fi Mac/PC.
+  Future<GeofenceCheckResult> checkGeofence(
+    String tokoId, {
+    bool webKiosk = false,
+  }) {
+    return _geofence.ensureAtStore(tokoId, webKiosk: webKiosk);
   }
 
   bool isFaceEnrolled(Map<String, dynamic>? karyawan) {
@@ -262,7 +267,7 @@ class AttendanceService {
         .single();
 
     ProdWriteGuard.check('attendance.clockIn.log');
-    await _client.from('attendance_logs').insert({
+    final log = await _client.from('attendance_logs').insert({
       'shift_id': shift['id'],
       'karyawan_id': karyawanId,
       'toko_id': tokoId,
@@ -278,7 +283,22 @@ class AttendanceService {
       'liveness_provider': liveness.livenessProvider ?? 'local',
       'device_info': deviceInfo,
       if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
-    });
+    }).select('id').single();
+
+    // Antrean Admin: bandingkan capture vs foto terdaftar.
+    final enrolledUrl = (karyawan['face_photo_url'] ?? '').toString().trim();
+    await AttendanceVerificationService(client: _client).enqueueAfterClockIn(
+      shiftId: shift['id'].toString(),
+      logId: log['id']?.toString(),
+      karyawanId: karyawanId,
+      tokoId: tokoId,
+      capturePhotoUrl: photoUrl,
+      enrolledPhotoUrl: enrolledUrl.isEmpty ? null : enrolledUrl,
+      matchScore: score,
+      livenessOk: true,
+      livenessConfidence: liveness.livenessConfidence,
+      livenessProvider: liveness.livenessProvider ?? 'local',
+    );
   }
 
   Future<void> clockOut({
@@ -286,6 +306,43 @@ class AttendanceService {
     required LivenessCaptureResult liveness,
     required GeofenceCheckResult geo,
     bool storeKiosk = false,
+  }) async {
+    await _clockOutCore(
+      karyawan: karyawan,
+      geo: geo,
+      storeKiosk: storeKiosk,
+      liveness: liveness,
+      skipFaceMatch: false,
+    );
+  }
+
+  /// Absen pulang tanpa face match — hanya bukti QR + GPS geofence (kiosk toko).
+  Future<void> clockOutByGeoUnlock({
+    required Map<String, dynamic> karyawan,
+    required GeofenceCheckResult geo,
+    bool storeKiosk = true,
+    String? qrTokenId,
+  }) async {
+    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+      throw 'Absen pulang ditolak: GPS harus di dalam area toko.';
+    }
+    await _clockOutCore(
+      karyawan: karyawan,
+      geo: geo,
+      storeKiosk: storeKiosk,
+      liveness: null,
+      skipFaceMatch: true,
+      qrTokenId: qrTokenId,
+    );
+  }
+
+  Future<void> _clockOutCore({
+    required Map<String, dynamic> karyawan,
+    required GeofenceCheckResult geo,
+    required bool storeKiosk,
+    required bool skipFaceMatch,
+    LivenessCaptureResult? liveness,
+    String? qrTokenId,
   }) async {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
@@ -296,16 +353,57 @@ class AttendanceService {
     final open = await fetchOpenShift(karyawanId);
     if (open == null) throw 'Belum ada shift masuk hari ini.';
 
-    final score = await _matchOrThrow(karyawan, liveness);
+    final double? score;
+    final String? photoUrl;
+    final bool livenessOk;
+    final double? livenessConfidence;
+    final String? livenessSessionId;
+    final String? livenessProvider;
+
+    if (skipFaceMatch) {
+      score = null;
+      photoUrl = null;
+      livenessOk = false;
+      livenessConfidence = null;
+      livenessSessionId = null;
+      livenessProvider = 'qr+gps';
+    } else {
+      if (liveness == null) throw 'Face match wajib untuk absen wajah.';
+      score = await _matchOrThrow(karyawan, liveness);
+      photoUrl = await _uploadPhoto(
+        karyawanId: karyawanId,
+        tipe: 'PULANG',
+        bytes: liveness.photoBytes!,
+      );
+      livenessOk = true;
+      livenessConfidence = liveness.livenessConfidence;
+      livenessSessionId = liveness.livenessSessionId;
+      livenessProvider = liveness.livenessProvider ?? 'local';
+    }
+
     final deviceInfo = storeKiosk
-        ? '${defaultTargetPlatform.name}-toko-kiosk'
+        ? (skipFaceMatch
+            ? '${defaultTargetPlatform.name}-toko-kiosk-qr-pulang'
+            : '${defaultTargetPlatform.name}-toko-kiosk')
         : defaultTargetPlatform.name;
 
-    final photoUrl = await _uploadPhoto(
-      karyawanId: karyawanId,
-      tipe: 'PULANG',
-      bytes: liveness.photoBytes!,
-    );
+    final logPayload = <String, dynamic>{
+      'shift_id': open['id'],
+      'karyawan_id': karyawanId,
+      'toko_id': tokoId,
+      'tipe': 'PULANG',
+      'photo_url': photoUrl,
+      'latitude': geo.latitude,
+      'longitude': geo.longitude,
+      'distance_meters': geo.distanceMeters,
+      'match_score': score,
+      'liveness_ok': livenessOk,
+      'liveness_confidence': livenessConfidence,
+      'liveness_session_id': livenessSessionId,
+      'liveness_provider': livenessProvider,
+      'device_info': deviceInfo,
+      if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
+    };
 
     if (TrainingMode.instance.isActive) {
       await _training.update(
@@ -316,22 +414,7 @@ class AttendanceService {
         },
         where: {'id': open['id']},
       );
-      await _training.insert('attendance_logs', {
-        'shift_id': open['id'],
-        'karyawan_id': karyawanId,
-        'toko_id': tokoId,
-        'tipe': 'PULANG',
-        'photo_url': photoUrl,
-        'latitude': geo.latitude,
-        'longitude': geo.longitude,
-        'distance_meters': geo.distanceMeters,
-        'match_score': score,
-        'liveness_ok': true,
-        'liveness_confidence': liveness.livenessConfidence,
-        'liveness_session_id': liveness.livenessSessionId,
-        'liveness_provider': liveness.livenessProvider ?? 'local',
-        'device_info': deviceInfo,
-      });
+      await _training.insert('attendance_logs', logPayload);
       return;
     }
 
@@ -342,22 +425,7 @@ class AttendanceService {
     }).eq('id', open['id']);
 
     ProdWriteGuard.check('attendance.clockOut.log');
-    await _client.from('attendance_logs').insert({
-      'shift_id': open['id'],
-      'karyawan_id': karyawanId,
-      'toko_id': tokoId,
-      'tipe': 'PULANG',
-      'photo_url': photoUrl,
-      'latitude': geo.latitude,
-      'longitude': geo.longitude,
-      'distance_meters': geo.distanceMeters,
-      'match_score': score,
-      'liveness_ok': true,
-      'liveness_confidence': liveness.livenessConfidence,
-      'liveness_session_id': liveness.livenessSessionId,
-      'liveness_provider': liveness.livenessProvider ?? 'local',
-      'device_info': deviceInfo,
-    });
+    await _client.from('attendance_logs').insert(logPayload);
   }
 
   void _requireLivenessPassed(LivenessCaptureResult liveness) {

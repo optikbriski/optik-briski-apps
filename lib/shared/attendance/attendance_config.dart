@@ -20,12 +20,22 @@ class AttendanceConfig {
   /// bukan di HP pribadi karyawan. Enroll wajah tetap boleh di HP karyawan.
   static const bool faceMatchOnStoreDeviceOnly = true;
 
-  /// Di mode kiosk toko, QR Admin tidak diperlukan (perangkat sudah di toko).
+  /// Absensi Toko Admin wajib punya geo unlock aktif dari HP karyawan
+  /// (scan QR Absensi + GPS di geofence) sebelum face match masuk /
+  /// auto pulang tanpa wajah.
+  static const bool requireKaryawanGeoUnlock = true;
+
+  /// Masa hidup bukti lokasi (detik) setelah karyawan scan QR + GPS OK.
+  /// Admin harus menyelesaikan face match sebelum ini habis (~2–5 menit).
+  static const int geoUnlockTtlSeconds = 180;
+
+  /// Di mode kiosk toko, QR Admin tidak dipakai sebagai syarat face match di
+  /// perangkat Admin (bukti lokasi datang dari unlock HP karyawan).
   static const bool kioskSkipAdminQr = true;
 
   /// Masa hidup token QR absensi di layar Admin (detik).
   /// Pendek agar QR tidak sempat dikirim ke luar toko.
-  /// (Legacy / cadangan jika faceMatchOnStoreDeviceOnly = false.)
+  /// Dipakai karyawan untuk membuka geo unlock (bukan clock-in wajah di HP).
   static const int qrTtlSeconds = 5;
 
   /// Interval rotasi QR di layar Admin (sama dengan TTL).
