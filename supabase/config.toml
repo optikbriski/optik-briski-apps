@@ -14,3 +14,8 @@ entrypoint = "./functions/send-invoice-email/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/aws-rekognition/index.ts"
+
+[functions.aws-face-liveness]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/aws-face-liveness/index.ts"

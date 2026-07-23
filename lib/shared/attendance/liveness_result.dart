@@ -15,7 +15,7 @@ class LivenessCaptureResult {
   final Uint8List? photoBytes;
   final List<double>? faceTemplate;
 
-  /// `aws` | `local` | null
+  /// `aws` | `local` | `web` | null
   final String? livenessProvider;
   final String? livenessSessionId;
   final double? livenessConfidence;

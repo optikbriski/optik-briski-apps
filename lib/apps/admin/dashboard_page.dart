@@ -12,6 +12,7 @@ import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
 import 'riwayat_transaksi_page.dart';
 import 'invoice_config_page.dart';
+import 'absensi_toko_page.dart';
 import 'attendance_qr_page.dart';
 import 'jadwal_kerja_page.dart';
 import 'monthly_export_page.dart';
@@ -346,12 +347,28 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Satu pintu Absen: QR toko → karyawan scan → face di APK
+                          // Absensi Toko: face match di perangkat Admin toko (Android).
                           if (!training)
                             PremiumMenuTile(
                               title: 'dash_menu_absen'.tr(),
-                              icon: Icons.qr_code_2_rounded,
+                              icon: Icons.face_retouching_natural_rounded,
                               color: Colors.deepPurpleAccent,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AbsensiTokoPage(
+                                    profile: widget.profile,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          // Cadangan: QR berputar (jika faceMatchOnStoreDeviceOnly dimatikan).
+                          if (!training)
+                            PremiumMenuTile(
+                              title: 'dash_menu_attendance_qr'.tr(),
+                              icon: Icons.qr_code_2_rounded,
+                              color: Colors.purple,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(

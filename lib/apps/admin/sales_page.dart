@@ -34,7 +34,7 @@ import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/training/training_ops_sync.dart';
 import '../../shared/logistics/request_order_service.dart';
-import '../karyawan/absensi_page.dart';
+import 'absensi_toko_page.dart';
 import 'garansi_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -3701,9 +3701,12 @@ class _SalesPageState extends State<SalesPage> {
       return;
     }
     // Push (bukan replace) agar keranjang/transaksi POS tetap utuh saat kembali.
+    // Face match di perangkat Admin toko — bukan AbsensiPage HP karyawan.
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AbsensiPage()),
+      MaterialPageRoute(
+        builder: (_) => AbsensiTokoPage(profile: widget.profile),
+      ),
     );
   }
 

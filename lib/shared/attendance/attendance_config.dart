@@ -2,23 +2,30 @@
 class AttendanceConfig {
   AttendanceConfig._();
 
-  /// true = wajib lewat AWS Rekognition Face Liveness (Edge Function).
-  /// false = liveness lokal (senyum ML Kit). Default OFF sampai AWS siap.
+  /// AWS Face Liveness — dimatikan (Admin web pakai liveness browser lokal).
   static const bool useAwsFaceLiveness = false;
 
-  /// Ambang default di client; server memakai AWS_LIVENESS_MIN_CONFIDENCE.
+  /// Ambang legacy AWS (tidak dipakai saat [useAwsFaceLiveness] = false).
   static const double minLivenessConfidence = 90;
 
-  /// Setelah liveness AWS lolos, cocokkan wajah lewat template lokal (ML Kit).
+  /// Face match lokal: ML Kit di Android; di web pakai [WebFaceSignature] + foto enroll.
   static const bool useLocalFaceMatch = true;
 
-  /// Opsional: panggil Edge Function aws-rekognition compare setelah liveness.
+  /// AWS CompareFaces — dimatikan; tidak butuh secrets AWS untuk Absensi Toko.
   static const bool useAwsFaceCompare = false;
 
   static const String edgeFunctionName = 'aws-face-liveness';
 
+  /// Face match clock-in/out hanya di perangkat toko (Admin tablet / kiosk / web Admin),
+  /// bukan di HP pribadi karyawan. Enroll wajah tetap boleh di HP karyawan.
+  static const bool faceMatchOnStoreDeviceOnly = true;
+
+  /// Di mode kiosk toko, QR Admin tidak diperlukan (perangkat sudah di toko).
+  static const bool kioskSkipAdminQr = true;
+
   /// Masa hidup token QR absensi di layar Admin (detik).
   /// Pendek agar QR tidak sempat dikirim ke luar toko.
+  /// (Legacy / cadangan jika faceMatchOnStoreDeviceOnly = false.)
   static const int qrTtlSeconds = 5;
 
   /// Interval rotasi QR di layar Admin (sama dengan TTL).
