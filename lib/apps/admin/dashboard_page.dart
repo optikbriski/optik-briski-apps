@@ -367,8 +367,9 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Absensi kiosk (QR→geo→face): admin_toko (cabang/Pusat)
-                          // + owner (Pusat). Bukan admin_pusat (mereka pakai Monitor).
+                          // Absensi kiosk (QR→geo→face):
+                          // - admin_toko cabang → Absensi (toko sendiri)
+                          // - owner / admin_pusat → Absensi Pusat (perangkat Pusat)
                           if (!training &&
                               AttendanceAdminScope.canOpenStoreKiosk(
                                   widget.profile))
@@ -407,7 +408,10 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          if (!training)
+                          // Geofence: owner + admin_pusat saja (bukan cabang).
+                          if (!training &&
+                              AttendanceAdminScope.canManageGeofence(
+                                  widget.profile))
                             PremiumMenuTile(
                               title: 'Geofence Toko',
                               icon: Icons.radar_rounded,

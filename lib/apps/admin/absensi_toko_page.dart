@@ -21,7 +21,8 @@ import '../../shared/widgets/admin/admin_premium.dart';
 /// - belum shift OPEN: Admin face match → masuk
 /// - sudah shift OPEN: Admin auto pulang tanpa face → kembali ke QR.
 /// Tanpa GPS di perangkat Admin (Mac OK).
-/// Owner / admin_toko di PUSAT → toko_id operasional CABANG-PUSAT (fallback PUSAT).
+/// Owner / admin_pusat / admin_toko di PUSAT → operasional CABANG-PUSAT
+/// (fallback PUSAT).
 class AbsensiTokoPage extends StatefulWidget {
   const AbsensiTokoPage({super.key, required this.profile});
 
@@ -73,7 +74,8 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     super.dispose();
   }
 
-  /// Cabang: toko_id profile. Pusat (owner / admin_toko PUSAT): CABANG-PUSAT → PUSAT.
+  /// Cabang: toko_id profile. Pusat (owner / admin_pusat / admin_toko PUSAT):
+  /// CABANG-PUSAT → PUSAT.
   Future<String?> _resolveTokoId() async {
     final profileToko = AttendanceAdminScope.tokoOf(widget.profile);
     final pusatKiosk =

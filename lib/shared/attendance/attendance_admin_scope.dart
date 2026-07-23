@@ -39,26 +39,31 @@ class AttendanceAdminScope {
   static bool canOpenStoreMonitor(Map<String, dynamic> profile) =>
       isOwner(profile) || isAdminPusat(profile);
 
+  /// Editor geofence toko: hanya owner / admin_pusat (bukan admin_toko cabang).
+  static bool canManageGeofence(Map<String, dynamic> profile) =>
+      isOwner(profile) || isAdminPusat(profile);
+
   /// Kiosk QR + face match di perangkat toko.
-  /// - admin_toko: ya (cabang mana pun, termasuk jika toko = PUSAT/CABANG-PUSAT)
+  /// - admin_toko: ya (toko cabang / toko sendiri)
   /// - owner: ya (kiosk Absensi Pusat)
-  /// - admin_pusat: tidak (pakai Monitor cabang saja)
+  /// - admin_pusat: ya (kiosk Absensi Pusat — operasi perangkat;
+  ///   monitor/validasi absensi Pusat tetap owner-only)
   static bool canOpenStoreKiosk(Map<String, dynamic> profile) {
-    if (isAdminPusat(profile)) return false;
-    if (isOwner(profile)) return true;
-    return isAdminToko(profile) || !canOpenStoreMonitor(profile);
+    if (isOwner(profile) || isAdminPusat(profile)) return true;
+    return isAdminToko(profile);
   }
 
-  /// Label tile/AppBar: "Absensi Pusat" untuk owner atau operator toko Pusat.
+  /// Label tile/AppBar: "Absensi Pusat" untuk owner, admin_pusat, atau
+  /// admin_toko yang assigned ke toko Pusat.
   static bool isPusatKioskLabel(Map<String, dynamic> profile) {
-    if (isOwner(profile)) return true;
+    if (isOwner(profile) || isAdminPusat(profile)) return true;
     return isPusatTokoId(tokoOf(profile));
   }
 
   /// Apakah kiosk harus memakai toko Pusat (bukan cabang)?
-  /// Owner selalu Pusat; admin_toko hanya jika assigned ke PUSAT/CABANG-PUSAT.
+  /// Owner & admin_pusat → Pusat; admin_toko hanya jika assigned PUSAT/CABANG-PUSAT.
   static bool usesPusatKioskToko(Map<String, dynamic> profile) {
-    if (isOwner(profile)) return true;
+    if (isOwner(profile) || isAdminPusat(profile)) return true;
     return isPusatTokoId(tokoOf(profile));
   }
 
