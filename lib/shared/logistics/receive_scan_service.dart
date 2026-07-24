@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../qr/obr_codes.dart';
 import 'request_order_service.dart';
+import 'stock_mutation_service.dart';
 
 class ReceiveScanResult {
   const ReceiveScanResult({
@@ -157,6 +158,19 @@ class ReceiveScanService {
     final now = DateTime.now().toUtc();
     final moveId = row['id'].toString();
 
+    final tipe = (row['tipe'] ?? '').toString().toUpperCase();
+    final isReturn = tipe == 'RETUR' || resi.toUpperCase().startsWith('RET-');
+    await StockMutationService(client: _client).receiveItemsFromMoveKeterangan(
+      tokoId: cabangKaryawan.trim().toUpperCase(),
+      keterangan: row['keterangan']?.toString() ?? '',
+      jumlahFlat: int.tryParse(row['jumlah']?.toString() ?? '0') ?? 0,
+      reason: StockReason.transferIn,
+      refType: 'stock_move',
+      refId: moveId,
+      actorNama: verifiedByName,
+      isReturn: isReturn,
+    );
+
     await _client.from('stock_move_history').update({
       'status': 'SUCCESS',
       'verified_by': verifiedById,
@@ -171,12 +185,6 @@ class ReceiveScanService {
       );
     } catch (_) {}
 
-    await _injectStockToCabang(
-      keterangan: row['keterangan']?.toString() ?? '',
-      jumlahFlat: int.tryParse(row['jumlah']?.toString() ?? '0') ?? 0,
-      tokoId: cabangKaryawan.trim().toUpperCase(),
-    );
-
     return ReceiveScanResult(
       ok: true,
       resi: resi,
@@ -185,105 +193,6 @@ class ReceiveScanService {
       message:
           'Resi $resi diterima. Stok toko diperbarui. Petugas: $verifiedByName · ${_fmt(now.toLocal())}',
     );
-  }
-
-  Future<void> _injectStockToCabang({
-    required String keterangan,
-    required int jumlahFlat,
-    required String tokoId,
-  }) async {
-    if (keterangan.contains('[{')) {
-      try {
-        final jsonPart = keterangan.substring(keterangan.indexOf('[{'));
-        final items = jsonDecode(jsonPart);
-        if (items is! List) return;
-        for (final itm in items) {
-          if (itm is! Map) continue;
-          final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
-          if (qty <= 0) continue;
-          await _upsertProductLine(
-            tokoId: tokoId,
-            qty: qty,
-            barcode: itm['barcode']?.toString() ?? '-',
-            sku: itm['sku']?.toString(),
-            nama: itm['nama']?.toString() ?? '-',
-            hargaJual: itm['harga_jual'] ?? itm['harga'] ?? 0,
-            hargaModal: itm['harga_modal'],
-            kategori: itm['kategori']?.toString() ?? 'Lainnya',
-            warna: itm['warna']?.toString() ?? '-',
-          );
-        }
-        return;
-      } catch (_) {}
-    }
-
-    // Fallback: move 1-SKU tanpa JSON detail
-    if (jumlahFlat > 0) {
-      await _upsertProductLine(
-        tokoId: tokoId,
-        qty: jumlahFlat,
-        barcode: '-',
-        nama: 'Barang masuk (tanpa detail SKU)',
-        hargaJual: 0,
-        hargaModal: 0,
-        kategori: 'Lainnya',
-        warna: '-',
-      );
-    }
-  }
-
-  Future<void> _upsertProductLine({
-    required String tokoId,
-    required int qty,
-    required String barcode,
-    String? sku,
-    required String nama,
-    required dynamic hargaJual,
-    required dynamic hargaModal,
-    required String kategori,
-    required String warna,
-  }) async {
-    Map<String, dynamic>? existing;
-    if (barcode.isNotEmpty && barcode != '-') {
-      existing = await _client
-          .from('products')
-          .select('id, stock')
-          .eq('barcode', barcode)
-          .eq('toko_id', tokoId)
-          .maybeSingle();
-    }
-    if (existing == null && sku != null && sku.trim().isNotEmpty) {
-      existing = await _client
-          .from('products')
-          .select('id, stock')
-          .eq('sku', sku.trim())
-          .eq('toko_id', tokoId)
-          .maybeSingle();
-    }
-
-    if (existing != null) {
-      final cur = int.tryParse(existing['stock']?.toString() ?? '0') ?? 0;
-      await _client
-          .from('products')
-          .update({'stock': cur + qty}).eq('id', existing['id']);
-      return;
-    }
-
-    final hj = int.tryParse(hargaJual?.toString() ?? '0') ?? 0;
-    final hm = int.tryParse(hargaModal?.toString() ?? '') ??
-        (hj > 0 ? (hj * 0.4).round() : 0);
-
-    await _client.from('products').insert({
-      'nama': nama,
-      'barcode': barcode,
-      if (sku != null && sku.trim().isNotEmpty) 'sku': sku.trim(),
-      'stock': qty,
-      'toko_id': tokoId,
-      'harga_jual': hj,
-      'harga_modal': hm,
-      'kategori': kategori,
-      'warna': warna,
-    });
   }
 
   static String _fmt(DateTime dt) {

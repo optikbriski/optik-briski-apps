@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -76,34 +77,26 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           .from('verification-proofs')
           .uploadBinary(fileName, bytes);
 
-      // 3. TAMBAH STOK FISIK DI CABANG DULU (Lebih aman jika ini gagal duluan)
-      final existingProd = await supabase
-          .from('products')
-          .select('id, stock')
-          .eq('nama', task['product_name'])
-          .eq('toko_id', widget.profile['toko_id'])
-          .maybeSingle();
+      // 3. Stok via ledger SKU-first (bukan nama/resi)
+      final tipe = (task['tipe'] ?? '').toString().toUpperCase();
+      final resiName = (task['product_name'] ?? '').toString();
+      final isReturn =
+          tipe == 'RETUR' || resiName.toUpperCase().startsWith('RET-');
+      await StockMutationService().receiveItemsFromMoveKeterangan(
+        tokoId: (widget.profile['toko_id'] ?? '').toString(),
+        keterangan: task['keterangan']?.toString() ?? '',
+        jumlahFlat: int.tryParse(task['jumlah']?.toString() ?? '0') ?? 0,
+        reason: StockReason.transferIn,
+        refType: 'stock_move',
+        refId: task['id'].toString(),
+        actorNama: (widget.profile['nama'] ?? '').toString(),
+        isReturn: isReturn,
+      );
 
-      if (existingProd != null) {
-        await supabase.from('products').update({
-          'stock': (existingProd['stock'] ?? 0) + (task['jumlah'] ?? 0)
-        }).eq('id', existingProd['id']);
-      } else {
-        await supabase.from('products').insert({
-          'nama': task['product_name'],
-          'stock': task['jumlah'],
-          'toko_id': widget.profile['toko_id'],
-          'harga': 0,
-          'kategori': 'Frame',
-          'sub_kategori': 'Lainnya',
-        });
-      }
-
-// 4. UPDATE STATUS HISTORY JADI SUCCESS (Gunakan nama kolom yang sesuai dengan DB)
+      // 4. UPDATE STATUS HISTORY JADI SUCCESS
       await supabase.from('stock_move_history').update({
         'status': 'SUCCESS',
-        'bukti_foto_penerim':
-            fileName, // ✅ FIX: Sudah sinkron dengan Screenshot 2026-07-01 at 18.35.35.jpg
+        'bukti_foto_penerim': fileName,
       }).eq('id', task['id']);
 
       if (!mounted) return;

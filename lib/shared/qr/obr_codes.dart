@@ -7,6 +7,7 @@
 // OBRDO|v1|<resi>|<tujuan>
 // OBRRO|v1|<resi>|<tujuan>
 // OBRCUS|v1|<nama>|<phone>|<email>
+// OBRKARY|v1|<karyawan_id>|<nama>|<toko_id>
 //
 // Field values must not contain `|` (stripped on encode).
 
@@ -259,6 +260,57 @@ class ObrCustomer {
       nama: nama,
       phone: phone.isEmpty ? null : phone,
       email: email.isEmpty ? null : email,
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Karyawan identity (verifikasi actor login Admin / revisi stok)
+// -----------------------------------------------------------------------------
+
+class ObrKaryawanData {
+  const ObrKaryawanData({
+    required this.karyawanId,
+    required this.nama,
+    this.tokoId,
+  });
+
+  final String karyawanId;
+  final String nama;
+  final String? tokoId;
+}
+
+class ObrKaryawan {
+  ObrKaryawan._();
+
+  static const prefix = 'OBRKARY';
+  static const version = 'v1';
+
+  static String encode({
+    required String karyawanId,
+    required String nama,
+    String? tokoId,
+  }) {
+    final id = _clean(karyawanId).replaceAll(' ', '');
+    final n = _clean(nama);
+    if (id.isEmpty || n.isEmpty) return '';
+    final t = _clean(tokoId);
+    return '$prefix|$version|$id|$n|$t';
+  }
+
+  static bool looksLike(String? raw) => parse(raw) != null;
+
+  static ObrKaryawanData? parse(String? raw) {
+    final parts = _parts(raw, prefix);
+    if (parts == null || parts.length < 4) return null;
+    final id = parts[2].trim();
+    final nama = parts[3].trim();
+    if (id.isEmpty || nama.isEmpty) return null;
+    final toko = parts.length >= 5 ? parts[4].trim() : '';
+    return ObrKaryawanData(
+      karyawanId: id,
+      nama: nama,
+      tokoId: toko.isEmpty ? null : toko,
     );
   }
 }

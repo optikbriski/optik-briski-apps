@@ -4,9 +4,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/karyawan/karyawan_jabatan.dart';
+import '../../shared/qr/obr_codes.dart';
 
 /// Kode TOTP unik per karyawan untuk login web Admin (berganti tiap 10 dtk).
 class AdminLoginCodePage extends StatefulWidget {
@@ -24,6 +26,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
   static const _card = Color(0xFF1E293B);
 
   String? _code;
+  String? _karyawanId;
   String? _nama;
   String? _tokoId;
   String? _jabatan;
@@ -34,6 +37,18 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
   bool _copied = false;
   Timer? _tick;
   late final AnimationController _pulse;
+
+  String? get _karyawanQrPayload {
+    final id = (_karyawanId ?? '').trim();
+    final nama = (_nama ?? '').trim();
+    if (id.isEmpty || nama.isEmpty) return null;
+    final payload = ObrKaryawan.encode(
+      karyawanId: id,
+      nama: nama,
+      tokoId: _tokoId,
+    );
+    return payload.isEmpty ? null : payload;
+  }
 
   @override
   void initState() {
@@ -68,6 +83,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
       if (!mounted) return;
       setState(() {
         _code = (map!['code'] ?? '').toString();
+        _karyawanId = (map['karyawan_id'] ?? '').toString();
         _nama = (map['nama'] ?? '').toString();
         _tokoId = (map['toko_id'] ?? '').toString();
         _jabatan = (map['jabatan'] ?? '').toString();
@@ -188,6 +204,8 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                             _legendChip(),
                             const SizedBox(height: 22),
                             _copyButton(),
+                            const SizedBox(height: 18),
+                            _identityQrCard(),
                             const SizedBox(height: 12),
                             Text(
                               'Kode berganti tiap $_period detik. '
@@ -202,6 +220,74 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                           ],
                         ),
                       ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _identityQrCard() {
+    final payload = _karyawanQrPayload;
+    if (payload == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        color: Colors.white.withOpacity(0.04),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'QR Identitas (otorisasi stok)',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Scan QR ini di web Admin saat revisi / write-off stok. '
+            'Harus sama dengan akun via login.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.55),
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: QrImageView(
+              data: payload,
+              size: 180,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Color(0xFF0F172A),
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            (_nama ?? '').trim(),
+            style: const TextStyle(
+              color: _accent,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
           ),
         ],
       ),

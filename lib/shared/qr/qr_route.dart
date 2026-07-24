@@ -11,6 +11,7 @@ enum QrPayloadType {
   receiveStock,
   product,
   customer,
+  karyawan,
   unknown,
 }
 
@@ -32,6 +33,9 @@ class QrRouteResult {
     this.customerNama,
     this.customerPhone,
     this.customerEmail,
+    this.karyawanId,
+    this.karyawanNama,
+    this.karyawanTokoId,
   });
 
   final QrPayloadType type;
@@ -51,6 +55,9 @@ class QrRouteResult {
   final String? customerNama;
   final String? customerPhone;
   final String? customerEmail;
+  final String? karyawanId;
+  final String? karyawanNama;
+  final String? karyawanTokoId;
 
   bool get isKnown => type != QrPayloadType.unknown;
 }
@@ -96,6 +103,17 @@ class QrRouter {
         raw: s,
         attendanceTokoId: att.tokoId,
         attendanceToken: att.token,
+      );
+    }
+
+    final kary = ObrKaryawan.parse(s);
+    if (kary != null) {
+      return QrRouteResult(
+        type: QrPayloadType.karyawan,
+        raw: s,
+        karyawanId: kary.karyawanId,
+        karyawanNama: kary.nama,
+        karyawanTokoId: kary.tokoId,
       );
     }
 

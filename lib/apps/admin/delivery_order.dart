@@ -8,7 +8,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
@@ -364,6 +366,10 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     for (var entry in selectedItems.entries) {
       final prod =
           allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
+      final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+      if (sku == null) {
+        throw 'Produk ${prod['nama']} belum punya SKU. Lengkapi di Product Master.';
+      }
       detailItems.add({
         'id_produk': prod['id'],
         'nama': prod['nama'] ?? '-',
@@ -374,7 +380,10 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         'sph_r': prod['sph_r'] ?? 0,
         'cyl_r': prod['cyl_r'] ?? 0,
         'add_r': prod['add_r'] ?? 0,
-        'barcode': prod['barcode'] ?? '-',
+        'barcode': prod['barcode'] ?? sku,
+        'sku': sku,
+        'harga_jual': prod['harga_jual'] ?? prod['harga'] ?? 0,
+        'harga_modal': prod['harga_modal'] ?? 0,
         'qty': entry.value
       });
     }
@@ -392,31 +401,41 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     setState(() => isProcessing = true);
 
     try {
-      // Step A: Validasi ketersediaan stok fisik di Gudang Pusat satu per satu
+      final cartJson = buildCartJson();
+      final mut = StockMutationService();
+      final actor =
+          (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
+
+      final draft = await supabase
+          .from('draft_pengiriman')
+          .insert({
+            'tujuan': selectedToko,
+            'items': cartJson,
+            'created_at': DateTime.now().toIso8601String()
+          })
+          .select('id')
+          .single();
+
+      // Step A: potong PUSAT via ledger (TRANSFER_OUT) — beralasan
       for (var entry in selectedItems.entries) {
-        final res = await supabase
-            .from('products')
-            .select('stock, nama')
-            .eq('id', entry.key)
-            .single();
-
-        int currentStock = int.tryParse(res['stock'].toString()) ?? 0;
-        if (currentStock < entry.value) {
-          throw "Stok ${res['nama']} tidak mencukupi untuk dialokasikan!";
+        final prod = allProdukPusat
+            .firstWhere((p) => p['id'].toString() == entry.key);
+        final sku =
+            ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+        if (sku == null) {
+          throw 'Produk ${prod['nama']} belum punya SKU.';
         }
-
-        // Kurangi stok di PUSAT karena barang sudah disisihkan untuk draf ini
-        await supabase
-            .from('products')
-            .update({'stock': currentStock - entry.value}).eq('id', entry.key);
+        await mut.shipOut(
+          fromToko: 'PUSAT',
+          sku: sku,
+          qty: entry.value,
+          reason: StockReason.transferOut,
+          alasanText: 'Alokasi draft DO → $selectedToko',
+          refType: 'draft',
+          refId: draft['id'].toString(),
+          actorNama: actor,
+        );
       }
-
-      // Step B: Masukkan data bundle keranjang ke tabel transaksi gantung
-      await supabase.from('draft_pengiriman').insert({
-        'tujuan': selectedToko,
-        'items': buildCartJson(),
-        'created_at': DateTime.now().toIso8601String()
-      });
 
       if (mounted) {
         setState(() {
@@ -534,26 +553,35 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         return;
       }
 
-      // Loop pengaman: Validasi & eksekusi pemotongan stok di Gudang Pusat secara real-time
-      for (var entry in selectedItems.entries) {
-        final current = await Supabase.instance.client
-            .from('products')
-            .select('stock, nama')
-            .eq('id', entry.key)
-            .single();
-
-        int stockSekarang = int.tryParse(current['stock'].toString()) ?? 0;
-        if (stockSekarang < entry.value)
-          throw "Stok ${current['nama']} mendadak habis atau tidak mencukupi!";
-
-        await Supabase.instance.client
-            .from('products')
-            .update({'stock': stockSekarang - entry.value}).eq('id', entry.key);
-      }
+      final cartJson = buildCartJson();
+      final mut = StockMutationService();
+      final actor =
+          (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
 
       // Formula pembuatan nomor resi surat jalan otomatis (DO-xxxxx)
       String resiDO =
           "DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
+
+      // Potong PUSAT via ledger dulu
+      for (var entry in selectedItems.entries) {
+        final prod = allProdukPusat
+            .firstWhere((p) => p['id'].toString() == entry.key);
+        final sku =
+            ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+        if (sku == null) {
+          throw 'Produk ${prod['nama']} belum punya SKU.';
+        }
+        await mut.shipOut(
+          fromToko: 'PUSAT',
+          sku: sku,
+          qty: entry.value,
+          reason: StockReason.transferOut,
+          alasanText: 'Ship DO $resiDO → $selectedToko',
+          refType: 'stock_move',
+          refId: resiDO,
+          actorNama: actor,
+        );
+      }
 
       // Catat log resmi ke tabel riwayat mutasi barang (Status: TRANSIT untuk kurir jalan)
       await Supabase.instance.client.from('stock_move_history').insert({
@@ -564,7 +592,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         'tipe': 'DELIVERY',
         'status': 'TRANSIT',
         'bukti_foto_pengirim': imgUrl,
-        'keterangan': buildCartJson(),
+        'keterangan': cartJson,
         'created_at': DateTime.now().toIso8601String(),
         if (!kurirPickSkipped(kurirPick)) ...{
           'kurir_karyawan_id': kurirPick!['id'],
@@ -1830,22 +1858,24 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
   Future<void> _cancelDraft(String alasan) async {
     setState(() => isProcessing = true);
     try {
+      final mut = StockMutationService();
       for (var itm in originalItems) {
         int qty = int.tryParse(itm['qty'].toString()) ?? 0;
-        String idProduk = itm['id_produk'].toString();
-
-        final current = await Supabase.instance.client
-            .from('products')
-            .select('stock')
-            .eq('id', idProduk)
-            .single();
-
-        int stokSekarang = int.tryParse(current['stock'].toString()) ?? 0;
-
-        // Pulihkan kembali stok pusat yang sempat dikunci saat pembuatan draf
-        await Supabase.instance.client
-            .from('products')
-            .update({'stock': stokSekarang + qty}).eq('id', idProduk);
+        if (qty <= 0) continue;
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(itm));
+        if (sku == null) {
+          throw 'Item draft tanpa SKU tidak bisa dikembalikan stoknya.';
+        }
+        await mut.applyDelta(
+          tokoId: 'PUSAT',
+          sku: sku,
+          qtyDelta: qty,
+          reason: StockReason.adjust,
+          alasanText: 'Batal draft DO: $alasan',
+          refType: 'draft',
+          refId: widget.draft['id'].toString(),
+          allowCreate: false,
+        );
       }
 
       await Supabase.instance.client
@@ -1983,38 +2013,31 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           .from('attendance_photos')
           .getPublicUrl(path);
 
-      // Algoritma Rekonsiliasi: Hitung selisih perubahan kuantiti item draf lama vs draf baru
+      // Rekonsiliasi qty draft vs final via ledger (stok sudah dipotong saat draft).
+      final mut = StockMutationService();
       for (var ori in originalItems) {
-        String idProduk = ori['id_produk'].toString();
-        int oriQty = int.tryParse(ori['qty'].toString()) ?? 0;
-
-        var localMatch = localItems
+        final idProduk = ori['id_produk'].toString();
+        final oriQty = int.tryParse(ori['qty'].toString()) ?? 0;
+        final localMatch = localItems
             .where((item) => item['id_produk'].toString() == idProduk)
             .toList();
-
-        int finalQty = 0;
-        if (localMatch.isNotEmpty) {
-          finalQty = int.tryParse(localMatch.first['qty'].toString()) ?? 0;
-        }
-
-        int selisih = oriQty - finalQty;
-        if (selisih != 0) {
-          final current = await Supabase.instance.client
-              .from('products')
-              .select('stock, nama')
-              .eq('id', idProduk)
-              .single();
-
-          int stokPusat = int.tryParse(current['stock'].toString()) ?? 0;
-
-          // Jika terjadi penambahan kuantiti item draf, validasi sisa stok gudang pusat terlebih dahulu
-          if (selisih < 0 && stokPusat < (selisih.abs())) {
-            throw "Stok ${current['nama']} di PUSAT sisa $stokPusat. Tidak cukup untuk menambah pesanan!";
-          }
-          await Supabase.instance.client
-              .from('products')
-              .update({'stock': stokPusat + selisih}).eq('id', idProduk);
-        }
+        final finalQty = localMatch.isEmpty
+            ? 0
+            : int.tryParse(localMatch.first['qty'].toString()) ?? 0;
+        final selisih = oriQty - finalQty; // + = kembalikan ke PUSAT
+        if (selisih == 0) continue;
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(ori));
+        if (sku == null) throw 'Item draft tanpa SKU.';
+        await mut.applyDelta(
+          tokoId: 'PUSAT',
+          sku: sku,
+          qtyDelta: selisih,
+          reason: StockReason.adjust,
+          alasanText: 'Rekonsiliasi qty draft → DO',
+          refType: 'draft',
+          refId: widget.draft['id'].toString(),
+          allowCreate: false,
+        );
       }
 
       String resiDO =

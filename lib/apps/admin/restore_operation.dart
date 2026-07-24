@@ -5,6 +5,8 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/product_identity.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/theme.dart';
@@ -106,24 +108,33 @@ class _RestoreOperationState extends State<RestoreOperation> {
       List<Map<String, dynamic>> detailReturn = [];
       int totalQty = 0;
 
+      final mut = StockMutationService();
+      final fromToko =
+          (widget.profile['toko_id'] ?? '').toString().toUpperCase();
+      final actor =
+          (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
+
       for (var entry in returnItems.entries) {
         final prod =
             myProducts.firstWhere((p) => p['id'].toString() == entry.key);
         int returQty = entry.value;
         totalQty += returQty;
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+        if (sku == null) {
+          throw 'Produk ${prod['nama']} belum punya SKU. Tidak bisa retur.';
+        }
 
         detailReturn.add({
           'id_produk': prod['id'],
           'nama': prod['nama'],
-          'barcode': prod['barcode'],
+          'barcode': prod['barcode'] ?? sku,
+          'sku': sku,
+          'harga_jual': prod['harga_jual'] ?? prod['harga'] ?? 0,
+          'harga_modal': prod['harga_modal'] ?? 0,
+          'kategori': prod['kategori'] ?? 'Lainnya',
+          'warna': prod['warna'] ?? '-',
           'qty': returQty
         });
-
-        // Potong stok fisik di Cabang pengirim
-        int sisaStok = (prod['stock'] as int) - returQty;
-        await supabase
-            .from('products')
-            .update({'stock': sisaStok}).eq('id', prod['id']);
       }
 
       // Formula pembuatan kode nomor resi retur otomatis
@@ -140,6 +151,20 @@ class _RestoreOperationState extends State<RestoreOperation> {
       if (kurirPickCancelled(kurirPick)) {
         setState(() => isProcessing = false);
         return;
+      }
+
+      // Potong stok cabang via ledger RETURN_OUT
+      for (final line in detailReturn) {
+        await mut.shipOut(
+          fromToko: fromToko,
+          sku: line['sku'].toString(),
+          qty: line['qty'] as int,
+          reason: StockReason.returnOut,
+          alasanText: 'Retur $resiRetur → PUSAT',
+          refType: 'stock_move',
+          refId: resiRetur,
+          actorNama: actor,
+        );
       }
 
       // Catat log ke History Mutasi Barang (Status: PENDING agar divalidasi Pusat)

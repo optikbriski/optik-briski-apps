@@ -36,7 +36,9 @@ import '../../shared/widgets/leave_page_guard.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/training/training_ops_sync.dart';
+import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/request_order_service.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import 'absensi_toko_page.dart';
 import 'garansi_page.dart';
 import '../../shared/theme.dart';
@@ -998,7 +1000,7 @@ class _SalesPageState extends State<SalesPage> {
         return;
       }
 
-      // 1. Cari Master Produk — prioritas id tertanam di QR/barcode produk
+      // 1. Cari produk di toko login dulu (SKU/barcode), fallback master
       Map<String, dynamic>? res;
       if (productId != null && productId.isNotEmpty) {
         res = await supabase
@@ -1007,37 +1009,59 @@ class _SalesPageState extends State<SalesPage> {
             .eq('id', productId)
             .maybeSingle();
       }
+      res ??= await ProductIdentity.findAtToko(
+        tokoId: tokoId.toString(),
+        sku: sku,
+        barcode: sku,
+        select: '*',
+      );
       if (res == null && sku.isNotEmpty) {
         res = await supabase
             .from('products')
             .select()
             .eq('sku', sku)
-            .maybeSingle();
-      }
-      if (res == null && sku.isNotEmpty) {
-        res = await supabase
-            .from('products')
-            .select()
-            .eq('barcode', sku)
+            .eq('toko_id', 'PUSAT')
             .maybeSingle();
       }
 
       if (res != null) {
         final stockSku = (res['sku'] ?? res['barcode'] ?? sku).toString();
-        // 2. Cek Stok di Cabang Tersebut
-        final stockRes = await supabase
-            .from('inventory_stocks')
-            .select('stok')
-            .eq('toko_id', tokoId)
-            .eq('sku', stockSku)
-            .maybeSingle();
-
-        int stokAktif = stockRes != null ? (stockRes['stok'] ?? 0) : 0;
+        // 2. Cek stok dari products.stock toko login (sumber kebenaran tunggal)
+        Map<String, dynamic>? localProd;
+        if ((res['toko_id'] ?? '').toString().toUpperCase() ==
+            tokoId.toUpperCase()) {
+          localProd = Map<String, dynamic>.from(res);
+        } else {
+          localProd = await supabase
+              .from('products')
+              .select('id, stock, sku, barcode, toko_id')
+              .eq('toko_id', tokoId)
+              .eq('sku', stockSku)
+              .maybeSingle();
+          localProd ??= await supabase
+              .from('products')
+              .select('id, stock, sku, barcode, toko_id')
+              .eq('toko_id', tokoId)
+              .eq('barcode', stockSku)
+              .maybeSingle();
+        }
+        final stokAktif =
+            int.tryParse(localProd?['stock']?.toString() ?? '0') ?? 0;
 
         if (stokAktif <= 0) {
           _showSnack(
               "${"pos_stok_kosong".tr()} SKU: $stockSku", Colors.redAccent);
           return;
+        }
+        // Pastikan item keranjang memakai id baris produk toko ini
+        if (localProd != null && localProd['id'] != null) {
+          res = {
+            ...Map<String, dynamic>.from(res),
+            'id': localProd['id'],
+            'stock': stokAktif,
+            'toko_id': tokoId,
+            'sku': localProd['sku'] ?? stockSku,
+          };
         }
 
         // 3. Pisahkan Logika Kategori Lensa vs Frame/Aksesoris
@@ -2729,46 +2753,60 @@ class _SalesPageState extends State<SalesPage> {
               : resepKomplitFisik, // 🎯 DATA MASUK UTUH: Apa yang diketik di POS masuk ke detail invoice database harian
         });
 
-        // Pengurangan Stok Utama Mengunci ID Unik
+        // Potong stok via ledger SALE (beralasan + ref invoice)
         if (item['id'] != null && item['is_lensa_custom'] == false) {
-          try {
-            final prodData = await supabase
+          // Resolve SKU dari baris produk toko bila cart "No SKU"
+          String? skuItem = ProductIdentity.normalizeSku(item['sku']) ??
+              ProductIdentity.normalizeBarcode(item['barcode']);
+          if (skuItem == null && item['id'] != null) {
+            final row = await supabase
                 .from('products')
-                .select('stock, id')
+                .select('sku, barcode')
                 .eq('id', item['id'])
-                .eq('toko_id', tokoId)
-                .single();
-
-            int stokSekarang = (prodData['stock'] ?? 0) as int;
-            int stokBaru = stokSekarang - (item['qty'] as int);
-
-            await supabase
-                .from('products')
-                .update({'stock': stokBaru < 0 ? 0 : stokBaru}).eq(
-                    'id', prodData['id']);
-          } catch (e) {
-            debugPrint("Gagal potong stok produk ID ${item['id']}: $e");
+                .maybeSingle();
+            skuItem = ProductIdentity.normalizeSku(row?['sku']) ??
+                ProductIdentity.normalizeBarcode(row?['barcode']);
           }
+          if (skuItem == null) {
+            throw 'Item tanpa SKU tidak bisa dipotong stoknya: ${item['nama_produk']}';
+          }
+          await StockMutationService().sale(
+            tokoId: tokoId.toString(),
+            sku: skuItem,
+            qty: item['qty'] as int,
+            invoiceNo: noInvoice.toString(),
+            actorNama:
+                (widget.profile['nama'] ?? widget.profile['email'] ?? '')
+                    .toString(),
+            meta: {'product_id': item['id']},
+          );
         }
 
-        // OTOMASI POTONG STOK PAKET BONUS FRAME
+        // OTOMASI POTONG STOK PAKET BONUS FRAME (ledger SALE)
         if (item['kategori'] == 'Frame') {
           final List<String> bonusItems = ['Kotak Kacamata', 'Lap Kacamata'];
           for (String namaBonus in bonusItems) {
             try {
               final bonusData = await supabase
                   .from('products')
-                  .select('id, stock')
+                  .select('id, stock, sku, barcode')
                   .eq('nama', namaBonus)
                   .eq('toko_id', tokoId)
                   .maybeSingle();
-
-              if (bonusData != null) {
-                int stokBonusSekarang = (bonusData['stock'] ?? 0) as int;
-                int stokBonusBaru = stokBonusSekarang - (item['qty'] as int);
-                await supabase.from('products').update({
-                  'stock': stokBonusBaru < 0 ? 0 : stokBonusBaru
-                }).eq('id', bonusData['id']);
+              final bonusSku = ProductIdentity.normalizeSku(bonusData?['sku']) ??
+                  ProductIdentity.normalizeBarcode(bonusData?['barcode']);
+              if (bonusSku != null) {
+                await StockMutationService().sale(
+                  tokoId: tokoId.toString(),
+                  sku: bonusSku,
+                  qty: item['qty'] as int,
+                  invoiceNo: '$noInvoice-BONUS',
+                  actorNama: (widget.profile['nama'] ??
+                          widget.profile['email'] ??
+                          '')
+                      .toString(),
+                  meta: {'bonus_of': item['id'], 'nama': namaBonus},
+                );
               }
             } catch (e) {
               debugPrint("Gagal potong otomatis item bonus: $e");

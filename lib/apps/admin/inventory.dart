@@ -10,6 +10,10 @@ import 'barcode_scanner.dart';
 import 'restore_operation.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
+import '../../shared/logistics/product_identity.dart';
+import '../../shared/logistics/stock_actor_gate.dart';
+import '../../shared/logistics/stock_integrity_service.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -50,6 +54,553 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     return NumberFormat.currency(
             locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
         .format(nominal);
+  }
+
+  Future<void> _showWriteOffDialog() async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'write-off stok rusak',
+    );
+    if (!allowed || !mounted) return;
+
+    final skuCtrl = TextEditingController();
+    final qtyCtrl = TextEditingController(text: '1');
+    final alasanCtrl = TextEditingController();
+    final toko =
+        (widget.profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        title: const Text('Stok Rusak / Write-off',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Toko: $toko',
+                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: skuCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'SKU / Barcode',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+            TextField(
+              controller: qtyCtrl,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Qty rusak',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+            TextField(
+              controller: alasanCtrl,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Alasan (wajib)',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('BATAL')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('PROSES'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true || !mounted) {
+      skuCtrl.dispose();
+      qtyCtrl.dispose();
+      alasanCtrl.dispose();
+      return;
+    }
+
+    try {
+      final raw = skuCtrl.text.trim();
+      final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+      final alasan = alasanCtrl.text.trim();
+      skuCtrl.dispose();
+      qtyCtrl.dispose();
+      alasanCtrl.dispose();
+
+      final prod = await ProductIdentity.findAtToko(
+        tokoId: toko,
+        sku: raw,
+        barcode: raw,
+      );
+      final sku = ProductIdentity.normalizeSku(prod?['sku']) ??
+          ProductIdentity.normalizeSku(raw) ??
+          ProductIdentity.normalizeBarcode(raw);
+      if (sku == null) throw 'Produk/SKU tidak ditemukan di $toko.';
+
+      await StockMutationService().writeOff(
+        tokoId: toko,
+        sku: sku,
+        qty: qty,
+        alasan: alasan,
+        actorNama:
+            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Stok rusak tercatat di ledger.'),
+        backgroundColor: Colors.green,
+      ));
+      _fetchInventoryFinancials();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal write-off: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
+  }
+
+  Future<void> _showReviseStockDialog() async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'revisi stok',
+    );
+    if (!allowed || !mounted) return;
+
+    final skuCtrl = TextEditingController();
+    final newStockCtrl = TextEditingController();
+    final alasanCtrl = TextEditingController();
+    final toko =
+        (widget.profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
+    String? previewText;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Future<void> lookup() async {
+              final raw = skuCtrl.text.trim();
+              if (raw.isEmpty) return;
+              final prod = await ProductIdentity.findAtToko(
+                tokoId: toko,
+                sku: raw,
+                barcode: raw,
+              );
+              if (!ctx.mounted) return;
+              if (prod == null) {
+                setLocal(() => previewText = 'Produk tidak ditemukan di $toko');
+                return;
+              }
+              final stok =
+                  int.tryParse(prod['stock']?.toString() ?? '0') ?? 0;
+              setLocal(() {
+                previewText =
+                    '${prod['nama']} · stok sekarang: $stok pcs';
+                if (newStockCtrl.text.trim().isEmpty) {
+                  newStockCtrl.text = stok.toString();
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: OptikAdminTokens.card,
+              title: const Text(
+                'Revisi Stok',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Toko: $toko\n'
+                    'Isi stok hasil hitung fisik. Sistem hitung selisih '
+                    'otomatis dan catat sebagai ADJUST (wajib alasan).',
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: skuCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'SKU / Barcode',
+                      labelStyle: const TextStyle(color: Colors.white54),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.search, color: Colors.white54),
+                        onPressed: lookup,
+                      ),
+                    ),
+                    onSubmitted: (_) => lookup(),
+                  ),
+                  if (previewText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(previewText!,
+                        style: const TextStyle(
+                            color: Colors.tealAccent, fontSize: 12)),
+                  ],
+                  TextField(
+                    controller: newStockCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Stok baru (hasil hitung)',
+                      labelStyle: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                  TextField(
+                    controller: alasanCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Alasan revisi (wajib)',
+                      labelStyle: TextStyle(color: Colors.white54),
+                      hintText: 'Contoh: stock opname Maret / selisih fisik',
+                      hintStyle: TextStyle(color: Colors.white24),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('BATAL'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('SIMPAN REVISI'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true || !mounted) {
+      skuCtrl.dispose();
+      newStockCtrl.dispose();
+      alasanCtrl.dispose();
+      return;
+    }
+
+    try {
+      final raw = skuCtrl.text.trim();
+      final newStock = int.tryParse(newStockCtrl.text.trim());
+      final alasan = alasanCtrl.text.trim();
+      skuCtrl.dispose();
+      newStockCtrl.dispose();
+      alasanCtrl.dispose();
+
+      if (newStock == null) throw 'Stok baru tidak valid.';
+      final prod = await ProductIdentity.findAtToko(
+        tokoId: toko,
+        sku: raw,
+        barcode: raw,
+      );
+      final sku = ProductIdentity.normalizeSku(prod?['sku']) ??
+          ProductIdentity.normalizeSku(raw) ??
+          ProductIdentity.normalizeBarcode(raw);
+      if (sku == null) throw 'Produk/SKU tidak ditemukan di $toko.';
+
+      final before = int.tryParse(prod?['stock']?.toString() ?? '0') ?? 0;
+      await StockMutationService().reviseTo(
+        tokoId: toko,
+        sku: sku,
+        newStock: newStock,
+        alasan: alasan,
+        actorNama:
+            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
+      );
+
+      if (!mounted) return;
+      final delta = newStock - before;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Revisi tercatat: $before → $newStock '
+          '(${delta >= 0 ? '+' : ''}$delta) · alasan wajib tersimpan.',
+        ),
+        backgroundColor: Colors.green,
+      ));
+      _fetchInventoryFinancials();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal revisi stok: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
+  }
+
+  Future<void> _runIntegrityCheck() async {
+    setState(() => isLoading = true);
+    try {
+      final svc = StockIntegrityService();
+      final report = await svc.runLeakCheck();
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => R.constrainedDialog(
+          context: ctx,
+          preferWidth: 560,
+          child: AlertDialog(
+            backgroundColor: OptikAdminTokens.card,
+            title: Row(
+              children: [
+                Icon(
+                  report.isClean
+                      ? Icons.verified_user_rounded
+                      : Icons.warning_amber_rounded,
+                  color: report.isClean
+                      ? Colors.greenAccent
+                      : Colors.orangeAccent,
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Cek Kebocoran Stok',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 440,
+              child: ListView(
+                children: [
+                  Text(
+                    report.verdict,
+                    style: TextStyle(
+                      color: report.isClean
+                          ? Colors.greenAccent
+                          : Colors.orangeAccent,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Cara kerja:\n'
+                    '• Setiap perubahan stok wajib punya jejak di ledger '
+                    '(jual / kirim / retur / rusak / saldo awal).\n'
+                    '• Rumus aman: stok toko = jumlah semua +/- di ledger '
+                    'untuk SKU itu.\n'
+                    '• Kalau beda → ada kebocoran (stok berubah tanpa alasan).',
+                    style: TextStyle(
+                        color: Colors.white54, fontSize: 12, height: 1.45),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Dicek: ${report.checkedProducts} baris produk\n'
+                    'Selisih bocor: ${report.mismatches.length}\n'
+                    'SKU lemah/NOSKU: ${report.missingSkuCount}\n'
+                    'Masih transit (normal, bukan bocor): '
+                    '${report.openTransitQty} pcs',
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12.5, height: 1.45),
+                  ),
+                  const SizedBox(height: 14),
+                  if (report.mismatches.isEmpty)
+                    const Text(
+                      'Tidak ada selisih. Stok sinkron dengan jejak.',
+                      style: TextStyle(color: Colors.greenAccent),
+                    )
+                  else ...[
+                    const Text(
+                      'Detail selisih (maks. 40):',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    ...report.mismatches.take(40).map((e) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.nama ?? e.sku,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              'SKU ${e.sku} · ${e.tokoId}',
+                              style: const TextStyle(
+                                  color: Colors.white38, fontSize: 11),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Stok sekarang: ${e.stock}  |  '
+                              'Jejak ledger: ${e.ledgerSum}  |  '
+                              'Selisih: ${e.delta > 0 ? '+' : ''}${e.delta}',
+                              style: const TextStyle(
+                                  color: Colors.orangeAccent, fontSize: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              e.diagnosis,
+                              style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11.5,
+                                  height: 1.35),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () async {
+                                  Navigator.pop(ctx);
+                                  await _reconcileLeak(e);
+                                },
+                                child: const Text(
+                                  'CATAT SELISIH KE LEDGER',
+                                  style: TextStyle(
+                                      color: Colors.tealAccent, fontSize: 11),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('TUTUP'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Gagal cek kebocoran: $e\n'
+          'Pastikan SQL 00012 sudah dijalankan di Supabase.',
+        ),
+        backgroundColor: Colors.redAccent,
+      ));
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _reconcileLeak(StockIntegrityIssue issue) async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'catat selisih kebocoran stok',
+    );
+    if (!allowed || !mounted) return;
+
+    final alasanCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        title: const Text(
+          'Catat selisih ke ledger',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${issue.sku} @ ${issue.tokoId}\n'
+              'Stok fisik tetap ${issue.stock}.\n'
+              'Jejak ledger ${issue.ledgerSum} akan ditambah '
+              'catatan selisih ${issue.delta > 0 ? '+' : ''}${issue.delta} '
+              'agar rumus stok = jejak kembali cocok.\n\n'
+              'Ini TIDAK mengubah jumlah barang di rak — hanya melengkapi '
+              'jejak supaya kebocoran terdata.',
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: alasanCtrl,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Penjelasan selisih (wajib)',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('CATAT'),
+          ),
+        ],
+      ),
+    );
+    final alasan = alasanCtrl.text;
+    alasanCtrl.dispose();
+    if (ok != true || !mounted) return;
+
+    try {
+      await StockIntegrityService().recognizeVariance(
+        issue: issue,
+        alasan: alasan,
+        actorNama:
+            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Selisih tercatat. Cek ulang untuk pastikan AMAN.'),
+        backgroundColor: Colors.green,
+      ));
+      await _runIntegrityCheck();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Gagal catat selisih: $e\n'
+          'Jalankan juga SQL 00013 di Supabase.',
+        ),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
   }
 
   // Helper mengubah nilai ukuran lensa optik agar seragam (+0.25 / -1.00)
@@ -210,6 +761,32 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                       ),
                     );
                   },
+                ),
+
+                PremiumListTile(
+                  title: 'Revisi Stok',
+                  subtitle:
+                      'Stock opname / koreksi: set stok baru + alasan (ADJUST)',
+                  icon: Icons.edit_note_rounded,
+                  iconColor: Colors.amberAccent,
+                  onTap: _showReviseStockDialog,
+                ),
+
+                PremiumListTile(
+                  title: 'Stok Rusak / Write-off',
+                  subtitle: 'Kurangi stok dengan alasan wajib (tercatat ledger)',
+                  icon: Icons.report_gmailerrorred_rounded,
+                  iconColor: Colors.orangeAccent,
+                  onTap: _showWriteOffDialog,
+                ),
+
+                PremiumListTile(
+                  title: 'Cek Kebocoran Stok',
+                  subtitle:
+                      'Deteksi selisih stok vs jejak ledger — wajib 0 selisih',
+                  icon: Icons.fact_check_rounded,
+                  iconColor: Colors.lightGreenAccent,
+                  onTap: _runIntegrityCheck,
                 ),
 
                 PremiumListTile(

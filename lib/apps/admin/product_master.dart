@@ -6,6 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'request_order_page.dart';
+import '../../shared/logistics/product_identity.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -163,28 +165,38 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       final data = await q.order('created_at', ascending: false);
       List<dynamic> rawList = data as List<dynamic>;
 
+      // Group by SKU (canonical), bukan nama — hindari merge produk beda SKU.
       Map<String, Map<String, dynamic>> mapGabung = {};
       for (var item in rawList) {
-        String namaKey = item['nama'].toString().trim();
+        final skuKey = ProductIdentity.normalizeSku(item['sku']) ??
+            ProductIdentity.normalizeBarcode(item['barcode']) ??
+            'ID-${item['id']}';
         int stokSekarang = int.tryParse(item['stock'].toString()) ?? 0;
         String lokasiToko =
             item['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
 
-        if (!mapGabung.containsKey(namaKey)) {
-          mapGabung[namaKey] = Map<String, dynamic>.from(item);
-          mapGabung[namaKey]!['breakdown_stok'] = [
+        if (!mapGabung.containsKey(skuKey)) {
+          mapGabung[skuKey] = Map<String, dynamic>.from(item);
+          mapGabung[skuKey]!['breakdown_stok'] = [
             {"cabang": lokasiToko, "stok": stokSekarang}
           ];
-          mapGabung[namaKey]!['total_stock'] = stokSekarang;
+          mapGabung[skuKey]!['total_stock'] = stokSekarang;
         } else {
-          mapGabung[namaKey]!['total_stock'] =
-              (mapGabung[namaKey]!['total_stock'] ?? 0) + stokSekarang;
+          mapGabung[skuKey]!['total_stock'] =
+              (mapGabung[skuKey]!['total_stock'] ?? 0) + stokSekarang;
 
           List<Map<String, dynamic>> breakdown =
               List<Map<String, dynamic>>.from(
-                  mapGabung[namaKey]!['breakdown_stok']);
+                  mapGabung[skuKey]!['breakdown_stok']);
           breakdown.add({"cabang": lokasiToko, "stok": stokSekarang});
-          mapGabung[namaKey]!['breakdown_stok'] = breakdown;
+          mapGabung[skuKey]!['breakdown_stok'] = breakdown;
+          // Prefer baris PUSAT sebagai representasi master
+          if (lokasiToko == 'PUSAT') {
+            final prev = mapGabung[skuKey]!;
+            mapGabung[skuKey] = Map<String, dynamic>.from(item);
+            mapGabung[skuKey]!['breakdown_stok'] = breakdown;
+            mapGabung[skuKey]!['total_stock'] = prev['total_stock'];
+          }
         }
       }
 
@@ -447,41 +459,61 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
         int stokInput = int.tryParse(stokController.text) ?? 0;
 
+        final mut = StockMutationService();
+        final actor =
+            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
+        final sku = (basePayload['sku'] ?? finalBarcode).toString();
+
         if (selectedCabang == "BROADCAST_ALL") {
-          // 1. Amankan dan masukkan ke PUSAT terlebih dahulu
           var pusatData = Map<String, dynamic>.from(basePayload);
           pusatData['toko_id'] = 'PUSAT';
-          pusatData['stock'] = stokInput;
+          pusatData['stock'] = 0;
           await Supabase.instance.client.from('products').insert(pusatData);
+          if (stokInput > 0) {
+            await mut.opening(
+              tokoId: 'PUSAT',
+              sku: sku,
+              qty: stokInput,
+              actorNama: actor,
+            );
+          }
 
-          // 2. Gunakan Loop Terisolasi untuk menyebarkan ke tiap cabang (Anti-Macet)
           for (var cabang in listCabang) {
             try {
               var branchData = Map<String, dynamic>.from(basePayload);
               branchData['toko_id'] = cabang.toString().toUpperCase();
-              branchData['stock'] = 0; // Cabang diset 0 sesuai skema awal Bos
+              branchData['stock'] = 0;
               await Supabase.instance.client
                   .from('products')
                   .insert(branchData);
             } catch (e) {
-              // Jika satu cabang error/sudah ada itemnya, loop tidak akan mati dan tetep lanjut ke cabang lain
               debugPrint("Gagal otomatis broadcast ke cabang $cabang: $e");
             }
           }
-          // 🎯 FIX: Baris insert(broadcastData) lama yang bikin eror di sini sudah DIBUANG BERSIH!
         } else {
           var specificData = Map<String, dynamic>.from(basePayload);
           specificData['toko_id'] = selectedCabang;
-          specificData['stock'] = stokInput;
+          specificData['stock'] = 0;
           await Supabase.instance.client.from('products').insert(specificData);
+          if (stokInput > 0) {
+            await mut.opening(
+              tokoId: selectedCabang!,
+              sku: sku,
+              qty: stokInput,
+              actorNama: actor,
+            );
+          }
         }
       } else {
-        var updateData = Map<String, dynamic>.from(basePayload);
-        updateData['stock'] = int.tryParse(stokController.text) ?? 0;
+        // Metadata sync ke semua toko (SKU) — stok tidak diubah di sini.
+        final updateData = Map<String, dynamic>.from(basePayload);
+        final sku = ProductIdentity.normalizeSku(updateData['sku']) ??
+            ProductIdentity.normalizeBarcode(updateData['barcode']);
+        if (sku == null) throw 'SKU wajib untuk edit produk.';
         await Supabase.instance.client
             .from('products')
             .update(updateData)
-            .eq('id', editId!);
+            .eq('sku', sku);
       }
 
       if (mounted) {
@@ -726,7 +758,41 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         ),
                         const Spacer(),
 
-                        // 🎯 SENSOR TOMBOL: Tombol ADD BRANCH hijau otomatis hilang jika yang login adalah Cabang
+                        InkWell(
+                          onTap: () {
+                            final nama = (item['nama'] ?? '').toString();
+                            Navigator.pop(ctx);
+                            Future.delayed(const Duration(milliseconds: 200),
+                                () {
+                              if (mounted) {
+                                _showBranchRevisionHistory(productNama: nama);
+                              }
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: Colors.teal.withOpacity(0.2),
+                                border: Border.all(color: Colors.tealAccent),
+                                borderRadius: BorderRadius.circular(6)),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.history_rounded,
+                                    color: Colors.tealAccent, size: 12),
+                                SizedBox(width: 4),
+                                Text('RIWAYAT',
+                                    style: TextStyle(
+                                        color: Colors.tealAccent,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        // Tombol ADD BRANCH hanya untuk akses edit (PUSAT)
                         if (isCanEdit)
                           InkWell(
                             onTap: () {
@@ -1071,7 +1137,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           ],
         ),
         content: Text(
-          "Apakah Bos yakin ingin mendistribusikan produk '${item['nama']}' dengan tambahan sebanyak +$qty Pcs ke cabang berikut:\n\n${cabangs.join(', ')}?",
+          "Daftarkan produk ke cabang (stok 0).\n\n"
+          "Produk: ${item['nama']}\n"
+          "Cabang:\n${cabangs.where((c) => c.toUpperCase() != 'PUSAT').join(', ')}\n\n"
+          "Stok fisik hanya bergerak lewat RO/DO/Retur/POS. "
+          "Add Branch tidak menambah qty stok.",
           style:
               const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
         ),
@@ -1095,54 +1165,343 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     );
   }
 
-  // 3. FUNGSI MASSAL (BULK UPSERT SYSTEM) KE DATABASE SUPABASE
+  /// Revisi master: daftar/update baris produk di cabang.
+  /// Tidak memotong stok PUSAT dan tidak menulis Logistik (RO/DO).
+  /// Setiap aksi dicatat ke `product_branch_revision_logs`.
   Future<void> _executeBulkAddBranch(
       Map<String, dynamic> baseProduct,
       List<String> targets,
-      int additionalStock,
+      int additionalStock, // ignored: Add Branch always stock 0
       Map<String, int> existingStocks) async {
     setState(() => isLoading = true);
+    final client = Supabase.instance.client;
     try {
-      for (var toko in targets) {
-        bool isExist = existingStocks.containsKey(toko);
+      final cabangTargets = targets
+          .map((t) => t.toString().trim().toUpperCase())
+          .where((t) => t.isNotEmpty && t != 'PUSAT')
+          .toSet()
+          .toList()
+        ..sort();
+      if (cabangTargets.isEmpty) {
+        throw 'Pilih minimal 1 cabang (bukan hanya PUSAT).';
+      }
 
-        // Bersihkan payload data dari id bawaan pusat
-        Map<String, dynamic> row = Map.from(baseProduct);
-        row.remove('id');
-        row.remove('created_at');
-        row.remove('breakdown_stok');
-        row.remove('total_stock');
-        row['toko_id'] = toko;
+      final nama = (baseProduct['nama'] ?? '').toString().trim();
+      final sku = ProductIdentity.normalizeSku(baseProduct['sku']) ??
+          ProductIdentity.normalizeBarcode(baseProduct['barcode']);
+      final barcode = (baseProduct['barcode'] ?? '').toString().trim();
+      if (nama.isEmpty) throw 'Nama produk kosong.';
+      if (sku == null) throw 'SKU wajib untuk Add Branch.';
 
-        if (isExist) {
-          // Jalur 1: Jika cabang sudah punya produk ini, update kuantitasnya langsung
-          int stockLama = existingStocks[toko] ?? 0;
-          await Supabase.instance.client
-              .from('products')
-              .update({'stock': stockLama + additionalStock})
-              .eq('nama', baseProduct['nama'])
-              .eq('toko_id', toko);
+      // Hanya daftar produk di cabang (stok 0). Qty fisik lewat RO/DO.
+      final detailTokos = <Map<String, dynamic>>[];
+
+      for (final toko in cabangTargets) {
+        Map<String, dynamic>? branch = await client
+            .from('products')
+            .select('id, stock')
+            .eq('toko_id', toko)
+            .eq('sku', sku)
+            .maybeSingle();
+
+        if (branch != null) {
+          final lama = int.tryParse(branch['stock']?.toString() ?? '0') ?? 0;
+          detailTokos.add({
+            'toko': toko,
+            'created': false,
+            'stock_before': lama,
+            'stock_after': lama,
+            'qty_delta': 0,
+          });
         } else {
-          // Jalur 2: Jika benar-benar cabang baru, daftarkan row baru
-          row['stock'] = additionalStock;
-          await Supabase.instance.client.from('products').insert(row);
+          final row = Map<String, dynamic>.from(baseProduct);
+          row.remove('id');
+          row.remove('created_at');
+          row.remove('breakdown_stok');
+          row.remove('total_stock');
+          row['toko_id'] = toko;
+          row['stock'] = 0;
+          row['nama'] = nama;
+          row['sku'] = sku;
+          if (barcode.isNotEmpty) row['barcode'] = barcode;
+          await client.from('products').insert(row);
+          detailTokos.add({
+            'toko': toko,
+            'created': true,
+            'stock_before': 0,
+            'stock_after': 0,
+            'qty_delta': 0,
+          });
         }
       }
 
-      _fetch(); // Refresh list inventori halaman utama web Bos
+      final user = client.auth.currentUser;
+      var logOk = true;
+      try {
+        await client.from('product_branch_revision_logs').insert({
+          'product_nama': nama,
+          'product_sku': sku,
+          'product_barcode':
+              barcode.isEmpty || barcode == '-' ? null : barcode,
+          'tokos': cabangTargets,
+          'qty_per_toko': 0,
+          'action': 'add_branch',
+          'changed_by': user?.id,
+          'changed_by_email':
+              (widget.profile['email'] ?? user?.email ?? '').toString(),
+          'changed_by_nama': (widget.profile['nama'] ??
+                  widget.profile['email'] ??
+                  user?.email ??
+                  '')
+              .toString(),
+          'changed_by_role': (widget.profile['role'] ?? '').toString(),
+          'changed_by_toko':
+              (widget.profile['toko_id'] ?? '').toString().toUpperCase(),
+          'details': {
+            'tokos': detailTokos,
+            'product': {
+              'nama': nama,
+              'sku': sku,
+              'barcode': barcode,
+              'kategori': baseProduct['kategori'],
+            },
+          },
+        });
+      } catch (_) {
+        logOk = false;
+      }
+
+      await _fetch();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              "✅ Sukses mendistribusikan stok tambahan ke ${targets.length} cabang!"),
-          backgroundColor: Colors.green));
+            '✅ Produk didaftarkan di ${cabangTargets.length} cabang (stok 0). '
+            '${logOk ? 'Tercatat di riwayat.' : 'Riwayat gagal (jalankan SQL 00011).'} '
+            'Pengisian stok hanya lewat RO/DO.',
+          ),
+          backgroundColor: logOk ? Colors.green : Colors.orange));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Gagal Alokasi: $e"), backgroundColor: Colors.red));
+          content: Text('Gagal revisi: $e'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  Future<void> _showBranchRevisionHistory({String? productNama}) async {
+    try {
+      final client = Supabase.instance.client;
+      final filterNama =
+          productNama != null && productNama.trim().isNotEmpty
+              ? productNama.trim()
+              : null;
+      final raw = filterNama == null
+          ? await client
+              .from('product_branch_revision_logs')
+              .select()
+              .order('created_at', ascending: false)
+              .limit(80)
+          : await client
+              .from('product_branch_revision_logs')
+              .select()
+              .eq('product_nama', filterNama)
+              .order('created_at', ascending: false)
+              .limit(80);
+      final rows = List<Map<String, dynamic>>.from(raw);
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => R.constrainedDialog(
+          context: ctx,
+          preferWidth: 560,
+          child: AlertDialog(
+            backgroundColor: OptikAdminTokens.card,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.history_rounded, color: Colors.tealAccent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    productNama == null || productNama.isEmpty
+                        ? 'Riwayat Add Branch'
+                        : 'Riwayat: $productNama',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 420,
+              child: rows.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Belum ada riwayat revisi.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: rows.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(color: Colors.white12, height: 18),
+                      itemBuilder: (context, i) {
+                        final r = rows[i];
+                        final when = _formatRevisionWhen(r['created_at']);
+                        final tokos = _tokosFromLog(r['tokos']);
+                        final siapa = [
+                          (r['changed_by_nama'] ?? r['changed_by_email'] ?? '-')
+                              .toString(),
+                          if ((r['changed_by_role'] ?? '')
+                              .toString()
+                              .isNotEmpty)
+                            r['changed_by_role'].toString(),
+                          if ((r['changed_by_toko'] ?? '')
+                              .toString()
+                              .isNotEmpty)
+                            r['changed_by_toko'].toString(),
+                        ].join(' · ');
+                        final qty =
+                            int.tryParse(r['qty_per_toko']?.toString() ?? '0') ??
+                                0;
+                        final sku = (r['product_sku'] ?? '').toString();
+                        final detailLines = _detailLinesFromLog(r['details']);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (r['product_nama'] ?? '-').toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            if (sku.isNotEmpty)
+                              Text(
+                                'SKU: $sku',
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 11),
+                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              when,
+                              style: TextStyle(
+                                color: Colors.tealAccent.withOpacity(0.9),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Oleh: $siapa',
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              qty > 0
+                                  ? 'Qty revisi: +$qty Pcs / toko'
+                                  : 'Daftar produk saja (qty 0)',
+                              style: const TextStyle(
+                                  color: Colors.white54, fontSize: 12),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Toko (${tokos.length}): ${tokos.join(', ')}',
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 11.5,
+                                height: 1.35,
+                              ),
+                            ),
+                            if (detailLines.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              ...detailLines.map(
+                                (line) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Text(
+                                    line,
+                                    style: const TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 11,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('TUTUP'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal muat riwayat: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  List<String> _tokosFromLog(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  List<String> _detailLinesFromLog(dynamic raw) {
+    Map<String, dynamic>? map;
+    if (raw is Map) {
+      map = Map<String, dynamic>.from(raw);
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) map = Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    final tokos = map?['tokos'];
+    if (tokos is! List) return const [];
+    return tokos.map((e) {
+      if (e is! Map) return e.toString();
+      final t = (e['toko'] ?? '-').toString();
+      final created = e['created'] == true;
+      final before = e['stock_before'] ?? 0;
+      final after = e['stock_after'] ?? 0;
+      final delta = e['qty_delta'] ?? 0;
+      if (created) {
+        return '• $t: baru (stok $after)${delta != 0 ? ', +$delta' : ''}';
+      }
+      return '• $t: $before → $after${delta != 0 ? ' (+$delta)' : ''}';
+    }).toList();
+  }
+
+  String _formatRevisionWhen(dynamic raw) {
+    if (raw == null) return '-';
+    final dt = DateTime.tryParse(raw.toString())?.toLocal();
+    if (dt == null) return raw.toString();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+        '${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
   }
 
   // 3. REUSABLE WIDGET TEXTFIELD INPUT COMPACT GENERATOR
@@ -1388,6 +1747,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       appBar: PremiumAppBar(
         title: "pm_title".tr(),
         actions: [
+          IconButton(
+            tooltip: 'Riwayat Add Branch',
+            icon: const Icon(Icons.history_rounded, color: Colors.tealAccent),
+            onPressed: () => _showBranchRevisionHistory(),
+          ),
           if (editId != null)
             IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.orangeAccent),

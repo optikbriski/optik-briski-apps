@@ -60,6 +60,7 @@ class UniversalQrNav {
         return (cabangKaryawan ?? '').trim().isNotEmpty;
       case QrPayloadType.product:
       case QrPayloadType.customer:
+      case QrPayloadType.karyawan:
       case QrPayloadType.unknown:
         return false;
     }
@@ -169,6 +170,13 @@ class UniversalQrNav {
       case QrPayloadType.customer:
         snack('Scan QR pelanggan di layar POS untuk mengisi data.',
             color: Colors.blueAccent);
+        return;
+
+      case QrPayloadType.karyawan:
+        snack(
+          'QR karyawan untuk otorisasi revisi stok (Inventory).',
+          color: Colors.blueAccent,
+        );
         return;
 
       case QrPayloadType.unknown:

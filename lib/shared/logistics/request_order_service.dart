@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'product_identity.dart';
+import 'stock_mutation_service.dart';
+
 /// Pipeline RO Pusat: Approve → Preparing → Shipping → Success
 /// dengan reservasi stok (PREPARING) sebelum potong fisik.
 class RequestOrderService {
@@ -68,21 +71,14 @@ class RequestOrderService {
     String? sku,
     String? namaProduk,
   }) async {
-    if (sku != null && sku.trim().isNotEmpty && sku != 'No SKU') {
-      final bySku = await _client
-          .from('products')
-          .select(
-              'id, nama, sku, barcode, stock, harga_jual, harga_modal, kategori, warna')
-          .eq('toko_id', 'PUSAT')
-          .eq('sku', sku.trim())
-          .maybeSingle();
-      if (bySku != null) return Map<String, dynamic>.from(bySku);
-    }
+    final found = await ProductIdentity.findPusat(sku: sku);
+    if (found != null) return found;
+    // Nama hanya sebagai fallback lookup (bukan untuk mutasi tanpa SKU).
     if (namaProduk != null && namaProduk.trim().isNotEmpty) {
       final byNama = await _client
           .from('products')
           .select(
-              'id, nama, sku, barcode, stock, harga_jual, harga_modal, kategori, warna')
+              'id, nama, sku, barcode, stock, harga_jual, harga_modal, kategori, warna, toko_id')
           .eq('toko_id', 'PUSAT')
           .ilike('nama', namaProduk.trim())
           .maybeSingle();
@@ -294,23 +290,25 @@ class RequestOrderService {
     );
     if (product == null) throw 'Produk tidak ditemukan di stok Pusat.';
 
+    final sku = ProductIdentity.skuOf(product) ??
+        ProductIdentity.normalizeSku(req['sku']);
+    if (sku == null) {
+      throw 'SKU produk wajib untuk shipping RO. Lengkapi di Product Master.';
+    }
+
     final stockNow = int.tryParse(product['stock']?.toString() ?? '0') ?? 0;
     if (stockNow < qty) {
       throw 'Stok fisik Pusat tidak cukup untuk shipping '
           '(stok $stockNow, minta $qty).';
     }
 
-    await _client
-        .from('products')
-        .update({'stock': stockNow - qty}).eq('id', product['id']);
-
     final resi =
         'RO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
     final itemJson = jsonEncode([
       {
         'nama': product['nama'] ?? req['nama_produk'] ?? '-',
-        'barcode': product['barcode'] ?? '-',
-        'sku': product['sku'] ?? req['sku'],
+        'barcode': product['barcode'] ?? sku,
+        'sku': sku,
         'qty': qty,
         'harga_jual': product['harga_jual'] ?? 0,
         'harga_modal': product['harga_modal'] ?? 0,
@@ -339,12 +337,28 @@ class RequestOrderService {
         .select('id')
         .single();
 
+    try {
+      await StockMutationService(client: _client).shipOut(
+        fromToko: 'PUSAT',
+        sku: sku,
+        qty: qty,
+        reason: StockReason.transferOut,
+        alasanText: 'Ship RO $resi → $tokoTujuan',
+        refType: 'stock_move',
+        refId: move['id'].toString(),
+      );
+    } catch (e) {
+      await _client.from('stock_move_history').delete().eq('id', move['id']);
+      rethrow;
+    }
+
     await _client.from('pending_requests').update({
       'status': 'SHIPPING',
       'tracking_status': trackingFor('SHIPPING'),
       'reserved_qty': 0,
       'stock_move_id': move['id'],
       'stock_move_resi': resi,
+      'sku': sku,
     }).eq('id', id);
 
     return resi;
