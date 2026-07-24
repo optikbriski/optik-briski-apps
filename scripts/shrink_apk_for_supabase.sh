@@ -110,18 +110,15 @@ if len(optimized) >= len(original):
     print(f"==> PNG optimize skipped (no gain: {len(original)} -> {len(optimized)})")
     raise SystemExit(0)
 
-# Replace entry: delete then add via zip
-subprocess.run(["zip", "-d", str(apk), logo_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-tmpdir = tempfile.mkdtemp(prefix="optik-png-")
-# recreate nested path for zip
-dest = Path(tmpdir) / logo_path
-dest.parent.mkdir(parents=True, exist_ok=True)
-dest.write_bytes(optimized)
-# zip from tmpdir so archive path matches
-subprocess.run(["zip", "-9", "-X", str(apk), logo_path], cwd=tmpdir, check=True, stdout=subprocess.DEVNULL)
-# cleanup
-import shutil
-shutil.rmtree(tmpdir)
+# Replace entry via rewrite (zip CLI -9 from nested cwd often fails with exit 15)
+tmp_apk = apk.with_suffix(".tmp.apk")
+with zipfile.ZipFile(apk, "r") as zin, zipfile.ZipFile(
+    tmp_apk, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+) as zout:
+    for info in zin.infolist():
+        data = optimized if info.filename == logo_path else zin.read(info.filename)
+        zout.writestr(info, data)
+os.replace(tmp_apk, apk)
 print(f"==> Lossless PNG: {len(original)} -> {len(optimized)} bytes (-{len(original)-len(optimized)})")
 PY
 
