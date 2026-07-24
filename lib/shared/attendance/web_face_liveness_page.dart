@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -17,6 +18,7 @@ enum _WebLiveStep {
 
 /// Liveness + capture untuk Admin web (browser camera).
 /// Challenge sederhana (posisi → hadap kiri → kanan → diam) + cek gerak frame.
+/// Auto-advance saat kondisi terpenuhi; tombol Lanjut sebagai fallback.
 /// Jujur: lebih lemah dari AWS / biometrik enterprise.
 class WebFaceLivenessPage extends StatefulWidget {
   const WebFaceLivenessPage({super.key});
@@ -33,8 +35,14 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   _WebLiveStep _step = _WebLiveStep.position;
   List<double>? _prevSig;
   DateTime? _stepEnteredAt;
+  DateTime? _stillStableSince;
+  Timer? _pollTimer;
 
-  static const _minStepMs = 1200;
+  static const _minStepMs = 900;
+  static const _pollMs = 650;
+  static const _holdStableMs = 800;
+  static const _motionTurnMin = 0.06;
+  static const _motionStillMax = 0.22;
 
   @override
   void initState() {
@@ -72,6 +80,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         _booting = false;
         _stepEnteredAt = DateTime.now();
       });
+      _startAutoPoll();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -79,6 +88,25 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         _error = 'web_liveness_camera_denied'.tr();
       });
     }
+  }
+
+  void _startAutoPoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(
+      const Duration(milliseconds: _pollMs),
+      (_) => _autoTick(),
+    );
+  }
+
+  Future<void> _autoTick() async {
+    if (!mounted || _busy || _camera == null) return;
+    if (_step == _WebLiveStep.capturing) return;
+    final entered = _stepEnteredAt;
+    if (entered != null &&
+        DateTime.now().difference(entered).inMilliseconds < _minStepMs) {
+      return;
+    }
+    await _evaluateStep(showErrors: false);
   }
 
   String get _statusText {
@@ -113,6 +141,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   Future<Uint8List?> _snap() async {
     final cam = _camera;
     if (cam == null || !cam.value.isInitialized) return null;
+    if (cam.value.isTakingPicture) return null;
     final shot = await cam.takePicture();
     return shot.readAsBytes();
   }
@@ -125,16 +154,24 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
       _toast('web_liveness_wait'.tr());
       return;
     }
+    await _evaluateStep(showErrors: true);
+  }
 
+  /// [showErrors] true = tombol manual (tampilkan snackbar); false = auto-poll diam.
+  Future<void> _evaluateStep({required bool showErrors}) async {
+    if (_busy || _camera == null) return;
     setState(() => _busy = true);
     try {
       final bytes = await _snap();
       if (bytes == null || bytes.length < 800) {
-        throw 'web_liveness_frame_bad'.tr();
+        if (showErrors) throw 'web_liveness_frame_bad'.tr();
+        return;
       }
       final sig = await WebFaceSignature.fromJpeg(bytes);
       if (sig == null) {
-        throw 'web_liveness_face_unclear'.tr();
+        _stillStableSince = null;
+        if (showErrors) throw 'web_liveness_face_unclear'.tr();
+        return;
       }
 
       switch (_step) {
@@ -144,32 +181,50 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
           break;
         case _WebLiveStep.turnLeft:
           final motion = WebFaceSignature.motionScore(_prevSig, sig);
-          if (motion < 0.06) {
-            throw 'web_liveness_need_turn'.tr();
+          if (motion < _motionTurnMin) {
+            if (showErrors) throw 'web_liveness_need_turn'.tr();
+            return;
           }
           _prevSig = sig;
           _go(_WebLiveStep.turnRight);
           break;
         case _WebLiveStep.turnRight:
           final motion = WebFaceSignature.motionScore(_prevSig, sig);
-          if (motion < 0.06) {
-            throw 'web_liveness_need_turn'.tr();
+          if (motion < _motionTurnMin) {
+            if (showErrors) throw 'web_liveness_need_turn'.tr();
+            return;
           }
           _prevSig = sig;
+          _stillStableSince = null;
           _go(_WebLiveStep.holdStill);
           break;
         case _WebLiveStep.holdStill:
           final motion = WebFaceSignature.motionScore(_prevSig, sig);
-          if (motion > 0.22) {
-            throw 'web_liveness_need_still'.tr();
+          if (motion > _motionStillMax) {
+            _stillStableSince = null;
+            _prevSig = sig;
+            if (showErrors) throw 'web_liveness_need_still'.tr();
+            return;
           }
-          await _finish(bytes, sig);
-          return;
+          // Manual: langsung capture. Auto: tunggu diam stabil sebentar.
+          if (showErrors) {
+            await _finish(bytes, sig);
+            return;
+          }
+          final now = DateTime.now();
+          _stillStableSince ??= now;
+          if (now.difference(_stillStableSince!).inMilliseconds >=
+              _holdStableMs) {
+            await _finish(bytes, sig);
+            return;
+          }
+          _prevSig = sig;
+          break;
         case _WebLiveStep.capturing:
           break;
       }
     } catch (e) {
-      _toast(e.toString());
+      if (showErrors) _toast(e.toString());
     } finally {
       if (mounted && _step != _WebLiveStep.capturing) {
         setState(() => _busy = false);
@@ -181,11 +236,13 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     setState(() {
       _step = next;
       _stepEnteredAt = DateTime.now();
+      _stillStableSince = null;
       _busy = false;
     });
   }
 
   Future<void> _finish(Uint8List bytes, List<double> sig) async {
+    _pollTimer?.cancel();
     setState(() {
       _step = _WebLiveStep.capturing;
       _busy = true;
@@ -213,6 +270,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _camera?.dispose();
     super.dispose();
   }
@@ -350,33 +408,44 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF38BDF8),
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+            child: Column(
+              children: [
+                Text(
+                  'Ikuti petunjuk — langkah lanjut otomatis. '
+                  'Tombol di bawah hanya jika perlu.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF38BDF8),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: _busy || _step == _WebLiveStep.capturing
+                        ? null
+                        : _onContinue,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(
+                            _step == _WebLiveStep.holdStill
+                                ? 'web_liveness_capture'.tr()
+                                : 'web_liveness_next'.tr(),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
-                onPressed: _busy || _step == _WebLiveStep.capturing
-                    ? null
-                    : _onContinue,
-                child: _busy
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(
-                        _step == _WebLiveStep.holdStill
-                            ? 'web_liveness_capture'.tr()
-                            : 'web_liveness_next'.tr(),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-              ),
+              ],
             ),
           ),
         ],

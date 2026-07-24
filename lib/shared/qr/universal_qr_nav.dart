@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../apps/karyawan/absensi_page.dart';
 import '../../apps/member/member_rating_page.dart';
-import '../invoice/invoice_hub_page.dart';
+import '../invoice/invoice_qr_opener.dart';
 import '../scanner_penerimaan_page.dart';
 import 'qr_route.dart';
 import 'universal_qr_scan_page.dart';
@@ -103,17 +103,18 @@ class UniversalQrNav {
             callerRole == UniversalQrCallerRole.admin &&
             result.invoiceCustomerLifecycle &&
             !result.invoiceViewOnly;
-        await Navigator.push(
+        final openInvoice = InvoiceQrOpener.open;
+        if (openInvoice == null) {
+          snack('universal_qr_unknown'.tr(), color: Colors.orange);
+          return;
+        }
+        await openInvoice(
           context,
-          MaterialPageRoute(
-            builder: (_) => InvoiceHubPage(
-              noInvoice: inv,
-              rawScan: result.raw,
-              profile: profile,
-              viewOnly: !lifecycleOk,
-              fromAdminHidScanner: lifecycleOk,
-            ),
-          ),
+          noInvoice: inv,
+          rawScan: result.raw,
+          profile: profile,
+          viewOnly: !lifecycleOk,
+          fromAdminHidScanner: lifecycleOk,
         );
         return;
 

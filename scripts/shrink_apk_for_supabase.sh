@@ -26,10 +26,21 @@ BEFORE=$(stat -f%z "$APK" 2>/dev/null || stat -c%s "$APK")
 echo "==> Shrink (non-quality) $APK ($(python3 -c "print(f'{$BEFORE/1024/1024:.2f} MB')"))"
 
 # Windows BLE helper + Cupertino font (tidak dipakai di kode) + Flutter license blob
+# + package logos/JSON never loaded by Karyawan runtime paths
+# + ML Kit face models unused by our FaceDetectorOptions:
+#   - contours (enableContours=false)
+#   - fssd_25 / fast (we use FaceDetectorMode.accurate → medium models)
 zip -d "$APK" \
   "assets/flutter_assets/packages/win_ble/assets/BLEServer.exe" \
   "assets/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf" \
+  "assets/flutter_assets/packages/flutter_map/lib/assets/flutter_map_logo.png" \
+  "assets/flutter_assets/packages/esc_pos_utils_plus/resources/capabilities.json" \
   "assets/flutter_assets/NOTICES.Z" \
+  "assets/models_bundled/contours.tfl" \
+  "assets/models_bundled/fssd_25_8bit_v2.tflite" \
+  "assets/models_bundled/fssd_25_8bit_gray_v2.tflite" \
+  "assets/models_bundled/fssd_anchors_v2.pb" \
+  "assets/models_bundled/MFT_fssd_fastgray.pb" \
   2>/dev/null || true
 
 # Kotlin coroutines debug probes (release junk) + license / VCS / OSGI / library version markers

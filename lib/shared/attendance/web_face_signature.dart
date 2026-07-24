@@ -12,8 +12,9 @@ class WebFaceSignature {
   static const int gridSize = 16;
   static const int vectorLength = gridSize * gridSize;
 
-  /// Rata-rata |Δ| setelah normalisasi; semakin kecil semakin mirip.
-  static const double matchThreshold = 0.14;
+  /// Rata-rata |Δ| (jarak) setelah normalisasi; semakin kecil semakin mirip.
+  /// Ambang longgar: signature grid 16×16 lemah vs cahaya / mirror kamera depan.
+  static const double matchThreshold = 0.30;
 
   /// Minimal kontras (std) agar frame tidak hitam/kosong.
   static const double minContrast = 0.04;
@@ -96,12 +97,31 @@ class WebFaceSignature {
     return sum / a.length;
   }
 
+  /// Mirror horizontal grid (kamera depan sering terbalik vs foto enroll).
+  static List<double> flipHorizontal(List<double> v) {
+    if (!isWebVector(v)) return v;
+    final out = List<double>.filled(vectorLength, 0);
+    for (var gy = 0; gy < gridSize; gy++) {
+      for (var gx = 0; gx < gridSize; gx++) {
+        out[gy * gridSize + gx] = v[gy * gridSize + (gridSize - 1 - gx)];
+      }
+    }
+    return out;
+  }
+
+  /// Jarak terbaik antara live vs enrolled, termasuk mirror horizontal.
+  static double bestDistance(List<double> enrolled, List<double> live) {
+    final d = distance(enrolled, live);
+    final dFlip = distance(enrolled, flipHorizontal(live));
+    return d < dFlip ? d : dFlip;
+  }
+
   static bool isMatch(
     List<double> enrolled,
     List<double> live, {
     double threshold = matchThreshold,
   }) {
-    return distance(enrolled, live) <= threshold;
+    return bestDistance(enrolled, live) <= threshold;
   }
 
   /// Perubahan frame (liveness gerak kepala): jarak antar signature.

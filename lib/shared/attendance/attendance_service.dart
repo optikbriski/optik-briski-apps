@@ -525,11 +525,15 @@ class AttendanceService {
       throw 'Foto wajah terdaftar rusak / tidak jelas. Daftar ulang wajah.';
     }
 
-    final score = WebFaceSignature.distance(enrolledSig, liveSig);
-    if (!WebFaceSignature.isMatch(enrolledSig, liveSig)) {
+    // Jarak (bukan similarity): semakin kecil semakin mirip. Coba juga mirror
+    // horizontal karena preview kamera depan sering terbalik vs foto enroll.
+    final score = WebFaceSignature.bestDistance(enrolledSig, liveSig);
+    final threshold = WebFaceSignature.matchThreshold;
+    if (score > threshold) {
       throw 'Wajah tidak cocok dengan data terdaftar '
-          '(skor web ${score.toStringAsFixed(3)}). '
-          'Coba pencahayaan lebih baik atau daftar ulang wajah.';
+          '(jarak web ${score.toStringAsFixed(3)}, lolos ≤ ${threshold.toStringAsFixed(2)}). '
+          'Coba cahaya sama seperti saat daftar, lepas kacamata jika berbeda, '
+          'atau daftar ulang wajah di Absensi Admin.';
     }
     return score;
   }

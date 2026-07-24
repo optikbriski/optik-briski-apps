@@ -6,11 +6,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../apps/admin/garansi_page.dart';
-import '../../apps/admin/sales_page.dart';
 import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
 import '../qr/qr_route.dart';
 import '../qr/universal_qr_scan_page.dart';
+import 'invoice_detail_page.dart';
 import 'invoice_hub_service.dart';
 import 'invoice_lifecycle_service.dart';
 import 'invoice_link.dart';
