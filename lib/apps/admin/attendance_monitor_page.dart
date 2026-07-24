@@ -8,6 +8,7 @@ import '../../shared/attendance/attendance_verification_config.dart';
 import '../../shared/attendance/attendance_verification_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/zoomable_network_image.dart';
 import 'tinjauan_mencurigakan_page.dart';
 
 /// Monitor Absensi (owner / admin_pusat): toko → karyawan hari ini → detail Valid/Mencurigakan.
@@ -784,34 +785,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
           const SizedBox(height: 10),
-          AspectRatio(
-            aspectRatio: 3 / 4,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: url.trim().isEmpty
-                  ? Container(
-                      color: OptikAdminTokens.bgMid,
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'Foto tidak tersedia',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                    )
-                  : GestureDetector(
-                      onTap: () => _preview(url),
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: OptikAdminTokens.bgMid,
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.broken_image,
-                              color: Colors.white38),
-                        ),
-                      ),
-                    ),
-            ),
-          ),
+          ZoomableNetworkImagePane(url: url),
         ],
       ),
     );
@@ -836,16 +810,6 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         height: size,
         color: OptikAdminTokens.bgMid,
         child: const Icon(Icons.broken_image, color: Colors.white24, size: 18),
-      ),
-    );
-  }
-
-  void _preview(String url) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        child: InteractiveViewer(child: Image.network(url)),
       ),
     );
   }
