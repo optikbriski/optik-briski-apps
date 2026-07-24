@@ -36,6 +36,15 @@ abstract final class AttendanceLatePenalty {
   static bool isMorningShift(int hourJakarta) =>
       hourJakarta < morningShiftHourBefore;
 
+  /// Tanggal kalender Asia/Jakarta `YYYY-MM-DD` dari waktu UTC.
+  static String jakartaDateKey([DateTime? nowUtc]) {
+    final utc = (nowUtc ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    final m = jkt.month.toString().padLeft(2, '0');
+    final d = jkt.day.toString().padLeft(2, '0');
+    return '${jkt.year}-$m-$d';
+  }
+
   /// Hitung penalti dari jam datang terjadwal + waktu clock-in.
   static LatePenaltyResult compute({
     required DateTime clockInUtc,
