@@ -280,7 +280,23 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            "${(widget.profile['role'] ?? 'default_admin'.tr()).toString().toUpperCase()} - ${widget.profile['toko_id'] == 'CABANG-PUSAT' ? 'nama_toko_pusat'.tr() : widget.profile['toko_id']}",
+                            () {
+                              final role = (widget.profile['role'] ??
+                                      'default_admin'.tr())
+                                  .toString()
+                                  .toUpperCase();
+                              final toko = widget.profile['toko_id'] ==
+                                      'CABANG-PUSAT'
+                                  ? 'nama_toko_pusat'.tr()
+                                  : widget.profile['toko_id'];
+                              final via = (widget.profile[
+                                          'login_via_karyawan_nama'] ??
+                                      '')
+                                  .toString()
+                                  .trim();
+                              if (via.isEmpty) return '$role - $toko';
+                              return '$role - $toko · via $via';
+                            }(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

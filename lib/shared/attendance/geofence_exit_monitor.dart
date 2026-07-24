@@ -9,10 +9,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'android_battery_optimization.dart';
+import 'attendance_late_penalty.dart';
+import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
 
 /// Pantau lokasi karyawan saat shift OPEN; notifikasi lokal jika keluar area
 /// atau GPS/izin lokasi dimatikan.
+///
+/// Peringatan **keluar area** baru aktif:
+/// - shift pagi ≥ 08:30
+/// - shift siang ≥ 13:00
+/// Sebelum itu (mis. absen jam 05:00 lalu keluar) tidak diingatkan.
 ///
 /// Android: [Geolocator] position stream + foreground service (notifikasi
 /// ongoing) agar pantauan lebih tahan saat app di background / layar mati.
@@ -42,6 +49,8 @@ class GeofenceExitMonitor {
   DateTime? _lastTickAt;
   DateTime? _lastIjinCheckAt;
   bool? _cachedHasApprovedLeave;
+  int? _cachedJamMasukHour;
+  DateTime? _lastScheduleCheckAt;
   bool _tickInFlight = false;
   bool _notifReady = false;
   bool _starting = false;
@@ -322,6 +331,8 @@ class GeofenceExitMonitor {
     _tickInFlight = false;
     _lastIjinCheckAt = null;
     _cachedHasApprovedLeave = null;
+    _cachedJamMasukHour = null;
+    _lastScheduleCheckAt = null;
     _lastGpsAlertAt = null;
     _gpsIssueActive = false;
   }
@@ -407,6 +418,60 @@ class GeofenceExitMonitor {
     _cachedHasApprovedLeave = ok;
     _lastIjinCheckAt = now;
     return ok;
+  }
+
+  /// Pagi ≥ 08:30 / siang ≥ 13:00 → peringatan keluar area aktif.
+  Future<bool> _isExitDutyActive(String karyawanId) async {
+    final hour = await _jamMasukHourCached(karyawanId);
+    if (hour == null) {
+      // Tanpa jadwal: tetap pantau (aman / fail-closed untuk peringatan).
+      return true;
+    }
+    final now = DateTime.now().toUtc();
+    final tanggalKey = AttendanceLatePenalty.jakartaDateKey(now);
+    return AttendanceScheduleRules.isExitMonitorActiveNow(
+      nowUtc: now,
+      tanggalKey: tanggalKey,
+      jamMasukHourJakarta: hour,
+    );
+  }
+
+  Future<int?> _jamMasukHourCached(String karyawanId) async {
+    final now = DateTime.now();
+    if (_cachedJamMasukHour != null &&
+        _lastScheduleCheckAt != null &&
+        now.difference(_lastScheduleCheckAt!) < _ijinCacheFor) {
+      return _cachedJamMasukHour;
+    }
+    final hour = await _fetchJamMasukHour(karyawanId);
+    _cachedJamMasukHour = hour;
+    _lastScheduleCheckAt = now;
+    return hour;
+  }
+
+  Future<int?> _fetchJamMasukHour(String karyawanId) async {
+    if (karyawanId.isEmpty) return null;
+    final tanggalKey =
+        AttendanceLatePenalty.jakartaDateKey(DateTime.now().toUtc());
+    try {
+      final row = await _db
+          .from('jadwal_kerja')
+          .select('jam_masuk, is_libur')
+          .eq('karyawan_id', karyawanId)
+          .eq('tanggal', tanggalKey)
+          .maybeSingle();
+      if (row == null || row['is_libur'] == true) return null;
+      final jamMasuk = (row['jam_masuk'] ?? '').toString().trim();
+      if (jamMasuk.isEmpty) return null;
+      final parsed = AttendanceLatePenalty.parseSchedule(
+        tanggalKey: tanggalKey,
+        jamMasuk: jamMasuk,
+      );
+      return parsed?.hourJakarta;
+    } catch (e) {
+      debugPrint('GeofenceExitMonitor jadwal check: $e');
+      return null;
+    }
   }
 
   /// Panggil saat app resume / cold start / buka absensi — restart jika
@@ -495,6 +560,15 @@ class GeofenceExitMonitor {
       );
 
       final inside = result.inside;
+
+      // Sebelum jam tugas (pagi 08:30 / siang 13:00): boleh keluar, tanpa peringatan.
+      final dutyActive = await _isExitDutyActive(kid);
+      if (!dutyActive) {
+        // Anggap "di dalam" agar begitu jam tugas tiba & masih di luar → langsung warn.
+        _wasInside = true;
+        return;
+      }
+
       if (_wasInside && !inside) {
         // Ijin/cuti disetujui hari ini → jangan peringatkan keluar area.
         final onLeave = await _hasApprovedLeaveCached(kid);

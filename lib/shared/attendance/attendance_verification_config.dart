@@ -1,11 +1,14 @@
 /// Konstanta poin verifikasi absensi wajah (Admin).
 ///
-/// Terpisah dari klaim SOP harian (`sumber: SOP`) dan penalti telat
-/// (`sumber: ABSEN_TELAT` — lihat [AttendanceLatePenalty]).
-/// Poin Valid/Aman memakai `sumber: ABSEN` di `poin_logs`.
-/// Hukuman curang: -200 poin + SP1 — **bukan** untuk keterlambatan.
+/// **Poin belum ada sebelum Admin verifikasi** (pending/mencurigakan = 0).
+/// Saat verifikasi, satu jalur saja (jangan digabung):
+/// - **Ontime + Valid** → `ABSEN` +20
+/// - **Telat + Valid** → `ABSEN_TELAT` saja (tanpa +20)
+/// - **Curang** → −200 saja (hapus ontime/telat event ini)
+///
+/// Terpisah dari klaim SOP harian (`sumber: SOP`).
 abstract final class AttendanceVerificationConfig {
-  /// Poin harian saat Admin menandai absen wajah Valid / Aman.
+  /// Poin ontime saat Admin menandai absen wajah Valid / Aman (bukan telat).
   static const int validDayPoints = 20;
 
   /// Penalti poin jika terbukti curang (foto/liveness tidak sah).

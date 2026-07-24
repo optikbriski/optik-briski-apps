@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/admin/admin_code_login_service.dart';
 import '../../shared/bootstrap.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
@@ -119,6 +120,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
     }
 
     if (data.event == AuthChangeEvent.signedOut) {
+      unawaited(AdminCodeLoginService.clearActor());
       setState(() {
         _session = null;
         _profile = null;
@@ -193,9 +195,19 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
         return;
       }
 
+      final merged = Map<String, dynamic>.from(row);
+      final actor = await AdminCodeLoginService.loadActor();
+      if (actor != null && actor.isPresent) {
+        merged['login_via_karyawan_id'] = actor.karyawanId;
+        merged['login_via_karyawan_nama'] = actor.nama;
+        merged['login_via_karyawan_toko'] = actor.tokoId;
+        merged['login_via_karyawan_jabatan'] = actor.jabatan;
+        merged['login_via_audit_id'] = actor.auditId;
+      }
+
       setState(() {
         _session = session;
-        _profile = Map<String, dynamic>.from(row);
+        _profile = merged;
         _booting = false;
         _bannerError = null;
       });

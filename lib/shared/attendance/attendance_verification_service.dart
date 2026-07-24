@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
+import 'attendance_late_penalty.dart';
 import 'attendance_verification_config.dart';
 
 /// Status verifikasi wajah absensi (mirror DB check constraint).
@@ -20,6 +21,13 @@ class AttendanceVerificationService {
 
   final SupabaseClient _client;
   final _dayKey = DateFormat('yyyy-MM-dd');
+
+  /// Hari kalender Asia/Jakarta (hindari TZ device Admin).
+  String _jakartaDayKey([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    return _dayKey.format(DateTime(jkt.year, jkt.month, jkt.day));
+  }
 
   /// Dipanggil setelah clock-in MASUK sukses → antrean `pending_review`.
   Future<void> enqueueAfterClockIn({
@@ -92,7 +100,9 @@ class AttendanceVerificationService {
     return List<Map<String, dynamic>>.from(rows);
   }
 
-  /// Valid (dari antrian) atau Aman (dari tinjauan) → status aman + poin ABSEN.
+  /// Valid / Aman: wajah OK. Poin baru di sini (bukan saat clock-in).
+  /// - Ontime → +20 (`ABSEN`) saja
+  /// - Telat → hanya `ABSEN_TELAT` (tanpa +20)
   Future<void> markAman({
     required String verificationId,
     required String karyawanId,
@@ -100,10 +110,16 @@ class AttendanceVerificationService {
   }) async {
     ProdWriteGuard.check('verifikasi.markAman');
     final uid = _client.auth.currentUser?.id;
-    final points = AttendanceVerificationConfig.validDayPoints;
     final now = DateTime.now();
-    final tanggal = _dayKey.format(now);
-    final refId = 'absen-valid-$verificationId';
+    final tanggal = _jakartaDayKey(now);
+
+    final lateInfo = await _lateInfoForVerification(verificationId);
+    final wasLate = lateInfo.isLate && lateInfo.penaltyPoints < 0;
+    // Satu jalur saja — jangan gabung ontime + telat.
+    // Siklus telat: pagi −1/mnt (08:30–09:00) lalu −20/15mnt; siang −20/15mnt dari 13:00.
+    final ontimePoints =
+        wasLate ? 0 : AttendanceVerificationConfig.validDayPoints;
+    final awarded = wasLate ? lateInfo.penaltyPoints : ontimePoints;
 
     final updated = await _client
         .from('attendance_verifications')
@@ -112,7 +128,7 @@ class AttendanceVerificationService {
           'notes': notes,
           'reviewed_by': uid,
           'reviewed_at': now.toIso8601String(),
-          'poin_awarded': points,
+          'poin_awarded': awarded,
         })
         .eq('id', verificationId)
         .inFilter('status', [
@@ -125,18 +141,35 @@ class AttendanceVerificationService {
       throw 'Status sudah berubah. Muat ulang daftar.';
     }
 
-    // Wajib masuk poin_logs — sumber baca APK Karyawan. Duplikat = OK (idempotent).
-    await _insertPoinLog(
-      karyawanId: karyawanId,
-      tanggal: tanggal,
-      poin: points,
-      refId: refId,
-    );
+    if (wasLate) {
+      final logId = lateInfo.logId;
+      if (logId == null || logId.isEmpty) {
+        throw 'Log absen tidak ditemukan — poin telat tidak bisa ditulis.';
+      }
+      await _insertPoinLog(
+        karyawanId: karyawanId,
+        tanggal: tanggal,
+        poin: lateInfo.penaltyPoints,
+        refId: AttendanceLatePenalty.refIdForLog(logId),
+        sumber: AttendanceLatePenalty.sumberPoinTelat,
+      );
+    } else {
+      await _insertPoinLog(
+        karyawanId: karyawanId,
+        tanggal: tanggal,
+        poin: ontimePoints,
+        refId: 'absen-valid-$verificationId',
+        sumber: AttendanceVerificationConfig.sumberPoinAbsen,
+      );
+    }
 
     await _notifyKaryawan(
       karyawanId: karyawanId,
       judul: 'Absensi wajah aman',
-      isi: 'Verifikasi absensi wajah disetujui. Poin +$points.',
+      isi: wasLate
+          ? 'Verifikasi disetujui. Poin telat ${lateInfo.penaltyPoints} '
+              '(tanpa poin ontime).'
+          : 'Verifikasi disetujui. Poin ontime +$ontimePoints.',
       tipe: 'ADMIN',
     );
   }
@@ -165,7 +198,7 @@ class AttendanceVerificationService {
     }
   }
 
-  /// Terbukti curang: -200 poin + SP1. Bukan untuk keterlambatan.
+  /// Terbukti curang: hanya −200 + SP1 (hapus poin telat/ontime absen ini).
   Future<void> markCurang({
     required String verificationId,
     required String karyawanId,
@@ -176,12 +209,14 @@ class AttendanceVerificationService {
     final uid = _client.auth.currentUser?.id;
     final penalty = AttendanceVerificationConfig.cheatingPenaltyPoints;
     final now = DateTime.now();
-    final tanggal = _dayKey.format(now);
+    final tanggal = _jakartaDayKey(now);
     final refId = 'absen-curang-$verificationId';
     final alasan = (notes == null || notes.trim().isEmpty)
         ? 'Terbukti curang pada verifikasi wajah absensi '
             '(bukan keterlambatan).'
         : notes.trim();
+
+    final logId = await _logIdForVerification(verificationId);
 
     final updated = await _client
         .from('attendance_verifications')
@@ -199,6 +234,13 @@ class AttendanceVerificationService {
     if (List<dynamic>.from(updated).isEmpty) {
       throw 'Status sudah berubah. Muat ulang daftar.';
     }
+
+    // Curang saja — jangan digabung dengan telat / ontime.
+    await _removePoinForAbsenEvent(
+      karyawanId: karyawanId,
+      verificationId: verificationId,
+      logId: logId,
+    );
 
     await _insertPoinLog(
       karyawanId: karyawanId,
@@ -229,25 +271,142 @@ class AttendanceVerificationService {
       karyawanId: karyawanId,
       judul: 'SP ${AttendanceVerificationConfig.cheatingSpTingkat} — Absensi',
       isi: 'Terbukti curang pada verifikasi wajah. '
-          'Poin $penalty dan SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
-          '(Bukan karena keterlambatan.)',
+          'Hanya poin curang $penalty + SP '
+          '${AttendanceVerificationConfig.cheatingSpTingkat} '
+          '(poin telat/ontime absen ini dibatalkan).',
       tipe: 'ADMIN',
     );
   }
 
-  /// Insert `poin_logs` (sumber ABSEN). Duplikat ref diabaikan; error lain dilempar.
+  Future<String?> _logIdForVerification(String verificationId) async {
+    try {
+      final row = await _client
+          .from('attendance_verifications')
+          .select('log_id')
+          .eq('id', verificationId)
+          .maybeSingle();
+      final id = (row?['log_id'] ?? '').toString().trim();
+      return id.isEmpty ? null : id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<({bool isLate, int penaltyPoints, String? logId})>
+      _lateInfoForVerification(String verificationId) async {
+    final logId = await _logIdForVerification(verificationId);
+    if (logId == null) {
+      return (isLate: false, penaltyPoints: 0, logId: null);
+    }
+    try {
+      final log = await _client
+          .from('attendance_logs')
+          .select(
+            'late_seconds, late_penalty_points, created_at, karyawan_id',
+          )
+          .eq('id', logId)
+          .maybeSingle();
+      if (log == null) {
+        return (isLate: false, penaltyPoints: 0, logId: logId);
+      }
+      var pts = (log['late_penalty_points'] as num?)?.toInt() ?? 0;
+      final secs = (log['late_seconds'] as num?)?.toInt() ?? 0;
+
+      // Cadangan: hitung ulang siklus pagi/siang jika metadata kosong.
+      if (pts >= 0 && secs > 0) {
+        pts = await _recomputeLatePenaltyPoints(log) ?? pts;
+      }
+      if (pts >= 0 && secs <= 0) {
+        final recomputed = await _recomputeLatePenaltyPoints(log);
+        if (recomputed != null && recomputed < 0) pts = recomputed;
+      }
+
+      final late = pts < 0 || secs > 0;
+      return (
+        isLate: late,
+        penaltyPoints: pts < 0 ? pts : 0,
+        logId: logId,
+      );
+    } catch (_) {
+      return (isLate: false, penaltyPoints: 0, logId: logId);
+    }
+  }
+
+  /// Hitung ulang penalti dari jadwal + created_at log (siklus pagi/siang).
+  Future<int?> _recomputeLatePenaltyPoints(Map<String, dynamic> log) async {
+    try {
+      final kid = (log['karyawan_id'] ?? '').toString();
+      final created = DateTime.tryParse((log['created_at'] ?? '').toString());
+      if (kid.isEmpty || created == null) return null;
+
+      final utc = created.toUtc();
+      final jkt = utc.add(const Duration(hours: 7));
+      final day =
+          '${jkt.year.toString().padLeft(4, '0')}-'
+          '${jkt.month.toString().padLeft(2, '0')}-'
+          '${jkt.day.toString().padLeft(2, '0')}';
+
+      final jadwal = await _client
+          .from('jadwal_kerja')
+          .select('jam_masuk, is_libur')
+          .eq('karyawan_id', kid)
+          .eq('tanggal', day)
+          .maybeSingle();
+      if (jadwal == null || jadwal['is_libur'] == true) return null;
+      final jam = (jadwal['jam_masuk'] ?? '').toString().trim();
+      if (jam.isEmpty) return null;
+
+      final parsed = AttendanceLatePenalty.parseSchedule(
+        tanggalKey: day,
+        jamMasuk: jam,
+      );
+      if (parsed == null) return null;
+
+      return AttendanceLatePenalty.compute(
+        clockInUtc: utc,
+        scheduledMasukUtc: parsed.utc,
+        scheduledMasukHourJakarta: parsed.hourJakarta,
+      ).penaltyPoints;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Hapus poin ontime/telat untuk event absen ini (sebelum curang).
+  Future<void> _removePoinForAbsenEvent({
+    required String karyawanId,
+    required String verificationId,
+    String? logId,
+  }) async {
+    final refs = <String>[
+      'absen-valid-$verificationId',
+      if (logId != null && logId.isNotEmpty) 'absen-telat-$logId',
+    ];
+    for (final ref in refs) {
+      try {
+        await _client
+            .from('poin_logs')
+            .delete()
+            .eq('karyawan_id', karyawanId)
+            .eq('ref_id', ref);
+      } catch (_) {}
+    }
+  }
+
+  /// Insert `poin_logs`. Duplikat ref diabaikan; error lain dilempar.
   Future<void> _insertPoinLog({
     required String karyawanId,
     required String tanggal,
     required int poin,
     required String refId,
+    String sumber = AttendanceVerificationConfig.sumberPoinAbsen,
   }) async {
     try {
       await _client.from('poin_logs').insert({
         'karyawan_id': karyawanId,
         'tanggal': tanggal,
         'poin': poin,
-        'sumber': AttendanceVerificationConfig.sumberPoinAbsen,
+        'sumber': sumber,
         'ref_id': refId,
       });
     } catch (e) {

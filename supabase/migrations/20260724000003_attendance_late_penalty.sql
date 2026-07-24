@@ -1,6 +1,12 @@
--- Metadata keterlambatan absen masuk (+ penalti poin di poin_logs sumber ABSEN_TELAT).
--- Aturan app: tiap kelipatan 15 menit terlambat = −20 poin
--- (1d–15m → −20; 15m1s–30m → −40; dst).
+-- Metadata keterlambatan absen masuk.
+-- Poin_logs ABSEN_TELAT ditulis app saat Admin Valid (bukan saat clock-in).
+--
+-- Aturan penalti (app):
+--   Shift pagi (jam_masuk 08:30):
+--     08:30:01–09:00:00 → −1 / menit
+--     09:00:01+         → −20 tiap 15 menit dari 09:00
+--   Shift siang (jam_masuk 13:00):
+--     13:00:01+         → −20 tiap 15 menit dari 13:00
 
 alter table public.attendance_logs
   add column if not exists late_seconds integer,
@@ -9,4 +15,4 @@ alter table public.attendance_logs
 comment on column public.attendance_logs.late_seconds is
   'Detik terlambat vs jam_masuk jadwal (Asia/Jakarta). Null = tidak dihitung.';
 comment on column public.attendance_logs.late_penalty_points is
-  'Poin penalti telat (negatif). 0 / null = tidak kena.';
+  'Metadata penalti telat (negatif). Poin_logs ABSEN_TELAT baru saat Admin Valid.';

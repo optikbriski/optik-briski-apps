@@ -12,11 +12,13 @@ import 'pengingat_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
+import 'admin_login_code_page.dart';
 import 'pengajuan_jadwal_page.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
+import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
@@ -60,6 +62,12 @@ class KaryawanPageState extends State<KaryawanPage>
 
   // MESIN NAVIGASI BAWAH
   int _currentIndex = 0;
+
+  /// PUSAT: Admin/Owner. Cabang: Kepala Toko/Kepala Area. Front/Back: tidak.
+  bool get _canShowAdminLoginCode => KaryawanJabatan.canShowAdminLoginCode(
+        tokoId: _tokoId,
+        jabatan: _jabatanKaryawan,
+      );
 
   @override
   void initState() {
@@ -1744,6 +1752,14 @@ class KaryawanPageState extends State<KaryawanPage>
                     "menu_pengaturan_akun".tr(),
                     "sub_pengaturan_akun".tr(),
                     true),
+                if (_canShowAdminLoginCode)
+                  _buildMenuProfil(
+                      Icons.phonelink_lock_rounded,
+                      'Kode Login Admin',
+                      (_tokoId ?? '').trim().toUpperCase() == 'PUSAT'
+                          ? 'Admin Pusat — kode unik, login web ter-track ke Anda'
+                          : 'Kepala Toko / Kepala Area — kode login web Admin',
+                      true),
                 _buildMenuProfil(Icons.headset_mic_rounded,
                     "menu pusat bantuan".tr(), "sub_pusat_bantuan".tr(), true),
                 _buildMenuProfil(Icons.warning_rounded, "menu pengaduan".tr(),
@@ -1788,6 +1804,11 @@ class KaryawanPageState extends State<KaryawanPage>
                     context,
                     MaterialPageRoute(
                         builder: (context) => const PengaturanAkunPage()));
+              } else if (title == 'Kode Login Admin') {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const AdminLoginCodePage()));
               } else if (title == "menu pusat bantuan".tr()) {
                 Navigator.push(
                     context,

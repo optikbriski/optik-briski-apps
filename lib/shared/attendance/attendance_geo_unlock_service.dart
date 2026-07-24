@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../training/training_mode.dart';
 import '../training/training_sandbox_store.dart';
 import 'attendance_config.dart';
+import 'attendance_service.dart';
 import 'geofence_service.dart';
 
 class AttendanceGeoUnlock {
@@ -79,6 +80,20 @@ class AttendanceGeoUnlockService {
   }) async {
     final ttl = ttlSeconds ?? AttendanceConfig.geoUnlockTtlSeconds;
 
+    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+      throw 'GPS harus di dalam geofence toko sebelum scan QR absensi.';
+    }
+    if (qrTokenId == null || qrTokenId.trim().isEmpty) {
+      throw 'QR Absensi wajib. Scan QR di perangkat toko dulu.';
+    }
+
+    // Masuk: wajib jadwal + jam geofence shift. Pulang: boleh tanpa jadwal hari ini
+    // (tutup shift OPEN kemarin) — deteksi dari source.
+    final isPulang = source.toLowerCase().contains('pulang');
+    if (!isPulang) {
+      await AttendanceService(client: _client).assertCanAbsenMasukNow(karyawanId);
+    }
+
     if (TrainingMode.instance.isActive) {
       TrainingMode.instance.assertSameToko(tokoId);
       final expires = DateTime.now().add(Duration(seconds: ttl));
@@ -93,8 +108,7 @@ class AttendanceGeoUnlockService {
           'accuracy_meters': geo.accuracyMeters,
           'source': source,
           'consumed_at': null,
-          if (qrTokenId != null && qrTokenId.isNotEmpty)
-            'qr_token_id': qrTokenId,
+          'qr_token_id': qrTokenId,
         },
       );
       return AttendanceGeoUnlock.fromJson(row);

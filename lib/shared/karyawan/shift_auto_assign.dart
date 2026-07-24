@@ -9,24 +9,31 @@ enum OfficeLayer { front, back }
 /// Klasifikasi jabatan → Front / Back office.
 OfficeLayer officeLayerOf(String? jabatan) {
   final j = (jabatan ?? '').toLowerCase().trim();
-  const backHints = [
-    'kepala',
-    'admin',
-    'lab',
-    'teknisi',
-    'gudang',
-    'back',
-    'warehouse',
-    'akunting',
-    'accounting',
-    'finance',
-    'keuangan',
-    'inventori',
-    'inventory',
-    'office',
-  ];
-  for (final h in backHints) {
-    if (j.contains(h)) return OfficeLayer.back;
+  // Hierarki resmi: Frontliner = front; sisanya back office.
+  if (j == 'frontliner' ||
+      j.contains('kasir') ||
+      j.contains('sales') ||
+      j.contains('spg') ||
+      j == 'ro') {
+    return OfficeLayer.front;
+  }
+  if (j == 'backliner' ||
+      j.contains('kepala') ||
+      j == 'admin' ||
+      j == 'owner' ||
+      j.contains('lab') ||
+      j.contains('teknisi') ||
+      j.contains('gudang') ||
+      j.contains('back') ||
+      j.contains('warehouse') ||
+      j.contains('akunting') ||
+      j.contains('accounting') ||
+      j.contains('finance') ||
+      j.contains('keuangan') ||
+      j.contains('inventori') ||
+      j.contains('inventory') ||
+      j.contains('office')) {
+    return OfficeLayer.back;
   }
   return OfficeLayer.front;
 }
@@ -40,10 +47,10 @@ class TokoShiftSettings {
   TokoShiftSettings({
     required this.tokoId,
     this.shift1Label = 'Shift Pagi',
-    this.shift1Masuk = '09:00',
+    this.shift1Masuk = '08:30',
     this.shift1Pulang = '17:00',
     this.shift1Kuota = 3,
-    this.shift2Label = 'Shift Sore',
+    this.shift2Label = 'Shift Siang',
     this.shift2Masuk = '13:00',
     this.shift2Pulang = '21:00',
     this.shift2Kuota = 3,
@@ -74,10 +81,10 @@ class TokoShiftSettings {
     return TokoShiftSettings(
       tokoId: row['toko_id']?.toString() ?? '',
       shift1Label: row['shift1_label']?.toString() ?? 'Shift Pagi',
-      shift1Masuk: t(row['shift1_masuk'], '09:00'),
+      shift1Masuk: t(row['shift1_masuk'], '08:30'),
       shift1Pulang: t(row['shift1_pulang'], '17:00'),
       shift1Kuota: (row['shift1_kuota'] as num?)?.toInt() ?? 3,
-      shift2Label: row['shift2_label']?.toString() ?? 'Shift Sore',
+      shift2Label: row['shift2_label']?.toString() ?? 'Shift Siang',
       shift2Masuk: t(row['shift2_masuk'], '13:00'),
       shift2Pulang: t(row['shift2_pulang'], '21:00'),
       shift2Kuota: (row['shift2_kuota'] as num?)?.toInt() ?? 3,

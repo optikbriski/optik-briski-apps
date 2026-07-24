@@ -19,3 +19,9 @@ entrypoint = "./functions/aws-rekognition/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/aws-face-liveness/index.ts"
+
+[functions.admin-login-with-code]
+enabled = true
+verify_jwt = false
+import_map = "./functions/admin-login-with-code/deno.json"
+entrypoint = "./functions/admin-login-with-code/index.ts"

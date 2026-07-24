@@ -380,7 +380,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
             permissionContext: mounted ? context : null,
           );
         }
-        final lateNote = late.isLate ? ' ${late.summary}.' : '';
+        final lateNote = late.isLate
+            ? ' Terdeteksi telat — poin menunggu verifikasi Admin.'
+            : ' Poin menunggu verifikasi Admin.';
         _snack(
           'Absen masuk berhasil. Shift dimulai — lokasi dipantau '
           '(termasuk di background jika izin selalu diberikan).$lateNote',

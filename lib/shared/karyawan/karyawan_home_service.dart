@@ -141,7 +141,8 @@ class KaryawanHomeService {
     );
   }
 
-  /// Backfill `poin_logs` dari verifikasi aman/curang yang sudah punya poin_awarded.
+  /// Backfill `poin_logs` dari verifikasi aman/curang + penalti telat di logs.
+  /// Unique (karyawan, sumber, ref_id) mencegah double.
   Future<void> _syncAbsenPoinFromVerifications(String karyawanId) async {
     try {
       final rows = await _client
@@ -166,20 +167,73 @@ class KaryawanHomeService {
             ) ??
             DateTime.now();
         final tanggal = _dateKey.format(when.toLocal());
-        try {
-          await _client.from('poin_logs').insert({
-            'karyawan_id': karyawanId,
-            'tanggal': tanggal,
-            'poin': points,
-            'sumber': 'ABSEN',
-            'ref_id': refId,
-          });
-        } catch (_) {
-          // Sudah ada / RLS — lanjut.
+        await _insertPoinIgnoreDup(
+          karyawanId: karyawanId,
+          tanggal: tanggal,
+          poin: points,
+          sumber: 'ABSEN',
+          refId: refId,
+        );
+      }
+
+      // Heal ABSEN_TELAT hanya jika verifikasi sudah aman + telat
+      // (poin belom ada sebelum Admin verifikasi).
+      final lateVerified = await _client
+          .from('attendance_verifications')
+          .select(
+            'id, log_id, poin_awarded, reviewed_at, created_at, '
+            'log:log_id(id, late_penalty_points)',
+          )
+          .eq('karyawan_id', karyawanId)
+          .eq('status', 'aman')
+          .lt('poin_awarded', 0)
+          .limit(200);
+      for (final raw in lateVerified) {
+        final v = Map<String, dynamic>.from(raw as Map);
+        final log = v['log'];
+        String? logId;
+        var pts = (v['poin_awarded'] as num?)?.toInt() ?? 0;
+        if (log is Map) {
+          logId = (log['id'] ?? '').toString();
+          final lp = (log['late_penalty_points'] as num?)?.toInt();
+          if (lp != null && lp < 0) pts = lp;
         }
+        logId ??= (v['log_id'] ?? '').toString();
+        if (logId.isEmpty || pts >= 0) continue;
+        final when = DateTime.tryParse(
+              (v['reviewed_at'] ?? v['created_at'] ?? '').toString(),
+            ) ??
+            DateTime.now();
+        await _insertPoinIgnoreDup(
+          karyawanId: karyawanId,
+          tanggal: _dateKey.format(when.toLocal()),
+          poin: pts,
+          sumber: 'ABSEN_TELAT',
+          refId: 'absen-telat-$logId',
+        );
       }
     } catch (_) {
       // Jangan gagalkan load home.
+    }
+  }
+
+  Future<void> _insertPoinIgnoreDup({
+    required String karyawanId,
+    required String tanggal,
+    required int poin,
+    required String sumber,
+    required String refId,
+  }) async {
+    try {
+      await _client.from('poin_logs').insert({
+        'karyawan_id': karyawanId,
+        'tanggal': tanggal,
+        'poin': poin,
+        'sumber': sumber,
+        'ref_id': refId,
+      });
+    } catch (_) {
+      // Unique / RLS — sudah ada, jangan double.
     }
   }
 

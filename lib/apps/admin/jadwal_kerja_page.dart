@@ -505,7 +505,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
 
     var isLibur = existing?['is_libur'] == true;
     final masukCtrl = TextEditingController(
-      text: isLibur ? '' : _fmtTime(existing?['jam_masuk']).replaceAll('--:--', '09:00'),
+      text: isLibur ? '' : _fmtTime(existing?['jam_masuk']).replaceAll('--:--', '08:30'),
     );
     final pulangCtrl = TextEditingController(
       text: isLibur

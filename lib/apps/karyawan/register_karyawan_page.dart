@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/liveness_result.dart';
+import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/ktp/ktp_capture_page.dart';
 import '../../shared/ktp/ktp_ocr_service.dart';
 import '../../shared/liveness_camera_page.dart';
@@ -2057,14 +2058,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                     DropdownButtonFormField<String>(
                       value: jabatan,
                       dropdownColor: Colors.white,
-                      items: const [
-                        "Kasir",
-                        "RO",
-                        "Sales / SPG",
-                        "Kepala Toko",
-                        "Admin",
-                        "Lab / Teknisi",
-                      ]
+                      items: KaryawanJabatan.all
                           .map((e) => DropdownMenuItem(
                               value: e,
                               child: Text(e,

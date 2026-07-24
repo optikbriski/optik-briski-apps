@@ -1,16 +1,21 @@
 /// Penalti keterlambatan + aturan jam paling awal absen pulang.
 ///
+/// Absen masuk: boleh kapan saja hari itu jika ada jadwal (lihat
+/// [AttendanceScheduleRules]). Peringatan keluar area / standby:
+/// pagi ≥ 08:30, siang ≥ 13:00.
+///
 /// **Shift pagi** (`jam_masuk` 08:30):
+/// - Absen sebelum 08:30 → ontime; keluar area diingatkan mulai 08:30
 /// - 08:30:01 … 09:00:00 → −1 poin / menit (dari 08:30)
-/// - 09:00:01 … → hanya −20 / 15 menit dari 09:00
-///   (09:00:01 → −20; 09:15:01 → −40; …) — tidak ditumpuk dengan −1/menit
+/// - 09:00:01 … → −20 tiap 15 menit dari 09:00
 ///
 /// **Shift siang** (`jam_masuk` 13:00):
-/// - 13:00:01 … → −20 / 15 menit dari 13:00
+/// - Absen sebelum 13:00 → ontime; keluar area diingatkan mulai 13:00
+/// - 13:00:01 … → −20 tiap 15 menit dari 13:00
 ///
 /// **Pulang paling awal (scan QR):**
 /// - Shift pagi → mulai 17:00
-/// - Shift siang/malem → mulai 21:00
+/// - Shift siang → mulai 21:00
 abstract final class AttendanceLatePenalty {
   static const int bracketMinutes = 15;
   static const int pointsPerBracket = 20;

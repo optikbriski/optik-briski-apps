@@ -215,9 +215,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     final ok = await _confirm(
       title: 'Tandai Valid?',
       body:
-          'Absensi wajah hari ini akan ditandai AMAN dan karyawan mendapat '
-          '+${AttendanceVerificationConfig.validDayPoints} poin ABSEN.\n\n'
-          'Ini verifikasi wajah — bukan penilaian keterlambatan.',
+          'Wajah disetujui. Poin baru dihitung sekarang:\n'
+          '• Ontime → +${AttendanceVerificationConfig.validDayPoints}\n'
+          '• Telat → hanya penalti telat (tanpa poin ontime)\n\n'
+          'Sebelum Valid, belum ada poin absensi.',
       confirmLabel: 'Valid',
       danger: false,
     );
@@ -231,7 +232,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       );
       if (!mounted) return;
       _snack(
-        'Ditandai aman. Poin +${AttendanceVerificationConfig.validDayPoints}.',
+        'Ditandai aman. Poin absensi sudah diproses (ontime atau telat).',
         OptikAdminTokens.success,
       );
       await _loadKaryawanForToko(_selectedToko!);

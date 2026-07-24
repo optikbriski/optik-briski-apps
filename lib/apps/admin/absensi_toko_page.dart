@@ -525,7 +525,10 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           storeKiosk: true,
           qrTokenId: unlock.qrTokenId,
         );
-        final lateNote = late.isLate ? ' ${late.summary}.' : '';
+        // Poin baru setelah Owner/Admin Pusat verifikasi di Monitor.
+        final lateNote = late.isLate
+            ? ' Terdeteksi telat — poin menunggu verifikasi Monitor.'
+            : ' Poin ontime menunggu verifikasi Monitor.';
         _snack(
           '${'absensi_toko_masuk_ok'.tr()}$lateNote',
           late.isLate ? Colors.orange : Colors.green,

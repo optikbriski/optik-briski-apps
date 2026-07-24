@@ -8,6 +8,7 @@ import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
 import 'attendance_config.dart';
 import 'attendance_late_penalty.dart';
+import 'attendance_schedule_rules.dart';
 import 'attendance_verification_service.dart';
 import 'face_template.dart';
 import 'geofence_service.dart';
@@ -285,7 +286,38 @@ class AttendanceService {
     return photoUrl;
   }
 
-  /// Absen masuk. Mengembalikan hasil penalti telat (0 jika on-time / tanpa jadwal).
+  /// Jadwal kerja karyawan untuk tanggal Jakarta (yyyy-MM-dd).
+  Future<Map<String, dynamic>?> fetchJadwalHariIni(
+    String karyawanId, {
+    DateTime? nowUtc,
+  }) async {
+    final day = _jakartaDayLabel(nowUtc ?? DateTime.now().toUtc());
+    if (TrainingMode.instance.isActive) {
+      return _training.selectOne(
+        'jadwal_kerja',
+        where: {'karyawan_id': karyawanId, 'tanggal': day},
+      );
+    }
+    return _client
+        .from('jadwal_kerja')
+        .select('jam_masuk, jam_pulang, is_libur, tanggal')
+        .eq('karyawan_id', karyawanId)
+        .eq('tanggal', day)
+        .maybeSingle();
+  }
+
+  /// Wajib jadwal hari ini (boleh absen sebelum jam standby).
+  Future<void> assertCanAbsenMasukNow(String karyawanId) async {
+    final now = DateTime.now().toUtc();
+    final day = _jakartaDayLabel(now);
+    final jadwal = await fetchJadwalHariIni(karyawanId, nowUtc: now);
+    AttendanceScheduleRules.assertCanStartMasukNow(
+      jadwal: jadwal,
+      tanggalKey: day,
+    );
+  }
+
+  /// Absen masuk. Mengembalikan hasil penalti telat (0 jika on-time).
   Future<LatePenaltyResult> clockIn({
     required Map<String, dynamic> karyawan,
     required LivenessCaptureResult liveness,
@@ -298,8 +330,15 @@ class AttendanceService {
     if (tokoId.isEmpty) throw 'Toko karyawan belum terisi.';
     TrainingMode.instance.assertSameToko(tokoId);
 
+    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+      throw 'Absen masuk ditolak: GPS harus di dalam geofence toko.';
+    }
+
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
+
+    // Wajib dijadwalkan hari ini; absen boleh sebelum jam standby.
+    await assertCanAbsenMasukNow(karyawanId);
 
     // Maksimal 1× MASUK per tanggal (Asia/Jakarta), meski shift sebelumnya sudah CLOSED.
     await _assertOncePerDay(karyawanId: karyawanId, tipe: 'MASUK');
@@ -422,12 +461,8 @@ class AttendanceService {
       livenessProvider: liveness.livenessProvider ?? 'local',
     );
 
-    await _writeLatePoinLog(
-      karyawanId: karyawanId,
-      logId: log['id']?.toString() ?? '',
-      late: late,
-    );
-
+    // Poin (ontime / telat / curang) hanya setelah Admin verifikasi — bukan di sini.
+    // Metadata late_* tetap disimpan di log untuk dihitung saat Valid/Curang.
     return late;
   }
 
@@ -479,32 +514,8 @@ class AttendanceService {
     }
   }
 
-  Future<void> _writeLatePoinLog({
-    required String karyawanId,
-    required String logId,
-    required LatePenaltyResult late,
-  }) async {
-    if (!late.isLate || logId.isEmpty) return;
-    final tanggal = _jakartaDayLabel();
-    final refId = AttendanceLatePenalty.refIdForLog(logId);
-    try {
-      ProdWriteGuard.check('attendance.latePoin');
-      await _client.from('poin_logs').insert({
-        'karyawan_id': karyawanId,
-        'tanggal': tanggal,
-        'poin': late.penaltyPoints,
-        'sumber': AttendanceLatePenalty.sumberPoinTelat,
-        'ref_id': refId,
-      });
-    } catch (e) {
-      if (_isUniqueViolation(e)) return;
-      // Jangan gagalkan absen masuk jika poin telat gagal tersimpan.
-      // ignore: avoid_print
-      print('poin_logs ABSEN_TELAT: $e');
-    }
-  }
-
-  /// Pagi baru boleh pulang ≥17:00; siang/malem ≥21:00 (Asia/Jakarta).
+  /// Pulang mengikuti shift: pagi ≥17:00 / siang ≥21:00,
+  /// atau `jam_pulang` jadwal jika diisi.
   Future<void> _assertPulangTimeAllowed({
     required String karyawanId,
     required Map<String, dynamic> openShift,
@@ -513,21 +524,9 @@ class AttendanceService {
     final day = _jakartaDayLabel(now);
 
     int? jamMasukHour;
+    String? jamPulang;
     try {
-      final Map<String, dynamic>? jadwal;
-      if (TrainingMode.instance.isActive) {
-        jadwal = await _training.selectOne(
-          'jadwal_kerja',
-          where: {'karyawan_id': karyawanId, 'tanggal': day},
-        );
-      } else {
-        jadwal = await _client
-            .from('jadwal_kerja')
-            .select('jam_masuk')
-            .eq('karyawan_id', karyawanId)
-            .eq('tanggal', day)
-            .maybeSingle();
-      }
+      final jadwal = await fetchJadwalHariIni(karyawanId, nowUtc: now);
       final jam = (jadwal?['jam_masuk'] ?? '').toString().trim();
       if (jam.isNotEmpty) {
         jamMasukHour = AttendanceLatePenalty.parseSchedule(
@@ -535,24 +534,36 @@ class AttendanceService {
           jamMasuk: jam,
         )?.hourJakarta;
       }
+      final jp = (jadwal?['jam_pulang'] ?? '').toString().trim();
+      if (jp.isNotEmpty) jamPulang = jp;
     } catch (_) {}
 
-    // Fallback: pakai jam masuk_at shift OPEN.
+    // Fallback: jam masuk_at shift OPEN (untuk pulang tanpa jadwal hari ini).
     if (jamMasukHour == null) {
-      final masukAt = DateTime.tryParse((openShift['masuk_at'] ?? '').toString());
+      final masukAt =
+          DateTime.tryParse((openShift['masuk_at'] ?? '').toString());
       if (masukAt != null) {
         jamMasukHour = masukAt.toUtc().add(const Duration(hours: 7)).hour;
       }
     }
-    jamMasukHour ??= 8; // default anggap pagi
+    jamMasukHour ??= 8;
 
-    final earliest = AttendanceLatePenalty.earliestPulangUtc(
+    DateTime? earliest;
+    if (jamPulang != null) {
+      earliest = AttendanceLatePenalty.scheduledMasukUtc(
+        tanggalKey: day,
+        jamMasuk: jamPulang,
+      );
+    }
+    earliest ??= AttendanceLatePenalty.earliestPulangUtc(
       tanggalKey: day,
       jamMasukHourJakarta: jamMasukHour,
     );
+
     if (now.isBefore(earliest)) {
-      final label =
-          AttendanceLatePenalty.earliestPulangLabel(jamMasukHour);
+      final label = jamPulang != null && jamPulang.length >= 5
+          ? jamPulang.substring(0, 5)
+          : AttendanceLatePenalty.earliestPulangLabel(jamMasukHour);
       throw 'Belum waktunya absen pulang. '
           'Scan QR pulang mulai jam $label.';
     }
