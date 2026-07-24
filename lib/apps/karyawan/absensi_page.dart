@@ -285,6 +285,22 @@ class _AbsensiPageState extends State<AbsensiPage> {
 
     setState(() => _busy = true);
     try {
+      if (action == 'MASUK' || action == 'PULANG') {
+        final already = await _service.hasAttendanceLogToday(
+          karyawanId: _karyawan!['id'].toString(),
+          tipe: action,
+        );
+        if (already) {
+          _snack(
+            action == 'MASUK'
+                ? 'Sudah absen masuk hari ini. Masuk hanya 1× per tanggal.'
+                : 'Sudah absen pulang hari ini. Pulang hanya 1× per tanggal.',
+            Colors.orange,
+          );
+          return;
+        }
+      }
+
       final geo = await _service.checkGeofence(tokoId);
       if (!geo.inside) {
         _snack(geo.message, Colors.redAccent);
@@ -349,7 +365,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
         );
         _snack('Wajah berhasil didaftarkan.', Colors.green);
       } else if (action == 'MASUK') {
-        await _service.clockIn(
+        final late = await _service.clockIn(
           karyawan: _karyawan!,
           liveness: liveness,
           geo: geo,
@@ -364,10 +380,11 @@ class _AbsensiPageState extends State<AbsensiPage> {
             permissionContext: mounted ? context : null,
           );
         }
+        final lateNote = late.isLate ? ' ${late.summary}.' : '';
         _snack(
           'Absen masuk berhasil. Shift dimulai — lokasi dipantau '
-          '(termasuk di background jika izin selalu diberikan).',
-          Colors.green,
+          '(termasuk di background jika izin selalu diberikan).$lateNote',
+          late.isLate ? Colors.orange : Colors.green,
         );
       } else if (action == 'PULANG') {
         await _service.clockOut(

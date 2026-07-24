@@ -518,14 +518,18 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         _snack('absensi_toko_enroll_ok'.tr(), Colors.green);
       } else {
         // MASUK: foto liveness → attendance_logs + antrean Monitor Absensi.
-        await _service.clockIn(
+        final late = await _service.clockIn(
           karyawan: karyawan,
           liveness: liveness,
           geo: geo,
           storeKiosk: true,
           qrTokenId: unlock.qrTokenId,
         );
-        _snack('absensi_toko_masuk_ok'.tr(), Colors.green);
+        final lateNote = late.isLate ? ' ${late.summary}.' : '';
+        _snack(
+          '${'absensi_toko_masuk_ok'.tr()}$lateNote',
+          late.isLate ? Colors.orange : Colors.green,
+        );
       }
 
       await _returnToQr(consume: true);

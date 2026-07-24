@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
 import 'attendance_config.dart';
+import 'attendance_late_penalty.dart';
 import 'attendance_verification_service.dart';
 import 'face_template.dart';
 import 'geofence_service.dart';
@@ -95,6 +96,87 @@ class AttendanceService {
         .order('masuk_at', ascending: false)
         .limit(1)
         .maybeSingle();
+  }
+
+  /// Awal hari kalender Asia/Jakarta dalam UTC (untuk filter `created_at`).
+  static DateTime jakartaDayStartUtc([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    return DateTime.utc(jkt.year, jkt.month, jkt.day)
+        .subtract(const Duration(hours: 7));
+  }
+
+  static String _jakartaDayLabel([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    final m = jkt.month.toString().padLeft(2, '0');
+    final d = jkt.day.toString().padLeft(2, '0');
+    return '${jkt.year}-$m-$d';
+  }
+
+  /// True jika sudah ada log MASUK/PULANG di tanggal Jakarta hari ini.
+  Future<bool> hasAttendanceLogToday({
+    required String karyawanId,
+    required String tipe,
+  }) async {
+    final start = jakartaDayStartUtc();
+    final end = start.add(const Duration(days: 1));
+
+    if (TrainingMode.instance.isActive) {
+      final rows = await _training.select(
+        'attendance_logs',
+        where: {'karyawan_id': karyawanId, 'tipe': tipe},
+      );
+      for (final r in rows) {
+        final at = DateTime.tryParse((r['created_at'] ?? '').toString());
+        if (at == null) continue;
+        final u = at.toUtc();
+        if (!u.isBefore(start) && u.isBefore(end)) return true;
+      }
+      return false;
+    }
+
+    final rows = await _client
+        .from('attendance_logs')
+        .select('id')
+        .eq('karyawan_id', karyawanId)
+        .eq('tipe', tipe)
+        .gte('created_at', start.toIso8601String())
+        .lt('created_at', end.toIso8601String())
+        .limit(1);
+    return List<dynamic>.from(rows).isNotEmpty;
+  }
+
+  Future<void> _assertOncePerDay({
+    required String karyawanId,
+    required String tipe,
+  }) async {
+    final exists = await hasAttendanceLogToday(
+      karyawanId: karyawanId,
+      tipe: tipe,
+    );
+    if (!exists) return;
+    final day = _jakartaDayLabel();
+    if (tipe == 'MASUK') {
+      throw 'Sudah absen masuk hari ini ($day). '
+          'Masuk hanya 1× per tanggal.';
+    }
+    throw 'Sudah absen pulang hari ini ($day). '
+        'Pulang hanya 1× per tanggal.';
+  }
+
+  static bool _isUniqueViolation(Object e) {
+    if (e is PostgrestException) {
+      final code = (e.code ?? '').toString();
+      final msg = e.message.toLowerCase();
+      return code == '23505' ||
+          msg.contains('duplicate') ||
+          msg.contains('unique');
+    }
+    final s = e.toString().toLowerCase();
+    return s.contains('23505') ||
+        s.contains('duplicate') ||
+        s.contains('unique');
   }
 
   /// [webKiosk]: Absensi Toko di browser — lewati GPS Wi‑Fi Mac/PC.
@@ -203,7 +285,8 @@ class AttendanceService {
     return photoUrl;
   }
 
-  Future<void> clockIn({
+  /// Absen masuk. Mengembalikan hasil penalti telat (0 jika on-time / tanpa jadwal).
+  Future<LatePenaltyResult> clockIn({
     required Map<String, dynamic> karyawan,
     required LivenessCaptureResult liveness,
     required GeofenceCheckResult geo,
@@ -217,6 +300,9 @@ class AttendanceService {
 
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
+
+    // Maksimal 1× MASUK per tanggal (Asia/Jakarta), meski shift sebelumnya sudah CLOSED.
+    await _assertOncePerDay(karyawanId: karyawanId, tipe: 'MASUK');
 
     final score = await _matchOrThrow(
       karyawan,
@@ -233,46 +319,20 @@ class AttendanceService {
       bytes: liveness.photoBytes!,
     );
 
+    final clockAt = DateTime.now().toUtc();
+    final late = await _computeLatePenalty(
+      karyawanId: karyawanId,
+      clockInUtc: clockAt,
+    );
+
     final shiftPayload = {
       'karyawan_id': karyawanId,
       'toko_id': tokoId,
       'status': 'OPEN',
-      'masuk_at': DateTime.now().toIso8601String(),
+      'masuk_at': clockAt.toIso8601String(),
     };
 
-    // Training: local sandbox only (offline OK) — never sync to pusat.
-    if (TrainingMode.instance.isActive) {
-      final shift = await _training.insert('attendance_shifts', shiftPayload);
-      await _training.insert('attendance_logs', {
-        'shift_id': shift['id'],
-        'karyawan_id': karyawanId,
-        'toko_id': tokoId,
-        'tipe': 'MASUK',
-        'photo_url': photoUrl,
-        'latitude': geo.latitude,
-        'longitude': geo.longitude,
-        'distance_meters': geo.distanceMeters,
-        'match_score': score,
-        'liveness_ok': true,
-        'liveness_confidence': liveness.livenessConfidence,
-        'liveness_session_id': liveness.livenessSessionId,
-        'liveness_provider': liveness.livenessProvider ?? 'local',
-        'device_info': deviceInfo,
-        if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
-      });
-      return;
-    }
-
-    ProdWriteGuard.check('attendance.clockIn.shift');
-    final shift = await _client
-        .from('attendance_shifts')
-        .insert(shiftPayload)
-        .select()
-        .single();
-
-    ProdWriteGuard.check('attendance.clockIn.log');
-    final log = await _client.from('attendance_logs').insert({
-      'shift_id': shift['id'],
+    final logPayload = <String, dynamic>{
       'karyawan_id': karyawanId,
       'toko_id': tokoId,
       'tipe': 'MASUK',
@@ -286,8 +346,66 @@ class AttendanceService {
       'liveness_session_id': liveness.livenessSessionId,
       'liveness_provider': liveness.livenessProvider ?? 'local',
       'device_info': deviceInfo,
+      'late_seconds': late.lateSeconds,
+      'late_penalty_points': late.penaltyPoints,
       if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
-    }).select('id').single();
+    };
+
+    // Training: local sandbox only (offline OK) — never sync to pusat.
+    if (TrainingMode.instance.isActive) {
+      final shift = await _training.insert('attendance_shifts', shiftPayload);
+      await _training.insert('attendance_logs', {
+        ...logPayload,
+        'shift_id': shift['id'],
+      });
+      return late;
+    }
+
+    ProdWriteGuard.check('attendance.clockIn.shift');
+    late final Map<String, dynamic> shift;
+    late final Map<String, dynamic> log;
+    try {
+      shift = await _client
+          .from('attendance_shifts')
+          .insert(shiftPayload)
+          .select()
+          .single();
+
+      ProdWriteGuard.check('attendance.clockIn.log');
+      try {
+        log = await _client
+            .from('attendance_logs')
+            .insert({
+              ...logPayload,
+              'shift_id': shift['id'],
+            })
+            .select('id')
+            .single();
+      } on PostgrestException catch (e) {
+        // Kolom late_* belum di-migrate → simpan tanpa metadata telat.
+        if ((e.message).toLowerCase().contains('late_')) {
+          final slim = Map<String, dynamic>.from(logPayload)
+            ..remove('late_seconds')
+            ..remove('late_penalty_points');
+          log = await _client
+              .from('attendance_logs')
+              .insert({
+                ...slim,
+                'shift_id': shift['id'],
+              })
+              .select('id')
+              .single();
+        } else {
+          rethrow;
+        }
+      }
+    } catch (e) {
+      if (_isUniqueViolation(e)) {
+        throw 'Sudah absen masuk hari ini (${_jakartaDayLabel()}). '
+            'Masuk hanya 1× per tanggal.';
+      }
+      rethrow;
+    }
 
     // Antrean Admin: bandingkan capture vs foto terdaftar.
     final enrolledUrl = (karyawan['face_photo_url'] ?? '').toString().trim();
@@ -303,6 +421,141 @@ class AttendanceService {
       livenessConfidence: liveness.livenessConfidence,
       livenessProvider: liveness.livenessProvider ?? 'local',
     );
+
+    await _writeLatePoinLog(
+      karyawanId: karyawanId,
+      logId: log['id']?.toString() ?? '',
+      late: late,
+    );
+
+    return late;
+  }
+
+  Future<LatePenaltyResult> _computeLatePenalty({
+    required String karyawanId,
+    required DateTime clockInUtc,
+  }) async {
+    final day = _jakartaDayLabel(clockInUtc);
+    try {
+      final Map<String, dynamic>? jadwal;
+      if (TrainingMode.instance.isActive) {
+        jadwal = await _training.selectOne(
+          'jadwal_kerja',
+          where: {'karyawan_id': karyawanId, 'tanggal': day},
+        );
+      } else {
+        jadwal = await _client
+            .from('jadwal_kerja')
+            .select('jam_masuk, is_libur')
+            .eq('karyawan_id', karyawanId)
+            .eq('tanggal', day)
+            .maybeSingle();
+      }
+
+      if (jadwal == null || jadwal['is_libur'] == true) {
+        return const LatePenaltyResult(lateSeconds: 0, penaltyPoints: 0);
+      }
+      final jam = (jadwal['jam_masuk'] ?? '').toString().trim();
+      if (jam.isEmpty) {
+        return const LatePenaltyResult(lateSeconds: 0, penaltyPoints: 0);
+      }
+
+      final parsed = AttendanceLatePenalty.parseSchedule(
+        tanggalKey: day,
+        jamMasuk: jam,
+      );
+      if (parsed == null) {
+        return const LatePenaltyResult(lateSeconds: 0, penaltyPoints: 0);
+      }
+
+      // Shift pagi: jam_masuk = jam datang (08:30); jendela lunak 30 mnt ke buka (09:00).
+      return AttendanceLatePenalty.compute(
+        clockInUtc: clockInUtc,
+        scheduledMasukUtc: parsed.utc,
+        scheduledMasukHourJakarta: parsed.hourJakarta,
+      );
+    } catch (_) {
+      return const LatePenaltyResult(lateSeconds: 0, penaltyPoints: 0);
+    }
+  }
+
+  Future<void> _writeLatePoinLog({
+    required String karyawanId,
+    required String logId,
+    required LatePenaltyResult late,
+  }) async {
+    if (!late.isLate || logId.isEmpty) return;
+    final tanggal = _jakartaDayLabel();
+    final refId = AttendanceLatePenalty.refIdForLog(logId);
+    try {
+      ProdWriteGuard.check('attendance.latePoin');
+      await _client.from('poin_logs').insert({
+        'karyawan_id': karyawanId,
+        'tanggal': tanggal,
+        'poin': late.penaltyPoints,
+        'sumber': AttendanceLatePenalty.sumberPoinTelat,
+        'ref_id': refId,
+      });
+    } catch (e) {
+      if (_isUniqueViolation(e)) return;
+      // Jangan gagalkan absen masuk jika poin telat gagal tersimpan.
+      // ignore: avoid_print
+      print('poin_logs ABSEN_TELAT: $e');
+    }
+  }
+
+  /// Pagi baru boleh pulang ≥17:00; siang/malem ≥21:00 (Asia/Jakarta).
+  Future<void> _assertPulangTimeAllowed({
+    required String karyawanId,
+    required Map<String, dynamic> openShift,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final day = _jakartaDayLabel(now);
+
+    int? jamMasukHour;
+    try {
+      final Map<String, dynamic>? jadwal;
+      if (TrainingMode.instance.isActive) {
+        jadwal = await _training.selectOne(
+          'jadwal_kerja',
+          where: {'karyawan_id': karyawanId, 'tanggal': day},
+        );
+      } else {
+        jadwal = await _client
+            .from('jadwal_kerja')
+            .select('jam_masuk')
+            .eq('karyawan_id', karyawanId)
+            .eq('tanggal', day)
+            .maybeSingle();
+      }
+      final jam = (jadwal?['jam_masuk'] ?? '').toString().trim();
+      if (jam.isNotEmpty) {
+        jamMasukHour = AttendanceLatePenalty.parseSchedule(
+          tanggalKey: day,
+          jamMasuk: jam,
+        )?.hourJakarta;
+      }
+    } catch (_) {}
+
+    // Fallback: pakai jam masuk_at shift OPEN.
+    if (jamMasukHour == null) {
+      final masukAt = DateTime.tryParse((openShift['masuk_at'] ?? '').toString());
+      if (masukAt != null) {
+        jamMasukHour = masukAt.toUtc().add(const Duration(hours: 7)).hour;
+      }
+    }
+    jamMasukHour ??= 8; // default anggap pagi
+
+    final earliest = AttendanceLatePenalty.earliestPulangUtc(
+      tanggalKey: day,
+      jamMasukHourJakarta: jamMasukHour,
+    );
+    if (now.isBefore(earliest)) {
+      final label =
+          AttendanceLatePenalty.earliestPulangLabel(jamMasukHour);
+      throw 'Belum waktunya absen pulang. '
+          'Scan QR pulang mulai jam $label.';
+    }
   }
 
   Future<void> clockOut({
@@ -355,7 +608,16 @@ class AttendanceService {
     }
 
     final open = await fetchOpenShift(karyawanId);
-    if (open == null) throw 'Belum ada shift masuk hari ini.';
+    if (open == null) throw 'Belum ada shift masuk yang masih OPEN.';
+
+    // Maksimal 1× PULANG per tanggal (Asia/Jakarta).
+    await _assertOncePerDay(karyawanId: karyawanId, tipe: 'PULANG');
+
+    // Pagi ≥17:00 / siang ≥21:00 baru boleh scan pulang.
+    await _assertPulangTimeAllowed(
+      karyawanId: karyawanId,
+      openShift: open,
+    );
 
     final double? score;
     final String? photoUrl;
@@ -433,7 +695,15 @@ class AttendanceService {
     }).eq('id', open['id']);
 
     ProdWriteGuard.check('attendance.clockOut.log');
-    await _client.from('attendance_logs').insert(logPayload);
+    try {
+      await _client.from('attendance_logs').insert(logPayload);
+    } catch (e) {
+      if (_isUniqueViolation(e)) {
+        throw 'Sudah absen pulang hari ini (${_jakartaDayLabel()}). '
+            'Pulang hanya 1× per tanggal.';
+      }
+      rethrow;
+    }
   }
 
   void _requireLivenessPassed(LivenessCaptureResult liveness) {
