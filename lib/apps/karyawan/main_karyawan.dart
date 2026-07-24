@@ -93,6 +93,8 @@ class KaryawanPageState extends State<KaryawanPage>
     if (state == AppLifecycleState.resumed) {
       _cekHasilInstallSetelahResume();
       _syncGeofenceMonitorIfOpenShift();
+      // Tarik ulang poin/SOP agar Valid/Curang dari Admin langsung terlihat.
+      unawaited(_tarikDataProfil());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // Auto-unduh di background saat app di-minimize (install tetap konfirmasi).
@@ -775,6 +777,9 @@ class KaryawanPageState extends State<KaryawanPage>
                     } else if (status == 0) {
                       warnaCard = Colors.redAccent;
                       iconCard = Icons.cancel_rounded;
+                    } else if (status == -1) {
+                      warnaCard = Colors.deepOrange;
+                      iconCard = Icons.gavel_rounded;
                     } else {
                       warnaCard = Colors.grey.shade200;
                       iconCard = Icons.hourglass_empty;

@@ -125,20 +125,16 @@ class AttendanceVerificationService {
       throw 'Status sudah berubah. Muat ulang daftar.';
     }
 
-    try {
-      await _client.from('poin_logs').insert({
-        'karyawan_id': karyawanId,
-        'tanggal': tanggal,
-        'poin': points,
-        'sumber': AttendanceVerificationConfig.sumberPoinAbsen,
-        'ref_id': refId,
-      });
-    } catch (_) {
-      // Unique (karyawan, sumber, ref) — sudah pernah di-award.
-    }
+    // Wajib masuk poin_logs — sumber baca APK Karyawan. Duplikat = OK (idempotent).
+    await _insertPoinLog(
+      karyawanId: karyawanId,
+      tanggal: tanggal,
+      poin: points,
+      refId: refId,
+    );
 
-    await _notify(
-      userId: karyawanId,
+    await _notifyKaryawan(
+      karyawanId: karyawanId,
       judul: 'Absensi wajah aman',
       isi: 'Verifikasi absensi wajah disetujui. Poin +$points.',
       tipe: 'ADMIN',
@@ -204,15 +200,12 @@ class AttendanceVerificationService {
       throw 'Status sudah berubah. Muat ulang daftar.';
     }
 
-    try {
-      await _client.from('poin_logs').insert({
-        'karyawan_id': karyawanId,
-        'tanggal': tanggal,
-        'poin': penalty,
-        'sumber': AttendanceVerificationConfig.sumberPoinAbsen,
-        'ref_id': refId,
-      });
-    } catch (_) {}
+    await _insertPoinLog(
+      karyawanId: karyawanId,
+      tanggal: tanggal,
+      poin: penalty,
+      refId: refId,
+    );
 
     try {
       await _client.from('surat_peringatan').insert({
@@ -225,12 +218,15 @@ class AttendanceVerificationService {
         'issued_by': uid,
         'issued_at': now.toIso8601String(),
       });
-    } catch (_) {
-      // Unique ref — SP sudah pernah diterbitkan untuk verifikasi ini.
+    } catch (e) {
+      if (!_isUniqueViolation(e)) {
+        // ignore: avoid_print
+        print('surat_peringatan insert: $e');
+      }
     }
 
-    await _notify(
-      userId: karyawanId,
+    await _notifyKaryawan(
+      karyawanId: karyawanId,
       judul: 'SP ${AttendanceVerificationConfig.cheatingSpTingkat} — Absensi',
       isi: 'Terbukti curang pada verifikasi wajah. '
           'Poin $penalty dan SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
@@ -239,20 +235,64 @@ class AttendanceVerificationService {
     );
   }
 
-  Future<void> _notify({
-    required String userId,
+  /// Insert `poin_logs` (sumber ABSEN). Duplikat ref diabaikan; error lain dilempar.
+  Future<void> _insertPoinLog({
+    required String karyawanId,
+    required String tanggal,
+    required int poin,
+    required String refId,
+  }) async {
+    try {
+      await _client.from('poin_logs').insert({
+        'karyawan_id': karyawanId,
+        'tanggal': tanggal,
+        'poin': poin,
+        'sumber': AttendanceVerificationConfig.sumberPoinAbsen,
+        'ref_id': refId,
+      });
+    } catch (e) {
+      if (_isUniqueViolation(e)) return;
+      throw 'Poin absensi gagal disimpan ke poin_logs: $e';
+    }
+  }
+
+  static bool _isUniqueViolation(Object e) {
+    if (e is PostgrestException) {
+      final code = (e.code ?? '').toString();
+      final msg = e.message.toLowerCase();
+      return code == '23505' ||
+          msg.contains('duplicate') ||
+          msg.contains('unique');
+    }
+    final s = e.toString().toLowerCase();
+    return s.contains('23505') ||
+        s.contains('duplicate') ||
+        s.contains('unique');
+  }
+
+  /// Notifikasi ke auth user karyawan (`notifikasi.user_id` → auth.users).
+  Future<void> _notifyKaryawan({
+    required String karyawanId,
     required String judul,
     required String isi,
     required String tipe,
   }) async {
+    final authUserId = await _resolveAuthUserId(karyawanId);
+    if (authUserId == null || authUserId.isEmpty) return;
     try {
       await _client.from('notifikasi').insert({
-        'user_id': userId,
+        'user_id': authUserId,
         'judul': judul,
         'isi': isi,
         'tipe': tipe,
       });
     } catch (_) {}
+  }
+
+  /// Register Karyawan biasanya set id = auth.uid.
+  Future<String?> _resolveAuthUserId(String karyawanId) async {
+    if (karyawanId.trim().isEmpty) return null;
+    return karyawanId;
   }
 
   String enrolledUrlOf(Map<String, dynamic> row) {

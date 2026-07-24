@@ -92,16 +92,32 @@ class KaryawanHomeService {
     }).toList();
 
     final monthStart = DateTime(DateTime.now().year, DateTime.now().month, 1);
+
+    // Samakan poin absensi Admin (attendance_verifications.poin_awarded)
+    // ke poin_logs bila insert Admin sebelumnya gagal diam-diam.
+    await _syncAbsenPoinFromVerifications(karyawanId);
+
+    final monthKey = _dateKey.format(monthStart);
     final poinRows = await _client
         .from('poin_logs')
         .select('poin, tanggal, sumber, ref_id')
         .eq('karyawan_id', karyawanId)
-        .gte('tanggal', _dateKey.format(monthStart));
+        .gte('tanggal', monthKey);
 
     var totalPoin = 0;
+    final logRefs = <String>{};
     for (final p in poinRows) {
       totalPoin += (p['poin'] as num?)?.toInt() ?? 0;
+      final ref = p['ref_id']?.toString();
+      if (ref != null && ref.isNotEmpty) logRefs.add(ref);
     }
+
+    // Cadangan: jika insert poin_logs gagal (RLS/dll), tetap hitung dari verifikasi.
+    totalPoin += await _absenPoinFromVerificationsMissingInLogs(
+      karyawanId: karyawanId,
+      monthStartKey: monthKey,
+      existingRefs: logRefs,
+    );
 
     final sudahKlaim = poinRows.any((p) =>
         p['sumber'] == 'SOP' &&
@@ -116,12 +132,97 @@ class KaryawanHomeService {
       karyawan: karyawan,
       jadwalMinggu: jadwalMinggu,
       sopTasks: sopTasks,
-      totalPoinBulan: totalPoin.clamp(0, 100000),
+      // Biarkan negatif (penalti curang) tampil di APK.
+      totalPoinBulan: totalPoin.clamp(-100000, 100000),
       streakHari: streak,
       sudahKlaimHariIni: sudahKlaim,
       riwayat30Hari: riwayat,
       securityScore: security,
     );
+  }
+
+  /// Backfill `poin_logs` dari verifikasi aman/curang yang sudah punya poin_awarded.
+  Future<void> _syncAbsenPoinFromVerifications(String karyawanId) async {
+    try {
+      final rows = await _client
+          .from('attendance_verifications')
+          .select('id, status, poin_awarded, reviewed_at, created_at')
+          .eq('karyawan_id', karyawanId)
+          .inFilter('status', ['aman', 'curang'])
+          .limit(200);
+
+      for (final raw in rows) {
+        final v = Map<String, dynamic>.from(raw as Map);
+        final status = (v['status'] ?? '').toString();
+        var points = (v['poin_awarded'] as num?)?.toInt() ?? 0;
+        if (points == 0) {
+          points = status == 'curang' ? -200 : 20;
+        }
+        final id = (v['id'] ?? '').toString();
+        if (id.isEmpty) continue;
+        final refId = status == 'curang' ? 'absen-curang-$id' : 'absen-valid-$id';
+        final when = DateTime.tryParse(
+              (v['reviewed_at'] ?? v['created_at'] ?? '').toString(),
+            ) ??
+            DateTime.now();
+        final tanggal = _dateKey.format(when.toLocal());
+        try {
+          await _client.from('poin_logs').insert({
+            'karyawan_id': karyawanId,
+            'tanggal': tanggal,
+            'poin': points,
+            'sumber': 'ABSEN',
+            'ref_id': refId,
+          });
+        } catch (_) {
+          // Sudah ada / RLS — lanjut.
+        }
+      }
+    } catch (_) {
+      // Jangan gagalkan load home.
+    }
+  }
+
+  /// Jumlahkan poin verifikasi bulan ini yang belum masuk `poin_logs`.
+  Future<int> _absenPoinFromVerificationsMissingInLogs({
+    required String karyawanId,
+    required String monthStartKey,
+    required Set<String> existingRefs,
+  }) async {
+    try {
+      final rows = await _client
+          .from('attendance_verifications')
+          .select('id, status, poin_awarded, reviewed_at, created_at')
+          .eq('karyawan_id', karyawanId)
+          .inFilter('status', ['aman', 'curang'])
+          .limit(200);
+
+      var extra = 0;
+      for (final raw in rows) {
+        final v = Map<String, dynamic>.from(raw as Map);
+        final status = (v['status'] ?? '').toString();
+        final id = (v['id'] ?? '').toString();
+        if (id.isEmpty) continue;
+        final refId = status == 'curang' ? 'absen-curang-$id' : 'absen-valid-$id';
+        if (existingRefs.contains(refId)) continue;
+
+        final when = DateTime.tryParse(
+              (v['reviewed_at'] ?? v['created_at'] ?? '').toString(),
+            ) ??
+            DateTime.now();
+        final tanggal = _dateKey.format(when.toLocal());
+        if (tanggal.compareTo(monthStartKey) < 0) continue;
+
+        var points = (v['poin_awarded'] as num?)?.toInt() ?? 0;
+        if (points == 0) {
+          points = status == 'curang' ? -200 : 20;
+        }
+        extra += points;
+      }
+      return extra;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<void> completeSopTask({
@@ -420,7 +521,10 @@ class KaryawanHomeService {
     for (var i = 0; i < 30; i++) {
       final d = start.add(Duration(days: i));
       final pts = map[_dateKey.format(d)] ?? 0;
-      if (pts >= 35) {
+      if (pts < 0) {
+        // Hari kena penalti (mis. curang) — bedakan dari kosong.
+        out.add(-1);
+      } else if (pts >= 35) {
         out.add(2);
       } else if (pts > 0) {
         out.add(1);
