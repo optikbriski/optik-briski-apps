@@ -668,7 +668,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             final stacked = c.maxWidth < 560;
             final left = _photoPane(
               label: 'Capture absen (hari ini)',
-              subtitle: 'Hasil liveness / face match saat masuk',
+              subtitle: 'Foto liveness saat masuk (tinjauan Admin)',
               url: capture,
               accent: OptikAdminTokens.accentSoft,
             );

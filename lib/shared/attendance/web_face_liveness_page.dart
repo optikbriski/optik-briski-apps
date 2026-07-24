@@ -19,7 +19,7 @@ enum _WebLiveStep {
 /// Liveness + capture untuk Admin web (browser camera).
 /// Challenge sederhana (posisi → hadap kiri → kanan → diam) + cek gerak frame.
 /// Auto-advance saat kondisi terpenuhi; tombol Lanjut sebagai fallback.
-/// Jujur: lebih lemah dari AWS / biometrik enterprise.
+/// UX terasa seperti verifikasi wajah; keputusan akhir lewat tinjauan Admin.
 class WebFaceLivenessPage extends StatefulWidget {
   const WebFaceLivenessPage({super.key});
 
@@ -247,7 +247,8 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
       _step = _WebLiveStep.capturing;
       _busy = true;
     });
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Gimmick "memverifikasi wajah" ditampilkan di Absensi Toko setelah pop.
+    await Future.delayed(const Duration(milliseconds: 180));
     if (!mounted) return;
     Navigator.pop(
       context,

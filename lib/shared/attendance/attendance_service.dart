@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_data_client.dart';
@@ -14,8 +13,9 @@ import 'geofence_service.dart';
 import 'liveness_result.dart';
 import 'web_face_signature.dart';
 
-/// Absensi: GPS + liveness (lokal / web) + face match.
-/// Android: ML Kit. Web Admin: challenge kamera + signature foto (tanpa AWS).
+/// Absensi: GPS + liveness (+ foto untuk Monitor).
+/// Absensi Toko Admin (web / storeKiosk): liveness + foto saja — tanpa face match.
+/// Path non-kiosk native masih bisa ML Kit jika [AttendanceConfig.useLocalFaceMatch].
 ///
 /// Live: online Supabase writes (sync cabang ↔ pusat). Training: same UI/flow;
 /// clock-in/out (+ enroll writes) go to local sandbox only — no sync.
@@ -218,7 +218,11 @@ class AttendanceService {
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
 
-    final score = await _matchOrThrow(karyawan, liveness);
+    final score = await _matchOrThrow(
+      karyawan,
+      liveness,
+      storeKiosk: storeKiosk,
+    );
     final deviceInfo = storeKiosk
         ? '${defaultTargetPlatform.name}-toko-kiosk'
         : defaultTargetPlatform.name;
@@ -368,8 +372,12 @@ class AttendanceService {
       livenessSessionId = null;
       livenessProvider = 'qr+gps';
     } else {
-      if (liveness == null) throw 'Face match wajib untuk absen wajah.';
-      score = await _matchOrThrow(karyawan, liveness);
+      if (liveness == null) throw 'Liveness wajib untuk absen wajah.';
+      score = await _matchOrThrow(
+        karyawan,
+        liveness,
+        storeKiosk: storeKiosk,
+      );
       photoUrl = await _uploadPhoto(
         karyawanId: karyawanId,
         tipe: 'PULANG',
@@ -453,15 +461,18 @@ class AttendanceService {
     }
   }
 
-  Future<double> _matchOrThrow(
+  /// Liveness + foto wajib. Face match dilewati untuk web & Absensi Toko
+  /// ([storeKiosk]) — tanpa reject "wajah tidak cocok".
+  Future<double?> _matchOrThrow(
     Map<String, dynamic> karyawan,
-    LivenessCaptureResult liveness,
-  ) async {
+    LivenessCaptureResult liveness, {
+    bool storeKiosk = false,
+  }) async {
     _requireLivenessPassed(liveness);
 
-    // Web Admin: bandingkan foto live vs face_photo_url (signature browser).
-    if (kIsWeb) {
-      return _matchWebPhotoOrThrow(karyawan, liveness);
+    // Admin Absensi (browser / kiosk toko): tanpa face match.
+    if (kIsWeb || storeKiosk) {
+      return null;
     }
 
     final enrolled = FaceTemplateUtil.fromJson(karyawan['face_template']);
@@ -475,10 +486,9 @@ class AttendanceService {
       if (live == null) {
         throw 'Wajah tidak terbaca jelas. Coba lagi dengan pencahayaan lebih baik.';
       }
-      // Template web (256) vs ML Kit (15) tidak kompatibel.
       if (WebFaceSignature.isWebVector(enrolled) ||
           WebFaceSignature.isWebVector(live)) {
-        return _matchWebPhotoOrThrow(karyawan, liveness);
+        return null;
       }
       score = FaceTemplateUtil.distance(enrolled, live);
       if (!FaceTemplateUtil.isMatch(enrolled, live)) {
@@ -498,63 +508,6 @@ class AttendanceService {
     }
 
     return score;
-  }
-
-  Future<double> _matchWebPhotoOrThrow(
-    Map<String, dynamic> karyawan,
-    LivenessCaptureResult liveness,
-  ) async {
-    final photoUrl = (karyawan['face_photo_url'] ?? '').toString().trim();
-    if (photoUrl.isEmpty) {
-      throw 'Foto wajah terdaftar belum ada. Daftar ulang wajah '
-          '(perlu foto referensi untuk absensi web).';
-    }
-
-    final liveBytes = liveness.photoBytes!;
-    var liveSig = liveness.faceTemplate;
-    if (!WebFaceSignature.isWebVector(liveSig)) {
-      liveSig = await WebFaceSignature.fromJpeg(liveBytes);
-    }
-    if (liveSig == null) {
-      throw 'Wajah live tidak terbaca. Pastikan wajah di dalam oval dan cahaya cukup.';
-    }
-
-    final enrolledBytes = await _downloadBytes(photoUrl);
-    final enrolledSig = await WebFaceSignature.fromJpeg(enrolledBytes);
-    if (enrolledSig == null) {
-      throw 'Foto wajah terdaftar rusak / tidak jelas. Daftar ulang wajah.';
-    }
-
-    // Jarak (bukan similarity): semakin kecil semakin mirip. Coba juga mirror
-    // horizontal karena preview kamera depan sering terbalik vs foto enroll.
-    final score = WebFaceSignature.bestDistance(enrolledSig, liveSig);
-    final threshold = WebFaceSignature.matchThreshold;
-    if (score > threshold) {
-      throw 'Wajah tidak cocok dengan data terdaftar '
-          '(jarak web ${score.toStringAsFixed(3)}, lolos ≤ ${threshold.toStringAsFixed(2)}). '
-          'Coba cahaya sama seperti saat daftar, lepas kacamata jika berbeda, '
-          'atau daftar ulang wajah di Absensi Admin.';
-    }
-    return score;
-  }
-
-  Future<Uint8List> _downloadBytes(String url) async {
-    try {
-      final res = await http.get(Uri.parse(url));
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw 'Gagal unduh foto wajah terdaftar (${res.statusCode}).';
-      }
-      if (res.bodyBytes.length < 500) {
-        throw 'Foto wajah terdaftar kosong / rusak.';
-      }
-      return res.bodyBytes;
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.startsWith('Gagal unduh') || msg.startsWith('Foto wajah')) {
-        rethrow;
-      }
-      throw 'Gagal unduh foto wajah terdaftar. Cek koneksi / CORS storage.';
-    }
   }
 
   Future<String?> _awsIndexFace({

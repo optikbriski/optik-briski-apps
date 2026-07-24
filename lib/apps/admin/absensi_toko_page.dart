@@ -13,12 +13,13 @@ import '../../shared/attendance/attendance_geo_unlock_service.dart';
 import '../../shared/attendance/attendance_liveness.dart';
 import '../../shared/attendance/attendance_qr_service.dart';
 import '../../shared/attendance/attendance_service.dart';
+import '../../shared/attendance/face_verify_gimmick.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Absensi Toko (Admin web / perangkat toko) — cabang atau Pusat.
 /// Alur: tampilkan QR → karyawan scan+GPS di geofence →
-/// - belum shift OPEN: Admin face match → masuk
+/// - belum shift OPEN: Admin liveness + foto → masuk (antrean Monitor)
 /// - sudah shift OPEN: Admin auto pulang tanpa face → kembali ke QR.
 /// Tanpa GPS di perangkat Admin (Mac OK).
 /// Owner / admin_pusat / admin_toko di PUSAT → operasional CABANG-PUSAT
@@ -499,11 +500,13 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         await _returnToQr(consume: true);
         return;
       }
-      if (!kIsWeb && liveness.faceTemplate == null) {
-        _snack('aws_liveness_face_unclear'.tr(), Colors.redAccent);
-        await _returnToQr(consume: true);
-        return;
-      }
+      // Absensi Toko: cukup foto liveness (tanpa face match ketat).
+      // Template ML Kit hanya wajib jika path non-kiosk masih memakainya.
+
+      if (!mounted) return;
+      // Gimmick UX "memverifikasi wajah" — selalu lanjut, bukan reject match.
+      await showFaceVerifyGimmick(context, photoBytes: liveness.photoBytes!);
+      if (!mounted) return;
 
       if (action == 'ENROLL') {
         await _service.enrollFace(
@@ -514,7 +517,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         );
         _snack('absensi_toko_enroll_ok'.tr(), Colors.green);
       } else {
-        // Face phase hanya untuk masuk; pulang lewat _runAutoPulang (QR+geo).
+        // MASUK: foto liveness → attendance_logs + antrean Monitor Absensi.
         await _service.clockIn(
           karyawan: karyawan,
           liveness: liveness,

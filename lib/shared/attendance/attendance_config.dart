@@ -8,8 +8,14 @@ class AttendanceConfig {
   /// Ambang legacy AWS (tidak dipakai saat [useAwsFaceLiveness] = false).
   static const double minLivenessConfidence = 90;
 
-  /// Face match lokal: ML Kit di Android; di web pakai [WebFaceSignature] + foto enroll.
+  /// Face match lokal (ML Kit) — hanya path non-kiosk / non-web (jarang dipakai).
+  /// Absensi Toko Admin (web + storeKiosk) tidak memakai face match;
+  /// cukup liveness + foto untuk tinjauan Monitor.
   static const bool useLocalFaceMatch = true;
+
+  /// Legacy: tolak clock-in web jika signature di atas ambang.
+  /// Diabaikan — path web/kiosk selalu skip face match (lihat AttendanceService).
+  static const bool strictWebFaceMatch = false;
 
   /// AWS CompareFaces — dimatikan; tidak butuh secrets AWS untuk Absensi Toko.
   static const bool useAwsFaceCompare = false;
