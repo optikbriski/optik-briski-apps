@@ -52,8 +52,7 @@ class StockLeakReport {
   final int openTransitQty;
   final DateTime generatedAt;
 
-  bool get isClean =>
-      mismatches.isEmpty && missingSkuCount == 0;
+  bool get isClean => mismatches.isEmpty && missingSkuCount == 0;
 
   String get verdict {
     if (isClean) {
@@ -70,25 +69,54 @@ class StockLeakReport {
   }
 }
 
+/// Progress realtime saat scan kebocoran (untuk UI persen).
+class StockLeakProgress {
+  const StockLeakProgress({
+    required this.percent,
+    required this.phase,
+    this.checked = 0,
+    this.total = 0,
+    this.currentLabel,
+    this.foundLeaks = 0,
+  });
+
+  /// 0.0 – 1.0
+  final double percent;
+  final String phase;
+  final int checked;
+  final int total;
+  final String? currentLabel;
+  final int foundLeaks;
+
+  int get percentInt => (percent.clamp(0.0, 1.0) * 100).round();
+}
+
+typedef StockLeakProgressCallback = void Function(StockLeakProgress progress);
+
 /// Deteksi kebocoran: setiap pcs stok harus punya jejak di `product_stock_ledger`.
 ///
 /// Rumus per (SKU, toko):
 ///   products.stock  ==  SUM(ledger.qty_delta)
-///
-/// Jika beda → ada perubahan stok yang tidak lewat RPC/ledger (kebocoran).
 class StockIntegrityService {
   StockIntegrityService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
-  /// Full scan (paged) — dipakai fitur "Cek Kebocoran Stok".
-  Future<StockLeakReport> runLeakCheck({int pageSize = 500}) async {
-    final mismatches = <StockIntegrityIssue>[];
-    var checked = 0;
-    var missingSku = 0;
-    var offset = 0;
+  /// Full scan dengan callback progress (persen nyata per baris produk).
+  Future<StockLeakReport> runLeakCheck({
+    int pageSize = 500,
+    StockLeakProgressCallback? onProgress,
+  }) async {
+    void emit(StockLeakProgress p) => onProgress?.call(p);
 
+    emit(const StockLeakProgress(
+      percent: 0.02,
+      phase: 'Menyiapkan daftar produk…',
+    ));
+
+    final allRows = <Map<String, dynamic>>[];
+    var offset = 0;
     while (true) {
       final page = await _client
           .from('products')
@@ -97,16 +125,41 @@ class StockIntegrityService {
           .range(offset, offset + pageSize - 1);
       final rows = List<Map<String, dynamic>>.from(page);
       if (rows.isEmpty) break;
+      allRows.addAll(rows);
+      emit(StockLeakProgress(
+        percent: 0.04 + (0.06 * (allRows.length / (allRows.length + pageSize))),
+        phase: 'Memuat katalog produk…',
+        checked: allRows.length,
+        total: allRows.length,
+      ));
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+      if (offset > 20000) break;
+    }
 
-      for (final p in rows) {
-        checked++;
-        final sku = (p['sku'] ?? '').toString().trim();
-        final toko = (p['toko_id'] ?? '').toString().toUpperCase();
-        if (sku.isEmpty || sku.startsWith('NOSKU-')) {
-          missingSku++;
-        }
-        if (sku.isEmpty) continue;
+    final total = allRows.length;
+    emit(StockLeakProgress(
+      percent: 0.10,
+      phase: total == 0 ? 'Tidak ada produk' : 'Memindai $total baris produk…',
+      checked: 0,
+      total: total,
+    ));
 
+    final mismatches = <StockIntegrityIssue>[];
+    var checked = 0;
+    var missingSku = 0;
+
+    for (final p in allRows) {
+      checked++;
+      final sku = (p['sku'] ?? '').toString().trim();
+      final toko = (p['toko_id'] ?? '').toString().toUpperCase();
+      final nama = (p['nama'] ?? sku).toString();
+
+      if (sku.isEmpty || sku.startsWith('NOSKU-')) {
+        missingSku++;
+      }
+
+      if (sku.isNotEmpty) {
         final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
         final ledgerSum = await _sumLedger(sku: sku, tokoId: toko);
         if (ledgerSum != stock) {
@@ -122,13 +175,35 @@ class StockIntegrityService {
         }
       }
 
-      if (rows.length < pageSize) break;
-      offset += pageSize;
-      // Safety: jangan infinite loop di dataset ekstrem
-      if (offset > 20000) break;
+      // 10% → 90% untuk pemindaian baris
+      final scanPct = total == 0 ? 0.9 : 0.10 + (0.80 * (checked / total));
+      emit(StockLeakProgress(
+        percent: scanPct,
+        phase: 'Memverifikasi jejak ledger…',
+        checked: checked,
+        total: total,
+        currentLabel: '$nama · $toko',
+        foundLeaks: mismatches.length,
+      ));
     }
 
+    emit(StockLeakProgress(
+      percent: 0.92,
+      phase: 'Menghitung paket transit…',
+      checked: checked,
+      total: total,
+      foundLeaks: mismatches.length,
+    ));
+
     final openTransit = await _openTransitQty();
+
+    emit(StockLeakProgress(
+      percent: 1.0,
+      phase: 'Pengecekan selesai',
+      checked: checked,
+      total: total,
+      foundLeaks: mismatches.length,
+    ));
 
     return StockLeakReport(
       checkedProducts: checked,
@@ -152,7 +227,6 @@ class StockIntegrityService {
     return sum;
   }
 
-  /// Qty paket TRANSIT/PENDING/WAITING — stok sudah keluar sumber, belum masuk tujuan.
   Future<int> _openTransitQty() async {
     final rows = await _client
         .from('stock_move_history')
@@ -165,8 +239,6 @@ class StockIntegrityService {
     return total;
   }
 
-  /// Catat selisih ke ledger TANPA mengubah angka stok fisik.
-  /// Setelah ini: sum(ledger) == stock lagi (jejak lengkap).
   Future<Map<String, dynamic>> recognizeVariance({
     required StockIntegrityIssue issue,
     required String alasan,

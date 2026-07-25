@@ -346,167 +346,50 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   }
 
   Future<void> _runIntegrityCheck() async {
-    setState(() => isLoading = true);
-    try {
-      final svc = StockIntegrityService();
-      final report = await svc.runLeakCheck();
-      if (!mounted) return;
+    final progress = ValueNotifier<StockLeakProgress>(
+      const StockLeakProgress(
+        percent: 0,
+        phase: 'Menyiapkan mesin audit…',
+      ),
+    );
 
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => R.constrainedDialog(
+    // Dialog progress premium — bukan spinner "lemot"
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: R.constrainedDialog(
           context: ctx,
-          preferWidth: 560,
+          preferWidth: 420,
           child: AlertDialog(
             backgroundColor: OptikAdminTokens.card,
-            title: Row(
-              children: [
-                Icon(
-                  report.isClean
-                      ? Icons.verified_user_rounded
-                      : Icons.warning_amber_rounded,
-                  color: report.isClean
-                      ? Colors.greenAccent
-                      : Colors.orangeAccent,
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Cek Kebocoran Stok',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 440,
-              child: ListView(
-                children: [
-                  Text(
-                    report.verdict,
-                    style: TextStyle(
-                      color: report.isClean
-                          ? Colors.greenAccent
-                          : Colors.orangeAccent,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Cara kerja:\n'
-                    '• Setiap perubahan stok wajib punya jejak di ledger '
-                    '(jual / kirim / retur / rusak / saldo awal).\n'
-                    '• Rumus aman: stok toko = jumlah semua +/- di ledger '
-                    'untuk SKU itu.\n'
-                    '• Kalau beda → ada kebocoran (stok berubah tanpa alasan).',
-                    style: TextStyle(
-                        color: Colors.white54, fontSize: 12, height: 1.45),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Dicek: ${report.checkedProducts} baris produk\n'
-                    'Selisih bocor: ${report.mismatches.length}\n'
-                    'SKU lemah/NOSKU: ${report.missingSkuCount}\n'
-                    'Masih transit (normal, bukan bocor): '
-                    '${report.openTransitQty} pcs',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12.5, height: 1.45),
-                  ),
-                  const SizedBox(height: 14),
-                  if (report.mismatches.isEmpty)
-                    const Text(
-                      'Tidak ada selisih. Stok sinkron dengan jejak.',
-                      style: TextStyle(color: Colors.greenAccent),
-                    )
-                  else ...[
-                    const Text(
-                      'Detail selisih (maks. 40):',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    ...report.mismatches.take(40).map((e) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              e.nama ?? e.sku,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              'SKU ${e.sku} · ${e.tokoId}',
-                              style: const TextStyle(
-                                  color: Colors.white38, fontSize: 11),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Stok sekarang: ${e.stock}  |  '
-                              'Jejak ledger: ${e.ledgerSum}  |  '
-                              'Selisih: ${e.delta > 0 ? '+' : ''}${e.delta}',
-                              style: const TextStyle(
-                                  color: Colors.orangeAccent, fontSize: 12),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              e.diagnosis,
-                              style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11.5,
-                                  height: 1.35),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () async {
-                                  Navigator.pop(ctx);
-                                  await _reconcileLeak(e);
-                                },
-                                child: const Text(
-                                  'CATAT SELISIH KE LEDGER',
-                                  style: TextStyle(
-                                      color: Colors.tealAccent, fontSize: 11),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ],
-              ),
+            content: ValueListenableBuilder<StockLeakProgress>(
+              valueListenable: progress,
+              builder: (_, p, __) => _LeakCheckProgressBody(progress: p),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('TUTUP'),
-              ),
-            ],
           ),
         ),
+      ),
+    );
+
+    try {
+      final report = await StockIntegrityService().runLeakCheck(
+        onProgress: (p) {
+          progress.value = p;
+        },
       );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // tutup progress
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted) return;
+      await _showLeakReportDialog(report);
     } catch (e) {
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal cek kebocoran: $e\n'
@@ -515,8 +398,59 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         backgroundColor: Colors.redAccent,
       ));
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      progress.dispose();
     }
+  }
+
+  Future<void> _showLeakReportDialog(StockLeakReport report) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => R.constrainedDialog(
+        context: ctx,
+        preferWidth: 560,
+        child: AlertDialog(
+          backgroundColor: OptikAdminTokens.card,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          actionsPadding:
+              const EdgeInsets.only(left: 16, right: 16, bottom: 14),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 520,
+            child: _LeakCheckResultBody(
+              report: report,
+              onRecognize: (issue) async {
+                Navigator.pop(ctx);
+                await _reconcileLeak(issue);
+              },
+            ),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: report.isClean
+                      ? const Color(0xFF14B8A6)
+                      : Colors.orangeAccent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  report.isClean ? 'SELESAI' : 'TUTUP',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _reconcileLeak(StockIntegrityIssue issue) async {
@@ -1020,4 +954,594 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     );
   }
 
+}
+
+/// Hasil audit kebocoran — tampilan premium (status hero + kartu metrik).
+class _LeakCheckResultBody extends StatelessWidget {
+  const _LeakCheckResultBody({
+    required this.report,
+    required this.onRecognize,
+  });
+
+  final StockLeakReport report;
+  final Future<void> Function(StockIntegrityIssue issue) onRecognize;
+
+  @override
+  Widget build(BuildContext context) {
+    final clean = report.isClean;
+    final accent = clean ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
+
+    return ListView(
+      children: [
+        // Hero status
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: accent.withOpacity(0.35)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accent.withOpacity(0.18),
+                accent.withOpacity(0.04),
+                Colors.white.withOpacity(0.02),
+              ],
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent.withOpacity(0.15),
+                  border: Border.all(color: accent.withOpacity(0.5), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withOpacity(0.25),
+                      blurRadius: 22,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  clean
+                      ? Icons.verified_user_rounded
+                      : Icons.warning_amber_rounded,
+                  color: accent,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                clean ? 'SISTEM AMAN' : 'ADA INDIKASI BOCOR',
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                report.verdict,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.75),
+                  fontSize: 12.5,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Metric grid
+        Row(
+          children: [
+            Expanded(
+              child: _resultStat(
+                'Dicek',
+                '${report.checkedProducts}',
+                'baris',
+                const Color(0xFF2DD4BF),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _resultStat(
+                'Selisih',
+                '${report.mismatches.length}',
+                'bocor',
+                report.mismatches.isEmpty
+                    ? const Color(0xFF34D399)
+                    : const Color(0xFFFBBF24),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _resultStat(
+                'SKU lemah',
+                '${report.missingSkuCount}',
+                'NOSKU',
+                report.missingSkuCount == 0
+                    ? Colors.white60
+                    : Colors.orangeAccent,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _resultStat(
+                'Transit',
+                '${report.openTransitQty}',
+                'pcs (normal)',
+                Colors.lightBlueAccent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Formula card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.functions_rounded,
+                      size: 16, color: Colors.white.withOpacity(0.55)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'RUMUS AUDIT',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'stok toko  =  Σ ledger (+/−) per SKU',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Setiap jual, kirim, retur, rusak, dan revisi wajib punya jejak. '
+                'Bedanya angka = kebocoran.',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.45),
+                  fontSize: 11.5,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        if (clean)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF34D399).withOpacity(0.35)),
+              color: const Color(0xFF34D399).withOpacity(0.08),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded,
+                    color: Color(0xFF34D399), size: 22),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Tidak ada selisih. Stok sinkron penuh dengan jejak ledger.',
+                    style: TextStyle(
+                      color: Color(0xFFA7F3D0),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          Text(
+            'DETAIL SELISIH',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...report.mismatches.take(40).map((e) {
+            final deltaLabel =
+                '${e.delta > 0 ? '+' : ''}${e.delta}';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: Colors.white.withOpacity(0.03),
+                border: Border.all(
+                  color: const Color(0xFFFBBF24).withOpacity(0.28),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          e.nama ?? e.sku,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: const Color(0xFFFBBF24).withOpacity(0.4),
+                          ),
+                        ),
+                        child: Text(
+                          'Δ $deltaLabel',
+                          style: const TextStyle(
+                            color: Color(0xFFFBBF24),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'SKU ${e.sku} · ${e.tokoId}',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.38),
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _miniCompare('Stok', '${e.stock}'),
+                      ),
+                      Icon(Icons.arrow_forward_rounded,
+                          size: 14, color: Colors.white.withOpacity(0.25)),
+                      Expanded(
+                        child: _miniCompare('Ledger', '${e.ledgerSum}'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    e.diagnosis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 11.5,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => onRecognize(e),
+                      icon: const Icon(Icons.playlist_add_check_rounded,
+                          size: 16, color: Color(0xFF2DD4BF)),
+                      label: const Text(
+                        'CATAT SELISIH',
+                        style: TextStyle(
+                          color: Color(0xFF2DD4BF),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+
+  Widget _resultStat(
+      String label, String value, String unit, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              height: 1.1,
+            ),
+          ),
+          Text(
+            unit,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.35),
+              fontSize: 10.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniCompare(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.35),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// UI progress premium untuk Cek Kebocoran Stok (persen nyata + fase).
+class _LeakCheckProgressBody extends StatelessWidget {
+  const _LeakCheckProgressBody({required this.progress});
+
+  final StockLeakProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = progress.percent.clamp(0.0, 1.0);
+    final pctLabel = progress.percentInt;
+    final accent = pct >= 1.0 ? Colors.greenAccent : const Color(0xFF2DD4BF);
+
+    return SizedBox(
+      width: 340,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Audit Kebocoran Stok',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Sedang memverifikasi jejak — bukan loading lemot',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.45),
+              fontSize: 11.5,
+            ),
+          ),
+          const SizedBox(height: 22),
+          SizedBox(
+            width: 148,
+            height: 148,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: pct),
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) {
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 148,
+                      height: 148,
+                      child: CircularProgressIndicator(
+                        value: value <= 0 ? null : value,
+                        strokeWidth: 8,
+                        backgroundColor: Colors.white.withOpacity(0.08),
+                        color: accent,
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$pctLabel%',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          progress.total > 0
+                              ? '${progress.checked}/${progress.total}'
+                              : 'scan',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.4),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            progress.phase,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13.5,
+              height: 1.3,
+            ),
+          ),
+          if ((progress.currentLabel ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Text(
+                progress.currentLabel!,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.65),
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _miniStat(
+                  'Terverifikasi',
+                  '${progress.checked}',
+                  Colors.white70,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(
+                  'Selisih',
+                  '${progress.foundLeaks}',
+                  progress.foundLeaks > 0
+                      ? Colors.orangeAccent
+                      : Colors.greenAccent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: pct <= 0 ? null : pct,
+              minHeight: 5,
+              backgroundColor: Colors.white.withOpacity(0.08),
+              color: accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStat(String label, String value, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
