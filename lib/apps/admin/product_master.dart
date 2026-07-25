@@ -56,10 +56,19 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   final Set<String> _collapsedGroups = <String>{};
 
   bool get _hasActiveFilters =>
+      filterUnit != 'SEMUA' ||
       filterKat != 'SEMUA' ||
       filterSubKat != 'SEMUA' ||
       filterHarga != 'SEMUA' ||
       groupMode != 'none';
+
+  String _cabangLabel(String raw) {
+    final t = raw.trim().toUpperCase();
+    if (t == 'SEMUA') return 'Semua cabang';
+    if (t == 'PUSAT') return 'PUSAT';
+    if (t.startsWith('CABANG-')) return t.replaceFirst('CABANG-', '');
+    return t;
+  }
 
   void _toggleGroupCollapsed(String key) {
     setState(() {
@@ -156,13 +165,12 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   Future<void> _fetch() async {
     setState(() => isLoading = true);
     try {
-      var q = Supabase.instance.client.from('products').select();
-
-      if (isCanEdit && filterUnit != 'SEMUA' && filterUnit != 'BROADCAST ALL') {
-        q = q.eq('toko_id', filterUnit);
-      }
-
-      final data = await q.order('created_at', ascending: false);
+      // Selalu ambil semua toko lalu filter cabang di client,
+      // supaya breakdown stok per cabang tetap lengkap.
+      final data = await Supabase.instance.client
+          .from('products')
+          .select()
+          .order('created_at', ascending: false);
       List<dynamic> rawList = data as List<dynamic>;
 
       // Group by SKU (canonical), bukan nama — hindari merge produk beda SKU.
@@ -229,8 +237,43 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return haystacks.any((s) => s.toLowerCase().contains(query));
   }
 
+  int _stockAtToko(Map item, String toko) {
+    final target = toko.trim().toUpperCase();
+    final breakdown = item['breakdown_stok'];
+    if (breakdown is! List) {
+      final own = (item['toko_id'] ?? '').toString().toUpperCase();
+      if (own == target) {
+        return int.tryParse('${item['stock'] ?? 0}') ?? 0;
+      }
+      return 0;
+    }
+    for (final b in breakdown) {
+      if (b is! Map) continue;
+      if ((b['cabang'] ?? '').toString().toUpperCase() == target) {
+        return int.tryParse('${b['stok']}') ?? 0;
+      }
+    }
+    return 0;
+  }
+
+  bool _hasTokoRow(Map item, String toko) {
+    final target = toko.trim().toUpperCase();
+    final breakdown = item['breakdown_stok'];
+    if (breakdown is! List) {
+      return (item['toko_id'] ?? '').toString().toUpperCase() == target;
+    }
+    for (final b in breakdown) {
+      if (b is! Map) continue;
+      if ((b['cabang'] ?? '').toString().toUpperCase() == target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   List<dynamic> get _filteredProduk {
     final query = searchController.text.toLowerCase().trim();
+    final unit = filterUnit.trim().toUpperCase();
     return listProdukAll.where((raw) {
       final item = raw as Map;
       if (!_productMatchesQuery(item, query)) return false;
@@ -245,6 +288,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       if (filterHarga != 'SEMUA') {
         final h = int.tryParse((item['harga'] ?? 0).toString()) ?? 0;
         if (h.toString() != filterHarga) return false;
+      }
+      // Filter cabang: tampilkan produk yang punya baris di toko itu
+      if (unit.isNotEmpty && unit != 'SEMUA' && unit != 'BROADCAST_ALL') {
+        if (!_hasTokoRow(item, unit)) return false;
       }
       return true;
     }).toList();
@@ -648,227 +695,501 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
   // Request Order hanya lewat menu Logistik (bukan pintasan Master Data).
 
-  // 2. FUNGSI POP-UP DETAIL PRODUK + PRATINJAU BARCODE
+  // 2. POP-UP DETAIL PRODUK (premium) + distribusi stok cabang
   void showProductDetail(dynamic item) {
-    // 🔍 Deteksi otomatis siapa akun yang sedang melihat detail
-    String userToko =
+    final userToko =
         widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-    bool isHakAksesPusat = userToko == 'PUSAT' ||
+    final isHakAksesPusat = userToko == 'PUSAT' ||
         widget.profile['role'] == 'owner' ||
         widget.profile['role'] == 'admin_pusat';
 
-    // 📦 Hitung kalkulasi stok khusus untuk teks indikator baris atas
-    int displayTotalStock = item['total_stock'] ?? item['stock'] ?? 0;
-    String labelStokAtas =
-        "pm_total_stok".tr(); // Mengikuti easy localization bawaan
+    var displayTotalStock =
+        int.tryParse('${item['total_stock'] ?? item['stock'] ?? 0}') ?? 0;
+    var labelStokAtas = "pm_total_stok".tr();
+
+    final rawBreakdown = List<Map<String, dynamic>>.from(
+      ((item['breakdown_stok'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e)),
+    );
+
+    final visibleBreakdown = rawBreakdown.where((lokasi) {
+      final cabang = lokasi['cabang']?.toString().toUpperCase() ?? '';
+      return isHakAksesPusat || cabang == userToko;
+    }).toList()
+      ..sort((a, b) {
+        final ca = (a['cabang'] ?? '').toString().toUpperCase();
+        final cb = (b['cabang'] ?? '').toString().toUpperCase();
+        if (ca == 'PUSAT' && cb != 'PUSAT') return -1;
+        if (cb == 'PUSAT' && ca != 'PUSAT') return 1;
+        final sa = int.tryParse('${a['stok']}') ?? 0;
+        final sb = int.tryParse('${b['stok']}') ?? 0;
+        if (sa != sb) return sb.compareTo(sa);
+        return ca.compareTo(cb);
+      });
 
     if (!isHakAksesPusat) {
-      labelStokAtas = "Stok Cabang";
-      int stokKetemu = 0;
-      List<dynamic> breakdown = item['breakdown_stok'] ?? [];
-      for (var b in breakdown) {
+      labelStokAtas = 'Stok Cabang';
+      displayTotalStock = 0;
+      for (final b in visibleBreakdown) {
         if (b['cabang'].toString().toUpperCase() == userToko) {
-          stokKetemu = int.tryParse(b['stok'].toString()) ?? 0;
+          displayTotalStock = int.tryParse('${b['stok']}') ?? 0;
           break;
         }
       }
-      displayTotalStock = stokKetemu;
     }
+
+    final sku = (item['sku'] ?? item['barcode'] ?? '').toString();
+    final kategori = (item['kategori'] ?? '-').toString();
+    final sub = (item['sub_kategori'] ?? '-').toString();
+    final cabangAktif =
+        visibleBreakdown.where((e) => (int.tryParse('${e['stok']}') ?? 0) > 0).length;
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: OptikAdminTokens.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: R.constrainedDialog(
           context: ctx,
-          preferWidth: 380,
+          preferWidth: 440,
           child: Container(
-          padding: const EdgeInsets.all(25),
-          child: SingleChildScrollView(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.88,
+            ),
+            decoration: BoxDecoration(
+              color: OptikAdminTokens.card,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2DD4BF).withOpacity(0.08),
+                  blurRadius: 40,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("pm_detail_produk".tr(),
-                    style: const TextStyle(
-                        color: Colors.blueAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        letterSpacing: 1.5)),
-                const SizedBox(height: 20),
-                if ((item['barcode'] ?? item['sku']) != null &&
-                    (item['barcode'] ?? item['sku']).toString().isNotEmpty)
-                  _buildProductCodes(
-                    (item['sku'] ?? item['barcode']).toString(),
-                    productId: item['id']?.toString(),
-                  ),
-                const SizedBox(height: 15),
-                Text(_toTitleCase(item['nama'] ?? '-'),
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18),
-                    textAlign: TextAlign.center),
-                const Divider(color: Colors.white10, height: 30),
-                _row("pm_kat".tr(), item['kategori'] ?? '-'),
-                _row("pm_bahan_coating".tr(), item['sub_kategori'] ?? '-'),
-                if (item['kategori'] == 'Frame')
-                  _row("pm_warna_frame".tr(), item['warna'] ?? '-'),
-                if (item['kategori'] == 'Lensa') ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(10)),
-                    child: Column(
-                      children: [
-                        _row("pm_jenis_lensa".tr(), item['jenis_lensa'] ?? '-'),
-                        const Divider(color: Colors.white10),
-                        _row("pm_uk_sph".tr(), _formatOptic(item['sph_r'])),
-                        _row("pm_uk_cyl".tr(), _formatOptic(item['cyl_r'])),
-                        if (item['jenis_lensa'] == 'Progresif' ||
-                            item['jenis_lensa'] == 'Kryptok')
-                          _row("pm_uk_add".tr(), _formatOptic(item['add_r'])),
-                      ],
-                    ),
-                  )
-                ],
-                const SizedBox(height: 10),
-                _row("pm_harga_jual".tr(), _formatRupiahLocal(item['harga'])),
-
-                // 🎯 SENSOR STOK ATAS: Menampilkan stok asli sesuai wilayah login
-                _row(labelStokAtas, "$displayTotalStock Pcs"),
-
-                if (item['breakdown_stok'] != null) ...[
-                  const Divider(color: Colors.white10, height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.storefront,
-                            color: Colors.blueAccent, size: 14),
-                        const SizedBox(width: 5),
-                        Text(
-                          "pm_distribusi_stok".tr(),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blueAccent,
-                              fontSize: 11),
-                        ),
-                        const Spacer(),
-
-                        InkWell(
-                          onTap: () {
-                            final nama = (item['nama'] ?? '').toString();
-                            Navigator.pop(ctx);
-                            Future.delayed(const Duration(milliseconds: 200),
-                                () {
-                              if (mounted) {
-                                _showBranchRevisionHistory(productNama: nama);
-                              }
-                            });
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: Colors.teal.withOpacity(0.2),
-                                border: Border.all(color: Colors.tealAccent),
-                                borderRadius: BorderRadius.circular(6)),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.history_rounded,
-                                    color: Colors.tealAccent, size: 12),
-                                SizedBox(width: 4),
-                                Text('RIWAYAT',
-                                    style: TextStyle(
-                                        color: Colors.tealAccent,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // Tombol ADD BRANCH hanya untuk akses edit (PUSAT)
-                        if (isCanEdit)
-                          InkWell(
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              Future.delayed(const Duration(milliseconds: 200),
-                                  () {
-                                if (mounted) _showAddBranchDialog(item);
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.2),
-                                  border: Border.all(color: Colors.green),
-                                  borderRadius: BorderRadius.circular(6)),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.add_business,
-                                      color: Colors.green, size: 12),
-                                  const SizedBox(width: 4),
-                                  Text("pm_btn_tambah_cabang".tr(),
-                                      style: const TextStyle(
-                                          color: Colors.green,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                          )
+                // Hero header
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(22)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFF2DD4BF).withOpacity(0.16),
+                        Colors.blueAccent.withOpacity(0.08),
+                        Colors.transparent,
                       ],
                     ),
                   ),
-                  const SizedBox(height: 5),
-
-                  // 🎯 SENSOR LIST DISTRIBUSI: Menyaring list agar murni menampilkan milik cabangnya sendiri
-                  ...(item['breakdown_stok'] as List)
-                      .where((lokasi) =>
-                          isHakAksesPusat ||
-                          lokasi['cabang'].toString().toUpperCase() == userToko)
-                      .map((lokasi) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6.0, left: 5.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    children: [
+                      Text(
+                        "pm_detail_produk".tr().toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.45),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (sku.isNotEmpty) ...[
+                        _buildProductCodes(
+                          sku,
+                          productId: item['id']?.toString(),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      Text(
+                        _toTitleCase(item['nama'] ?? '-'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        alignment: WrapAlignment.center,
                         children: [
-                          Text("• ${lokasi['cabang'].toString().toUpperCase()}",
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 12)),
-                          Text("${lokasi['stok']} Pcs",
-                              style: TextStyle(
-                                  color: lokasi['stok'] >= 0
-                                      ? Colors.greenAccent
-                                      : Colors.redAccent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold)),
+                          _detailChip(kategori, Colors.blueAccent),
+                          if (sub != '-' && sub.isNotEmpty)
+                            _detailChip(sub, const Color(0xFF2DD4BF)),
+                          if (sku.isNotEmpty)
+                            _detailChip('SKU $sku', Colors.orangeAccent),
                         ],
                       ),
-                    );
-                  }),
-                ],
-                const SizedBox(height: 25),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text("TUTUP",
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    ],
                   ),
-                )
+                ),
+
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Spec + stock summary cards
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _detailMetricCard(
+                                label: "pm_harga_jual".tr(),
+                                value: _formatRupiahLocal(item['harga']),
+                                color: Colors.amberAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _detailMetricCard(
+                                label: labelStokAtas,
+                                value: '$displayTotalStock Pcs',
+                                color: const Color(0xFF34D399),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _detailInfoPanel(
+                          children: [
+                            _row("pm_kat".tr(), kategori),
+                            _row("pm_bahan_coating".tr(), sub),
+                            if (kategori == 'Frame')
+                              _row("pm_warna_frame".tr(),
+                                  (item['warna'] ?? '-').toString()),
+                            if (kategori == 'Lensa') ...[
+                              _row("pm_jenis_lensa".tr(),
+                                  (item['jenis_lensa'] ?? '-').toString()),
+                              _row("pm_uk_sph".tr(),
+                                  _formatOptic(item['sph_r'])),
+                              _row("pm_uk_cyl".tr(),
+                                  _formatOptic(item['cyl_r'])),
+                              if (item['jenis_lensa'] == 'Progresif' ||
+                                  item['jenis_lensa'] == 'Kryptok')
+                                _row("pm_uk_add".tr(),
+                                    _formatOptic(item['add_r'])),
+                            ],
+                          ],
+                        ),
+
+                        if (visibleBreakdown.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: Colors.blueAccent.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.storefront_rounded,
+                                    color: Colors.blueAccent, size: 16),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "pm_distribusi_stok".tr().toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$cabangAktif cabang berstok · ${visibleBreakdown.length} lokasi',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.4),
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _detailActionChip(
+                                icon: Icons.history_rounded,
+                                label: 'RIWAYAT',
+                                color: const Color(0xFF2DD4BF),
+                                onTap: () {
+                                  final nama = (item['nama'] ?? '').toString();
+                                  Navigator.pop(ctx);
+                                  Future.delayed(
+                                      const Duration(milliseconds: 200), () {
+                                    if (mounted) {
+                                      _showBranchRevisionHistory(
+                                          productNama: nama);
+                                    }
+                                  });
+                                },
+                              ),
+                              if (isCanEdit) ...[
+                                const SizedBox(width: 6),
+                                _detailActionChip(
+                                  icon: Icons.add_business_rounded,
+                                  label: "pm_btn_tambah_cabang".tr(),
+                                  color: const Color(0xFF4ADE80),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    Future.delayed(
+                                        const Duration(milliseconds: 200), () {
+                                      if (mounted) {
+                                        _showAddBranchDialog(item);
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...visibleBreakdown.map((lokasi) {
+                            final cabang =
+                                lokasi['cabang']?.toString().toUpperCase() ??
+                                    '-';
+                            final stok =
+                                int.tryParse('${lokasi['stok']}') ?? 0;
+                            final isPusat = cabang == 'PUSAT';
+                            final label = cabang.startsWith('CABANG-')
+                                ? cabang.replaceFirst('CABANG-', '')
+                                : cabang;
+                            final stockColor = stok <= 0
+                                ? Colors.white38
+                                : stok < 5
+                                    ? Colors.orangeAccent
+                                    : const Color(0xFF34D399);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 11),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.03),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isPusat
+                                      ? const Color(0xFF2DD4BF).withOpacity(0.35)
+                                      : Colors.white.withOpacity(0.06),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      color: (isPusat
+                                              ? const Color(0xFF2DD4BF)
+                                              : Colors.blueAccent)
+                                          .withOpacity(0.14),
+                                    ),
+                                    child: Icon(
+                                      isPusat
+                                          ? Icons.warehouse_rounded
+                                          : Icons.store_mall_directory_rounded,
+                                      size: 17,
+                                      color: isPusat
+                                          ? const Color(0xFF2DD4BF)
+                                          : Colors.blueAccent,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          label,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                        if (isPusat)
+                                          Text(
+                                            'Gudang pusat',
+                                            style: TextStyle(
+                                              color:
+                                                  Colors.white.withOpacity(0.35),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: stockColor.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                          color: stockColor.withOpacity(0.35)),
+                                    ),
+                                    child: Text(
+                                      '$stok Pcs',
+                                      style: TextStyle(
+                                        color: stockColor,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2DD4BF),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        'TUTUP',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _detailChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailMetricCard({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailInfoPanel({required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _detailActionChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 12),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1539,19 +1860,26 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         widget.profile['role'] == 'owner' ||
         widget.profile['role'] == 'admin_pusat';
 
-    int displayStock = item['total_stock'] ?? item['stock'] ?? 0;
-    String labelStok = "Total Stock: ";
+    final unit = filterUnit.trim().toUpperCase();
+    final viewingToko = !isHakAksesPusat
+        ? userToko
+        : (unit.isNotEmpty && unit != 'SEMUA' && unit != 'BROADCAST_ALL'
+            ? unit
+            : null);
 
-    if (!isHakAksesPusat && item['breakdown_stok'] != null) {
-      labelStok = "Stok Cabang: ";
-      int stokKetemu = 0;
-      for (var b in item['breakdown_stok']) {
-        if (b['cabang'].toString().toUpperCase() == userToko) {
-          stokKetemu = int.tryParse(b['stok'].toString()) ?? 0;
-          break;
-        }
-      }
-      displayStock = stokKetemu;
+    late final int displayStock;
+    late final String labelStok;
+    late final String lokasiLabel;
+
+    if (viewingToko != null) {
+      displayStock = _stockAtToko(item as Map, viewingToko);
+      labelStok = 'Stok: ';
+      lokasiLabel = _cabangLabel(viewingToko);
+    } else {
+      displayStock =
+          int.tryParse('${item['total_stock'] ?? item['stock'] ?? 0}') ?? 0;
+      labelStok = 'Total Stock: ';
+      lokasiLabel = 'Semua cabang';
     }
 
     return PremiumPanel(
@@ -1587,15 +1915,28 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.location_on,
-                    color: Colors.blueAccent, size: 11),
+                Icon(
+                  viewingToko == null
+                      ? Icons.hub_outlined
+                      : Icons.location_on,
+                  color: viewingToko == null
+                      ? const Color(0xFF2DD4BF)
+                      : Colors.blueAccent,
+                  size: 11,
+                ),
                 const SizedBox(width: 3),
-                Text(
-                  !isHakAksesPusat ? "CABANG $userToko" : "PUSAT",
-                  style: const TextStyle(
-                      color: Colors.blueAccent,
+                Flexible(
+                  child: Text(
+                    lokasiLabel,
+                    style: TextStyle(
+                      color: viewingToko == null
+                          ? const Color(0xFF2DD4BF)
+                          : Colors.blueAccent,
                       fontWeight: FontWeight.bold,
-                      fontSize: 10),
+                      fontSize: 10,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -1730,10 +2071,22 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   Widget build(BuildContext context) {
     final listProduk = _filteredProduk;
     final totalItems = listProduk.length;
+    final userToko =
+        widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
+    final unit = filterUnit.trim().toUpperCase();
+    final String? stockToko = !isCanEdit
+        ? userToko
+        : (unit.isNotEmpty && unit != 'SEMUA' && unit != 'BROADCAST_ALL'
+            ? unit
+            : null);
     final totalStock = listProduk.fold<int>(
       0,
-      (sum, item) =>
-          sum + (int.tryParse((item['total_stock'] ?? item['stock'] ?? 0).toString()) ?? 0),
+      (sum, item) {
+        final m = item as Map;
+        if (stockToko != null) return sum + _stockAtToko(m, stockToko);
+        return sum +
+            (int.tryParse('${m['total_stock'] ?? m['stock'] ?? 0}') ?? 0);
+      },
     );
     final frameCount = listProduk
         .where((item) => (item['kategori'] ?? '').toString() == 'Frame')
@@ -2000,11 +2353,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                           Text("CABANG ${cabang.toString().toUpperCase()}"))),
                 ],
                 onChanged: (val) {
-                  setState(() {
-                    selectedCabang = val.toString();
-                    filterUnit = val.toString();
-                  });
-                  _fetch();
+                  setState(() => selectedCabang = val?.toString());
                 },
               ),
               const SizedBox(height: 15),
@@ -2141,7 +2490,26 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               ),
             ),
             if (filtersOpen) ...[
-              const SizedBox(height: OptikAdminTokens.spaceSm),
+              if (isCanEdit) ...[
+                const SizedBox(height: OptikAdminTokens.spaceSm),
+                Text('Filter cabang',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                PremiumChipWrap(
+                  children: [
+                    for (final u in units)
+                      _filterChip(
+                        label: _cabangLabel(u),
+                        selected: filterUnit.toUpperCase() == u.toUpperCase(),
+                        onTap: () => setState(() => filterUnit = u),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: OptikAdminTokens.spaceMd),
+              ],
               Text('Grup tampilan',
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
