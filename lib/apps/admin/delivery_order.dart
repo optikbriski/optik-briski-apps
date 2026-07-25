@@ -120,15 +120,15 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     super.dispose();
   }
 
-  // 1. MEMUAT DAFTAR CABANG TUJUAN SECARA DINAMIS DARI DATABASE
+  // 1. MEMUAT DAFTAR CABANG TUJUAN dari master toko_id (bukan profiles).
+  // profiles hanya menampilkan cabang yang sudah punya akun login.
   Future<void> loadData() async {
     if (mounted) setState(() => isLoading = true);
     try {
-      final resToko = await supabase.from('profiles').select('toko_id');
+      final resToko = await supabase.from('toko_id').select('id');
 
-      // Filter nama toko agar bernilai unik dan mengeliminasi nama PUSAT
       final unik = (resToko as List)
-          .map((e) => e['toko_id']?.toString() ?? "")
+          .map((e) => e['id']?.toString().trim().toUpperCase() ?? '')
           .where((t) => t.isNotEmpty && t != 'PUSAT')
           .toSet()
           .toList()
