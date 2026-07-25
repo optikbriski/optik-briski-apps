@@ -1,6 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:async';
-import 'dart:math' show Point, max;
+import 'dart:math' as math show Point, max, min, cos, pi;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +17,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 
 enum _FenceDrawMode { circle, corners4 }
 
-/// Editor geofence absensi di **OpenStreetMap** (koordinat WGS84 = GPS HP).
+/// Editor geofence absensi (koordinat WGS84 = GPS HP).
 /// Mode: lingkaran (tap pusat + radius) atau **4 tap sudut**.
 class TokoGeofencePage extends StatefulWidget {
   const TokoGeofencePage({super.key, required this.profile});
@@ -72,16 +72,20 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   bool _draggingMarker = false;
 
   static const _defaultCenter = LatLng(-6.9175, 107.6191);
-  static const _searchZoom = 18.5;
+  static const _searchZoom = 19.5;
   static const _minRadius = 10;
   static const _maxRadius = 500;
+  static const _mapMaxZoom = 21.0;
   static const _autocompleteMinChars = 3;
   static const _autocompleteDebounce = Duration(milliseconds: 350);
   static const _reverseDebounceMs = Duration(milliseconds: 450);
-  static const _osmTiles =
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  // Carto Voyager: detail dekat lebih baik & stabil di web dibanding OSM.org.
+  static const _streetTiles =
+      'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+  static const _streetNativeZoom = 20;
   static const _esriSatelliteTiles =
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  static const _satelliteNativeZoom = 19;
 
   bool get _isPusat {
     final t = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
@@ -466,24 +470,77 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       _setRadius(radius.clamp(_minRadius, _maxRadius), updateText: true);
     });
 
-    final cam = (_lat != null && _lng != null)
-        ? LatLng(_lat!, _lng!)
-        : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      try {
-        _mapCtrl.move(cam, _zoomForRadius(_radiusMeters));
-      } catch (_) {}
+      _moveCameraToFence();
       _refreshReverseForActivePoint(immediate: true);
     });
   }
 
   double _zoomForRadius(int meters) {
-    if (meters <= 30) return 18;
-    if (meters <= 80) return 17;
-    if (meters <= 150) return 16;
-    if (meters <= 300) return 15;
+    if (meters <= 20) return 20;
+    if (meters <= 40) return 19.5;
+    if (meters <= 80) return 19;
+    if (meters <= 150) return 18;
+    if (meters <= 300) return 16;
     return 14;
+  }
+
+  /// Zoom dari ukuran polygon (meter) agar area kecil bisa “sedeket” mungkin.
+  double _zoomForPolygon(List<LatLng> corners) {
+    if (corners.length < 2) return 19.5;
+    var minLat = corners.first.latitude;
+    var maxLat = corners.first.latitude;
+    var minLng = corners.first.longitude;
+    var maxLng = corners.first.longitude;
+    for (final c in corners.skip(1)) {
+      minLat = math.min(minLat, c.latitude);
+      maxLat = math.max(maxLat, c.latitude);
+      minLng = math.min(minLng, c.longitude);
+      maxLng = math.max(maxLng, c.longitude);
+    }
+    final midLat = (minLat + maxLat) / 2;
+    final latM = (maxLat - minLat) * 111320.0;
+    final lngM =
+        (maxLng - minLng) * 111320.0 * math.cos(midLat * math.pi / 180).abs();
+    final span = math.max(latM, lngM);
+    if (span <= 6) return 21;
+    if (span <= 12) return 20.5;
+    if (span <= 25) return 20;
+    if (span <= 50) return 19.5;
+    if (span <= 100) return 19;
+    if (span <= 200) return 18;
+    if (span <= 400) return 17;
+    return 16;
+  }
+
+  void _moveCameraToFence() {
+    try {
+      if (_mode == _FenceDrawMode.corners4 && _corners.length >= 2) {
+        _mapCtrl.fitCamera(
+          CameraFit.bounds(
+            bounds: LatLngBounds.fromPoints(_corners),
+            padding: const EdgeInsets.all(80),
+            maxZoom: _mapMaxZoom,
+          ),
+        );
+        return;
+      }
+      final cam = (_lat != null && _lng != null)
+          ? LatLng(_lat!, _lng!)
+          : _defaultCenter;
+      _mapCtrl.move(cam, _zoomForRadius(_radiusMeters));
+    } catch (_) {
+      final cam = (_lat != null && _lng != null)
+          ? LatLng(_lat!, _lng!)
+          : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
+      final z = _mode == _FenceDrawMode.corners4 && _corners.length >= 2
+          ? _zoomForPolygon(_corners)
+          : _zoomForRadius(_radiusMeters);
+      try {
+        _mapCtrl.move(cam, z);
+      } catch (_) {}
+    }
   }
 
   void _setRadius(int meters, {bool updateText = true, bool moveCamera = false}) {
@@ -630,7 +687,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       final camera = _mapCtrl.camera;
       final screen = camera.latLngToScreenPoint(origin);
       return camera.pointToLatLng(
-        Point(screen.x + delta.dx, screen.y + delta.dy),
+        math.Point(screen.x + delta.dx, screen.y + delta.dy),
       );
     } catch (_) {
       return null;
@@ -1032,7 +1089,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: 'Geofence Toko',
-        subtitle: 'OpenStreetMap · koordinat GPS (WGS84)',
+        subtitle: 'Peta detail · koordinat GPS (WGS84)',
         actions: [
           IconButton(
             tooltip: 'Muat ulang',
@@ -1068,7 +1125,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   builder: (context) {
                     // Peta tinggi tetap (~72vh, min 560) — halaman di-scroll,
                     // bukan dipaksa muat satu viewport dengan Expanded.
-                    final mapH = max(
+                    final mapH = math.max(
                       560.0,
                       MediaQuery.sizeOf(context).height * 0.72,
                     );
@@ -1138,6 +1195,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                           initialCenter: center,
                                           initialZoom:
                                               _zoomForRadius(_radiusMeters),
+                                          minZoom: 3,
+                                          maxZoom: _mapMaxZoom,
                                           onTap: _onMapTap,
                                           interactionOptions:
                                               InteractionOptions(
@@ -1148,10 +1207,15 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                           TileLayer(
                                             urlTemplate: _satellite
                                                 ? _esriSatelliteTiles
-                                                : _osmTiles,
+                                                : _streetTiles,
                                             userAgentPackageName:
                                                 'com.optikbriski.admin',
-                                            maxZoom: 19,
+                                            // Zoom kamera boleh > native: tile
+                                            // terakhir di-scale (tidak abu-abu).
+                                            maxZoom: _mapMaxZoom,
+                                            maxNativeZoom: _satellite
+                                                ? _satelliteNativeZoom
+                                                : _streetNativeZoom,
                                           ),
                                           if (_mode ==
                                                   _FenceDrawMode.circle &&
@@ -1444,6 +1508,16 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           style: TextStyle(
             color: OptikAdminTokens.warning.withOpacity(0.9),
             fontSize: 12,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Untuk gambar paling dekat: nyalakan Satelit, lalu scroll zoom in. '
+          'Detail foto satelit terbatas ~level jalan/bangunan.',
+          style: TextStyle(
+            color: OptikAdminTokens.textMuted.withOpacity(0.9),
+            fontSize: 11,
             height: 1.35,
           ),
         ),
