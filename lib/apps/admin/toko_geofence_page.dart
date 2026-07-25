@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math show Point, max, min, cos, pi;
 
 import 'package:flutter/gestures.dart';
@@ -42,12 +43,17 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   bool _saving = false;
   bool _searching = false;
   bool _reversing = false;
-  bool _satellite = false;
+  /// Default satelit = mosaic Esri terbaru (bukan arsip Wayback).
+  bool _satellite = true;
   String? _error;
   String? _searchFeedback;
   String? _coordsFeedback;
   String? _reverseLabel;
   String? _radiusError;
+  String? _imageryMeta;
+  bool _imageryMetaLoading = false;
+  Timer? _imageryMetaDebounce;
+  int _imageryMetaGen = 0;
   List<Map<String, dynamic>> _tokoList = [];
   String? _selectedTokoId;
   List<OsmAddressHit> _searchHits = [];
@@ -107,6 +113,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   void dispose() {
     _searchDebounce?.cancel();
     _reverseDebounce?.cancel();
+    _imageryMetaDebounce?.cancel();
     _cancelInFlightSearch();
     _cancelInFlightReverse();
     _searchCtrl.dispose();
@@ -117,6 +124,152 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     _radiusFocus.dispose();
     _mapCtrl.dispose();
     super.dispose();
+  }
+
+  void _scheduleImageryMeta() {
+    _imageryMetaDebounce?.cancel();
+    _imageryMetaDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) _refreshImageryMeta();
+    });
+  }
+
+  String? _formatImageryDate(String? raw) {
+    if (raw == null) return null;
+    final t = raw.trim();
+    if (t.isEmpty || t.toLowerCase() == 'null') return null;
+    // YYYYMMDD
+    if (RegExp(r'^\d{8}$').hasMatch(t)) {
+      return '${t.substring(6, 8)}/${t.substring(4, 6)}/${t.substring(0, 4)}';
+    }
+    // M/D/YYYY or MM/DD/YYYY
+    final m = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(t);
+    if (m != null) {
+      final day = m.group(2)!.padLeft(2, '0');
+      final month = m.group(1)!.padLeft(2, '0');
+      return '$day/$month/${m.group(3)}';
+    }
+    return t;
+  }
+
+  /// Ambil tanggal akuisisi foto satelit Esri di titik peta (mosaic terbaru).
+  Future<void> _refreshImageryMeta() async {
+    if (!_satellite) {
+      if (!mounted) return;
+      setState(() {
+        _imageryMeta = 'Mode peta jalan · data OSM/Carto (bukan foto satelit)';
+        _imageryMetaLoading = false;
+      });
+      return;
+    }
+
+    LatLng center;
+    double zoom;
+    try {
+      center = _mapCtrl.camera.center;
+      zoom = _mapCtrl.camera.zoom;
+    } catch (_) {
+      center = (_lat != null && _lng != null)
+          ? LatLng(_lat!, _lng!)
+          : _defaultCenter;
+      zoom = 18;
+    }
+
+    final gen = ++_imageryMetaGen;
+    if (mounted) setState(() => _imageryMetaLoading = true);
+
+    try {
+      final z = zoom.round().clamp(12, 19);
+      final pad = 0.01 / math.max(1, z - 10);
+      final uri = Uri.parse(
+        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/identify',
+      ).replace(queryParameters: {
+        'f': 'json',
+        'geometry': '${center.longitude},${center.latitude}',
+        'geometryType': 'esriGeometryPoint',
+        'sr': '4326',
+        'tolerance': '2',
+        'mapExtent':
+            '${center.longitude - pad},${center.latitude - pad},${center.longitude + pad},${center.latitude + pad}',
+        'imageDisplay': '800,600,96',
+        'returnGeometry': 'false',
+        'layers': 'all',
+      });
+
+      final res = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (!mounted || gen != _imageryMetaGen) return;
+      if (res.statusCode != 200) {
+        setState(() {
+          _imageryMeta = 'Satelit Esri · mosaic terbaru (tanggal lokasi gagal dibaca)';
+          _imageryMetaLoading = false;
+        });
+        return;
+      }
+
+      final body = jsonDecode(res.body);
+      final results = (body is Map && body['results'] is List)
+          ? body['results'] as List
+          : const [];
+
+      Map<String, dynamic>? best;
+      var bestScore = -1;
+      for (final raw in results) {
+        if (raw is! Map) continue;
+        final attrs = raw['attributes'];
+        if (attrs is! Map) continue;
+        final a = Map<String, dynamic>.from(attrs);
+        final dateRaw = (a['DATE (YYYYMMDD)'] ??
+                a['SRC_DATE'] ??
+                a['DATE'] ??
+                a['SRC_DATE2'])
+            ?.toString();
+        final formatted = _formatImageryDate(dateRaw);
+        if (formatted == null) continue;
+
+        final minL = int.tryParse('${a['MinMapLevel'] ?? a['FROM_CACHE_LEVEL'] ?? 0}') ?? 0;
+        final maxL = int.tryParse('${a['MaxMapLevel'] ?? a['TO_CACHE_LEVEL'] ?? 19}') ?? 19;
+        final inRange = z >= minL && z <= maxL;
+        final resM = double.tryParse('${a['RESOLUTION (M)'] ?? a['SRC_RES'] ?? 99}') ?? 99;
+        final score = (inRange ? 1000 : 0) + (100 - resM.round().clamp(0, 100));
+        if (score > bestScore) {
+          bestScore = score;
+          best = {
+            'date': formatted,
+            'source': (a['SOURCE'] ?? a['NICE_DESC'] ?? a['SOURCE_INFO'] ?? 'Esri')
+                .toString(),
+            'product': (a['SOURCE_INFO'] ?? a['NICE_NAME'] ?? '').toString(),
+            'res': resM,
+          };
+        }
+      }
+
+      if (!mounted || gen != _imageryMetaGen) return;
+      if (best == null) {
+        setState(() {
+          _imageryMeta =
+              'Satelit Esri World Imagery · mosaic publik terbaru di lokasi ini';
+          _imageryMetaLoading = false;
+        });
+        return;
+      }
+
+      final hit = best;
+      final resM = hit['res'] as double;
+      final resLabel = resM < 10 ? ' · $resM m' : '';
+      final product = (hit['product'] as String).trim();
+      final productPart = product.isEmpty ? '' : ' · $product';
+      final label =
+          'Foto satelit: ${hit['date']}$productPart · ${hit['source']}$resLabel';
+      setState(() {
+        _imageryMeta = label;
+        _imageryMetaLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || gen != _imageryMetaGen) return;
+      setState(() {
+        _imageryMeta = 'Satelit Esri · mosaic terbaru (metadata offline)';
+        _imageryMetaLoading = false;
+      });
+    }
   }
 
   LatLng get _mapBias {
@@ -473,6 +626,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _moveCameraToFence();
+      _scheduleImageryMeta();
       _refreshReverseForActivePoint(immediate: true);
     });
   }
@@ -1198,6 +1352,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                           minZoom: 3,
                                           maxZoom: _mapMaxZoom,
                                           onTap: _onMapTap,
+                                          onMapEvent: (event) {
+                                            if (event is MapEventMoveEnd ||
+                                                event is MapEventFlingAnimationEnd) {
+                                              _scheduleImageryMeta();
+                                            }
+                                          },
                                           interactionOptions:
                                               InteractionOptions(
                                             flags: mapFlags,
@@ -1303,10 +1463,11 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                             child: InkWell(
                                               borderRadius:
                                                   BorderRadius.circular(10),
-                                              onTap: () => setState(
-                                                () =>
-                                                    _satellite = !_satellite,
-                                              ),
+                                              onTap: () {
+                                                setState(() =>
+                                                    _satellite = !_satellite);
+                                                _scheduleImageryMeta();
+                                              },
                                               child: Padding(
                                                 padding:
                                                     const EdgeInsets.symmetric(
@@ -1347,6 +1508,92 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                           ),
                                         ),
                                       ),
+                                      if (_imageryMeta != null ||
+                                          _imageryMetaLoading)
+                                        Positioned(
+                                          left: 12,
+                                          top: 12,
+                                          right: 12,
+                                          child: IgnorePointer(
+                                            child: Align(
+                                              alignment: Alignment.topLeft,
+                                              child: ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                        maxWidth: 420),
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    color: OptikAdminTokens
+                                                        .bgMid
+                                                        .withOpacity(0.94),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            10),
+                                                    border: Border.all(
+                                                      color: OptikAdminTokens
+                                                          .lineStrong,
+                                                    ),
+                                                  ),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 8,
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        if (_imageryMetaLoading)
+                                                          const SizedBox(
+                                                            width: 12,
+                                                            height: 12,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                              strokeWidth: 1.6,
+                                                              color:
+                                                                  OptikAdminTokens
+                                                                      .warning,
+                                                            ),
+                                                          )
+                                                        else
+                                                          const Icon(
+                                                            Icons
+                                                                .calendar_month_rounded,
+                                                            size: 14,
+                                                            color:
+                                                                OptikAdminTokens
+                                                                    .warning,
+                                                          ),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Flexible(
+                                                          child: Text(
+                                                            _imageryMetaLoading
+                                                                ? 'Cek tanggal foto satelit…'
+                                                                : (_imageryMeta ??
+                                                                    ''),
+                                                            style:
+                                                                const TextStyle(
+                                                              color:
+                                                                  OptikAdminTokens
+                                                                      .textSecondary,
+                                                              fontSize: 11,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              height: 1.3,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       if (_mode ==
                                               _FenceDrawMode.corners4 &&
                                           _selectedCorner != null)
@@ -1513,8 +1760,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Untuk gambar paling dekat: nyalakan Satelit, lalu scroll zoom in. '
-          'Detail foto satelit terbatas ~level jalan/bangunan.',
+          'Default: satelit Esri mosaic terbaru. Badge di peta menampilkan '
+          'tanggal foto di lokasi tersebut. Google-level “hari ini” butuh API berbayar.',
           style: TextStyle(
             color: OptikAdminTokens.textMuted.withOpacity(0.9),
             fontSize: 11,
