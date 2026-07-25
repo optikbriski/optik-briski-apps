@@ -4,17 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap foto bukti surat jalan pengiriman
 import 'package:easy_localization/easy_localization.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/responsive.dart';
-import '../../shared/logistics/kurir_pick_dialog.dart';
-import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
-import '../../shared/qr/obr_codes.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import 'do_preparing_page.dart';
 
 // Shortcut pintas client Supabase khusus file DO ini
 final supabase = Supabase.instance.client;
@@ -33,7 +30,6 @@ class OutgoingOperation extends StatefulWidget {
 class _OutgoingOperationState extends State<OutgoingOperation> {
   String? selectedToko;
   final searchController = TextEditingController();
-  final ImagePicker picker = ImagePicker();
 
   List<String> listToko = [];
   List<dynamic> allProdukPusat = [];
@@ -460,15 +456,14 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     }
   }
 
-  // 2. FUNGSI POP-UP DIALOG KONFIRMASI SEBELUM PROSES JEPTER KAMERA SURAT JALAN
+  // Konfirmasi → buat surat jalan PREPARING → halaman siapkan barang + Generate QR
   void confirmAndSend() {
     if (selectedToko == null || selectedItems.isEmpty) return;
 
-    // Formulasi pesan konfirmasi dinamis bahasa tr()
-    String confirmMsg = "do_konfirmasi_kirim"
-        .tr()
-        .replaceFirst('()', _calculateTotalQty().toString())
-        .replaceFirst(']', selectedToko!);
+    final confirmMsg =
+        'Pindahkan ${_calculateTotalQty()} pcs ke PREPARING untuk $selectedToko?\n\n'
+        'Stok PUSAT dipotong sekarang. Di halaman Preparing Anda ceklis barang '
+        'lalu Generate QR. Status jadi TRANSIT setelah kurir scan.';
 
     showDialog(
       context: context,
@@ -476,98 +471,64 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       builder: (ctx) => R.constrainedDialog(
         context: ctx,
         child: AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10,
-          children: [
-          const Icon(Icons.local_shipping, color: Colors.blueAccent),
-          Text("do_kirim_langsung".tr(),
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15))
-        ]),
-        content: Text(confirmMsg,
-            style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("BATAL",
+          backgroundColor: OptikAdminTokens.card,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            children: [
+              Icon(Icons.inventory_2_outlined, color: Color(0xFF2DD4BF)),
+              Text('Ke Preparing',
                   style: TextStyle(
-                      color: Colors.grey, fontWeight: FontWeight.bold))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _handleProcessWithPhoto(); // Lanjut ke fungsi eksekusi kamera biner di Part 4
-            },
-            child: Text("do_btn_jepret".tr(),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15))
+            ],
+          ),
+          content: Text(confirmMsg,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('BATAL',
+                    style: TextStyle(
+                        color: Colors.grey, fontWeight: FontWeight.bold))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2DD4BF)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _createPreparingDo();
+              },
+              child: const Text('YA, PREPARING',
+                  style: TextStyle(
+                      color: Colors.black, fontWeight: FontWeight.bold)),
+            )
+          ],
+        ),
       ),
     );
   }
 
-  // 1. FUNGSI UTAMA: PROSES JEPRET KAMERA BUKTI, UPLOAD STORAGE, DAN INSERT HISTORY MUTASI
-  Future<void> _handleProcessWithPhoto() async {
-    // Membuka kamera dengan kualitas terkompresi (50%) agar hemat penyimpanan bucket Supabase
-    // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
-    final photo = await pickImageSafe(
-      picker: picker,
-      context: context,
-      preferredCameraDevice: CameraDevice.rear,
-      imageQuality: 50,
-    );
-    if (photo == null) return;
-
+  /// Buat DO status PREPARING (belum TRANSIT). QR dibuat di halaman Preparing.
+  Future<void> _createPreparingDo() async {
+    if (selectedToko == null || selectedItems.isEmpty) return;
     setState(() => isProcessing = true);
 
     try {
-      final bytes = await photo.readAsBytes();
-      final path = 'pengiriman/${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-      // Upload berkas gambar secara biner ke bucket attendance_photos
-      await Supabase.instance.client.storage
-          .from('attendance_photos')
-          .uploadBinary(path, bytes,
-              fileOptions: const FileOptions(upsert: true));
-
-      final imgUrl = Supabase.instance.client.storage
-          .from('attendance_photos')
-          .getPublicUrl(path);
-
-      if (!mounted) return;
-      final kurirPick = await showKurirPickDialog(
-        context,
-        service: LogisticsTrackingService(),
-        pusatOnly: true,
-        title: 'Pilih kurir DO (opsional)',
-      );
-      if (kurirPickCancelled(kurirPick)) {
-        setState(() => isProcessing = false);
-        return;
-      }
-
       final cartJson = buildCartJson();
       final mut = StockMutationService();
       final actor =
           (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
 
-      // Formula pembuatan nomor resi surat jalan otomatis (DO-xxxxx)
-      String resiDO =
-          "DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
+      final resiDO =
+          'DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
-      // Potong PUSAT via ledger dulu
       for (var entry in selectedItems.entries) {
-        final prod = allProdukPusat
-            .firstWhere((p) => p['id'].toString() == entry.key);
-        final sku =
-            ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+        final prod =
+            allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
         if (sku == null) {
           throw 'Produk ${prod['nama']} belum punya SKU.';
         }
@@ -576,47 +537,59 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           sku: sku,
           qty: entry.value,
           reason: StockReason.transferOut,
-          alasanText: 'Ship DO $resiDO → $selectedToko',
+          alasanText: 'Prepare DO $resiDO → $selectedToko',
           refType: 'stock_move',
           refId: resiDO,
           actorNama: actor,
         );
       }
 
-      // Catat log resmi ke tabel riwayat mutasi barang (Status: TRANSIT untuk kurir jalan)
-      await Supabase.instance.client.from('stock_move_history').insert({
-        'product_name': resiDO,
-        'dari_lokasi': 'PUSAT',
-        'ke_lokasi': selectedToko,
-        'jumlah': _calculateTotalQty(),
-        'tipe': 'DELIVERY',
-        'status': 'TRANSIT',
-        'bukti_foto_pengirim': imgUrl,
-        'keterangan': cartJson,
-        'created_at': DateTime.now().toIso8601String(),
-        if (!kurirPickSkipped(kurirPick)) ...{
-          'kurir_karyawan_id': kurirPick!['id'],
-          'kurir_nama': kurirPick['nama'],
-        },
-      });
+      final inserted = await Supabase.instance.client
+          .from('stock_move_history')
+          .insert({
+            'product_name': resiDO,
+            'dari_lokasi': 'PUSAT',
+            'ke_lokasi': selectedToko,
+            'jumlah': _calculateTotalQty(),
+            'tipe': 'DELIVERY',
+            'status': 'PREPARING',
+            'keterangan': cartJson,
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('id')
+          .single();
 
-      if (!mounted) return; // Pelindung async gap build context
+      final moveId = inserted['id'].toString();
+
+      if (!mounted) return;
       setState(() {
         selectedItems.clear();
         qtyControllers.clear();
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("do_sukses_transit".tr()),
-          backgroundColor: Colors.green));
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('DO masuk PREPARING. Siapkan barang lalu Generate QR.'),
+        backgroundColor: Colors.green,
+      ));
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DoPreparingPage(
+            profile: widget.profile,
+            moveId: moveId,
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Gagal memproses pengiriman: $e"),
+          content: Text('Gagal membuat PREPARING: $e'),
           backgroundColor: Colors.red));
     } finally {
       if (mounted) {
         setState(() => isProcessing = false);
-        _fetchProduk(); // Tarik ulang data stok terbaru di katalog depan
+        _fetchProduk();
       }
     }
   }
@@ -634,6 +607,25 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         title: "do_title".tr(),
         subtitle: 'Kirim restock Pusat → cabang',
         actions: [
+          IconButton(
+            tooltip: 'Antrian Preparing',
+            style: IconButton.styleFrom(
+              backgroundColor: _panelSoft,
+              side: const BorderSide(color: _line),
+            ),
+            icon: const Icon(Icons.fact_check_rounded,
+                color: Color(0xFF2DD4BF), size: 20),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      DoPreparingListPage(profile: widget.profile),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
           IconButton(
             tooltip: "do_trip_gantung".tr(),
             style: IconButton.styleFrom(
@@ -1363,7 +1355,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                     flex: 1,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
+                        backgroundColor: const Color(0xFF0F766E),
                         foregroundColor: Colors.white,
                         disabledBackgroundColor: _panelSoft,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1379,9 +1371,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                               height: 18,
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
-                          : Text("do_btn_kirim".tr(),
+                          : Text(
+                              'do_btn_preparing'.tr(),
+                              textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 12)),
+                                  fontWeight: FontWeight.w900, fontSize: 12),
+                            ),
                     ),
                   ),
                 ],
@@ -1898,79 +1893,6 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     }
   }
 
-  // 4. DIALOG MODAL TAMPILAN RESI DAN PRATINJAU QR CODE SURAT JALAN
-  void _showQRDialog(String resi, String qrPayload, String tujuan) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => R.constrainedDialog(
-        context: ctx,
-        preferWidth: 360,
-        child: AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text("draf_siap_kirim".tr(),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("${'draf_resi'.tr()} $resi",
-                style: const TextStyle(
-                    color: Colors.orangeAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15)),
-            const SizedBox(height: 5),
-            Text("${'draf_tujuan_resi'.tr()} $tujuan",
-                style: const TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 20),
-
-            // Generator QR Code Manifes Surat Jalan Kurir
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(15)),
-              child: QrImageView(
-                data: qrPayload,
-                version: QrVersions.auto,
-                size: 180.0,
-                backgroundColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              "draf_instruksi_qr".tr(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            )
-          ],
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10))),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                if (mounted) Navigator.pop(context, true);
-              },
-              child: Text("draf_btn_selesai".tr(),
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          )
-        ],
-      ),
-      ),
-    );
-  }
-
   // 5. FUNGSI DATABASE: SINKRONISASI UPDATE SELISIH STOK & KIRIM DRAF JADI DO TRANSIT
   Future<void> sendDraft() async {
     if (localItems.isEmpty) {
@@ -2047,41 +1969,23 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         totalQty += int.tryParse(itm['qty'].toString()) ?? 0;
       }
 
-      final String qrPayload = ObrDo.encode(
-        resi: resiDO,
-        tujuan: widget.draft['tujuan']?.toString(),
-      );
+      // Lepas draf → PREPARING (QR di halaman Preparing setelah barang siap)
+      final inserted = await Supabase.instance.client
+          .from('stock_move_history')
+          .insert({
+            'product_name': resiDO,
+            'dari_lokasi': 'PUSAT',
+            'ke_lokasi': widget.draft['tujuan'],
+            'jumlah': totalQty,
+            'tipe': 'DELIVERY',
+            'status': 'PREPARING',
+            'bukti_foto_pengirim': imgUrl,
+            'keterangan': jsonEncode(localItems),
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select('id')
+          .single();
 
-      if (!mounted) return;
-      final kurirPick = await showKurirPickDialog(
-        context,
-        service: LogisticsTrackingService(),
-        pusatOnly: true,
-        title: 'Pilih kurir DO (opsional)',
-      );
-      if (kurirPickCancelled(kurirPick)) {
-        setState(() => isProcessing = false);
-        return;
-      }
-
-      // Lepas data draf menjadi riwayat mutasi aktif berstatus WAITING / TRANSIT
-      await Supabase.instance.client.from('stock_move_history').insert({
-        'product_name': resiDO,
-        'dari_lokasi': 'PUSAT',
-        'ke_lokasi': widget.draft['tujuan'],
-        'jumlah': totalQty,
-        'tipe': 'DELIVERY',
-        'status': 'WAITING',
-        'bukti_foto_pengirim': imgUrl,
-        'keterangan': jsonEncode(localItems),
-        'created_at': DateTime.now().toIso8601String(),
-        if (!kurirPickSkipped(kurirPick)) ...{
-          'kurir_karyawan_id': kurirPick!['id'],
-          'kurir_nama': kurirPick['nama'],
-        },
-      });
-
-      // Hapus lembaran draf penampungan sementara
       await Supabase.instance.client
           .from('draft_pengiriman')
           .delete()
@@ -2089,7 +1993,16 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
 
       if (!mounted) return;
       setState(() => isProcessing = false);
-      _showQRDialog(resiDO, qrPayload, widget.draft['tujuan']);
+      final moveId = inserted['id'].toString();
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DoPreparingPage(
+            profile: const {},
+            moveId: moveId,
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

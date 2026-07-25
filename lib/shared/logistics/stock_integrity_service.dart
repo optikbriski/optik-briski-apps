@@ -231,7 +231,7 @@ class StockIntegrityService {
     final rows = await _client
         .from('stock_move_history')
         .select('jumlah, status')
-        .inFilter('status', ['TRANSIT', 'PENDING', 'WAITING']);
+        .inFilter('status', ['PREPARING', 'TRANSIT', 'PENDING', 'WAITING']);
     var total = 0;
     for (final r in List<Map<String, dynamic>>.from(rows)) {
       total += int.tryParse(r['jumlah']?.toString() ?? '0') ?? 0;

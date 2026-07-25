@@ -14,6 +14,7 @@ class ReceiveScanResult {
     this.alreadyDone = false,
     this.verifiedByName,
     this.verifiedAt,
+    this.becameTransit = false,
   });
 
   final bool ok;
@@ -22,16 +23,32 @@ class ReceiveScanResult {
   final bool alreadyDone;
   final String? verifiedByName;
   final DateTime? verifiedAt;
+  /// True jika scan mengubah PREPARING/WAITING → TRANSIT (jemput kurir).
+  final bool becameTransit;
 }
 
-/// Scan QR surat jalan → SUCCESS + stok cabang + audit petugas.
+/// Scan QR surat jalan:
+/// - PREPARING / WAITING → TRANSIT (kurir jemput)
+/// - TRANSIT / PENDING → SUCCESS + stok cabang (penerimaan)
 class ReceiveScanService {
   ReceiveScanService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
-  static const openStatuses = ['WAITING', 'TRANSIT', 'PENDING'];
+  /// Status yang boleh di-scan jadi transit (barcode perjalanan).
+  static const pickupStatuses = ['PREPARING', 'WAITING'];
+
+  /// Status yang boleh diterima cabang.
+  static const receiveStatuses = ['TRANSIT', 'PENDING'];
+
+  /// Alias lama — status terbuka di ledger (masih di jalan / belum selesai).
+  static const openStatuses = [
+    'PREPARING',
+    'WAITING',
+    'TRANSIT',
+    'PENDING',
+  ];
 
   static Map<String, dynamic> parseQrPayload(String raw) {
     final trimmed = raw.trim();
@@ -63,7 +80,8 @@ class ReceiveScanService {
     return a == b;
   }
 
-  Future<ReceiveScanResult> receiveFromQr({
+  /// Entry utama scan logistik (kurir jemput ATAU cabang terima).
+  Future<ReceiveScanResult> processLogisticsQr({
     required String qrRaw,
     required String cabangKaryawan,
     required String verifiedById,
@@ -82,17 +100,6 @@ class ReceiveScanService {
       );
     }
 
-    if (tujuanQr != null &&
-        tujuanQr.trim().isNotEmpty &&
-        !tokoMatches(tujuanQr, cabangKaryawan)) {
-      return ReceiveScanResult(
-        ok: false,
-        message:
-            'Barang ini untuk $tujuanQr, bukan untuk toko Anda ($cabangKaryawan).',
-        resi: resi,
-      );
-    }
-
     final row = await _client
         .from('stock_move_history')
         .select()
@@ -105,6 +112,89 @@ class ReceiveScanService {
       return ReceiveScanResult(
         ok: false,
         message: 'Resi $resi tidak ditemukan di sistem.',
+        resi: resi,
+      );
+    }
+
+    final status = (row['status'] ?? '').toString().toUpperCase();
+
+    if (pickupStatuses.contains(status)) {
+      return _markTransit(
+        row: Map<String, dynamic>.from(row),
+        resi: resi,
+        kurirId: verifiedById,
+        kurirNama: verifiedByName,
+      );
+    }
+
+    return _receiveRow(
+      row: Map<String, dynamic>.from(row),
+      resi: resi,
+      tujuanQr: tujuanQr,
+      cabangKaryawan: cabangKaryawan,
+      verifiedById: verifiedById,
+      verifiedByName: verifiedByName,
+    );
+  }
+
+  /// Kompat: sama dengan [processLogisticsQr].
+  Future<ReceiveScanResult> receiveFromQr({
+    required String qrRaw,
+    required String cabangKaryawan,
+    required String verifiedById,
+    required String verifiedByName,
+  }) =>
+      processLogisticsQr(
+        qrRaw: qrRaw,
+        cabangKaryawan: cabangKaryawan,
+        verifiedById: verifiedById,
+        verifiedByName: verifiedByName,
+      );
+
+  Future<ReceiveScanResult> _markTransit({
+    required Map<String, dynamic> row,
+    required String resi,
+    required String kurirId,
+    required String kurirNama,
+  }) async {
+    final moveId = row['id'].toString();
+    final patch = <String, dynamic>{
+      'status': 'TRANSIT',
+    };
+    // Isi kurir dari pemindai jika belum di-assign.
+    final existingKurir = (row['kurir_karyawan_id'] ?? '').toString().trim();
+    if (existingKurir.isEmpty && kurirId.trim().isNotEmpty) {
+      patch['kurir_karyawan_id'] = kurirId.trim();
+      patch['kurir_nama'] = kurirNama.trim();
+    }
+
+    await _client.from('stock_move_history').update(patch).eq('id', moveId);
+
+    return ReceiveScanResult(
+      ok: true,
+      resi: resi,
+      becameTransit: true,
+      verifiedByName: kurirNama,
+      message:
+          'Resi $resi sekarang TRANSIT (dalam perjalanan). Kurir: $kurirNama',
+    );
+  }
+
+  Future<ReceiveScanResult> _receiveRow({
+    required Map<String, dynamic> row,
+    required String resi,
+    required String? tujuanQr,
+    required String cabangKaryawan,
+    required String verifiedById,
+    required String verifiedByName,
+  }) async {
+    if (tujuanQr != null &&
+        tujuanQr.trim().isNotEmpty &&
+        !tokoMatches(tujuanQr, cabangKaryawan)) {
+      return ReceiveScanResult(
+        ok: false,
+        message:
+            'Barang ini untuk $tujuanQr, bukan untuk toko Anda ($cabangKaryawan).',
         resi: resi,
       );
     }
@@ -147,7 +237,16 @@ class ReceiveScanService {
       );
     }
 
-    if (!openStatuses.contains(status)) {
+    if (pickupStatuses.contains(status)) {
+      return ReceiveScanResult(
+        ok: false,
+        resi: resi,
+        message:
+            'Paket masih $status. Kurir harus scan barcode perjalanan dulu agar status jadi TRANSIT.',
+      );
+    }
+
+    if (!receiveStatuses.contains(status)) {
       return ReceiveScanResult(
         ok: false,
         resi: resi,

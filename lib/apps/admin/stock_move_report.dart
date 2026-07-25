@@ -15,6 +15,7 @@ import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/zoomable_network_image.dart';
+import 'do_preparing_page.dart';
 
 // ============================================================================
 // MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
@@ -136,7 +137,10 @@ class _StockMoveReportState extends State<StockMoveReport> {
         subtotalVolumeItem = qtyFlat;
       }
 
-      if (status == 'TRANSIT' || status == 'WAITING' || status == 'PENDING') {
+      if (status == 'TRANSIT' ||
+          status == 'WAITING' ||
+          status == 'PREPARING' ||
+          status == 'PENDING') {
         hitungTransitVal += subtotalNotaMutasi;
         hitungTransitVol += subtotalVolumeItem;
       } else if (status == 'SUCCESS') {
@@ -417,7 +421,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final dari = (item['dari_lokasi'] ?? '-').toString();
     final ke = (item['ke_lokasi'] ?? '-').toString();
     final paket = _cleanKeterangan(item['keterangan'] ?? '');
-    final showQr = status == 'WAITING' || status == 'TRANSIT';
+    final showQr =
+        status == 'PREPARING' || status == 'WAITING' || status == 'TRANSIT';
     final verifiedName = (item['verified_by_name'] ?? '').toString().trim();
     final verifiedAtRaw = item['verified_at']?.toString();
     String verifiedAt = '-';
@@ -688,9 +693,11 @@ class _StockMoveReportState extends State<StockMoveReport> {
       case 'DONE':
         return const Color(0xFF34D399);
       case 'TRANSIT':
-      case 'WAITING':
       case 'SHIPPING':
         return Colors.orangeAccent;
+      case 'PREPARING':
+      case 'WAITING':
+        return const Color(0xFF2DD4BF);
       case 'CANCEL':
       case 'BATAL':
       case 'FAILED':
@@ -1062,9 +1069,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
     Color statusColor = Colors.blueAccent;
     if (status == 'SUCCESS') {
       statusColor = const Color(0xFF4ADE80);
-    } else if (status == 'WAITING' ||
-        status == 'PENDING' ||
-        status == 'TRANSIT') {
+    } else if (status == 'PREPARING' || status == 'WAITING') {
+      statusColor = const Color(0xFF2DD4BF);
+    } else if (status == 'PENDING' || status == 'TRANSIT') {
       statusColor = const Color(0xFFFBBF24);
     } else if (status == 'BATAL' || status == 'REJECTED') {
       statusColor = const Color(0xFFF87171);
@@ -1146,9 +1153,34 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             fontSize: 12, fontWeight: FontWeight.w600)),
                   ),
                 const Spacer(),
-                if ((status == 'WAITING' ||
-                        status == 'TRANSIT' ||
-                        status == 'PENDING') &&
+                if ((status == 'PREPARING' || status == 'WAITING') &&
+                    (amITheSender || myToko == 'PUSAT'))
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DoPreparingPage(
+                            profile: widget.profile,
+                            moveId: item['id'].toString(),
+                          ),
+                        ),
+                      ).then((_) => _fetchMoveHistory());
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F766E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.fact_check_rounded, size: 15),
+                    label: const Text('Preparing',
+                        style: TextStyle(
+                            fontSize: 11.5, fontWeight: FontWeight.w800)),
+                  ),
+                if ((status == 'TRANSIT' || status == 'PENDING') &&
                     amITheReceiver)
                   FilledButton.icon(
                     onPressed: () => _confirmTerima(item),
@@ -1350,6 +1382,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   const SizedBox(height: OptikAdminTokens.spaceMd),
                   PremiumChipWrap(
                     children: [
+                      _buildStatusChip('PREPARING', const Color(0xFF2DD4BF)),
                       _buildStatusChip('WAITING', const Color(0xFFFBBF24)),
                       _buildStatusChip('TRANSIT', const Color(0xFF60A5FA)),
                       _buildStatusChip('SUCCESS', const Color(0xFF4ADE80)),

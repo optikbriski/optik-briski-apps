@@ -78,7 +78,12 @@ class RestockSuggestService {
     'SHIPPING',
   ];
 
-  static const _openMoveStatuses = ['WAITING', 'TRANSIT', 'PENDING'];
+  static const _openMoveStatuses = [
+    'PREPARING',
+    'WAITING',
+    'TRANSIT',
+    'PENDING',
+  ];
 
   static String matchKey(Map<String, dynamic> p) {
     final sku = (p['sku'] ?? '').toString().trim().toLowerCase();

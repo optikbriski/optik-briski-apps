@@ -92,10 +92,14 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
       if (result.ok) {
         _tampilkanDialogHasil(
           sukses: true,
-          judul: "scan_terima_sukses".tr(),
+          judul: result.becameTransit
+              ? 'Berangkat (TRANSIT)'
+              : "scan_terima_sukses".tr(),
           pesan: result.message,
-          icon: Icons.check_circle_rounded,
-          warna: Colors.green,
+          icon: result.becameTransit
+              ? Icons.local_shipping_rounded
+              : Icons.check_circle_rounded,
+          warna: result.becameTransit ? Colors.orangeAccent : Colors.green,
           popWithResult: result.resi ?? dataDariQR.trim(),
         );
       } else {

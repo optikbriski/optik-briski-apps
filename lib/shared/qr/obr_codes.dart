@@ -4,7 +4,8 @@
 // OBRATT|v1|<toko_id>|<token>         → qr_route.dart AttendanceQrPayload
 // OBRINV|v1|<no>|<DP|LUNAS|CLAIM>|<token>  → QR PELANGGAN (sekali pakai per fase)
 // OBRTXN|v1|<no_invoice>                    → QR TOKO (lihat detail saja)
-// OBRDO|v1|<resi>|<tujuan>
+// OBRPREP|v1|<resi>|<tujuan>   → klaim tim preparing (QUEUED → PREPARING)
+// OBRDO|v1|<resi>|<tujuan>     → QR jalan (driver → TRANSIT, cabang → SUCCESS)
 // OBRRO|v1|<resi>|<tujuan>
 // OBRCUS|v1|<nama>|<phone>|<email>
 // OBRKARY|v1|<karyawan_id>|<nama>|<toko_id>
@@ -143,10 +144,41 @@ class ObrLogisticsData {
     this.tujuan,
   });
 
-  /// `DO` or `RO`
+  /// `DO`, `RO`, or `PREP`
   final String kind;
   final String resi;
   final String? tujuan;
+}
+
+/// QR untuk tim preparing: scan → status PREPARING + buka daftar siapkan.
+class ObrPrep {
+  ObrPrep._();
+
+  static const prefix = 'OBRPREP';
+  static const version = 'v1';
+
+  static String encode({required String resi, String? tujuan}) {
+    final r = _clean(resi);
+    if (r.isEmpty) return '';
+    final t = _clean(tujuan);
+    if (t.isEmpty) return '$prefix|$version|$r';
+    return '$prefix|$version|$r|$t';
+  }
+
+  static bool looksLike(String? raw) => parse(raw) != null;
+
+  static ObrLogisticsData? parse(String? raw) {
+    final parts = _parts(raw, prefix);
+    if (parts == null || parts.length < 3) return null;
+    final resi = parts[2].trim();
+    if (resi.isEmpty) return null;
+    final tujuan = parts.length >= 4 ? parts[3].trim() : '';
+    return ObrLogisticsData(
+      kind: 'PREP',
+      resi: resi,
+      tujuan: tujuan.isEmpty ? null : tujuan,
+    );
+  }
 }
 
 class ObrDo {
@@ -209,8 +241,12 @@ class ObrRo {
   }
 }
 
-/// Parse either DO or RO logistics payload.
+/// Parse DO / RO / PREP logistics payload.
 ObrLogisticsData? parseObrLogistics(String? raw) =>
+    ObrPrep.parse(raw) ?? ObrDo.parse(raw) ?? ObrRo.parse(raw);
+
+/// Parse travel QR only (driver / cabang) — bukan klaim preparing.
+ObrLogisticsData? parseObrTravel(String? raw) =>
     ObrDo.parse(raw) ?? ObrRo.parse(raw);
 
 // -----------------------------------------------------------------------------

@@ -194,7 +194,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
             child: _moves.isEmpty
                 ? const Center(
                     child: Text(
-                      'Tidak ada paket WAITING / TRANSIT / PENDING.',
+                      'Tidak ada paket PREPARING / TRANSIT / PENDING.',
                       style: TextStyle(color: Colors.white54),
                       textAlign: TextAlign.center,
                     ),

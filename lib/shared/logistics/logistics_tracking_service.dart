@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Status surat jalan yang masih “di jalan” (bisa dilacak di peta gratis).
-const kLogisticsOpenStatuses = ['WAITING', 'TRANSIT', 'PENDING'];
+const kLogisticsOpenStatuses = ['PREPARING', 'WAITING', 'TRANSIT', 'PENDING'];
 
 class TokoGeo {
   const TokoGeo({
@@ -132,8 +132,10 @@ class LogisticsTrackingService {
 
   static String statusLabel(String? status) {
     switch ((status ?? '').toUpperCase()) {
+      case 'PREPARING':
+        return 'Sedang disiapkan';
       case 'WAITING':
-        return 'Menunggu kirim / jemput';
+        return 'Siap dijemput kurir';
       case 'TRANSIT':
         return 'Dalam perjalanan';
       case 'PENDING':
@@ -155,7 +157,8 @@ class LogisticsTrackingService {
   ) {
     final st = (move['status'] ?? '').toString().toUpperCase();
     final created = true;
-    final onRoad = st == 'WAITING' || st == 'TRANSIT' || st == 'PENDING';
+    final preparing = st == 'PREPARING' || st == 'WAITING';
+    final onRoad = st == 'TRANSIT' || st == 'PENDING';
     final done = st == 'SUCCESS';
     final batal = st == 'BATAL' || st == 'REJECTED';
 
@@ -167,10 +170,14 @@ class LogisticsTrackingService {
         current: st.isEmpty,
       ),
       (
+        key: 'prep',
+        label: 'Preparing',
+        done: preparing || onRoad || done,
+        current: preparing && !onRoad && !done,
+      ),
+      (
         key: 'road',
-        label: st == 'PENDING'
-            ? 'Menunggu'
-            : (st == 'WAITING' ? 'Siap kirim' : 'Transit'),
+        label: st == 'PENDING' ? 'Menunggu' : 'Transit',
         done: onRoad || done,
         current: onRoad && !done,
       ),
