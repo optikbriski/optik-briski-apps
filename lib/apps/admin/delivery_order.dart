@@ -1309,81 +1309,211 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                       ),
           ),
 
-          // --- BOTTOM BAR ---
+          // --- BOTTOM BAR: Draft + Preparing (aksi jelas) ---
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
             decoration: BoxDecoration(
-              color: _panel,
-              border: const Border(top: BorderSide(color: _line)),
+              color: const Color(0xFF0B1220),
+              border: Border(
+                top: BorderSide(color: Colors.white.withOpacity(0.10)),
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, -4),
+                  color: Colors.black.withOpacity(0.45),
+                  blurRadius: 22,
+                  offset: const Offset(0, -6),
                 ),
               ],
             ),
             child: SafeArea(
               top: false,
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFFBBF24),
-                        side: const BorderSide(color: Color(0xFFFBBF24)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: (isProcessing || selectedItems.isEmpty)
-                          ? null
-                          : saveDraft,
-                      child: isProcessing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  color: Color(0xFFFBBF24), strokeWidth: 2))
-                          : Text("do_btn_simpan".tr(),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 1,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F766E),
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: _panelSoft,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: (isProcessing || selectedItems.isEmpty)
-                          ? null
-                          : confirmAndSend,
-                      child: isProcessing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              'do_btn_preparing'.tr(),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w900, fontSize: 12),
+                  if (cartCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2DD4BF).withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(0xFF2DD4BF).withOpacity(0.4),
+                              ),
                             ),
+                            child: Text(
+                              '$cartCount SKU · $cartQty pcs siap diproses',
+                              style: const TextStyle(
+                                color: Color(0xFF2DD4BF),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DoActionButton(
+                          label: 'DRAFT',
+                          subtitle: 'Simpan dulu',
+                          icon: Icons.save_as_rounded,
+                          enabled: !isProcessing && selectedItems.isNotEmpty,
+                          loading: isProcessing,
+                          tone: _DoActionTone.draft,
+                          onTap: saveDraft,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DoActionButton(
+                          label: 'PREPARING',
+                          subtitle: 'Siapkan & kirim',
+                          icon: Icons.fact_check_rounded,
+                          enabled: !isProcessing && selectedItems.isNotEmpty,
+                          loading: isProcessing,
+                          tone: _DoActionTone.preparing,
+                          onTap: confirmAndSend,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _DoActionTone { draft, preparing }
+
+class _DoActionButton extends StatelessWidget {
+  const _DoActionButton({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.enabled,
+    required this.loading,
+    required this.tone,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final bool enabled;
+  final bool loading;
+  final _DoActionTone tone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDraft = tone == _DoActionTone.draft;
+    final accent =
+        isDraft ? const Color(0xFFFBBF24) : const Color(0xFF2DD4BF);
+    final fill = !enabled
+        ? Colors.white.withOpacity(0.04)
+        : isDraft
+            ? const Color(0xFFFBBF24).withOpacity(0.12)
+            : const Color(0xFF0F766E);
+    final border = !enabled
+        ? Colors.white.withOpacity(0.12)
+        : isDraft
+            ? const Color(0xFFFBBF24)
+            : const Color(0xFF2DD4BF);
+    final fg = !enabled
+        ? Colors.white38
+        : isDraft
+            ? const Color(0xFFFBBF24)
+            : Colors.white;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled && !loading ? onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 64,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: border, width: enabled ? 1.6 : 1),
+            boxShadow: enabled && !isDraft
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF2DD4BF).withOpacity(0.22),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : null,
+          ),
+          child: loading
+              ? Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: accent,
+                    ),
+                  ),
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: enabled
+                              ? accent.withOpacity(isDraft ? 0.18 : 0.22)
+                              : Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(icon, color: fg, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              label,
+                              style: TextStyle(
+                                color: fg,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                color: fg.withOpacity(enabled ? 0.75 : 0.45),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
       ),
     );
   }
