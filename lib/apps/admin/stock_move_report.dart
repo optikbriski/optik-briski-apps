@@ -10,9 +10,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/obr_codes.dart';
+import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/zoomable_network_image.dart';
 
 // ============================================================================
 // MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
@@ -406,144 +408,530 @@ class _StockMoveReportState extends State<StockMoveReport> {
     }
   }
 
-  // FUNGSI 3: DETAIL DRILL-DOWN MODAL INVOICE AUDIT
+  // FUNGSI 3: DETAIL DRILL-DOWN — premium + foto full (contain + lightbox)
   void _showDetail(dynamic item) {
+    final kind = _moveKind(item);
+    final kindColor = _kindColor(kind);
+    final status = (item['status'] ?? '-').toString().toUpperCase();
+    final resi = (item['product_name'] ?? item['id'] ?? '-').toString();
+    final dari = (item['dari_lokasi'] ?? '-').toString();
+    final ke = (item['ke_lokasi'] ?? '-').toString();
+    final paket = _cleanKeterangan(item['keterangan'] ?? '');
+    final showQr = status == 'WAITING' || status == 'TRANSIT';
+    final verifiedName = (item['verified_by_name'] ?? '').toString().trim();
+    final verifiedAtRaw = item['verified_at']?.toString();
+    String verifiedAt = '-';
+    if (verifiedAtRaw != null && verifiedAtRaw.isNotEmpty) {
+      final dt = DateTime.tryParse(verifiedAtRaw)?.toLocal();
+      verifiedAt = dt == null
+          ? verifiedAtRaw
+          : DateFormat('dd/MM/yyyy HH:mm').format(dt);
+    }
+
+    final qrData = () {
+      final tujuan = item['ke_lokasi']?.toString();
+      final resiCode = item['product_name']?.toString() ?? '';
+      if (kind == 'request') {
+        return ObrRo.encode(resi: resiCode, tujuan: tujuan);
+      }
+      return ObrDo.encode(resi: resiCode, tujuan: tujuan);
+    }();
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        title: Text("smr_detail_transaksi".tr(),
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueAccent)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              _detailRow("smr_id".tr(), item['id'].toString()),
-              _detailRow("smr_rute".tr(),
-                  "${item['dari_lokasi']} ➔ ${item['ke_lokasi']}"),
-              _detailRow("smr_isi_paket".tr(),
-                  _cleanKeterangan(item['keterangan'] ?? '')),
-              if (item['status'] == 'WAITING' ||
-                  item['status'] == 'TRANSIT') ...[
-                const SizedBox(height: 15),
-                Center(
-                  child: Column(
+      barrierColor: Colors.black.withOpacity(0.72),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+        child: R.constrainedDialog(
+          context: ctx,
+          preferWidth: 520,
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: OptikAdminTokens.card,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: kindColor.withOpacity(0.12),
+                  blurRadius: 40,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
+                  child: Row(
                     children: [
-                      Text("smr_scan_qr_update".tr(),
-                          style: const TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        width: 42,
+                        height: 42,
                         decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12)),
-                        child: QrImageView(
-                          data: () {
-                            final resi =
-                                item['product_name']?.toString() ?? '';
-                            final tujuan =
-                                item['ke_lokasi']?.toString();
-                            final kind = _moveKind(item);
-                            if (kind == 'request') {
-                              return ObrRo.encode(
-                                  resi: resi, tujuan: tujuan);
-                            }
-                            return ObrDo.encode(resi: resi, tujuan: tujuan);
-                          }(),
-                          version: QrVersions.auto,
-                          size: 130.0,
-                          backgroundColor: Colors.white,
+                          color: kindColor.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: kindColor.withOpacity(0.35)),
                         ),
+                        child: Icon(Icons.local_shipping_rounded,
+                            color: kindColor, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "smr_detail_transaksi".tr().toUpperCase(),
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.45),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              resi,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Tutup',
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.white38, size: 20),
                       ),
                     ],
                   ),
                 ),
-              ],
-              const SizedBox(height: 15),
-              const Divider(color: Colors.white12, height: 16),
-              Text("smr_bukti_pengirim".tr(),
-                  style: const TextStyle(fontSize: 10, color: Colors.white38)),
-              const SizedBox(height: 5),
-              _buildFotoBox(item['bukti_foto_pengirim']),
-              const SizedBox(height: 15),
-              Text("smr_bukti_penerima".tr(),
-                  style: const TextStyle(fontSize: 10, color: Colors.white38)),
-              const SizedBox(height: 5),
-              _buildFotoBox(item['bukti_foto_penerima']),
-              if ((item['verified_by_name'] ?? '')
-                      .toString()
-                      .trim()
-                      .isNotEmpty ||
-                  item['verified_at'] != null) ...[
-                const SizedBox(height: 12),
-                _detailRow(
-                  'Diterima oleh',
-                  item['verified_by_name']?.toString() ?? '-',
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _detailBadge(_kindLabel(kind), kindColor),
+                            _detailBadge(status, _statusAccent(status)),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _detailRouteCard(dari, ke),
+                        const SizedBox(height: 12),
+                        _detailInfoCard(
+                          label: "smr_isi_paket".tr(),
+                          value: paket.isEmpty ? '-' : paket,
+                          icon: Icons.inventory_2_outlined,
+                        ),
+                        const SizedBox(height: 8),
+                        _detailInfoCard(
+                          label: "smr_id".tr(),
+                          value: item['id']?.toString() ?? '-',
+                          icon: Icons.tag_rounded,
+                          mono: true,
+                        ),
+                        if (showQr) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.orangeAccent.withOpacity(0.12),
+                                  Colors.orangeAccent.withOpacity(0.04),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.orangeAccent.withOpacity(0.35),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  "smr_scan_qr_update".tr(),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.orangeAccent
+                                            .withOpacity(0.18),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: QrImageView(
+                                    data: qrData,
+                                    version: QrVersions.auto,
+                                    size: 168,
+                                    backgroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        Text(
+                          'BUKTI FOTO',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.4),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildFotoSection(
+                          title: "smr_bukti_pengirim".tr(),
+                          url: item['bukti_foto_pengirim'],
+                          accent: const Color(0xFF2DD4BF),
+                        ),
+                        const SizedBox(height: 14),
+                        _buildFotoSection(
+                          title: "smr_bukti_penerima".tr(),
+                          url: item['bukti_foto_penerima'],
+                          accent: Colors.lightBlueAccent,
+                        ),
+                        if (verifiedName.isNotEmpty ||
+                            verifiedAtRaw != null) ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _detailInfoCard(
+                                  label: 'Diterima oleh',
+                                  value: verifiedName.isEmpty
+                                      ? '-'
+                                      : verifiedName,
+                                  icon: Icons.person_outline_rounded,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _detailInfoCard(
+                                  label: 'Waktu terima',
+                                  value: verifiedAt,
+                                  icon: Icons.schedule_rounded,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-                _detailRow(
-                  'Waktu terima',
-                  () {
-                    final raw = item['verified_at']?.toString();
-                    if (raw == null || raw.isEmpty) return '-';
-                    final dt = DateTime.tryParse(raw)?.toLocal();
-                    if (dt == null) return raw;
-                    return DateFormat('dd/MM/yyyy HH:mm').format(dt);
-                  }(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'TUTUP',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("TUTUP",
+      ),
+    );
+  }
+
+  Color _statusAccent(String status) {
+    switch (status.toUpperCase()) {
+      case 'SUCCESS':
+      case 'RECEIVED':
+      case 'DONE':
+        return const Color(0xFF34D399);
+      case 'TRANSIT':
+      case 'WAITING':
+      case 'SHIPPING':
+        return Colors.orangeAccent;
+      case 'CANCEL':
+      case 'BATAL':
+      case 'FAILED':
+        return Colors.redAccent;
+      default:
+        return Colors.blueAccent;
+    }
+  }
+
+  Widget _detailBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRouteCard(String dari, String ke) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dari',
                   style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13)))
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  dari,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.orangeAccent.withOpacity(0.12),
+              shape: BoxShape.circle,
+              border:
+                  Border.all(color: Colors.orangeAccent.withOpacity(0.35)),
+            ),
+            child: const Icon(Icons.arrow_forward_rounded,
+                color: Colors.orangeAccent, size: 18),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'Ke',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  ke,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFotoBox(dynamic url) {
-    if (url == null || url.toString().isEmpty || url.toString() == '-') {
-      return Text("smr_belum_ada_foto".tr(),
-          style: const TextStyle(
-              fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic));
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(url.toString(),
-          height: 140,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (c, e, s) =>
-              const Icon(Icons.broken_image, color: Colors.white12, size: 40)),
+  Widget _detailInfoCard({
+    required String label,
+    required String value,
+    required IconData icon,
+    bool mono = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.white38),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                SelectableText(
+                  value,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: mono ? 11 : 12.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                    fontFamily: mono ? 'monospace' : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _detailRow(String title, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget _buildFotoSection({
+    required String title,
+    required dynamic url,
+    required Color accent,
+  }) {
+    final raw = url?.toString().trim() ?? '';
+    final hasFoto = raw.isNotEmpty && raw != '-';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.22)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title,
-              style: const TextStyle(fontSize: 10, color: Colors.white38)),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          Row(
+            children: [
+              Icon(Icons.photo_camera_outlined, size: 16, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title.replaceAll(':', ''),
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (hasFoto)
+                TextButton.icon(
+                  onPressed: () => showZoomableImageDialog(context, raw),
+                  icon: Icon(Icons.open_in_full_rounded,
+                      size: 14, color: accent),
+                  label: Text(
+                    'Full',
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (!hasFoto)
+            Container(
+              height: 160,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.06)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.image_not_supported_outlined,
+                      color: Colors.white.withOpacity(0.25), size: 28),
+                  const SizedBox(height: 8),
+                  Text(
+                    "smr_belum_ada_foto".tr(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.35),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            // Full frame: contain (bukan crop), tinggi besar, bisa pinch/full.
+            ZoomableNetworkImagePane(
+              url: raw,
+              aspectRatio: 4 / 3,
+              borderRadius: 12,
+            ),
         ],
       ),
     );
