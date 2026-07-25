@@ -302,7 +302,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   PlatformFile? foto;
   String? editId;
   List<dynamic> listCabang = [];
-  String? selectedCabang;
+  /// Target stok awal saat create. Katalog selalu ke PUSAT + semua toko.
+  String? selectedCabang = 'BROADCAST_ALL';
 
   //--- 4. SIKLUS HIDUP WIDGET (INIT & DISPOSE MEMORI)
   @override
@@ -369,6 +370,93 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       }
     } catch (e) {
       debugPrint("Init error: $e");
+    }
+  }
+
+  /// Pastikan SKU terdaftar di semua toko (stok 0). RPC dulu, fallback insert client.
+  Future<void> _propagateSkuToAllToko({
+    required String sku,
+    Map<String, dynamic>? template,
+  }) async {
+    final client = Supabase.instance.client;
+    try {
+      await client.rpc('propagate_pusat_sku_to_all_toko', params: {
+        'p_sku': sku,
+      });
+      return;
+    } catch (e) {
+      debugPrint('RPC propagate_pusat_sku_to_all_toko gagal, fallback: $e');
+    }
+
+    final base = Map<String, dynamic>.from(template ?? const {});
+    base.remove('id');
+    base.remove('created_at');
+    base.remove('breakdown_stok');
+    base.remove('total_stock');
+    base['sku'] = sku;
+    base['stock'] = 0;
+
+    for (final cabang in listCabang) {
+      final toko = cabang.toString().toUpperCase();
+      if (toko.isEmpty || toko == 'PUSAT') continue;
+      try {
+        final existing = await client
+            .from('products')
+            .select('id')
+            .eq('toko_id', toko)
+            .eq('sku', sku)
+            .maybeSingle();
+        if (existing != null) continue;
+        final row = Map<String, dynamic>.from(base);
+        row['toko_id'] = toko;
+        await client.from('products').insert(row);
+      } catch (e) {
+        debugPrint('Gagal daftar SKU $sku di $toko: $e');
+      }
+    }
+  }
+
+  Future<void> _syncPusatCatalogToAllToko() async {
+    setState(() => isLoading = true);
+    try {
+      try {
+        final res = await Supabase.instance.client
+            .rpc('backfill_pusat_catalog_to_all_toko');
+        if (!mounted) return;
+        final map = res is Map ? Map<String, dynamic>.from(res) : null;
+        final skus = map?['skus'] ?? '?';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Katalog PUSAT disinkron ke semua toko ($skus SKU).'),
+          backgroundColor: Colors.green,
+        ));
+      } catch (e) {
+        // Fallback: tiap SKU PUSAT di list gabungan
+        var n = 0;
+        for (final raw in listProdukAll) {
+          final item = raw as Map;
+          final sku = ProductIdentity.normalizeSku(item['sku']) ??
+              ProductIdentity.normalizeBarcode(item['barcode']);
+          if (sku == null) continue;
+          await _propagateSkuToAllToko(
+            sku: sku,
+            template: Map<String, dynamic>.from(item),
+          );
+          n++;
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Katalog disinkron via fallback ($n SKU).'),
+          backgroundColor: Colors.green,
+        ));
+      }
+      await _fetch();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal sinkron: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -721,46 +809,33 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         final actor =
             (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
         final sku = (basePayload['sku'] ?? finalBarcode).toString();
+        final client = Supabase.instance.client;
 
-        if (selectedCabang == "BROADCAST_ALL") {
-          var pusatData = Map<String, dynamic>.from(basePayload);
-          pusatData['toko_id'] = 'PUSAT';
-          pusatData['stock'] = 0;
-          await Supabase.instance.client.from('products').insert(pusatData);
-          if (stokInput > 0) {
-            await mut.opening(
-              tokoId: 'PUSAT',
-              sku: sku,
-              qty: stokInput,
-              actorNama: actor,
-            );
-          }
+        // Katalog selalu: PUSAT + semua toko (stok 0). Qty awal hanya di lokasi alokasi.
+        final pusatData = Map<String, dynamic>.from(basePayload);
+        pusatData['toko_id'] = 'PUSAT';
+        pusatData['stock'] = 0;
+        await client.from('products').insert(pusatData);
 
-          for (var cabang in listCabang) {
-            try {
-              var branchData = Map<String, dynamic>.from(basePayload);
-              branchData['toko_id'] = cabang.toString().toUpperCase();
-              branchData['stock'] = 0;
-              await Supabase.instance.client
-                  .from('products')
-                  .insert(branchData);
-            } catch (e) {
-              debugPrint("Gagal otomatis broadcast ke cabang $cabang: $e");
-            }
-          }
-        } else {
-          var specificData = Map<String, dynamic>.from(basePayload);
-          specificData['toko_id'] = selectedCabang;
-          specificData['stock'] = 0;
-          await Supabase.instance.client.from('products').insert(specificData);
-          if (stokInput > 0) {
-            await mut.opening(
-              tokoId: selectedCabang!,
-              sku: sku,
-              qty: stokInput,
-              actorNama: actor,
-            );
-          }
+        await _propagateSkuToAllToko(
+          sku: sku,
+          template: basePayload,
+        );
+
+        final openingToko =
+            (selectedCabang == null ||
+                    selectedCabang == 'BROADCAST_ALL' ||
+                    selectedCabang == 'PUSAT')
+                ? 'PUSAT'
+                : selectedCabang!.toString().toUpperCase();
+
+        if (stokInput > 0) {
+          await mut.opening(
+            tokoId: openingToko,
+            sku: sku,
+            qty: stokInput,
+            actorNama: actor,
+          );
         }
       } else {
         // Metadata sync ke semua toko (SKU) — stok tidak diubah di sini.
@@ -808,6 +883,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       inputKat = 'Frame';
       inputSub = 'Plastik';
       selectedJenisLensa = null;
+      selectedCabang = 'BROADCAST_ALL';
       foto = null;
       barcodeMode = 'AUTOMATIC'; // 🎯 Reset kembali ke setelan default otomatis
     });
@@ -1725,47 +1801,50 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       if (nama.isEmpty) throw 'Nama produk kosong.';
       if (sku == null) throw 'SKU wajib untuk Add Branch.';
 
-      // Hanya daftar produk di cabang (stok 0). Qty fisik lewat RO/DO.
+      // Katalog: PUSAT + semua toko (stok 0). Qty fisik tetap lewat RO/DO.
       final detailTokos = <Map<String, dynamic>>[];
 
       for (final toko in cabangTargets) {
-        Map<String, dynamic>? branch = await client
+        final branch = await client
             .from('products')
             .select('id, stock')
             .eq('toko_id', toko)
             .eq('sku', sku)
             .maybeSingle();
-
-        if (branch != null) {
-          final lama = int.tryParse(branch['stock']?.toString() ?? '0') ?? 0;
-          detailTokos.add({
-            'toko': toko,
-            'created': false,
-            'stock_before': lama,
-            'stock_after': lama,
-            'qty_delta': 0,
-          });
-        } else {
-          final row = Map<String, dynamic>.from(baseProduct);
-          row.remove('id');
-          row.remove('created_at');
-          row.remove('breakdown_stok');
-          row.remove('total_stock');
-          row['toko_id'] = toko;
-          row['stock'] = 0;
-          row['nama'] = nama;
-          row['sku'] = sku;
-          if (barcode.isNotEmpty) row['barcode'] = barcode;
-          await client.from('products').insert(row);
-          detailTokos.add({
-            'toko': toko,
-            'created': true,
-            'stock_before': 0,
-            'stock_after': 0,
-            'qty_delta': 0,
-          });
-        }
+        final lama = int.tryParse(branch?['stock']?.toString() ?? '0') ?? 0;
+        detailTokos.add({
+          'toko': toko,
+          'created': branch == null,
+          'stock_before': lama,
+          'stock_after': lama,
+          'qty_delta': 0,
+        });
       }
+
+      final pusat = await client
+          .from('products')
+          .select('id')
+          .eq('toko_id', 'PUSAT')
+          .eq('sku', sku)
+          .maybeSingle();
+      if (pusat == null) {
+        final row = Map<String, dynamic>.from(baseProduct);
+        row.remove('id');
+        row.remove('created_at');
+        row.remove('breakdown_stok');
+        row.remove('total_stock');
+        row['toko_id'] = 'PUSAT';
+        row['stock'] = 0;
+        row['nama'] = nama;
+        row['sku'] = sku;
+        if (barcode.isNotEmpty) row['barcode'] = barcode;
+        await client.from('products').insert(row);
+      }
+
+      await _propagateSkuToAllToko(
+        sku: sku,
+        template: Map<String, dynamic>.from(baseProduct),
+      );
 
       final user = client.auth.currentUser;
       var logOk = true;
@@ -2311,6 +2390,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       appBar: PremiumAppBar(
         title: "pm_title".tr(),
         actions: [
+          if (isCanEdit)
+            IconButton(
+              tooltip: 'Sinkron katalog PUSAT ke semua toko',
+              icon: const Icon(Icons.sync_alt_rounded,
+                  color: Color(0xFF2DD4BF)),
+              onPressed: isLoading ? null : _syncPusatCatalogToAllToko,
+            ),
           IconButton(
             tooltip: 'Riwayat Add Branch',
             icon: const Icon(Icons.history_rounded, color: Colors.tealAccent),
@@ -2539,8 +2625,12 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 value: selectedCabang,
                 decoration: InputDecoration(
-                  labelText: "pm_alokasi_cabang".tr(),
+                  labelText: 'Stok awal ke (katalog otomatis semua toko)',
                   labelStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+                  helperText:
+                      'Produk selalu terdaftar di PUSAT + semua cabang (stok 0).',
+                  helperStyle:
+                      const TextStyle(fontSize: 10, color: Colors.white38),
                   prefixIcon: const Icon(Icons.store,
                       color: Colors.blueAccent, size: 18),
                   filled: true,
@@ -2552,7 +2642,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 items: [
                   DropdownMenuItem(
                       value: "BROADCAST_ALL",
-                      child: Text("pm_broadcast".tr(),
+                      child: Text('Stok awal: PUSAT',
                           style: const TextStyle(
                               color: Colors.orangeAccent,
                               fontWeight: FontWeight.bold))),
@@ -2560,8 +2650,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       value: "PUSAT", child: Text("pm_pusat".tr())),
                   ...listCabang.map((cabang) => DropdownMenuItem(
                       value: cabang.toString(),
-                      child:
-                          Text("CABANG ${cabang.toString().toUpperCase()}"))),
+                      child: Text(
+                          "Stok awal: ${cabang.toString().toUpperCase()}"))),
                 ],
                 onChanged: (val) {
                   setState(() => selectedCabang = val?.toString());
