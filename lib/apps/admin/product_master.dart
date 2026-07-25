@@ -70,6 +70,217 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return t;
   }
 
+  Future<void> _pickCabangFilter() async {
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final q = query.trim().toLowerCase();
+            final filtered = units.where((u) {
+              if (q.isEmpty) return true;
+              final id = u.toLowerCase();
+              final label = _cabangLabel(u).toLowerCase();
+              return label.contains(q) || id.contains(q);
+            }).toList();
+
+            return Dialog(
+              backgroundColor: OptikAdminTokens.card,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 420,
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Pilih cabang',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Tutup',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close,
+                                color: Colors.white38, size: 20),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        autofocus: true,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'Cari nama cabang...',
+                          hintStyle: const TextStyle(
+                              color: Colors.white38, fontSize: 13),
+                          prefixIcon: const Icon(Icons.search,
+                              color: Colors.orangeAccent, size: 18),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.05),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                        ),
+                        onChanged: (v) =>
+                            setDialogState(() => query = v),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'Cabang tidak ditemukan',
+                                  style: TextStyle(
+                                      color: Colors.white38, fontSize: 13),
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: filtered.length,
+                                separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  color: Colors.white.withOpacity(0.06),
+                                ),
+                                itemBuilder: (context, i) {
+                                  final u = filtered[i];
+                                  final selected = filterUnit.toUpperCase() ==
+                                      u.toUpperCase();
+                                  return ListTile(
+                                    dense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    leading: Icon(
+                                      u == 'SEMUA'
+                                          ? Icons.hub_outlined
+                                          : Icons.storefront_outlined,
+                                      size: 18,
+                                      color: selected
+                                          ? Colors.orangeAccent
+                                          : Colors.white38,
+                                    ),
+                                    title: Text(
+                                      _cabangLabel(u),
+                                      style: TextStyle(
+                                        color: selected
+                                            ? Colors.orangeAccent
+                                            : Colors.white,
+                                        fontWeight: selected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    trailing: selected
+                                        ? const Icon(Icons.check_circle,
+                                            color: Colors.orangeAccent,
+                                            size: 18)
+                                        : null,
+                                    onTap: () => Navigator.pop(context, u),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (chosen != null && mounted) {
+      setState(() => filterUnit = chosen);
+    }
+  }
+
+  Widget _buildCabangFilterControl() {
+    final selected = filterUnit != 'SEMUA';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _pickCabangFilter,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? Colors.orangeAccent.withOpacity(0.55)
+                  : OptikAdminTokens.lineStrong,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.storefront_outlined : Icons.hub_outlined,
+                size: 18,
+                color: selected ? Colors.orangeAccent : Colors.white54,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      selected ? 'Cabang terpilih' : 'Semua cabang',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _cabangLabel(filterUnit),
+                      style: TextStyle(
+                        color: selected ? Colors.orangeAccent : Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                IconButton(
+                  tooltip: 'Reset ke semua cabang',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: () => setState(() => filterUnit = 'SEMUA'),
+                  icon: const Icon(Icons.close, color: Colors.white38, size: 18),
+                ),
+              const Icon(Icons.search, color: Colors.orangeAccent, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _toggleGroupCollapsed(String key) {
     setState(() {
       if (_collapsedGroups.contains(key)) {
@@ -2498,16 +2709,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         fontSize: 11,
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                PremiumChipWrap(
-                  children: [
-                    for (final u in units)
-                      _filterChip(
-                        label: _cabangLabel(u),
-                        selected: filterUnit.toUpperCase() == u.toUpperCase(),
-                        onTap: () => setState(() => filterUnit = u),
-                      ),
-                  ],
-                ),
+                _buildCabangFilterControl(),
                 const SizedBox(height: OptikAdminTokens.spaceMd),
               ],
               Text('Grup tampilan',
