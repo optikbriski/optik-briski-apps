@@ -1379,6 +1379,130 @@ class _SalesPageState extends State<SalesPage> {
   // ==========================================================================
   // POP-UP PENCARIAN & PEMILIHAN PRODUK MANUAL
   // ==========================================================================
+
+  double _posPickDialogWidth(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    return (w * 0.72).clamp(520.0, 920.0);
+  }
+
+  double _posPickDialogHeight(BuildContext context) {
+    final h = MediaQuery.sizeOf(context).height;
+    return (h * 0.82).clamp(480.0, 760.0);
+  }
+
+  Widget _posPickProductTile({
+    required Map<String, dynamic> item,
+    required int stock,
+    required int real,
+    required int pending,
+    required int totalReal,
+    required String tokoLabel,
+    required VoidCallback onTap,
+  }) {
+    final sku = item['sku']?.toString() ?? "pos_tanpa_sku".tr();
+    final fotoUrl =
+        (item['foto_url'] ?? item['image_url'] ?? '').toString();
+    final nama = item['nama']?.toString() ?? "pos_tanpa_nama".tr();
+    final harga = item['harga'] ?? 0;
+    final stockColor = stock > 0 ? Colors.greenAccent : Colors.redAccent;
+
+    return Card(
+      color: Colors.white.withOpacity(0.04),
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: fotoUrl.isNotEmpty
+                    ? Image.network(
+                        fotoUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.image_not_supported,
+                          color: Colors.grey,
+                          size: 28,
+                        ),
+                      )
+                    : const Icon(Icons.image, color: Colors.white24, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nama,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'SKU: $sku',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12.5,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Toko $tokoLabel — Tersedia: $stock · Real: $real · Pending: $pending',
+                      style: TextStyle(
+                        color: stockColor,
+                        fontSize: 12.5,
+                        height: 1.35,
+                      ),
+                    ),
+                    Text(
+                      'Total semua lokasi (Master): Real $totalReal',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Rp $harga',
+                      style: const TextStyle(
+                        color: Colors.amberAccent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(
+                padding: EdgeInsets.only(top: 20),
+                child: Icon(Icons.add_shopping_cart,
+                    color: Colors.orangeAccent, size: 26),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _munculkanDialogPilihFrame(BuildContext context) {
     showDialog(
       context: context,
@@ -1421,31 +1545,37 @@ class _SalesPageState extends State<SalesPage> {
 
             return R.constrainedDialog(
               context: context,
-              preferWidth: 360,
+              preferWidth: _posPickDialogWidth(context),
               child: AlertDialog(
               backgroundColor: OptikAdminTokens.card,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15)),
+                  borderRadius: BorderRadius.circular(16)),
               title: Text("pos_pilih_produk_frame".tr(),
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
                 width: double.infinity,
-                height: (MediaQuery.sizeOf(context).height * 0.55).clamp(320.0, 450.0),
+                height: _posPickDialogHeight(context),
                 child: Column(
                   children: [
                     TextField(
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
                         hintText: "pos_filter_nama_sku".tr(),
                         suffixIcon: const Icon(Icons.search,
-                            color: Colors.orangeAccent, size: 18),
+                            color: Colors.orangeAccent, size: 22),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 14),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none),
                       ),
                       onChanged: (val) {
@@ -1453,7 +1583,7 @@ class _SalesPageState extends State<SalesPage> {
                         cariDataFrame();
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Expanded(
                       child: isLoading
                           ? const Center(
@@ -1482,77 +1612,26 @@ class _SalesPageState extends State<SalesPage> {
                                         (widget.profile['toko_id'] ?? 'PUSAT')
                                             .toString()
                                             .toUpperCase();
-                                    String sku =
-                                        frame['sku'] ?? "pos_tanpa_sku".tr();
-                                    String fotoUrl = frame['foto_url'] ??
-                                        frame['image_url'] ??
-                                        "";
 
-                                    return Card(
-                                      color: Colors.white.withOpacity(0.03),
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      child: ListTile(
-                                        leading: Container(
-                                          width: 45,
-                                          height: 45,
-                                          decoration: BoxDecoration(
-                                              color: Colors.white
-                                                  .withOpacity(0.05),
-                                              borderRadius:
-                                                  BorderRadius.circular(6)),
-                                          child: fotoUrl.isNotEmpty
-                                              ? ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                  child: Image.network(fotoUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (context,
-                                                              error,
-                                                              stackTrace) =>
-                                                          const Icon(
-                                                              Icons
-                                                                  .image_not_supported,
-                                                              color:
-                                                                  Colors.grey,
-                                                              size: 18)))
-                                              : const Icon(Icons.image,
-                                                  color: Colors.white24,
-                                                  size: 18),
-                                        ),
-                                        title: Text(
-                                            frame['nama'] ??
-                                                "pos_tanpa_nama".tr(),
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold)),
-                                        subtitle: Text(
-                                            "SKU: $sku\n"
-                                            "Toko $tokoLabel — Tersedia: $stock · Real: $real · Pending: $pending\n"
-                                            "Total semua lokasi (Master): Real $totalReal\n"
-                                            "Rp ${frame['harga'] ?? 0}",
-                                            style: TextStyle(
-                                                color: stock > 0
-                                                    ? Colors.greenAccent
-                                                    : Colors.redAccent,
-                                                fontSize: 11)),
-                                        isThreeLine: true,
-                                        trailing: const Icon(
-                                            Icons.add_shopping_cart,
-                                            color: Colors.orangeAccent),
-                                        onTap: () {
-                                          if (stock <= 0) {
-                                            _showSnack("pos_stok_kosong".tr(),
-                                                Colors.red);
-                                            return;
-                                          }
-                                          setState(() {
-                                            selectedFrame = frameMap;
-                                            isFrameActive = true;
-                                          });
-                                          Navigator.pop(ctx);
-                                        },
-                                      ),
+                                    return _posPickProductTile(
+                                      item: frameMap,
+                                      stock: stock,
+                                      real: real,
+                                      pending: pending,
+                                      totalReal: totalReal,
+                                      tokoLabel: tokoLabel,
+                                      onTap: () {
+                                        if (stock <= 0) {
+                                          _showSnack("pos_stok_kosong".tr(),
+                                              Colors.red);
+                                          return;
+                                        }
+                                        setState(() {
+                                          selectedFrame = frameMap;
+                                          isFrameActive = true;
+                                        });
+                                        Navigator.pop(ctx);
+                                      },
                                     );
                                   },
                                 ),
@@ -1699,31 +1778,37 @@ class _SalesPageState extends State<SalesPage> {
 
             return R.constrainedDialog(
               context: context,
-              preferWidth: 360,
+              preferWidth: _posPickDialogWidth(context),
               child: AlertDialog(
               backgroundColor: OptikAdminTokens.card,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15)),
+                  borderRadius: BorderRadius.circular(16)),
               title: Text("pos_pilih_aksesoris".tr(),
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold)),
               content: SizedBox(
                 width: double.infinity,
-                height: (MediaQuery.sizeOf(context).height * 0.55).clamp(320.0, 450.0),
+                height: _posPickDialogHeight(context),
                 child: Column(
                   children: [
                     TextField(
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
                         hintText: "pos_filter_nama_sku".tr(),
                         suffixIcon: const Icon(Icons.search,
-                            color: Colors.orangeAccent, size: 18),
+                            color: Colors.orangeAccent, size: 22),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.05),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 14),
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none),
                       ),
                       onChanged: (val) {
@@ -1731,7 +1816,7 @@ class _SalesPageState extends State<SalesPage> {
                         cariDataLainnya();
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Expanded(
                       child: isLoading
                           ? const Center(
@@ -1753,74 +1838,33 @@ class _SalesPageState extends State<SalesPage> {
                                         StockQty.pendingOf(itemMap);
                                     final stock =
                                         StockQty.availableOf(itemMap);
-                                    String sku =
-                                        item['sku'] ?? "pos_tanpa_sku".tr();
-                                    String fotoUrl = item['foto_url'] ??
-                                        item['image_url'] ??
-                                        "";
+                                    final totalReal = int.tryParse(
+                                            '${itemMap['total_stock'] ?? real}') ??
+                                        real;
+                                    final tokoLabel =
+                                        (widget.profile['toko_id'] ?? 'PUSAT')
+                                            .toString()
+                                            .toUpperCase();
 
-                                    return Card(
-                                      color: Colors.white.withOpacity(0.03),
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      child: ListTile(
-                                        leading: Container(
-                                          width: 45,
-                                          height: 45,
-                                          decoration: BoxDecoration(
-                                              color: Colors.white
-                                                  .withOpacity(0.05),
-                                              borderRadius:
-                                                  BorderRadius.circular(6)),
-                                          child: fotoUrl.isNotEmpty
-                                              ? ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                  child: Image.network(fotoUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (c, e, s) =>
-                                                          const Icon(
-                                                              Icons
-                                                                  .image_not_supported,
-                                                              color:
-                                                                  Colors.grey,
-                                                              size: 18)))
-                                              : const Icon(Icons.image,
-                                                  color: Colors.white24,
-                                                  size: 18),
-                                        ),
-                                        title: Text(
-                                            item['nama'] ??
-                                                "pos_tanpa_nama".tr(),
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold)),
-                                        subtitle: Text(
-                                            "SKU: $sku\n"
-                                            "Tersedia: $stock  ·  Real: $real  ·  Pending: $pending\n"
-                                            "Rp ${item['harga'] ?? 0}",
-                                            style: TextStyle(
-                                                color: stock > 0
-                                                    ? Colors.greenAccent
-                                                    : Colors.redAccent,
-                                                fontSize: 11)),
-                                        isThreeLine: true,
-                                        trailing: const Icon(
-                                            Icons.add_shopping_cart,
-                                            color: Colors.orangeAccent),
-                                        onTap: () {
-                                          if (stock <= 0) {
-                                            _showSnack("pos_stok_kosong".tr(),
-                                                Colors.red);
-                                            return;
-                                          }
-                                          setState(() {
-                                            selectedAksesoris = itemMap;
-                                            isLainnyaActive = true;
-                                          });
-                                          Navigator.pop(ctx);
-                                        },
-                                      ),
+                                    return _posPickProductTile(
+                                      item: itemMap,
+                                      stock: stock,
+                                      real: real,
+                                      pending: pending,
+                                      totalReal: totalReal,
+                                      tokoLabel: tokoLabel,
+                                      onTap: () {
+                                        if (stock <= 0) {
+                                          _showSnack("pos_stok_kosong".tr(),
+                                              Colors.red);
+                                          return;
+                                        }
+                                        setState(() {
+                                          selectedAksesoris = itemMap;
+                                          isLainnyaActive = true;
+                                        });
+                                        Navigator.pop(ctx);
+                                      },
                                     );
                                   },
                                 ),
