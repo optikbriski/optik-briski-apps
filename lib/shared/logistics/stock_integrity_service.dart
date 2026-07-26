@@ -9,6 +9,7 @@ class StockIntegrityIssue {
     required this.delta,
     this.productId,
     this.nama,
+    this.ledgerByReason = const {},
   });
 
   final String sku;
@@ -22,6 +23,9 @@ class StockIntegrityIssue {
   final String? productId;
   final String? nama;
 
+  /// Jumlah qty_delta per reason ledger (SALE, TRANSFER_IN, …).
+  final Map<String, int> ledgerByReason;
+
   String get diagnosis {
     if (delta > 0) {
       return 'Stok di sistem +$delta lebih banyak dari jejak ledger '
@@ -33,6 +37,64 @@ class StockIntegrityIssue {
     }
     return 'Sinkron.';
   }
+
+  /// Label ringkas breakdown jejak, mis. "SALE −12 · TRANSFER_IN +20".
+  String get ledgerTrailLabel {
+    if (ledgerByReason.isEmpty) return 'Belum ada jejak ledger';
+    final order = [
+      'OPENING',
+      'TRANSFER_IN',
+      'TRANSFER_OUT',
+      'SALE',
+      'RETURN_IN',
+      'RETURN_OUT',
+      'WRITE_OFF',
+      'ADJUST',
+    ];
+    final keys = <String>[
+      ...order.where(ledgerByReason.containsKey),
+      ...ledgerByReason.keys.where((k) => !order.contains(k)),
+    ];
+    return keys.map((k) {
+      final v = ledgerByReason[k] ?? 0;
+      final sign = v > 0 ? '+' : '';
+      return '$k $sign$v';
+    }).join(' · ');
+  }
+}
+
+/// Satu paket/DO yang masih terbuka (preparing / transit).
+class StockOpenTransitItem {
+  const StockOpenTransitItem({
+    required this.id,
+    required this.resi,
+    required this.fromToko,
+    required this.toToko,
+    required this.status,
+    required this.qty,
+    this.createdAt,
+  });
+
+  final String id;
+  final String resi;
+  final String fromToko;
+  final String toToko;
+  final String status;
+  final int qty;
+  final String? createdAt;
+}
+
+/// Baris SKU untuk drill-down stok / penjualan.
+class StockSkuQtyLine {
+  const StockSkuQtyLine({
+    required this.sku,
+    required this.nama,
+    required this.qty,
+  });
+
+  final String sku;
+  final String nama;
+  final int qty;
 }
 
 class StockLeakReport {
@@ -42,6 +104,14 @@ class StockLeakReport {
     required this.missingSkuCount,
     required this.openTransitQty,
     required this.generatedAt,
+    this.stockByToko = const {},
+    this.stockLinesByToko = const {},
+    this.transitByStatus = const {},
+    this.transitByTujuan = const {},
+    this.openTransitItems = const [],
+    this.soldByToko30d = const {},
+    this.soldLinesByToko30d = const {},
+    this.ledgerByReason = const {},
   });
 
   final int checkedProducts;
@@ -52,7 +122,40 @@ class StockLeakReport {
   final int openTransitQty;
   final DateTime generatedAt;
 
+  /// Total stok fisik (`products.stock`) per toko_id.
+  final Map<String, int> stockByToko;
+
+  /// Top SKU berstok per toko (untuk drill-down).
+  final Map<String, List<StockSkuQtyLine>> stockLinesByToko;
+
+  /// Qty transit terbuka per status (PREPARING / TRANSIT / …).
+  final Map<String, int> transitByStatus;
+
+  /// Qty transit terbuka per cabang tujuan.
+  final Map<String, int> transitByTujuan;
+
+  /// Daftar paket transit terbuka (detail saat kategori diketuk).
+  final List<StockOpenTransitItem> openTransitItems;
+
+  /// Abs qty SALE ledger 30 hari terakhir per toko.
+  final Map<String, int> soldByToko30d;
+
+  /// Top SKU terjual per toko (30 hari).
+  final Map<String, List<StockSkuQtyLine>> soldLinesByToko30d;
+
+  /// Agregat qty_delta global per reason (dari scan mismatch trail + ringkas).
+  final Map<String, int> ledgerByReason;
+
   bool get isClean => mismatches.isEmpty && missingSkuCount == 0;
+
+  int get totalStockOnHand =>
+      stockByToko.values.fold<int>(0, (s, v) => s + v);
+
+  int get totalSold30d =>
+      soldByToko30d.values.fold<int>(0, (s, v) => s + v);
+
+  int get cabangCount =>
+      stockByToko.keys.where((k) => k != 'PUSAT').length;
 
   String get verdict {
     if (isClean) {
@@ -148,20 +251,34 @@ class StockIntegrityService {
     final mismatches = <StockIntegrityIssue>[];
     var checked = 0;
     var missingSku = 0;
+    final stockByToko = <String, int>{};
+    final stockLinesRaw = <String, List<StockSkuQtyLine>>{};
 
     for (final p in allRows) {
       checked++;
       final sku = (p['sku'] ?? '').toString().trim();
       final toko = (p['toko_id'] ?? '').toString().toUpperCase();
       final nama = (p['nama'] ?? sku).toString();
+      final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
+
+      if (toko.isNotEmpty) {
+        stockByToko[toko] = (stockByToko[toko] ?? 0) + stock;
+        if (stock > 0 && sku.isNotEmpty) {
+          stockLinesRaw.putIfAbsent(toko, () => []).add(StockSkuQtyLine(
+                sku: sku,
+                nama: nama,
+                qty: stock,
+              ));
+        }
+      }
 
       if (sku.isEmpty || sku.startsWith('NOSKU-')) {
         missingSku++;
       }
 
       if (sku.isNotEmpty) {
-        final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
-        final ledgerSum = await _sumLedger(sku: sku, tokoId: toko);
+        final ledger = await _ledgerForSkuToko(sku: sku, tokoId: toko);
+        final ledgerSum = ledger.sum;
         if (ledgerSum != stock) {
           mismatches.add(StockIntegrityIssue(
             sku: sku,
@@ -171,12 +288,13 @@ class StockIntegrityService {
             delta: stock - ledgerSum,
             productId: p['id']?.toString(),
             nama: p['nama']?.toString(),
+            ledgerByReason: ledger.byReason,
           ));
         }
       }
 
-      // 10% → 90% untuk pemindaian baris
-      final scanPct = total == 0 ? 0.9 : 0.10 + (0.80 * (checked / total));
+      // 10% → 88% untuk pemindaian baris
+      final scanPct = total == 0 ? 0.88 : 0.10 + (0.78 * (checked / total));
       emit(StockLeakProgress(
         percent: scanPct,
         phase: 'Memverifikasi jejak ledger…',
@@ -188,14 +306,50 @@ class StockIntegrityService {
     }
 
     emit(StockLeakProgress(
-      percent: 0.92,
-      phase: 'Menghitung paket transit…',
+      percent: 0.90,
+      phase: 'Menghitung peta stok…',
       checked: checked,
       total: total,
       foundLeaks: mismatches.length,
     ));
+    final stockLinesByToko = <String, List<StockSkuQtyLine>>{};
+    for (final entry in stockLinesRaw.entries) {
+      final lines = List<StockSkuQtyLine>.from(entry.value)
+        ..sort((a, b) => b.qty.compareTo(a.qty));
+      stockLinesByToko[entry.key] = lines.take(40).toList();
+    }
 
-    final openTransit = await _openTransitQty();
+    emit(StockLeakProgress(
+      percent: 0.93,
+      phase: 'Merinci paket transit…',
+      checked: checked,
+      total: total,
+      foundLeaks: mismatches.length,
+    ));
+    final transit = await _openTransitBreakdown();
+
+    emit(StockLeakProgress(
+      percent: 0.96,
+      phase: 'Menghitung penjualan POS…',
+      checked: checked,
+      total: total,
+      foundLeaks: mismatches.length,
+    ));
+    final sold = await _soldBreakdownLast30d();
+
+    emit(StockLeakProgress(
+      percent: 0.98,
+      phase: 'Merangkum jejak ledger…',
+      checked: checked,
+      total: total,
+      foundLeaks: mismatches.length,
+    ));
+    final ledgerByReason = <String, int>{};
+    for (final m in mismatches) {
+      m.ledgerByReason.forEach((k, v) {
+        ledgerByReason[k] = (ledgerByReason[k] ?? 0) + v;
+      });
+    }
 
     emit(StockLeakProgress(
       percent: 1.0,
@@ -209,34 +363,117 @@ class StockIntegrityService {
       checkedProducts: checked,
       mismatches: mismatches,
       missingSkuCount: missingSku,
-      openTransitQty: openTransit,
+      openTransitQty: transit.total,
+      stockByToko: stockByToko,
+      stockLinesByToko: stockLinesByToko,
+      transitByStatus: transit.byStatus,
+      transitByTujuan: transit.byTujuan,
+      openTransitItems: transit.items,
+      soldByToko30d: sold.byToko,
+      soldLinesByToko30d: sold.linesByToko,
+      ledgerByReason: ledgerByReason,
       generatedAt: DateTime.now(),
     );
   }
 
-  Future<int> _sumLedger({required String sku, required String tokoId}) async {
+  Future<_LedgerAgg> _ledgerForSkuToko({
+    required String sku,
+    required String tokoId,
+  }) async {
     final ledger = await _client
         .from('product_stock_ledger')
-        .select('qty_delta')
+        .select('qty_delta, reason')
         .eq('sku', sku)
         .eq('toko_id', tokoId);
     var sum = 0;
+    final byReason = <String, int>{};
     for (final l in List<Map<String, dynamic>>.from(ledger)) {
-      sum += int.tryParse(l['qty_delta']?.toString() ?? '0') ?? 0;
+      final d = int.tryParse(l['qty_delta']?.toString() ?? '0') ?? 0;
+      final reason = (l['reason'] ?? 'UNKNOWN').toString().toUpperCase();
+      sum += d;
+      byReason[reason] = (byReason[reason] ?? 0) + d;
     }
-    return sum;
+    return _LedgerAgg(sum: sum, byReason: byReason);
   }
 
-  Future<int> _openTransitQty() async {
+  Future<_TransitAgg> _openTransitBreakdown() async {
     final rows = await _client
         .from('stock_move_history')
-        .select('jumlah, status')
-        .inFilter('status', ['PREPARING', 'TRANSIT', 'PENDING', 'WAITING']);
+        .select(
+            'id, product_name, dari_lokasi, ke_lokasi, jumlah, status, created_at')
+        .inFilter('status', ['PREPARING', 'TRANSIT', 'PENDING', 'WAITING'])
+        .order('created_at', ascending: false)
+        .limit(200);
     var total = 0;
+    final byStatus = <String, int>{};
+    final byTujuan = <String, int>{};
+    final items = <StockOpenTransitItem>[];
     for (final r in List<Map<String, dynamic>>.from(rows)) {
-      total += int.tryParse(r['jumlah']?.toString() ?? '0') ?? 0;
+      final qty = int.tryParse(r['jumlah']?.toString() ?? '0') ?? 0;
+      final status = (r['status'] ?? 'UNKNOWN').toString().toUpperCase();
+      final tujuan = (r['ke_lokasi'] ?? '-').toString().toUpperCase();
+      final dari = (r['dari_lokasi'] ?? '-').toString().toUpperCase();
+      total += qty;
+      byStatus[status] = (byStatus[status] ?? 0) + qty;
+      byTujuan[tujuan] = (byTujuan[tujuan] ?? 0) + qty;
+      items.add(StockOpenTransitItem(
+        id: r['id']?.toString() ?? '',
+        resi: (r['product_name'] ?? '-').toString(),
+        fromToko: dari,
+        toToko: tujuan,
+        status: status,
+        qty: qty,
+        createdAt: r['created_at']?.toString(),
+      ));
     }
-    return total;
+    return _TransitAgg(
+      total: total,
+      byStatus: byStatus,
+      byTujuan: byTujuan,
+      items: items,
+    );
+  }
+
+  Future<_SoldAgg> _soldBreakdownLast30d({int pageSize = 1000}) async {
+    final since = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 30))
+        .toIso8601String();
+    final byToko = <String, int>{};
+    final skuByToko = <String, Map<String, int>>{};
+    var offset = 0;
+    while (true) {
+      final page = await _client
+          .from('product_stock_ledger')
+          .select('toko_id, qty_delta, sku')
+          .eq('reason', 'SALE')
+          .gte('created_at', since)
+          .range(offset, offset + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(page);
+      if (rows.isEmpty) break;
+      for (final r in rows) {
+        final toko = (r['toko_id'] ?? '').toString().toUpperCase();
+        if (toko.isEmpty) continue;
+        final d = (int.tryParse(r['qty_delta']?.toString() ?? '0') ?? 0).abs();
+        final sku = (r['sku'] ?? '-').toString();
+        byToko[toko] = (byToko[toko] ?? 0) + d;
+        final skuMap = skuByToko.putIfAbsent(toko, () => {});
+        skuMap[sku] = (skuMap[sku] ?? 0) + d;
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+      if (offset > 50000) break;
+    }
+
+    final linesByToko = <String, List<StockSkuQtyLine>>{};
+    for (final entry in skuByToko.entries) {
+      final lines = entry.value.entries
+          .map((e) => StockSkuQtyLine(sku: e.key, nama: e.key, qty: e.value))
+          .toList()
+        ..sort((a, b) => b.qty.compareTo(a.qty));
+      linesByToko[entry.key] = lines.take(40).toList();
+    }
+    return _SoldAgg(byToko: byToko, linesByToko: linesByToko);
   }
 
   Future<Map<String, dynamic>> recognizeVariance({
@@ -269,6 +506,8 @@ class StockIntegrityService {
       'open_transit_qty': report.openTransitQty,
       'checked': report.checkedProducts,
       'verdict': report.verdict,
+      'stock_by_toko': report.stockByToko,
+      'sold_by_toko_30d': report.soldByToko30d,
       'issues': report.mismatches
           .take(50)
           .map((e) => {
@@ -279,8 +518,37 @@ class StockIntegrityService {
                 'ledger_sum': e.ledgerSum,
                 'delta': e.delta,
                 'diagnosis': e.diagnosis,
+                'ledger_by_reason': e.ledgerByReason,
               })
           .toList(),
     };
   }
+}
+
+class _LedgerAgg {
+  const _LedgerAgg({required this.sum, required this.byReason});
+  final int sum;
+  final Map<String, int> byReason;
+}
+
+class _TransitAgg {
+  const _TransitAgg({
+    required this.total,
+    required this.byStatus,
+    required this.byTujuan,
+    required this.items,
+  });
+  final int total;
+  final Map<String, int> byStatus;
+  final Map<String, int> byTujuan;
+  final List<StockOpenTransitItem> items;
+}
+
+class _SoldAgg {
+  const _SoldAgg({
+    required this.byToko,
+    required this.linesByToko,
+  });
+  final Map<String, int> byToko;
+  final Map<String, List<StockSkuQtyLine>> linesByToko;
 }

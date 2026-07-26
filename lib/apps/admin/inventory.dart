@@ -417,7 +417,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
               const EdgeInsets.only(left: 16, right: 16, bottom: 14),
           content: SizedBox(
             width: double.maxFinite,
-            height: 520,
+            height: 620,
             child: _LeakCheckResultBody(
               report: report,
               onRecognize: (issue) async {
@@ -956,8 +956,8 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 
 }
 
-/// Hasil audit kebocoran — tampilan premium (status hero + kartu metrik).
-class _LeakCheckResultBody extends StatelessWidget {
+/// Hasil audit kebocoran — kategori ringkas, ketuk untuk lihat detail.
+class _LeakCheckResultBody extends StatefulWidget {
   const _LeakCheckResultBody({
     required this.report,
     required this.onRecognize,
@@ -967,13 +967,47 @@ class _LeakCheckResultBody extends StatelessWidget {
   final Future<void> Function(StockIntegrityIssue issue) onRecognize;
 
   @override
+  State<_LeakCheckResultBody> createState() => _LeakCheckResultBodyState();
+}
+
+class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
+  String? _expandedKey;
+
+  StockLeakReport get report => widget.report;
+
+  String _tokoLabel(String id) {
+    final t = id.trim().toUpperCase();
+    if (t == 'PUSAT') return 'Pusat';
+    if (t.startsWith('CABANG-')) return t.replaceFirst('CABANG-', '');
+    return t;
+  }
+
+  List<MapEntry<String, int>> _sortedDesc(Map<String, int> map) {
+    final entries = map.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries;
+  }
+
+  void _toggle(String key) {
+    setState(() => _expandedKey = _expandedKey == key ? null : key);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final clean = report.isClean;
     final accent = clean ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
+    final pusatQty = report.stockByToko['PUSAT'] ?? 0;
+    final cabangEntries = _sortedDesc(
+      Map.fromEntries(
+        report.stockByToko.entries.where((e) => e.key != 'PUSAT'),
+      ),
+    );
+    final cabangTotal =
+        cabangEntries.fold<int>(0, (s, e) => s + e.value);
+    final soldEntries = _sortedDesc(report.soldByToko30d);
 
     return ListView(
       children: [
-        // Hero status
         Container(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
           decoration: BoxDecoration(
@@ -992,35 +1026,28 @@ class _LeakCheckResultBody extends StatelessWidget {
           child: Column(
             children: [
               Container(
-                width: 64,
-                height: 64,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: accent.withOpacity(0.15),
                   border: Border.all(color: accent.withOpacity(0.5), width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withOpacity(0.25),
-                      blurRadius: 22,
-                      spreadRadius: 1,
-                    ),
-                  ],
                 ),
                 child: Icon(
                   clean
                       ? Icons.verified_user_rounded
                       : Icons.warning_amber_rounded,
                   color: accent,
-                  size: 32,
+                  size: 28,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 clean ? 'SISTEM AMAN' : 'ADA INDIKASI BOCOR',
                 style: TextStyle(
                   color: accent,
                   fontWeight: FontWeight.w900,
-                  fontSize: 18,
+                  fontSize: 17,
                   letterSpacing: 0.8,
                 ),
               ),
@@ -1029,325 +1056,671 @@ class _LeakCheckResultBody extends StatelessWidget {
                 report.verdict,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.75),
-                  fontSize: 12.5,
-                  height: 1.4,
-                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.72),
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${report.checkedProducts} baris dicek · ketuk kategori di bawah untuk detail',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-
-        // Metric grid
-        Row(
-          children: [
-            Expanded(
-              child: _resultStat(
-                'Dicek',
-                '${report.checkedProducts}',
-                'baris',
-                const Color(0xFF2DD4BF),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _resultStat(
-                'Selisih',
-                '${report.mismatches.length}',
-                'bocor',
-                report.mismatches.isEmpty
-                    ? const Color(0xFF34D399)
-                    : const Color(0xFFFBBF24),
-              ),
-            ),
-          ],
+        Text(
+          'HASIL PER KATEGORI',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.45),
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.1,
+          ),
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _resultStat(
-                'SKU lemah',
-                '${report.missingSkuCount}',
-                'NOSKU',
-                report.missingSkuCount == 0
-                    ? Colors.white60
-                    : Colors.orangeAccent,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _resultStat(
-                'Transit',
-                '${report.openTransitQty}',
-                'pcs (normal)',
-                Colors.lightBlueAccent,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
 
-        // Formula card
+        _categoryTile(
+          keyName: 'transit',
+          icon: Icons.local_shipping_rounded,
+          title: 'Transit',
+          countLabel: '${report.openTransitQty}',
+          unit: 'pcs',
+          color: Colors.lightBlueAccent,
+          detail: _transitDetail(),
+        ),
+        _categoryTile(
+          keyName: 'pusat',
+          icon: Icons.warehouse_rounded,
+          title: 'Stok Pusat',
+          countLabel: '$pusatQty',
+          unit: 'pcs',
+          color: const Color(0xFF2DD4BF),
+          detail: _stockLinesDetail('PUSAT'),
+        ),
+        _categoryTile(
+          keyName: 'cabang',
+          icon: Icons.store_mall_directory_rounded,
+          title: 'Stok Cabang',
+          countLabel: '$cabangTotal',
+          unit: '${cabangEntries.length} lokasi',
+          color: const Color(0xFF60A5FA),
+          detail: _cabangStockDetail(cabangEntries),
+        ),
+        _categoryTile(
+          keyName: 'pos',
+          icon: Icons.point_of_sale_rounded,
+          title: 'Terjual POS (30 hari)',
+          countLabel: '${report.totalSold30d}',
+          unit: 'pcs',
+          color: const Color(0xFFFBBF24),
+          detail: _posDetail(soldEntries),
+        ),
+        _categoryTile(
+          keyName: 'selisih',
+          icon: Icons.warning_amber_rounded,
+          title: 'Selisih / Bocor',
+          countLabel: '${report.mismatches.length}',
+          unit: 'item',
+          color: report.mismatches.isEmpty
+              ? const Color(0xFF34D399)
+              : const Color(0xFFFBBF24),
+          detail: _selisihDetail(),
+        ),
+        _categoryTile(
+          keyName: 'nosku',
+          icon: Icons.qr_code_2_rounded,
+          title: 'SKU Lemah / NOSKU',
+          countLabel: '${report.missingSkuCount}',
+          unit: 'produk',
+          color: report.missingSkuCount == 0
+              ? Colors.white60
+              : Colors.orangeAccent,
+          detail: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Text(
+              report.missingSkuCount == 0
+                  ? 'Semua produk punya SKU valid.'
+                  : '${report.missingSkuCount} baris produk tanpa SKU / NOSKU. '
+                      'Lengkapi di Product Master agar jejak ledger bisa dilacak.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.55),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.white10),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.functions_rounded,
-                      size: 16, color: Colors.white.withOpacity(0.55)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'RUMUS AUDIT',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'stok toko  =  Σ ledger (+/−) per SKU',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Setiap jual, kirim, retur, rusak, dan revisi wajib punya jejak. '
-                'Bedanya angka = kebocoran.',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
-                  fontSize: 11.5,
-                  height: 1.4,
-                ),
-              ),
-            ],
+          child: Text(
+            'Rumus: stok toko = Σ ledger (+/−) per SKU. '
+            'Bedanya angka = kebocoran.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 11,
+              height: 1.35,
+            ),
           ),
         ),
-        const SizedBox(height: 16),
+      ],
+    );
+  }
 
-        if (clean)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+  Widget _categoryTile({
+    required String keyName,
+    required IconData icon,
+    required String title,
+    required String countLabel,
+    required String unit,
+    required Color color,
+    required Widget detail,
+  }) {
+    final open = _expandedKey == keyName ||
+        (_expandedKey?.startsWith('$keyName-') ?? false);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withOpacity(open ? 0.05 : 0.03),
+        border: Border.all(
+          color: open ? color.withOpacity(0.45) : Colors.white10,
+        ),
+      ),
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {
+                // Collapse nested → parent, or toggle parent closed.
+                if (_expandedKey == keyName ||
+                    (_expandedKey?.startsWith('$keyName-') ?? false)) {
+                  setState(() => _expandedKey = null);
+                } else {
+                  _toggle(keyName);
+                }
+              },
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(11),
+                        color: color.withOpacity(0.14),
+                      ),
+                      child: Icon(icon, color: color, size: 20),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: color.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        countLabel,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      open
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      color: Colors.white54,
+                      size: 22,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (open) ...[
+            Divider(height: 1, color: Colors.white.withOpacity(0.08)),
+            detail,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyDetail(String msg) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      child: Text(
+        msg,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.45),
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _transitDetail() {
+    final items = report.openTransitItems;
+    if (items.isEmpty) {
+      return _emptyDetail('Tidak ada paket sedang transit / preparing.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        children: items.map((t) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withOpacity(0.03),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.resi,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${_tokoLabel(t.fromToko)} → ${_tokoLabel(t.toToko)}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        t.status,
+                        style: const TextStyle(
+                          color: Colors.lightBlueAccent,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${t.qty} pcs',
+                  style: const TextStyle(
+                    color: Colors.lightBlueAccent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _stockLinesDetail(String tokoId) {
+    final lines = report.stockLinesByToko[tokoId] ?? const [];
+    if (lines.isEmpty) {
+      return _emptyDetail('Tidak ada SKU berstok di lokasi ini.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        children: [
+          ...lines.take(30).map((l) => _skuLine(l.nama, l.sku, l.qty, 'pcs')),
+          if (lines.length > 30)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '+${lines.length - 30} SKU lain (top 30 ditampilkan)',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 11,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cabangStockDetail(List<MapEntry<String, int>> cabangEntries) {
+    if (cabangEntries.isEmpty) {
+      return _emptyDetail('Belum ada stok di cabang.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+      child: Column(
+        children: cabangEntries.map((e) {
+          final nestedKey = 'cabang-${e.key}';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+              color: Colors.white.withOpacity(0.02),
+            ),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () {
+                    // Keep parent 'cabang' conceptually open by using nested key
+                    // that still shows parent because parent detail contains this.
+                    setState(() {
+                      if (_expandedKey == nestedKey) {
+                        _expandedKey = 'cabang';
+                      } else {
+                        _expandedKey = nestedKey;
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _tokoLabel(e.key),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${e.value} pcs',
+                          style: const TextStyle(
+                            color: Color(0xFF60A5FA),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Icon(
+                          (_expandedKey == nestedKey)
+                              ? Icons.expand_less
+                              : Icons.chevron_right,
+                          color: Colors.white38,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_expandedKey == nestedKey) _stockLinesDetail(e.key),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _posDetail(List<MapEntry<String, int>> soldEntries) {
+    if (soldEntries.isEmpty) {
+      return _emptyDetail('Belum ada jejak SALE 30 hari terakhir.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+      child: Column(
+        children: soldEntries.map((e) {
+          final nestedKey = 'pos-${e.key}';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+              color: Colors.white.withOpacity(0.02),
+            ),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (_expandedKey == nestedKey) {
+                        _expandedKey = 'pos';
+                      } else {
+                        _expandedKey = nestedKey;
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'POS ${_tokoLabel(e.key)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${e.value} terjual',
+                          style: const TextStyle(
+                            color: Color(0xFFFBBF24),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Icon(
+                          (_expandedKey == nestedKey)
+                              ? Icons.expand_less
+                              : Icons.chevron_right,
+                          color: Colors.white38,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_expandedKey == nestedKey)
+                  _soldLinesDetail(e.key),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _soldLinesDetail(String tokoId) {
+    final lines = report.soldLinesByToko30d[tokoId] ?? const [];
+    if (lines.isEmpty) {
+      return _emptyDetail('Tidak ada rincian SKU penjualan.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      child: Column(
+        children: lines
+            .take(30)
+            .map((l) => _skuLine(l.nama, l.sku, l.qty, 'terjual'))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _skuLine(String nama, String sku, int qty, String unit) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nama,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  sku,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.35),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '$qty $unit',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.85),
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _selisihDetail() {
+    if (report.mismatches.isEmpty) {
+      return _emptyDetail(
+          'Tidak ada selisih. Stok sinkron penuh dengan jejak ledger.');
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        children: report.mismatches.take(40).map((e) {
+          final deltaLabel = '${e.delta > 0 ? '+' : ''}${e.delta}';
+          final reasonChips = e.ledgerByReason.entries.toList()
+            ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF34D399).withOpacity(0.35)),
-              color: const Color(0xFF34D399).withOpacity(0.08),
+              color: Colors.white.withOpacity(0.03),
+              border: Border.all(
+                color: const Color(0xFFFBBF24).withOpacity(0.28),
+              ),
             ),
-            child: const Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.check_circle_rounded,
-                    color: Color(0xFF34D399), size: 22),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Tidak ada selisih. Stok sinkron penuh dengan jejak ledger.',
-                    style: TextStyle(
-                      color: Color(0xFFA7F3D0),
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      height: 1.35,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.nama ?? e.sku,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Δ $deltaLabel',
+                      style: const TextStyle(
+                        color: Color(0xFFFBBF24),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'SKU ${e.sku} · ${_tokoLabel(e.tokoId)}',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.38),
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Stok ${e.stock}  vs  Ledger ${e.ledgerSum}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  e.diagnosis,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
+                if (reasonChips.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: reasonChips.map((r) {
+                      final sign = r.value > 0 ? '+' : '';
+                      final c = r.value < 0
+                          ? const Color(0xFFF87171)
+                          : const Color(0xFF2DD4BF);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: c.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: c.withOpacity(0.4)),
+                        ),
+                        child: Text(
+                          '${r.key} $sign${r.value}',
+                          style: TextStyle(
+                            color: c,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => widget.onRecognize(e),
+                    icon: const Icon(Icons.playlist_add_check_rounded,
+                        size: 16, color: Color(0xFF2DD4BF)),
+                    label: const Text(
+                      'CATAT SELISIH',
+                      style: TextStyle(
+                        color: Color(0xFF2DD4BF),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          )
-        else ...[
-          Text(
-            'DETAIL SELISIH',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...report.mismatches.take(40).map((e) {
-            final deltaLabel =
-                '${e.delta > 0 ? '+' : ''}${e.delta}';
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: Colors.white.withOpacity(0.03),
-                border: Border.all(
-                  color: const Color(0xFFFBBF24).withOpacity(0.28),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          e.nama ?? e.sku,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFBBF24).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: const Color(0xFFFBBF24).withOpacity(0.4),
-                          ),
-                        ),
-                        child: Text(
-                          'Δ $deltaLabel',
-                          style: const TextStyle(
-                            color: Color(0xFFFBBF24),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'SKU ${e.sku} · ${e.tokoId}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.38),
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _miniCompare('Stok', '${e.stock}'),
-                      ),
-                      Icon(Icons.arrow_forward_rounded,
-                          size: 14, color: Colors.white.withOpacity(0.25)),
-                      Expanded(
-                        child: _miniCompare('Ledger', '${e.ledgerSum}'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    e.diagnosis,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
-                      fontSize: 11.5,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => onRecognize(e),
-                      icon: const Icon(Icons.playlist_add_check_rounded,
-                          size: 16, color: Color(0xFF2DD4BF)),
-                      label: const Text(
-                        'CATAT SELISIH',
-                        style: TextStyle(
-                          color: Color(0xFF2DD4BF),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ],
-    );
-  }
-
-  Widget _resultStat(
-      String label, String value, String unit, Color valueColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white10),
+          );
+        }).toList(),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              height: 1.1,
-            ),
-          ),
-          Text(
-            unit,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
-              fontSize: 10.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniCompare(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.35),
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -1380,7 +1753,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Sedang memverifikasi jejak — bukan loading lemot',
+            'Sedang memverifikasi jejak',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.45),
