@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -371,9 +372,29 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           listCabang = unik;
         });
         _fetch();
+        // Semua SKU PUSAT wajib terdaftar di semua toko (stok tidak ikut).
+        if (isCanEdit) {
+          unawaited(_syncPusatCatalogToAllTokoQuiet());
+        }
       }
     } catch (e) {
       debugPrint("Init error: $e");
+    }
+  }
+
+  /// Tegakkan katalog PUSAT = semua cabang 100% (stok tidak disentuh).
+  Future<void> _syncPusatCatalogToAllTokoQuiet() async {
+    try {
+      await Supabase.instance.client.rpc('enforce_catalog_parity');
+      if (mounted) await _fetch();
+    } catch (e) {
+      // Fallback nama RPC lama (migrasi belum jalan)
+      try {
+        await Supabase.instance.client.rpc('backfill_pusat_catalog_to_all_toko');
+        if (mounted) await _fetch();
+      } catch (e2) {
+        debugPrint('Quiet catalog parity: $e / $e2');
+      }
     }
   }
 
@@ -424,14 +445,25 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     setState(() => isLoading = true);
     try {
       try {
-        final res = await Supabase.instance.client
-            .rpc('backfill_pusat_catalog_to_all_toko');
+        dynamic res;
+        try {
+          res = await Supabase.instance.client.rpc('enforce_catalog_parity');
+        } catch (_) {
+          res = await Supabase.instance.client
+              .rpc('backfill_pusat_catalog_to_all_toko');
+        }
         if (!mounted) return;
         final map = res is Map ? Map<String, dynamic>.from(res) : null;
-        final skus = map?['skus'] ?? '?';
+        final ok = map?['parity_ok'] == true || map?['gaps'] == 0;
+        final pusat = map?['pusat_skus'] ?? map?['skus'] ?? '?';
+        final gaps = map?['gaps'];
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Katalog PUSAT disinkron ke semua toko ($skus SKU).'),
-          backgroundColor: Colors.green,
+          content: Text(
+            ok
+                ? 'Katalog 100% sama: PUSAT & semua cabang ($pusat SKU). Stok tidak diubah.'
+                : 'Katalog disinkron ($pusat SKU). Sisa gap: ${gaps ?? "?"}. Stok tidak diubah.',
+          ),
+          backgroundColor: ok ? Colors.green : Colors.orange,
         ));
       } catch (e) {
         // Fallback: tiap SKU PUSAT di list gabungan
@@ -449,7 +481,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Katalog disinkron via fallback ($n SKU).'),
+          content: Text(
+              'Katalog disinkron via fallback ($n SKU). Stok tidak diubah.'),
           backgroundColor: Colors.green,
         ));
       }
@@ -2697,7 +2730,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         actions: [
           if (isCanEdit)
             IconButton(
-              tooltip: 'Sinkron katalog PUSAT ke semua toko',
+              tooltip:
+                  'Samakan katalog 100%: PUSAT = semua cabang (stok tidak diubah)',
               icon: const Icon(Icons.sync_alt_rounded,
                   color: Color(0xFF2DD4BF)),
               onPressed: isLoading ? null : _syncPusatCatalogToAllToko,

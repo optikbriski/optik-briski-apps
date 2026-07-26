@@ -1029,9 +1029,14 @@ class _SalesPageState extends State<SalesPage> {
         // 2. Cek stok dari products.stock toko login (sumber kebenaran tunggal)
         Map<String, dynamic>? localProd;
         if ((res['toko_id'] ?? '').toString().toUpperCase() ==
-            tokoId.toUpperCase()) {
+            tokoId.toString().toUpperCase()) {
           localProd = Map<String, dynamic>.from(res);
         } else {
+          // Produk pusat wajib terdaftar di toko (stok tidak disalin dari PUSAT).
+          await ProductIdentity.ensureAtToko(
+            tokoId: tokoId.toString(),
+            sku: stockSku,
+          );
           localProd = await supabase
               .from('products')
               .select('id, stock, reserved_qty, sku, barcode, toko_id')
@@ -1388,20 +1393,18 @@ class _SalesPageState extends State<SalesPage> {
             void cariDataFrame({bool initLoad = false}) async {
               setStateDialog(() => isLoading = true);
               try {
-                var query = supabase
-                    .from('products')
-                    .select()
-                    .eq('kategori', 'Frame')
-                    .eq('toko_id', widget.profile['toko_id']);
-
-                if (!initLoad && searchQuery.trim().isNotEmpty) {
-                  query = query
-                      .or('sku.ilike.%$searchQuery%,nama.ilike.%$searchQuery%');
-                }
-
-                final res = await query.limit(20);
+                // Katalog = semua Frame di PUSAT; stok = cabang login (0 jika belum ada).
+                // Baris toko yang belum ada didaftarkan otomatis tanpa salin stok PUSAT.
+                final res =
+                    await ProductIdentity.listPusatCatalogWithTokoStock(
+                  tokoId: (widget.profile['toko_id'] ?? 'PUSAT').toString(),
+                  kategoriEq: 'Frame',
+                  search: initLoad ? null : searchQuery,
+                  limit: 80,
+                  ensureMissingRows: true,
+                );
                 setStateDialog(() {
-                  searchResults = res as List<dynamic>;
+                  searchResults = res;
                   isLoading = false;
                 });
               } catch (e) {
@@ -1472,6 +1475,13 @@ class _SalesPageState extends State<SalesPage> {
                                         StockQty.pendingOf(frameMap);
                                     final stock =
                                         StockQty.availableOf(frameMap);
+                                    final totalReal = int.tryParse(
+                                            '${frameMap['total_stock'] ?? real}') ??
+                                        real;
+                                    final tokoLabel =
+                                        (widget.profile['toko_id'] ?? 'PUSAT')
+                                            .toString()
+                                            .toUpperCase();
                                     String sku =
                                         frame['sku'] ?? "pos_tanpa_sku".tr();
                                     String fotoUrl = frame['foto_url'] ??
@@ -1518,7 +1528,8 @@ class _SalesPageState extends State<SalesPage> {
                                                 fontWeight: FontWeight.bold)),
                                         subtitle: Text(
                                             "SKU: $sku\n"
-                                            "Tersedia: $stock  ·  Real: $real  ·  Pending: $pending\n"
+                                            "Toko $tokoLabel — Tersedia: $stock · Real: $real · Pending: $pending\n"
+                                            "Total semua lokasi (Master): Real $totalReal\n"
                                             "Rp ${frame['harga'] ?? 0}",
                                             style: TextStyle(
                                                 color: stock > 0
@@ -1663,19 +1674,16 @@ class _SalesPageState extends State<SalesPage> {
             void cariDataLainnya({bool initLoad = false}) async {
               setStateDialog(() => isLoading = true);
               try {
-                var query = supabase
-                    .from('products')
-                    .select()
-                    .neq('kategori', 'Frame')
-                    .neq('kategori', 'Lensa')
-                    .eq('toko_id', widget.profile['toko_id']);
-                if (!initLoad && searchQuery.trim().isNotEmpty) {
-                  query = query
-                      .or('sku.ilike.%$searchQuery%,nama.ilike.%$searchQuery%');
-                }
-                final res = await query.limit(20);
+                final res =
+                    await ProductIdentity.listPusatCatalogWithTokoStock(
+                  tokoId: (widget.profile['toko_id'] ?? 'PUSAT').toString(),
+                  kategoriNeq: const ['Frame', 'Lensa'],
+                  search: initLoad ? null : searchQuery,
+                  limit: 80,
+                  ensureMissingRows: true,
+                );
                 setStateDialog(() {
-                  searchResults = res as List<dynamic>;
+                  searchResults = res;
                   isLoading = false;
                 });
               } catch (e) {

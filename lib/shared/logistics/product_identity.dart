@@ -61,4 +61,184 @@ class ProductIdentity {
     String? barcode,
   }) =>
       findAtToko(tokoId: 'PUSAT', sku: sku, barcode: barcode);
+
+  /// Pastikan SKU PUSAT punya baris di [tokoId] (stok tetap 0 jika baru).
+  static Future<void> ensureAtToko({
+    required String tokoId,
+    required String sku,
+  }) async {
+    final s = normalizeSku(sku);
+    if (s == null) return;
+    final toko = tokoId.trim().toUpperCase();
+    if (toko.isEmpty) return;
+    try {
+      await Supabase.instance.client.rpc(
+        'ensure_product_at_toko',
+        params: {
+          'p_sku': s,
+          'p_toko': toko,
+          'p_template': <String, dynamic>{},
+        },
+      );
+    } catch (_) {
+      // Fallback: salin metadata dari PUSAT, stock = 0 (jangan salin stok PUSAT).
+      final pusat = await findPusat(sku: s);
+      if (pusat == null) return;
+      final existing = await findAtToko(tokoId: toko, sku: s, select: 'id');
+      if (existing != null) return;
+      final row = Map<String, dynamic>.from(pusat);
+      row.remove('id');
+      row.remove('created_at');
+      row['toko_id'] = toko;
+      row['stock'] = 0;
+      row['reserved_qty'] = 0;
+      try {
+        await Supabase.instance.client.from('products').insert(row);
+      } catch (_) {}
+    }
+  }
+
+  /// Katalog dari PUSAT, stok/pending dari [tokoId].
+  /// Produk pusat yang belum ada di cabang tetap tampil (stok 0) dan
+  /// opsional didaftarkan ke toko tanpa menyalin qty PUSAT.
+  static Future<List<Map<String, dynamic>>> listPusatCatalogWithTokoStock({
+    required String tokoId,
+    String? kategoriEq,
+    List<String>? kategoriNeq,
+    String? search,
+    int limit = 80,
+    bool ensureMissingRows = true,
+  }) async {
+    final client = Supabase.instance.client;
+    final toko = tokoId.trim().toUpperCase();
+    final q = (search ?? '').trim();
+
+    var pusatQuery = client.from('products').select().eq('toko_id', 'PUSAT');
+    if (kategoriEq != null && kategoriEq.isNotEmpty) {
+      pusatQuery = pusatQuery.eq('kategori', kategoriEq);
+    }
+    if (kategoriNeq != null) {
+      for (final k in kategoriNeq) {
+        pusatQuery = pusatQuery.neq('kategori', k);
+      }
+    }
+    if (q.isNotEmpty) {
+      pusatQuery =
+          pusatQuery.or('sku.ilike.%$q%,nama.ilike.%$q%,barcode.ilike.%$q%');
+    }
+
+    final pusatRes = await pusatQuery.order('nama').limit(limit);
+    final pusatList = List<Map<String, dynamic>>.from(
+      (pusatRes as List).map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+    if (pusatList.isEmpty) return const [];
+
+    final skus = <String>[];
+    for (final p in pusatList) {
+      final s = skuOf(p);
+      if (s != null) skus.add(s);
+    }
+    if (skus.isEmpty) return pusatList;
+
+    // Semua baris SKU (semua toko) → stok toko login + total jaringan (untuk bandingan Master)
+    final allRes = await client
+        .from('products')
+        .select('id, sku, barcode, stock, reserved_qty, toko_id')
+        .inFilter('sku', skus);
+
+    final bySkuLocal = <String, Map<String, dynamic>>{};
+    final totalReal = <String, int>{};
+    final totalPending = <String, int>{};
+    for (final raw in (allRes as List)) {
+      final m = Map<String, dynamic>.from(raw as Map);
+      final s = normalizeSku(m['sku']);
+      if (s == null) continue;
+      final t = (m['toko_id'] ?? '').toString().trim().toUpperCase();
+      final real = int.tryParse('${m['stock'] ?? 0}') ?? 0;
+      final pend = int.tryParse('${m['reserved_qty'] ?? 0}') ?? 0;
+      totalReal[s] = (totalReal[s] ?? 0) + real;
+      totalPending[s] = (totalPending[s] ?? 0) + pend;
+      if (t == toko) bySkuLocal[s] = m;
+    }
+
+    final missing = <String>[];
+    final merged = <Map<String, dynamic>>[];
+    for (final pusat in pusatList) {
+      final s = skuOf(pusat);
+      if (s == null) {
+        merged.add({
+          ...pusat,
+          'toko_id': toko,
+          'stock': 0,
+          'reserved_qty': 0,
+          'total_stock': 0,
+          'total_pending': 0,
+        });
+        continue;
+      }
+      final local = bySkuLocal[s];
+      final tr = totalReal[s] ?? 0;
+      final tp = totalPending[s] ?? 0;
+      if (local == null) {
+        missing.add(s);
+        merged.add({
+          ...pusat,
+          'id': pusat['id'],
+          'toko_id': toko,
+          'stock': 0,
+          'reserved_qty': 0,
+          'total_stock': tr,
+          'total_pending': tp,
+          '_catalog_only': true,
+        });
+      } else {
+        merged.add({
+          ...pusat,
+          'id': local['id'],
+          'toko_id': toko,
+          'stock': local['stock'] ?? 0,
+          'reserved_qty': local['reserved_qty'] ?? 0,
+          'sku': local['sku'] ?? pusat['sku'],
+          'barcode': local['barcode'] ?? pusat['barcode'],
+          'total_stock': tr,
+          'total_pending': tp,
+        });
+      }
+    }
+
+    if (ensureMissingRows && missing.isNotEmpty && toko != 'PUSAT') {
+      // Daftarkan baris toko (stok 0) — jangan salin qty PUSAT.
+      for (final s in missing) {
+        await ensureAtToko(tokoId: toko, sku: s);
+      }
+      final refreshed = await client
+          .from('products')
+          .select('id, sku, barcode, stock, reserved_qty, toko_id')
+          .inFilter('sku', missing);
+      for (final raw in (refreshed as List)) {
+        final m = Map<String, dynamic>.from(raw as Map);
+        final s = normalizeSku(m['sku']);
+        if (s == null) continue;
+        final t = (m['toko_id'] ?? '').toString().trim().toUpperCase();
+        if (t == toko) bySkuLocal[s] = m;
+      }
+      for (var i = 0; i < merged.length; i++) {
+        final s = skuOf(merged[i]);
+        if (s == null) continue;
+        final local = bySkuLocal[s];
+        if (local == null) continue;
+        final next = {
+          ...merged[i],
+          'id': local['id'],
+          'stock': local['stock'] ?? 0,
+          'reserved_qty': local['reserved_qty'] ?? 0,
+          'toko_id': toko,
+        };
+        next.remove('_catalog_only');
+        merged[i] = next;
+      }
+    }
+
+    return merged;
+  }
 }
