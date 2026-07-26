@@ -606,43 +606,50 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       appBar: PremiumAppBar(
         title: "do_title".tr(),
         subtitle: 'Kirim restock Pusat → cabang',
-        actions: [
-          IconButton(
-            tooltip: 'Antrian Preparing',
-            style: IconButton.styleFrom(
-              backgroundColor: _panelSoft,
-              side: const BorderSide(color: _line),
-            ),
-            icon: const Icon(Icons.fact_check_rounded,
-                color: Color(0xFF2DD4BF), size: 20),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      DoPreparingListPage(profile: widget.profile),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _DoPageNavButton(
+                    label: 'Preparing',
+                    subtitle: 'Antrian siapkan',
+                    icon: Icons.fact_check_rounded,
+                    color: const Color(0xFF2DD4BF),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              DoPreparingListPage(profile: widget.profile),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(width: 6),
-          IconButton(
-            tooltip: "do_trip_gantung".tr(),
-            style: IconButton.styleFrom(
-              backgroundColor: _panelSoft,
-              side: const BorderSide(color: _line),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DoPageNavButton(
+                    label: 'Draft',
+                    subtitle: 'Transaksi tertunda',
+                    icon: Icons.inventory_2_rounded,
+                    color: const Color(0xFFFBBF24),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DraftManagerPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            icon: const Icon(Icons.inventory_2_rounded,
-                color: Color(0xFFFBBF24), size: 20),
-            onPressed: () {
-              Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const DraftManagerPage()));
-            },
           ),
-          const SizedBox(width: 8),
-        ],
+        ),
       ),
       body: Column(
         children: [
@@ -1361,8 +1368,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                     children: [
                       Expanded(
                         child: _DoActionButton(
-                          label: 'DRAFT',
-                          subtitle: 'Simpan dulu',
+                          label: 'SIMPAN',
+                          subtitle: 'Jadi draft dulu',
                           icon: Icons.save_as_rounded,
                           enabled: !isProcessing && selectedItems.isNotEmpty,
                           loading: isProcessing,
@@ -1373,9 +1380,9 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _DoActionButton(
-                          label: 'PREPARING',
-                          subtitle: 'Siapkan & kirim',
-                          icon: Icons.fact_check_rounded,
+                          label: 'BUAT DO',
+                          subtitle: 'Masuk Preparing',
+                          icon: Icons.playlist_add_check_rounded,
                           enabled: !isProcessing && selectedItems.isNotEmpty,
                           loading: isProcessing,
                           tone: _DoActionTone.preparing,
@@ -1389,6 +1396,90 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Navigasi ke halaman antrian Preparing / daftar Draft.
+class _DoPageNavButton extends StatelessWidget {
+  const _DoPageNavButton({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          height: 46,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withOpacity(0.55), width: 1.4),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12.5,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: color.withOpacity(0.78),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: color.withOpacity(0.85), size: 20),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
