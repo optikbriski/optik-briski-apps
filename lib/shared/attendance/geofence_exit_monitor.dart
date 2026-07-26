@@ -43,6 +43,7 @@ class GeofenceExitMonitor {
   String? _karyawanId;
   String? _tokoId;
   Map<String, dynamic>? _tokoCache;
+  DateTime? _tokoCacheAt;
   bool _wasInside = true;
   DateTime? _lastAlertAt;
   DateTime? _lastGpsAlertAt;
@@ -55,10 +56,13 @@ class GeofenceExitMonitor {
   bool _notifReady = false;
   bool _starting = false;
   bool _gpsIssueActive = false;
+  bool _outsideActive = false;
+  bool _inAppDialogOpen = false;
+  DateTime? _lastInAppDialogAt;
 
   static const _cooldown = Duration(minutes: 10);
-  static const _pollEvery = Duration(seconds: 75);
-  static const _minTickGap = Duration(seconds: 45);
+  static const _pollEvery = Duration(seconds: 45);
+  static const _minTickGap = Duration(seconds: 20);
   static const _ijinCacheFor = Duration(minutes: 3);
   static final _dateKey = DateFormat('yyyy-MM-dd');
   static const _prefsBatteryDismissed = 'geofence_battery_opt_dismissed';
@@ -66,11 +70,27 @@ class GeofenceExitMonitor {
   static const _exitNotifId = 4401;
   static const _gpsNotifId = 4402;
 
-  static const _fgTitleOk = 'Absensi aktif · lokasi dipantau';
+  static const _fgTitleOk = 'Absensi aktif · di dalam area';
   static const _fgTextOk =
-      'Shift masih OPEN. Jangan force-stop app selama shift.';
+      'Shift OPEN · GPS di dalam geofence toko.';
+  static const _fgTitleOutside = 'Di luar area toko';
+  static const _fgTextOutside =
+      'Segera kembali. Shift masih OPEN — pantauan aktif.';
   static const _fgTitleGps = 'GPS dimatikan · absensi terancam';
   static const _fgTextGps = 'Nyalakan lokasi selama shift aktif';
+
+  /// Buffer GPS untuk deteksi keluar: 0 = tanpa kelonggaran di luar batas geo.
+  static const double _exitMaxBufferMeters = 0;
+
+  /// Navigator APK Karyawan — untuk popup peringatan di dalam app.
+  static GlobalKey<NavigatorState>? _navKey;
+
+  static void attachNavigator(GlobalKey<NavigatorState> key) {
+    _navKey = key;
+  }
+
+  /// Muat ulang data geofence toko berkala (admin bisa ubah batas).
+  static const _tokoCacheTtl = Duration(minutes: 5);
 
   bool get isRunning =>
       _karyawanId != null && (_timer != null || _positionSub != null);
@@ -183,8 +203,10 @@ class GeofenceExitMonitor {
       _karyawanId = karyawanId;
       _tokoId = tokoId;
       _tokoCache = await _geofence.loadToko(tokoId);
+      _tokoCacheAt = DateTime.now();
       _wasInside = true;
       _gpsIssueActive = false;
+      _outsideActive = false;
       await _startForegroundStream();
       _timer?.cancel();
       _timer = Timer.periodic(_pollEvery, (_) => _tick());
@@ -283,15 +305,21 @@ class GeofenceExitMonitor {
 
   LocationSettings _locationSettingsForPlatform({bool gpsIssue = false}) {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final title = gpsIssue
+          ? _fgTitleGps
+          : (_outsideActive ? _fgTitleOutside : _fgTitleOk);
+      final text = gpsIssue
+          ? _fgTextGps
+          : (_outsideActive ? _fgTextOutside : _fgTextOk);
       return AndroidSettings(
-        accuracy: LocationAccuracy.medium,
-        distanceFilter: 30,
-        intervalDuration: _pollEvery,
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+        intervalDuration: const Duration(seconds: 45),
         // Foreground service: tetap hidup saat app di background / layar mati
         // (selama sistem tidak force-stop / cabut izin).
         foregroundNotificationConfig: ForegroundNotificationConfig(
-          notificationTitle: gpsIssue ? _fgTitleGps : _fgTitleOk,
-          notificationText: gpsIssue ? _fgTextGps : _fgTextOk,
+          notificationTitle: title,
+          notificationText: text,
           notificationChannelName: 'Absensi lokasi',
           setOngoing: true,
           enableWakeLock: true,
@@ -305,17 +333,17 @@ class GeofenceExitMonitor {
     }
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       return AppleSettings(
-        accuracy: LocationAccuracy.medium,
+        accuracy: LocationAccuracy.high,
         activityType: ActivityType.otherNavigation,
-        distanceFilter: 30,
+        distanceFilter: 10,
         pauseLocationUpdatesAutomatically: false,
         showBackgroundLocationIndicator: true,
         allowBackgroundLocationUpdates: true,
       );
     }
     return const LocationSettings(
-      accuracy: LocationAccuracy.medium,
-      distanceFilter: 30,
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
     );
   }
 
@@ -328,6 +356,7 @@ class GeofenceExitMonitor {
     _karyawanId = null;
     _tokoId = null;
     _tokoCache = null;
+    _tokoCacheAt = null;
     _tickInFlight = false;
     _lastIjinCheckAt = null;
     _cachedHasApprovedLeave = null;
@@ -335,6 +364,7 @@ class GeofenceExitMonitor {
     _lastScheduleCheckAt = null;
     _lastGpsAlertAt = null;
     _gpsIssueActive = false;
+    _outsideActive = false;
   }
 
   /// null = OK; 'gps_off' | 'permission_denied' jika tidak bisa pantau lokasi.
@@ -382,6 +412,16 @@ class GeofenceExitMonitor {
     // Restart stream agar teks foreground notification Android ikut berubah.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       await _startForegroundStream(gpsIssue: gpsIssue);
+    }
+  }
+
+  /// Update notifikasi ongoing: di dalam / di luar area (bukan cuma GPS mati).
+  Future<void> _syncForegroundOutside(bool outside) async {
+    if (_outsideActive == outside) return;
+    _outsideActive = outside;
+    if (_gpsIssueActive) return;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      await _startForegroundStream(gpsIssue: false);
     }
   }
 
@@ -541,48 +581,73 @@ class GeofenceExitMonitor {
       }
       await _syncForegroundForGpsIssue(false);
 
-      _tokoCache ??= await _geofence.loadToko(tid);
+      final cacheStale = _tokoCache == null ||
+          _tokoCacheAt == null ||
+          DateTime.now().difference(_tokoCacheAt!) > _tokoCacheTtl;
+      if (cacheStale) {
+        _tokoCache = await _geofence.loadToko(tid);
+        _tokoCacheAt = DateTime.now();
+      }
       final toko = _tokoCache;
       if (toko == null) return;
 
       final pos = position ??
           await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.medium,
-              timeLimit: Duration(seconds: 15),
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 20),
             ),
           );
+      final acc = pos.accuracy.isFinite ? pos.accuracy : null;
 
       final result = _geofence.evaluatePosition(
         toko: toko,
         latitude: pos.latitude,
         longitude: pos.longitude,
+        accuracyMeters: acc,
+        maxBufferMeters: _exitMaxBufferMeters,
       );
 
       final inside = result.inside;
+      debugPrint(
+        'GeofenceExitMonitor: inside=$inside '
+        'dist=${result.distanceMeters?.toStringAsFixed(0)} '
+        'acc=${acc?.toStringAsFixed(0)} '
+        'mode=${toko['geofence_mode']} '
+        'msg=${result.message}',
+      );
 
       // Sebelum jam tugas (pagi 08:30 / siang 13:00): boleh keluar, tanpa peringatan.
       final dutyActive = await _isExitDutyActive(kid);
       if (!dutyActive) {
         // Anggap "di dalam" agar begitu jam tugas tiba & masih di luar → langsung warn.
         _wasInside = true;
+        await _syncForegroundOutside(false);
         return;
       }
 
+      await _syncForegroundOutside(!inside);
+
+      final onLeave = await _hasApprovedLeaveCached(kid);
+
       if (_wasInside && !inside) {
         // Ijin/cuti disetujui hari ini → jangan peringatkan keluar area.
-        final onLeave = await _hasApprovedLeaveCached(kid);
         if (!onLeave) {
           await _onExit(
             karyawanId: kid,
             tokoId: tid,
             lat: pos.latitude,
             lng: pos.longitude,
+            detail: result.message,
           );
         } else {
           debugPrint(
             'GeofenceExitMonitor: keluar area diabaikan (ijin/cuti APPROVED)',
           );
+        }
+      } else if (!_wasInside && inside) {
+        if (!onLeave) {
+          await _onReenter(detail: result.message);
         }
       }
       _wasInside = inside;
@@ -646,19 +711,66 @@ class GeofenceExitMonitor {
     required String tokoId,
     required double lat,
     required double lng,
+    String? detail,
   }) async {
-    final now = DateTime.now();
-    if (_lastAlertAt != null &&
-        now.difference(_lastAlertAt!) < _cooldown) {
-      return;
-    }
-    _lastAlertAt = now;
+    await _syncForegroundOutside(true);
 
+    final now = DateTime.now();
+    final canPushNotif = _lastAlertAt == null ||
+        now.difference(_lastAlertAt!) >= _cooldown;
+    if (canPushNotif) {
+      _lastAlertAt = now;
+      await ensureNotificationsReady();
+      await _notifications.show(
+        _exitNotifId,
+        'Keluar area toko',
+        'Anda keluar dari area toko saat shift masih aktif, tanpa ijin/cuti '
+            'yang disetujui untuk hari ini. Segera kembali ke area toko.',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'geofence_exit',
+            'Geofence toko',
+            channelDescription: 'Peringatan keluar area absensi',
+            importance: Importance.max,
+            priority: Priority.max,
+            playSound: true,
+            enableVibration: true,
+            category: AndroidNotificationCategory.alarm,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+      );
+      debugPrint('GeofenceExitMonitor: EXIT notif dikirim · $detail');
+
+      try {
+        await _db.from('geofence_exit_logs').insert({
+          'karyawan_id': karyawanId,
+          'toko_id': tokoId,
+          'latitude': lat,
+          'longitude': lng,
+        });
+      } catch (e) {
+        debugPrint('geofence_exit_logs insert: $e');
+      }
+    }
+
+    await _showInAppGeoDialog(
+      kind: _GeoInAppKind.outside,
+      detail: detail,
+    );
+  }
+
+  Future<void> _onReenter({String? detail}) async {
+    await _syncForegroundOutside(false);
+    await ensureNotificationsReady();
     await _notifications.show(
       _exitNotifId,
-      'Keluar area toko',
-      'Anda keluar dari area toko saat shift masih aktif, tanpa ijin/cuti '
-          'yang disetujui untuk hari ini. Segera kembali ke area toko.',
+      'Kembali di dalam area',
+      'Lokasi Anda kembali di dalam geofence toko. Tetap di area selama shift.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'geofence_exit',
@@ -667,19 +779,106 @@ class GeofenceExitMonitor {
           importance: Importance.high,
           priority: Priority.high,
         ),
-        iOS: DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+        ),
       ),
     );
+    await _showInAppGeoDialog(
+      kind: _GeoInAppKind.inside,
+      detail: detail,
+    );
+  }
+
+  Future<void> _showInAppGeoDialog({
+    required _GeoInAppKind kind,
+    String? detail,
+  }) async {
+    if (kIsWeb) return;
+    final nav = _navKey?.currentState;
+    final ctx = nav?.overlay?.context ?? nav?.context;
+    if (ctx == null || !ctx.mounted) {
+      debugPrint('GeofenceExitMonitor: popup dilewati (navigator belum siap)');
+      return;
+    }
+    if (_inAppDialogOpen) return;
+    final now = DateTime.now();
+    if (_lastInAppDialogAt != null &&
+        now.difference(_lastInAppDialogAt!) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastInAppDialogAt = now;
+    _inAppDialogOpen = true;
+
+    final isOutside = kind == _GeoInAppKind.outside;
+    final accent =
+        isOutside ? const Color(0xFFF87171) : const Color(0xFF34D399);
 
     try {
-      await _db.from('geofence_exit_logs').insert({
-        'karyawan_id': karyawanId,
-        'toko_id': tokoId,
-        'latitude': lat,
-        'longitude': lng,
-      });
+      await showDialog<void>(
+        context: ctx,
+        barrierDismissible: true,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Icon(
+                isOutside
+                    ? Icons.warning_amber_rounded
+                    : Icons.check_circle_rounded,
+                color: accent,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isOutside ? 'Di luar area toko' : 'Di dalam area toko',
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            isOutside
+                ? 'Anda keluar dari geofence toko saat shift masih aktif. '
+                    'Segera kembali ke area toko.\n\n'
+                    '${detail ?? ''}'
+                : 'Lokasi Anda kembali di dalam geofence toko. '
+                    'Tetap di area selama shift OPEN.\n\n'
+                    '${detail ?? ''}',
+            style: const TextStyle(
+              color: Colors.white70,
+              height: 1.4,
+              fontSize: 13.5,
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text(
+                'MENGERTI',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
-      debugPrint('geofence_exit_logs insert: $e');
+      debugPrint('GeofenceExitMonitor popup: $e');
+    } finally {
+      _inAppDialogOpen = false;
     }
   }
 }
+
+enum _GeoInAppKind { outside, inside }

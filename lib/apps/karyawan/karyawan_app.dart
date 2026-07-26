@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
 import 'login_karyawan_page.dart';
@@ -14,6 +15,7 @@ class KaryawanApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    GeofenceExitMonitor.attachNavigator(navigatorKey);
     return MaterialApp(
       title: 'Optik B. Riski — Karyawan',
       debugShowCheckedModeBanner: false,

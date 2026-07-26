@@ -123,15 +123,22 @@ class GeofenceService {
   }
 
   /// Evaluasi posisi terhadap geofence toko (circle atau polygon 4 sudut).
+  ///
+  /// [maxBufferMeters]: batasi buffer GPS (dipakai pantauan keluar area agar
+  /// tidak terlalu longgar). Absen masuk tetap pakai default penuh.
   GeofenceCheckResult evaluatePosition({
     required Map<String, dynamic> toko,
     required double latitude,
     required double longitude,
     double? accuracyMeters,
+    double? maxBufferMeters,
   }) {
     final mode = (toko['geofence_mode'] ?? 'circle').toString().toLowerCase();
     final polygon = GeofenceGeometry.parsePolygon(toko['geofence_polygon']);
-    final buffer = accuracyBufferMeters(accuracyMeters);
+    var buffer = accuracyBufferMeters(accuracyMeters);
+    if (maxBufferMeters != null && buffer > maxBufferMeters) {
+      buffer = maxBufferMeters;
+    }
 
     if (mode == 'polygon' && polygon.length >= 3) {
       final inside = GeofenceGeometry.containsWithBuffer(
