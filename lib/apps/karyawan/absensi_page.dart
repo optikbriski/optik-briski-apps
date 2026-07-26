@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/attendance/attendance_config.dart';
@@ -246,7 +247,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
             setState(() {
               _lastUnlockMsg = 'absensi_hp_masuk_tercatat'.tr();
             });
-            _snack('absensi_hp_monitor_started'.tr(), Colors.teal);
+            _snack('absensi_hp_monitor_started'.tr(), OptikKaryawanTokens.goldSoft);
           } else {
             if (!mounted) return;
             setState(() {
@@ -345,7 +346,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       if (!mounted) return;
       final liveness = await captureAttendanceLiveness(
         context,
-        onInfo: (key) => _snack(key.tr(), Colors.blueAccent),
+        onInfo: (key) => _snack(key.tr(), OptikKaryawanTokens.gold),
       );
       if (liveness == null || !liveness.success) {
         _snack('aws_liveness_cancelled'.tr(), Colors.orange);
@@ -421,7 +422,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       return true;
     }
     if (_openShift != null) {
-      _snack('Shift sudah aktif.', Colors.blueAccent);
+      _snack('Shift sudah aktif.', OptikKaryawanTokens.gold);
       return true;
     }
     if (_karyawan == null || !_faceEnrolled) {
@@ -439,10 +440,10 @@ class _AbsensiPageState extends State<AbsensiPage> {
     return HidScanIntake(
       tryHandleKnown: _tryHandleAttendanceQr,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: OptikKaryawanTokens.darkBg,
         appBar: AppBar(
           title: const Text('Absensi'),
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: OptikKaryawanTokens.darkBg,
           actions: [
             IconButton(
               onPressed: _busy ? null : _refresh,
@@ -452,7 +453,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
         ),
         body: _loading
             ? const Center(
-                child: CircularProgressIndicator(color: Colors.blueAccent))
+                child: CircularProgressIndicator(color: OptikKaryawanTokens.gold))
             : RefreshIndicator(
                 onRefresh: _refresh,
                 child: ListView(
@@ -502,8 +503,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
                                     ? 'Belum absen masuk'
                                     : 'Shift aktif sejak ${df.format(DateTime.parse(_openShift!['masuk_at']))}',
                                 _openShift == null
-                                    ? Colors.blueAccent
-                                    : Colors.tealAccent,
+                                    ? OptikKaryawanTokens.gold
+                                    : OptikKaryawanTokens.goldLite,
                               ),
                             ],
                           ),
@@ -538,7 +539,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     if (!_faceEnrolled)
                       _actionButton(
                         label: 'Daftarkan wajah (sekali)',
-                        color: Colors.purpleAccent,
+                        color: OptikKaryawanTokens.navyMid,
                         onTap: _busy ? null : () => _runFlow(action: 'ENROLL'),
                       ),
                     if (_storeDeviceOnly) ...[
@@ -567,7 +568,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       const SizedBox(height: 12),
                       _actionButton(
                         label: 'absensi_hp_scan_qr_lokasi'.tr(),
-                        color: Colors.teal,
+                        color: OptikKaryawanTokens.goldSoft,
                         onTap: _busy ? null : () => _runGeoUnlock(),
                       ),
                     ] else ...[
@@ -603,7 +604,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       const SizedBox(height: 20),
                       const Center(
                         child: CircularProgressIndicator(
-                            color: Colors.blueAccent),
+                            color: OptikKaryawanTokens.gold),
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -628,9 +629,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        color: OptikKaryawanTokens.darkCard,
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusMd),
+        border: Border.all(color: OptikKaryawanTokens.darkLine),
       ),
       child: child,
     );
@@ -653,6 +654,10 @@ class _AbsensiPageState extends State<AbsensiPage> {
     required Color color,
     required VoidCallback? onTap,
   }) {
+    final onGold = color == OptikKaryawanTokens.gold ||
+        color == OptikKaryawanTokens.goldSoft ||
+        color == OptikKaryawanTokens.goldLite;
+    final fg = onGold ? OptikKaryawanTokens.navyDeep : Colors.white;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(
@@ -661,16 +666,20 @@ class _AbsensiPageState extends State<AbsensiPage> {
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
-            foregroundColor: Colors.white,
+            foregroundColor: fg,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius:
+                  BorderRadius.circular(OptikKaryawanTokens.radiusSm),
             ),
           ),
           onPressed: onTap,
           child: Text(
             label,
-            style:
-                const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              color: fg,
+            ),
           ),
         ),
       ),

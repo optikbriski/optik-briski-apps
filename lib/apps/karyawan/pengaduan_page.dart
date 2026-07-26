@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/safe_image_picker.dart';
@@ -122,15 +123,9 @@ class _PengaduanPageState extends State<PengaduanPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        title: Text("pengaduan title".tr(),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E293B),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+    return KaryawanPremiumScaffold(
+      title: "pengaduan title".tr(),
+      eyebrow: 'OPTIK B. RISKI',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Form(
@@ -141,18 +136,18 @@ class _PengaduanPageState extends State<PengaduanPage> {
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: Colors.blueAccent.withOpacity(0.1),
+                  color: OptikKaryawanTokens.gold.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.info_outline_rounded,
-                        color: Colors.blueAccent),
+                        color: OptikKaryawanTokens.gold),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text("pengaduan_info_desc".tr(),
                           style: const TextStyle(
-                              color: Color(0xFF1E3C72), fontSize: 13)),
+                              color: OptikKaryawanTokens.navyMid, fontSize: 13)),
                     ),
                   ],
                 ),
@@ -160,7 +155,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
               const SizedBox(height: 25),
               Text("pengaduan_label_kategori".tr(),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: kategoriPilihan,
@@ -175,7 +170,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
               const SizedBox(height: 20),
               Text("pengaduan_label_penjelasan".tr(),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
               const SizedBox(height: 8),
               TextFormField(
                 controller: deskripsiCtrl,
@@ -188,7 +183,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
               const SizedBox(height: 20),
               Text("pengaduan_label_foto".tr(),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: pilihBuktiFoto,
@@ -230,9 +225,11 @@ class _PengaduanPageState extends State<PengaduanPage> {
                 height: 55,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent.shade700,
+                    backgroundColor: OptikKaryawanTokens.navyMid,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(
+                            OptikKaryawanTokens.radiusSm)),
                   ),
                   onPressed: isSubmitting ? null : kirimLaporan,
                   icon: isSubmitting

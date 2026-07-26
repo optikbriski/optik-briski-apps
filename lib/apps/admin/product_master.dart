@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'request_order_page.dart';
 import '../../shared/logistics/product_identity.dart';
+import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
@@ -301,6 +302,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   bool isLoading = true;
   PlatformFile? foto;
   String? editId;
+  /// Toko baris yang sedang diedit (untuk revisi Real stock).
+  String? editTokoId;
+  int? _editStockBefore;
   List<dynamic> listCabang = [];
   /// Target stok awal saat create. Katalog selalu ke PUSAT + semua toko.
   String? selectedCabang = 'BROADCAST_ALL';
@@ -478,24 +482,43 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         final skuKey = ProductIdentity.normalizeSku(item['sku']) ??
             ProductIdentity.normalizeBarcode(item['barcode']) ??
             'ID-${item['id']}';
-        int stokSekarang = int.tryParse(item['stock'].toString()) ?? 0;
+        final itemMap = Map<String, dynamic>.from(item as Map);
+        final realSekarang = StockQty.realOf(itemMap);
+        final pendingSekarang = StockQty.pendingOf(itemMap);
+        final availableSekarang = StockQty.availableOf(itemMap);
         String lokasiToko =
             item['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
 
         if (!mapGabung.containsKey(skuKey)) {
           mapGabung[skuKey] = Map<String, dynamic>.from(item);
           mapGabung[skuKey]!['breakdown_stok'] = [
-            {"cabang": lokasiToko, "stok": stokSekarang}
+            {
+              "cabang": lokasiToko,
+              "stok": realSekarang,
+              "pending": pendingSekarang,
+              "available": availableSekarang,
+            }
           ];
-          mapGabung[skuKey]!['total_stock'] = stokSekarang;
+          mapGabung[skuKey]!['total_stock'] = realSekarang;
+          mapGabung[skuKey]!['total_pending'] = pendingSekarang;
+          mapGabung[skuKey]!['total_available'] = availableSekarang;
         } else {
           mapGabung[skuKey]!['total_stock'] =
-              (mapGabung[skuKey]!['total_stock'] ?? 0) + stokSekarang;
+              (mapGabung[skuKey]!['total_stock'] ?? 0) + realSekarang;
+          mapGabung[skuKey]!['total_pending'] =
+              (mapGabung[skuKey]!['total_pending'] ?? 0) + pendingSekarang;
+          mapGabung[skuKey]!['total_available'] =
+              (mapGabung[skuKey]!['total_available'] ?? 0) + availableSekarang;
 
           List<Map<String, dynamic>> breakdown =
               List<Map<String, dynamic>>.from(
                   mapGabung[skuKey]!['breakdown_stok']);
-          breakdown.add({"cabang": lokasiToko, "stok": stokSekarang});
+          breakdown.add({
+            "cabang": lokasiToko,
+            "stok": realSekarang,
+            "pending": pendingSekarang,
+            "available": availableSekarang,
+          });
           mapGabung[skuKey]!['breakdown_stok'] = breakdown;
           // Prefer baris PUSAT sebagai representasi master
           if (lokasiToko == 'PUSAT') {
@@ -503,6 +526,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             mapGabung[skuKey] = Map<String, dynamic>.from(item);
             mapGabung[skuKey]!['breakdown_stok'] = breakdown;
             mapGabung[skuKey]!['total_stock'] = prev['total_stock'];
+            mapGabung[skuKey]!['total_pending'] = prev['total_pending'];
+            mapGabung[skuKey]!['total_available'] = prev['total_available'];
           }
         }
       }
@@ -715,6 +740,16 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       return;
     }
 
+    // UPDATE / ADD: wajib scan QR karyawan yang SAMA dengan "via siapa" login kode.
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: editId == null
+          ? 'tambah produk ke database'
+          : 'update product data',
+    );
+    if (!allowed || !mounted) return;
+
     setState(() => isLoading = true);
     try {
       // 🚨 BARIKADE VALIDASI: Deteksi duplikat barcode sebelum data dikirim ke Supabase (Hanya saat tambah barang baru)
@@ -838,7 +873,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           );
         }
       } else {
-        // Metadata sync ke semua toko (SKU) — stok tidak diubah di sini.
+        // Metadata sync ke semua toko (SKU).
         final updateData = Map<String, dynamic>.from(basePayload);
         final sku = ProductIdentity.normalizeSku(updateData['sku']) ??
             ProductIdentity.normalizeBarcode(updateData['barcode']);
@@ -847,6 +882,33 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             .from('products')
             .update(updateData)
             .eq('sku', sku);
+
+        // Revisi Real stock di toko baris yang diedit (jika angka berubah)
+        final tokoRev =
+            (editTokoId ?? 'PUSAT').toString().trim().toUpperCase();
+        final newStock = int.tryParse(stokController.text.trim());
+        final before = _editStockBefore ?? 0;
+        if (newStock != null && newStock != before) {
+          final alasan = await _askRevisiAlasan(
+            before: before,
+            after: newStock,
+            toko: tokoRev,
+          );
+          if (alasan == null || alasan.trim().isEmpty) {
+            throw 'Revisi stok dibatalkan — alasan wajib.';
+          }
+          final actor = (widget.profile['nama'] ??
+                  widget.profile['email'] ??
+                  '')
+              .toString();
+          await StockMutationService().reviseTo(
+            tokoId: tokoRev,
+            sku: sku,
+            newStock: newStock,
+            alasan: alasan.trim(),
+            actorNama: actor,
+          );
+        }
       }
 
       if (mounted) {
@@ -865,6 +927,180 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     }
   }
 
+  Future<String?> _askRevisiAlasan({
+    required int before,
+    required int after,
+    required String toko,
+  }) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        title: const Text(
+          'Alasan revisi stok',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Toko $toko: Real $before → $after pcs\n'
+              'Wajib isi alasan (tercatat di ledger ADJUST).',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Alasan',
+                labelStyle: TextStyle(color: Colors.white54),
+                hintText: 'Contoh: stock opname / selisih fisik',
+                hintStyle: TextStyle(color: Colors.white24),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('LANJUT'),
+          ),
+        ],
+      ),
+    );
+    final text = ctrl.text;
+    ctrl.dispose();
+    if (ok != true) return null;
+    return text;
+  }
+
+  /// Revisi Real stock dari detail produk (per toko) — wajib scan QR karyawan.
+  Future<void> _revisiStokDariDetail({
+    required String sku,
+    required String tokoId,
+    required int currentReal,
+    required String namaProduk,
+  }) async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'revisi stok',
+    );
+    if (!allowed || !mounted) return;
+
+    final stockCtrl = TextEditingController(text: currentReal.toString());
+    final alasanCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        title: const Text(
+          'Revisi Stok Real',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$namaProduk\nToko: $tokoId\nReal sekarang: $currentReal pcs',
+              style: const TextStyle(color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: stockCtrl,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Stok Real baru',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+            TextField(
+              controller: alasanCtrl,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Alasan (wajib)',
+                labelStyle: TextStyle(color: Colors.white54),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('SIMPAN'),
+          ),
+        ],
+      ),
+    );
+    final newStock = int.tryParse(stockCtrl.text.trim());
+    final alasan = alasanCtrl.text.trim();
+    stockCtrl.dispose();
+    alasanCtrl.dispose();
+    if (ok != true || !mounted) return;
+    if (newStock == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Stok baru tidak valid.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    if (alasan.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Alasan revisi wajib.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    if (newStock == currentReal) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Tidak ada perubahan stok.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+
+    try {
+      await StockMutationService().reviseTo(
+        tokoId: tokoId,
+        sku: sku,
+        newStock: newStock,
+        alasan: alasan,
+        actorNama:
+            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Revisi $tokoId: $currentReal → $newStock pcs',
+        ),
+        backgroundColor: Colors.green,
+      ));
+      await _fetch();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal revisi: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
+  }
+
   void _reset() {
     nameController.clear();
     hargaController.clear();
@@ -873,6 +1109,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     barcodeController.clear();
     inputSubController.clear();
     hargaModalController.clear();
+    editTokoId = null;
+    _editStockBefore = null;
 
     sphCtrl.text = "0.00";
     cylCtrl.text = "0.00";
@@ -992,7 +1230,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
     var displayTotalStock =
         int.tryParse('${item['total_stock'] ?? item['stock'] ?? 0}') ?? 0;
-    var labelStokAtas = "pm_total_stok".tr();
+    var displayPending =
+        int.tryParse('${item['total_pending'] ?? item['reserved_qty'] ?? 0}') ??
+            0;
+    var displayAvailable = int.tryParse(
+            '${item['total_available'] ?? StockQty.available(displayTotalStock, displayPending)}') ??
+        0;
+    var labelStokAtas = 'Total Real';
 
     final rawBreakdown = List<Map<String, dynamic>>.from(
       ((item['breakdown_stok'] as List?) ?? const [])
@@ -1016,11 +1260,16 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       });
 
     if (!isHakAksesPusat) {
-      labelStokAtas = 'Stok Cabang';
+      labelStokAtas = 'Real Cabang';
       displayTotalStock = 0;
+      displayPending = 0;
+      displayAvailable = 0;
       for (final b in visibleBreakdown) {
         if (b['cabang'].toString().toUpperCase() == userToko) {
           displayTotalStock = int.tryParse('${b['stok']}') ?? 0;
+          displayPending = int.tryParse('${b['pending'] ?? 0}') ?? 0;
+          displayAvailable = int.tryParse('${b['available'] ?? 0}') ??
+              StockQty.available(displayTotalStock, displayPending);
           break;
         }
       }
@@ -1030,7 +1279,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final kategori = (item['kategori'] ?? '-').toString();
     final sub = (item['sub_kategori'] ?? '-').toString();
     final cabangAktif =
-        visibleBreakdown.where((e) => (int.tryParse('${e['stok']}') ?? 0) > 0).length;
+        visibleBreakdown
+            .where((e) =>
+                (int.tryParse('${e['available'] ?? e['stok']}') ?? 0) > 0)
+            .length;
 
     showDialog(
       context: context,
@@ -1148,6 +1400,26 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _detailMetricCard(
+                                label: 'Pending',
+                                value: '$displayPending Pcs',
+                                color: Colors.orangeAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _detailMetricCard(
+                                label: 'Tersedia',
+                                value: '$displayAvailable Pcs',
+                                color: const Color(0xFF2DD4BF),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 10),
                         _detailInfoPanel(
                           children: [
@@ -1250,13 +1522,18 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                     '-';
                             final stok =
                                 int.tryParse('${lokasi['stok']}') ?? 0;
+                            final pending =
+                                int.tryParse('${lokasi['pending'] ?? 0}') ?? 0;
+                            final available = int.tryParse(
+                                    '${lokasi['available'] ?? StockQty.available(stok, pending)}') ??
+                                0;
                             final isPusat = cabang == 'PUSAT';
                             final label = cabang.startsWith('CABANG-')
                                 ? cabang.replaceFirst('CABANG-', '')
                                 : cabang;
-                            final stockColor = stok <= 0
+                            final stockColor = available <= 0
                                 ? Colors.white38
-                                : stok < 5
+                                : available < 5
                                     ? Colors.orangeAccent
                                     : const Color(0xFF34D399);
 
@@ -1321,24 +1598,46 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                       ],
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: stockColor.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                          color: stockColor.withOpacity(0.35)),
-                                    ),
+                                  Flexible(
                                     child: Text(
-                                      '$stok Pcs',
+                                      'Real $stok · Pend $pending · Ava $available',
+                                      textAlign: TextAlign.right,
                                       style: TextStyle(
                                         color: stockColor,
                                         fontWeight: FontWeight.w800,
-                                        fontSize: 12,
+                                        fontSize: 10.5,
                                       ),
                                     ),
                                   ),
+                                  if (isHakAksesPusat || cabang == userToko) ...[
+                                    const SizedBox(width: 6),
+                                    IconButton(
+                                      tooltip: 'Revisi stok Real',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 32, minHeight: 32),
+                                      icon: const Icon(
+                                        Icons.edit_note_rounded,
+                                        color: Colors.amberAccent,
+                                        size: 20,
+                                      ),
+                                      onPressed: () async {
+                                        final skuKey = (item['sku'] ??
+                                                item['barcode'] ??
+                                                '')
+                                            .toString();
+                                        if (skuKey.isEmpty) return;
+                                        Navigator.pop(ctx);
+                                        await _revisiStokDariDetail(
+                                          sku: skuKey,
+                                          tokoId: cabang,
+                                          currentReal: stok,
+                                          namaProduk:
+                                              (item['nama'] ?? '-').toString(),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ],
                               ),
                             );
@@ -1748,7 +2047,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           "Daftarkan produk ke cabang (stok 0).\n\n"
           "Produk: ${item['nama']}\n"
           "Cabang:\n${cabangs.where((c) => c.toUpperCase() != 'PUSAT').join(', ')}\n\n"
-          "Stok fisik hanya bergerak lewat RO/DO/Retur/POS. "
+          "Stok Real diubah lewat Product Master (revisi + scan QR) "
+          "atau mutasi RO/DO/Retur/POS. "
           "Add Branch tidak menambah qty stok.",
           style:
               const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
@@ -2297,6 +2597,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   } else {
                     setState(() {
                       editId = item['id'].toString();
+                      editTokoId =
+                          item['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
+                      _editStockBefore =
+                          int.tryParse(item['stock']?.toString() ?? '0') ?? 0;
                       nameController.text = item['nama'] ?? '';
                       hargaController.text = _formatRupiahLocal(item['harga'] ?? 0)
                           .replaceAll('Rp', '')
@@ -2309,6 +2613,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       warnaCtrl.text = item['warna'] ?? '';
                       barcodeMode = 'MANUAL_PRODUCT';
                       inputKat = item['kategori'] ?? 'Frame';
+                      selectedCabang = editTokoId;
                       String rawSub =
                           item['sub_kategori']?.toString().trim() ?? '';
                       if (inputKat == 'Frame') {
@@ -2617,46 +2922,62 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               ),
               const SizedBox(height: 15),
               _buildInput(
-                  stokController, "pm_stok_tersedia".tr(), Icons.inventory,
-                  isNumber: true),
-              const SizedBox(height: 15),
-              DropdownButtonFormField<String>(
-                dropdownColor: OptikAdminTokens.card,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                value: selectedCabang,
-                decoration: InputDecoration(
-                  labelText: 'Stok awal ke (katalog otomatis semua toko)',
-                  labelStyle: const TextStyle(fontSize: 12, color: Colors.grey),
-                  helperText:
-                      'Produk selalu terdaftar di PUSAT + semua cabang (stok 0).',
-                  helperStyle:
-                      const TextStyle(fontSize: 10, color: Colors.white38),
-                  prefixIcon: const Icon(Icons.store,
-                      color: Colors.blueAccent, size: 18),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none),
-                ),
-                items: [
-                  DropdownMenuItem(
-                      value: "BROADCAST_ALL",
-                      child: Text('Stok awal: PUSAT',
-                          style: const TextStyle(
-                              color: Colors.orangeAccent,
-                              fontWeight: FontWeight.bold))),
-                  DropdownMenuItem(
-                      value: "PUSAT", child: Text("pm_pusat".tr())),
-                  ...listCabang.map((cabang) => DropdownMenuItem(
-                      value: cabang.toString(),
-                      child: Text(
-                          "Stok awal: ${cabang.toString().toUpperCase()}"))),
-                ],
-                onChanged: (val) {
-                  setState(() => selectedCabang = val?.toString());
-                },
+                stokController,
+                editId == null
+                    ? 'Stok Real awal'
+                    : 'Stok Real (${editTokoId ?? 'PUSAT'}) — ubah = revisi',
+                Icons.inventory,
+                isNumber: true,
               ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4),
+                child: Text(
+                  editId == null
+                      ? 'Simpan produk wajib scan QR karyawan. Stok awal = Real di lokasi terpilih.'
+                      : 'Ubah produk / revisi stok wajib scan QR karyawan (via login kode APK).',
+                  style: const TextStyle(color: Colors.white38, fontSize: 10.5),
+                ),
+              ),
+              const SizedBox(height: 15),
+              if (editId == null)
+                DropdownButtonFormField<String>(
+                  dropdownColor: OptikAdminTokens.card,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  value: selectedCabang,
+                  decoration: InputDecoration(
+                    labelText: 'Stok awal ke (katalog otomatis semua toko)',
+                    labelStyle:
+                        const TextStyle(fontSize: 12, color: Colors.grey),
+                    helperText:
+                        'Produk selalu terdaftar di PUSAT + semua cabang (stok 0).',
+                    helperStyle:
+                        const TextStyle(fontSize: 10, color: Colors.white38),
+                    prefixIcon: const Icon(Icons.store,
+                        color: Colors.blueAccent, size: 18),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.05),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                        value: "BROADCAST_ALL",
+                        child: Text('Stok awal: PUSAT',
+                            style: const TextStyle(
+                                color: Colors.orangeAccent,
+                                fontWeight: FontWeight.bold))),
+                    DropdownMenuItem(
+                        value: "PUSAT", child: Text("pm_pusat".tr())),
+                    ...listCabang.map((cabang) => DropdownMenuItem(
+                        value: cabang.toString(),
+                        child: Text(
+                            "Stok awal: ${cabang.toString().toUpperCase()}"))),
+                  ],
+                  onChanged: (val) {
+                    setState(() => selectedCabang = val?.toString());
+                  },
+                ),
               const SizedBox(height: 15),
               SizedBox(
                 width: double.infinity,
@@ -2687,18 +3008,44 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12))),
-                    onPressed: isLoading ? null : _save,
-                    child: Text(
-                        editId == null
-                            ? "pm_btn_tambah_db".tr()
-                            : "pm_btn_update_db".tr(),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.white))),
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: isLoading ? null : _save,
+                  icon: const Icon(Icons.qr_code_scanner_rounded,
+                      color: Colors.white, size: 20),
+                  label: Text(
+                    editId == null
+                        ? "pm_btn_tambah_db".tr()
+                        : "pm_btn_update_db".tr(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                () {
+                  final via = (widget.profile['login_via_karyawan_nama'] ?? '')
+                      .toString()
+                      .trim();
+                  if (via.isEmpty) {
+                    return 'Wajib login via kode APK + scan barcode karyawan (NIK POS) yang sama sebelum simpan.';
+                  }
+                  return 'Sebelum simpan: scan barcode karyawan POS via "$via" (1 barcode untuk semua akses).';
+                }(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
               ),
               const SizedBox(height: 35),
             ],

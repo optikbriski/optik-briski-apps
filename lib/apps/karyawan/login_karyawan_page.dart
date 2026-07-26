@@ -2,6 +2,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -32,10 +33,10 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
   late final Animation<double> _fade;
   late final Animation<Offset> _slide;
 
-  static const _navy = Color(0xFF0A1628);
-  static const _navyMid = Color(0xFF132F4C);
-  static const _gold = Color(0xFFD4AF37);
-  static const _goldSoft = Color(0xFFC4A35A);
+  static const _navy = OptikKaryawanTokens.navyDeep;
+  static const _navyMid = OptikKaryawanTokens.navySoft;
+  static const _gold = OptikKaryawanTokens.gold;
+  static const _goldSoft = OptikKaryawanTokens.goldSoft;
 
   @override
   void initState() {
@@ -385,7 +386,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                       borderRadius: BorderRadius.circular(14),
                                       gradient: const LinearGradient(
                                         colors: [
-                                          Color(0xFFE8C872),
+                                          OptikKaryawanTokens.goldLite,
                                           _gold,
                                           _goldSoft,
                                         ],

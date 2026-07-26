@@ -625,7 +625,9 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   void _toggleItem(dynamic item) {
     if (item == null) return;
     String id = item['id'].toString();
-    int stokTersedia = int.tryParse(item['stock']?.toString() ?? '0') ?? 0;
+    int stokTersedia = StockQty.availableOf(
+      Map<String, dynamic>.from(item as Map),
+    );
 
     if (stokTersedia <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -758,7 +760,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           .select('id')
           .single();
 
-      // Step A: potong PUSAT via ledger (TRANSFER_OUT) — beralasan
+      // PENDING booking saja — Real PUSAT baru dipotong saat TRANSIT
       for (var entry in selectedItems.entries) {
         final prod = allProdukPusat
             .firstWhere((p) => p['id'].toString() == entry.key);
@@ -767,15 +769,17 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         if (sku == null) {
           throw 'Produk ${prod['nama']} belum punya SKU.';
         }
-        await mut.shipOut(
-          fromToko: 'PUSAT',
+        await mut.reserve(
+          tokoId: 'PUSAT',
           sku: sku,
           qty: entry.value,
-          reason: StockReason.transferOut,
-          alasanText: 'Alokasi draft DO → $selectedToko',
+          kind: StockReserveKind.doDraft,
           refType: 'draft',
           refId: draft['id'].toString(),
-          actorNama: actor,
+          meta: {
+            'tujuan': selectedToko,
+            'actor': actor,
+          },
         );
       }
 
@@ -809,8 +813,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
 
     final confirmMsg =
         'Pindahkan ${_calculateTotalQty()} pcs ke PREPARING untuk $selectedToko?\n\n'
-        'Stok PUSAT dipotong sekarang. Di halaman Preparing Anda ceklis barang '
-        'lalu Generate QR. Status jadi TRANSIT setelah kurir scan.';
+        'Stok Real PUSAT belum dipotong — masuk Pending (booking). '
+        'Real dipotong saat status jadi TRANSIT (kurir scan).';
 
     showDialog(
       context: context,
@@ -872,25 +876,6 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       final resiDO =
           'DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
-      for (var entry in selectedItems.entries) {
-        final prod =
-            allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
-        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
-        if (sku == null) {
-          throw 'Produk ${prod['nama']} belum punya SKU.';
-        }
-        await mut.shipOut(
-          fromToko: 'PUSAT',
-          sku: sku,
-          qty: entry.value,
-          reason: StockReason.transferOut,
-          alasanText: 'Prepare DO $resiDO → $selectedToko',
-          refType: 'stock_move',
-          refId: resiDO,
-          actorNama: actor,
-        );
-      }
-
       final inserted = await Supabase.instance.client
           .from('stock_move_history')
           .insert({
@@ -907,6 +892,29 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           .single();
 
       final moveId = inserted['id'].toString();
+
+      // PENDING booking (Real dipotong saat TRANSIT)
+      for (var entry in selectedItems.entries) {
+        final prod =
+            allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
+        if (sku == null) {
+          throw 'Produk ${prod['nama']} belum punya SKU.';
+        }
+        await mut.reserve(
+          tokoId: 'PUSAT',
+          sku: sku,
+          qty: entry.value,
+          kind: StockReserveKind.doPreparing,
+          refType: 'stock_move',
+          refId: moveId,
+          meta: {
+            'resi': resiDO,
+            'tujuan': selectedToko,
+            'actor': actor,
+          },
+        );
+      }
 
       if (!mounted) return;
       setState(() {
@@ -1430,9 +1438,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                           if (item == null) return const SizedBox.shrink();
 
                           String id = item['id'].toString();
-                          int maxStok =
-                              int.tryParse(item['stock']?.toString() ?? '0') ??
-                                  0;
+                          final itemMap = Map<String, dynamic>.from(item as Map);
+                          int maxStok = StockQty.availableOf(itemMap);
                           bool isSelected = selectedItems.containsKey(id);
                           final hint = restockHints[id];
                           final stockCabang = hint?.stockCabang ?? 0;
@@ -2656,24 +2663,13 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     setState(() => isProcessing = true);
     try {
       final mut = StockMutationService();
-      for (var itm in originalItems) {
-        int qty = int.tryParse(itm['qty'].toString()) ?? 0;
-        if (qty <= 0) continue;
-        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(itm));
-        if (sku == null) {
-          throw 'Item draft tanpa SKU tidak bisa dikembalikan stoknya.';
-        }
-        await mut.applyDelta(
-          tokoId: 'PUSAT',
-          sku: sku,
-          qtyDelta: qty,
-          reason: StockReason.adjust,
-          alasanText: 'Batal draft DO: $alasan',
-          refType: 'draft',
-          refId: widget.draft['id'].toString(),
-          allowCreate: false,
-        );
-      }
+      // Lepas PENDING booking (Real tidak berubah)
+      await mut.releaseReservation(
+        kind: StockReserveKind.doDraft,
+        refType: 'draft',
+        refId: widget.draft['id'].toString(),
+        tokoId: 'PUSAT',
+      );
 
       await Supabase.instance.client
           .from('draft_pengiriman')
@@ -2737,32 +2733,16 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           .from('attendance_photos')
           .getPublicUrl(path);
 
-      // Rekonsiliasi qty draft vs final via ledger (stok sudah dipotong saat draft).
       final mut = StockMutationService();
-      for (var ori in originalItems) {
-        final idProduk = ori['id_produk'].toString();
-        final oriQty = int.tryParse(ori['qty'].toString()) ?? 0;
-        final localMatch = localItems
-            .where((item) => item['id_produk'].toString() == idProduk)
-            .toList();
-        final finalQty = localMatch.isEmpty
-            ? 0
-            : int.tryParse(localMatch.first['qty'].toString()) ?? 0;
-        final selisih = oriQty - finalQty; // + = kembalikan ke PUSAT
-        if (selisih == 0) continue;
-        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(ori));
-        if (sku == null) throw 'Item draft tanpa SKU.';
-        await mut.applyDelta(
-          tokoId: 'PUSAT',
-          sku: sku,
-          qtyDelta: selisih,
-          reason: StockReason.adjust,
-          alasanText: 'Rekonsiliasi qty draft → DO',
-          refType: 'draft',
-          refId: widget.draft['id'].toString(),
-          allowCreate: false,
-        );
-      }
+      final draftId = widget.draft['id'].toString();
+
+      // Lepas PENDING draft lama, lalu book ulang sebagai PREPARING
+      await mut.releaseReservation(
+        kind: StockReserveKind.doDraft,
+        refType: 'draft',
+        refId: draftId,
+        tokoId: 'PUSAT',
+      );
 
       String resiDO =
           "DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
@@ -2787,6 +2767,23 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           })
           .select('id')
           .single();
+
+      final moveIdNew = inserted['id'].toString();
+      for (final itm in localItems) {
+        final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
+        if (qty <= 0) continue;
+        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(itm));
+        if (sku == null) throw 'Item draft tanpa SKU.';
+        await mut.reserve(
+          tokoId: 'PUSAT',
+          sku: sku,
+          qty: qty,
+          kind: StockReserveKind.doPreparing,
+          refType: 'stock_move',
+          refId: moveIdNew,
+          meta: {'resi': resiDO, 'from_draft': draftId},
+        );
+      }
 
       await Supabase.instance.client
           .from('draft_pengiriman')

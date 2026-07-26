@@ -78,7 +78,7 @@ class RequestOrderService {
       final byNama = await _client
           .from('products')
           .select(
-              'id, nama, sku, barcode, stock, harga_jual, harga_modal, kategori, warna, toko_id')
+              'id, nama, sku, barcode, stock, reserved_qty, harga_jual, harga_modal, kategori, warna, toko_id')
           .eq('toko_id', 'PUSAT')
           .ilike('nama', namaProduk.trim())
           .maybeSingle();
@@ -92,30 +92,23 @@ class RequestOrderService {
     String? namaProduk,
     int? excludeRequestId,
   }) async {
-    var q = _client
-        .from('pending_requests')
-        .select('id, reserved_qty, sku, nama_produk, status')
-        .inFilter('status', reserveStatuses)
-        .gt('reserved_qty', 0);
-
-    if (sku != null && sku.trim().isNotEmpty && sku != 'No SKU') {
-      q = q.eq('sku', sku.trim());
-    } else if (namaProduk != null && namaProduk.trim().isNotEmpty) {
-      q = q.ilike('nama_produk', namaProduk.trim());
-    } else {
-      return 0;
-    }
-
-    final rows = await q;
-    var total = 0;
-    for (final r in rows as List) {
-      if (excludeRequestId != null && r['id'] == excludeRequestId) continue;
-      total += (r['reserved_qty'] as num?)?.toInt() ?? 0;
+    // Pending terpusat di products.reserved_qty; RO rows masih dihitung
+    // jika excludeRequestId (saat approve sendiri) supaya available akurat.
+    final product = await findPusatProduct(sku: sku, namaProduk: namaProduk);
+    var total = StockQty.pendingOf(product);
+    if (excludeRequestId != null) {
+      final self = await _client
+          .from('pending_requests')
+          .select('reserved_qty')
+          .eq('id', excludeRequestId)
+          .maybeSingle();
+      final own = (self?['reserved_qty'] as num?)?.toInt() ?? 0;
+      total = (total - own).clamp(0, 1 << 30);
     }
     return total;
   }
 
-  /// Stok fisik Pusat, reserved aktif, dan available untuk approve.
+  /// Real / Pending / Available Pusat untuk approve.
   Future<
       ({
         int stock,
@@ -128,17 +121,17 @@ class RequestOrderService {
     int? excludeRequestId,
   }) async {
     final product = await findPusatProduct(sku: sku, namaProduk: namaProduk);
-    final stock = int.tryParse(product?['stock']?.toString() ?? '0') ?? 0;
+    final stock = StockQty.realOf(product);
     final reserved = await reservedQtyFor(
       sku: sku ?? product?['sku']?.toString(),
       namaProduk: namaProduk ?? product?['nama']?.toString(),
       excludeRequestId: excludeRequestId,
     );
-    final available = stock - reserved;
+    final available = StockQty.available(stock, reserved);
     return (
       stock: stock,
       reserved: reserved,
-      available: available < 0 ? 0 : available,
+      available: available,
       product: product,
     );
   }
@@ -175,11 +168,27 @@ class RequestOrderService {
     }
 
     final userId = _client.auth.currentUser?.id;
-    // Approve langsung masuk Preparing + reservasi aktif.
+    final sku = ProductIdentity.skuOf(snap.product!) ??
+        ProductIdentity.normalizeSku(req['sku']);
+    if (sku == null) {
+      throw 'SKU produk wajib untuk reservasi RO.';
+    }
+
+    // Approve langsung masuk Preparing + reservasi aktif (Pending terpusat).
+    await StockMutationService(client: _client).reserve(
+      tokoId: 'PUSAT',
+      sku: sku,
+      qty: qty,
+      kind: StockReserveKind.ro,
+      refType: 'pending_request',
+      refId: id.toString(),
+    );
+
     await _client.from('pending_requests').update({
       'status': 'PREPARING',
       'tracking_status': trackingFor('PREPARING'),
       'reserved_qty': qty,
+      'sku': sku,
       'reviewed_at': DateTime.now().toIso8601String(),
       'reviewed_by': userId,
     }).eq('id', id).inFilter('status', ['SENT_TO_HQ', 'PENDING']);
@@ -198,6 +207,12 @@ class RequestOrderService {
     }
 
     final userId = _client.auth.currentUser?.id;
+    await StockMutationService(client: _client).releaseReservation(
+      kind: StockReserveKind.ro,
+      refType: 'pending_request',
+      refId: id.toString(),
+      tokoId: 'PUSAT',
+    );
     await _client.from('pending_requests').update({
       'status': 'REJECTED',
       'tracking_status': trackingFor('REJECTED'),
@@ -217,10 +232,29 @@ class RequestOrderService {
     }
     final reserved = (req['reserved_qty'] as num?)?.toInt() ?? 0;
     final qty = (req['qty_request'] as num?)?.toInt() ?? 0;
+    final hold = reserved > 0 ? reserved : qty;
+    final product = await findPusatProduct(
+      sku: req['sku']?.toString(),
+      namaProduk: req['nama_produk']?.toString(),
+    );
+    final sku =
+        ProductIdentity.normalizeSku(req['sku']) ?? ProductIdentity.skuOf(product ?? {});
+    if (sku == null || hold <= 0) {
+      throw 'SKU / qty tidak valid untuk Preparing RO.';
+    }
+    await StockMutationService(client: _client).reserve(
+      tokoId: 'PUSAT',
+      sku: sku,
+      qty: hold,
+      kind: StockReserveKind.ro,
+      refType: 'pending_request',
+      refId: id.toString(),
+    );
     await _client.from('pending_requests').update({
       'status': 'PREPARING',
       'tracking_status': trackingFor('PREPARING'),
-      'reserved_qty': reserved > 0 ? reserved : qty,
+      'reserved_qty': hold,
+      'sku': sku,
     }).eq('id', id).eq('status', 'APPROVED');
   }
 
@@ -296,10 +330,13 @@ class RequestOrderService {
       throw 'SKU produk wajib untuk shipping RO. Lengkapi di Product Master.';
     }
 
-    final stockNow = int.tryParse(product['stock']?.toString() ?? '0') ?? 0;
-    if (stockNow < qty) {
-      throw 'Stok fisik Pusat tidak cukup untuk shipping '
-          '(stok $stockNow, minta $qty).';
+    final realNow = StockQty.realOf(product);
+    final pendingNow = StockQty.pendingOf(product);
+    // Shipping RO: lepas pending dulu lalu potong real — available harus mencakup qty
+    // (pending RO sendiri akan di-consume, jadi cek real >= qty).
+    if (realNow < qty) {
+      throw 'Stok real Pusat tidak cukup untuk shipping '
+          '(real $realNow, pending $pendingNow, minta $qty).';
     }
 
     final resi =
@@ -337,8 +374,17 @@ class RequestOrderService {
         .select('id')
         .single();
 
+    final mut = StockMutationService(client: _client);
     try {
-      await StockMutationService(client: _client).shipOut(
+      // Consume RO pending lalu potong Real
+      await mut.releaseReservation(
+        kind: StockReserveKind.ro,
+        refType: 'pending_request',
+        refId: id.toString(),
+        sku: sku,
+        tokoId: 'PUSAT',
+      );
+      await mut.shipOut(
         fromToko: 'PUSAT',
         sku: sku,
         qty: qty,
@@ -349,6 +395,17 @@ class RequestOrderService {
       );
     } catch (e) {
       await _client.from('stock_move_history').delete().eq('id', move['id']);
+      // Coba pulihkan pending jika ship gagal setelah release
+      try {
+        await mut.reserve(
+          tokoId: 'PUSAT',
+          sku: sku,
+          qty: qty,
+          kind: StockReserveKind.ro,
+          refType: 'pending_request',
+          refId: id.toString(),
+        );
+      } catch (_) {}
       rethrow;
     }
 

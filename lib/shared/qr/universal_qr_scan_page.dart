@@ -99,7 +99,11 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
     if (_done) return;
     final result = QrRouter.classify(raw);
 
-    if (result.type == QrPayloadType.unknown || !_isAllowed(result.type)) {
+    // unknown hanya lolos jika eksplisit diizinkan (mis. barcode NIK karyawan).
+    final unknownOk = result.type == QrPayloadType.unknown &&
+        widget.allowedTypes?.contains(QrPayloadType.unknown) == true;
+    if ((!unknownOk && result.type == QrPayloadType.unknown) ||
+        !_isAllowed(result.type)) {
       if (widget.returnRawOnly &&
           widget.allowedTypes?.contains(QrPayloadType.attendance) == true &&
           result.type != QrPayloadType.attendance) {

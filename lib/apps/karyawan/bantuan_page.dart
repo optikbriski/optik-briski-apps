@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/whatsapp_launcher.dart';
 
@@ -20,36 +21,28 @@ class BantuanPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        title: Text(
-          "bantuan_title".tr(),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF1E293B),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
+    return KaryawanPremiumScaffold(
+      title: "bantuan_title".tr(),
+      eyebrow: 'OPTIK B. RISKI',
       body: Column(
         children: [
           // 1. HEADER BANTUAN
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E293B),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
+            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              gradient: OptikKaryawanTokens.navyGradient,
+              borderRadius:
+                  BorderRadius.circular(OptikKaryawanTokens.radiusXl),
+              boxShadow: OptikKaryawanTokens.cardShadow,
             ),
             child: Column(
               children: [
-                Icon(
+                const Icon(
                   Icons.support_agent_rounded,
                   size: 60,
-                  color: Colors.blueAccent.shade100,
+                  color: OptikKaryawanTokens.gold,
                 ),
                 const SizedBox(height: 15),
                 Text(
@@ -80,7 +73,7 @@ class BantuanPage extends StatelessWidget {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: Colors.grey),
+                      color: OptikKaryawanTokens.muted),
                 ),
                 const SizedBox(height: 15),
                 _buildFaqItem("bantuan_ql".tr(), "bantuan_al".tr()),
@@ -133,20 +126,16 @@ class BantuanPage extends StatelessWidget {
   Widget _buildFaqItem(String tanya, String jawab) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+      decoration: OptikKaryawanTokens.premiumCard,
       child: ExpansionTile(
         title: Text(
           tanya,
           style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: Color(0xFF1E293B)),
+              color: OptikKaryawanTokens.navyDeep),
         ),
-        iconColor: Colors.blueAccent,
+        iconColor: OptikKaryawanTokens.navyMid,
         childrenPadding: const EdgeInsets.only(left: 15, right: 15, bottom: 15),
         children: [
           Text(

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -85,6 +86,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   String? _golDarahOcr;
   String? _agamaOcr;
   String? _statusKawinOcr;
+  String? _alamatJalanKtp;
+  String? _rtRwKtp;
+  String? _kelDesaKtp;
+  String? _kecamatanKtp;
+  String? _tempatLahirKtp;
+  String? _tanggalLahirKtp;
+  String? _pekerjaanKtp;
+  String? _kewarganegaraanKtp;
   bool _editNik = false;
   bool _editNama = false;
   bool _editAlamatKtp = false;
@@ -361,7 +370,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikKaryawanTokens.navyDeep,
         title: const Text(
           'Upload ditolak',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -453,6 +462,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       _golDarahOcr = result.golonganDarah;
       _agamaOcr = result.agama;
       _statusKawinOcr = result.statusPerkawinan;
+      _alamatJalanKtp = result.alamatJalan;
+      _rtRwKtp = result.rtRw;
+      _kelDesaKtp = result.kelDesa;
+      _kecamatanKtp = result.kecamatan;
+      _tempatLahirKtp = result.tempatLahir;
+      _tanggalLahirKtp = result.tanggalLahir;
+      _pekerjaanKtp = result.pekerjaan;
+      _kewarganegaraanKtp = result.kewarganegaraan;
       _nikCtrl.text = result.nik;
       _namaCtrl.text = result.nama;
       _alamatKtpCtrl.text = result.alamat;
@@ -484,7 +501,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       onPressed: onEdit,
       icon: Icon(
         editing ? Icons.lock_open_rounded : Icons.edit_rounded,
-        color: editing ? Colors.orange : const Color(0xFF1E3C72),
+        color: editing ? Colors.orange : OptikKaryawanTokens.navyMid,
         size: 20,
       ),
     );
@@ -1029,6 +1046,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         'nama_ocr': _namaOcr,
         'alamat_ktp_ocr': _alamatKtpOcr,
         'alamat_ktp': _alamatKtpCtrl.text.trim(),
+        'alamat_jalan_ktp': _alamatJalanKtp,
+        'rt_rw': _rtRwKtp,
+        'kelurahan_desa': _kelDesaKtp,
+        'kecamatan_ktp': _kecamatanKtp,
+        'tempat_lahir': _tempatLahirKtp,
+        'tanggal_lahir': _tanggalLahirKtp,
+        'pekerjaan': _pekerjaanKtp,
+        'kewarganegaraan': _kewarganegaraanKtp,
         'tempat_tgl_lahir': _ttlCtrl.text.trim(),
         'tempat_tgl_lahir_ocr': _ttlOcr,
         'golongan_darah': _golDarahCtrl.text.trim(),
@@ -1053,6 +1078,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         'no_rekening': _noRekeningCtrl.text.trim(),
         'darurat_nama': _daruratNamaCtrl.text,
         'darurat_wa': _daruratWaCtrl.text,
+        'darurat_hubungan': _hubunganDarurat,
         'tanggal_mulai': _tanggalMulai?.toIso8601String(),
         'status_approval': 'Menunggu Persetujuan',
       };
@@ -1068,15 +1094,45 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
               k == 'agama' ||
               k == 'status_perkawinan' ||
               k == 'alamat_ktp' ||
-              k == 'ktp_photo_url');
-        await client.from('karyawan').upsert({
+              k == 'ktp_photo_url' ||
+              k == 'darurat_hubungan' ||
+              k == 'alamat_jalan_ktp' ||
+              k == 'rt_rw' ||
+              k == 'kelurahan_desa' ||
+              k == 'kecamatan_ktp' ||
+              k == 'tempat_lahir' ||
+              k == 'tanggal_lahir' ||
+              k == 'pekerjaan' ||
+              k == 'kewarganegaraan');
+        final withKtpDetail = {
           ...fallback,
           'alamat_ktp': _alamatKtpCtrl.text.trim(),
           'ktp_photo_url': ktpUrl,
           'nik_ocr': _nikOcr,
           'nama_ocr': _namaOcr,
           'alamat_ktp_ocr': _alamatKtpOcr,
-        });
+          'darurat_hubungan': _hubunganDarurat,
+          'alamat_jalan_ktp': _alamatJalanKtp,
+          'rt_rw': _rtRwKtp,
+          'kelurahan_desa': _kelDesaKtp,
+          'kecamatan_ktp': _kecamatanKtp,
+          'tempat_lahir': _tempatLahirKtp,
+          'tanggal_lahir': _tanggalLahirKtp,
+          'pekerjaan': _pekerjaanKtp,
+          'kewarganegaraan': _kewarganegaraanKtp,
+        };
+        try {
+          await client.from('karyawan').upsert(withKtpDetail);
+        } catch (_) {
+          await client.from('karyawan').upsert({
+            ...fallback,
+            'alamat_ktp': _alamatKtpCtrl.text.trim(),
+            'ktp_photo_url': ktpUrl,
+            'nik_ocr': _nikOcr,
+            'nama_ocr': _namaOcr,
+            'alamat_ktp_ocr': _alamatKtpOcr,
+          });
+        }
       }
       await client.auth.signOut();
       if (!mounted) return;
@@ -1103,11 +1159,11 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     }
   }
 
-  static const _navy = Color(0xFF0F2744);
-  static const _navyMid = Color(0xFF1E3C72);
-  static const _gold = Color(0xFFC4A35A);
-  static const _ink = Color(0xFF0B1220);
-  static const _muted = Color(0xFF64748B);
+  static const _navy = OptikKaryawanTokens.navyDeep;
+  static const _navyMid = OptikKaryawanTokens.navyMid;
+  static const _gold = OptikKaryawanTokens.goldSoft;
+  static const _ink = OptikKaryawanTokens.ink;
+  static const _muted = OptikKaryawanTokens.muted;
 
   @override
   Widget build(BuildContext context) {
@@ -1124,7 +1180,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF0F2744),
+              OptikKaryawanTokens.navyDeep,
               Color(0xFF163A5F),
               Color(0xFFE8EEF5),
               Color(0xFFF4F7FB),
@@ -1422,13 +1478,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.badge, color: Color(0xFF1E3C72)),
+                        const Icon(Icons.badge, color: OptikKaryawanTokens.navyMid),
                         const SizedBox(width: 10),
                         Text("reg_sec_identitas".tr(),
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3C72))),
+                                color: OptikKaryawanTokens.navyMid)),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -1629,7 +1685,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                 ? null
                                 : _kirimOtpEmail,
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E3C72),
+                              backgroundColor: OptikKaryawanTokens.navyMid,
                               disabledBackgroundColor: Colors.green.shade400,
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
@@ -1887,7 +1943,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.location_on, color: Color(0xFF1E3C72)),
+                        const Icon(Icons.location_on, color: OptikKaryawanTokens.navyMid),
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
@@ -1895,7 +1951,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                             style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3C72)),
+                                color: OptikKaryawanTokens.navyMid),
                           ),
                         ),
                       ],
@@ -2043,13 +2099,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.work, color: Color(0xFF1E3C72)),
+                        const Icon(Icons.work, color: OptikKaryawanTokens.navyMid),
                         const SizedBox(width: 10),
                         Text("reg_sec_kepegawaian".tr(),
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3C72))),
+                                color: OptikKaryawanTokens.navyMid)),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -2091,7 +2147,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                               "reg_label_cabang".tr(),
                               Icons.storefront,
                               const Icon(Icons.search_rounded,
-                                  color: Color(0xFF1E3C72)),
+                                  color: OptikKaryawanTokens.navyMid),
                             ).copyWith(errorText: state.errorText),
                             child: Text(
                               _isLoadingToko
@@ -2122,7 +2178,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E3C72),
+                          color: OptikKaryawanTokens.navyMid,
                         ),
                       ),
                     ),
@@ -2152,7 +2208,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _tanggalMulai == null
-                                ? const Color(0xFF1E3C72).withOpacity(0.25)
+                                ? OptikKaryawanTokens.navyMid.withOpacity(0.25)
                                 : const Color(0xFF16A34A).withOpacity(0.35),
                           ),
                         ),
@@ -2161,7 +2217,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                             Icon(
                               Icons.calendar_month_rounded,
                               color: _tanggalMulai == null
-                                  ? const Color(0xFF1E3C72)
+                                  ? OptikKaryawanTokens.navyMid
                                   : const Color(0xFF16A34A),
                             ),
                             const SizedBox(width: 12),
@@ -2175,7 +2231,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                         : '${_tanggalMulai!.day.toString().padLeft(2, '0')}-${_tanggalMulai!.month.toString().padLeft(2, '0')}-${_tanggalMulai!.year}',
                                     style: TextStyle(
                                       color: _tanggalMulai == null
-                                          ? const Color(0xFF1E3C72)
+                                          ? OptikKaryawanTokens.navyMid
                                           : Colors.black87,
                                       fontSize: 13.5,
                                       fontWeight: FontWeight.w600,
@@ -2240,13 +2296,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.pin, color: Color(0xFF1E3C72)),
+                        const Icon(Icons.pin, color: OptikKaryawanTokens.navyMid),
                         const SizedBox(width: 10),
                         Text("reg_sec_pin".tr(),
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3C72))),
+                                color: OptikKaryawanTokens.navyMid)),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -2297,13 +2353,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.emergency, color: Color(0xFF1E3C72)),
+                        const Icon(Icons.emergency, color: OptikKaryawanTokens.navyMid),
                         const SizedBox(width: 10),
                         Text("reg_sec_darurat".tr(),
                             style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3C72))),
+                                color: OptikKaryawanTokens.navyMid)),
                       ],
                     ),
                     const SizedBox(height: 20),

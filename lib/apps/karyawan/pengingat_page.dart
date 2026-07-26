@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -91,33 +92,28 @@ class _PengingatPageState extends State<PengingatPage> {
       case 'SOP':
         return Colors.redAccent;
       case 'SHIFT':
-        return Colors.blueAccent;
+        return OptikKaryawanTokens.navyMid;
       case 'ADMIN':
         return Colors.orange;
       default:
-        return Colors.teal;
+        return OptikKaryawanTokens.goldSoft;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final df = DateFormat('dd MMM HH:mm', 'id_ID');
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        title: Text("pengingat_title".tr(),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1E293B),
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.done_all_rounded),
-            tooltip: "pengingat tooltip tandai".tr(),
-            onPressed: _items.isEmpty ? null : _tandaiSemua,
-          ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-        ],
-      ),
+    return KaryawanPremiumScaffold(
+      title: "pengingat_title".tr(),
+      eyebrow: 'OPTIK B. RISKI',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.done_all_rounded),
+          tooltip: "pengingat tooltip tandai".tr(),
+          onPressed: _items.isEmpty ? null : _tandaiSemua,
+        ),
+        IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty

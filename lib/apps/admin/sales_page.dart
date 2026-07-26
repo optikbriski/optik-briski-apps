@@ -1034,19 +1034,20 @@ class _SalesPageState extends State<SalesPage> {
         } else {
           localProd = await supabase
               .from('products')
-              .select('id, stock, sku, barcode, toko_id')
+              .select('id, stock, reserved_qty, sku, barcode, toko_id')
               .eq('toko_id', tokoId)
               .eq('sku', stockSku)
               .maybeSingle();
           localProd ??= await supabase
               .from('products')
-              .select('id, stock, sku, barcode, toko_id')
+              .select('id, stock, reserved_qty, sku, barcode, toko_id')
               .eq('toko_id', tokoId)
               .eq('barcode', stockSku)
               .maybeSingle();
         }
-        final stokAktif =
-            int.tryParse(localProd?['stock']?.toString() ?? '0') ?? 0;
+        final stokAktif = StockQty.availableOf(
+          localProd != null ? Map<String, dynamic>.from(localProd) : null,
+        );
 
         if (stokAktif <= 0) {
           _showSnack(
@@ -1058,7 +1059,9 @@ class _SalesPageState extends State<SalesPage> {
           res = {
             ...Map<String, dynamic>.from(res),
             'id': localProd['id'],
-            'stock': stokAktif,
+            'stock': StockQty.realOf(Map<String, dynamic>.from(localProd)),
+            'reserved_qty':
+                StockQty.pendingOf(Map<String, dynamic>.from(localProd)),
             'toko_id': tokoId,
             'sku': localProd['sku'] ?? stockSku,
           };
@@ -1462,7 +1465,13 @@ class _SalesPageState extends State<SalesPage> {
                                   itemCount: searchResults.length,
                                   itemBuilder: (context, index) {
                                     var frame = searchResults[index];
-                                    int stock = frame['stock'] ?? 0;
+                                    final frameMap =
+                                        Map<String, dynamic>.from(frame as Map);
+                                    final real = StockQty.realOf(frameMap);
+                                    final pending =
+                                        StockQty.pendingOf(frameMap);
+                                    final stock =
+                                        StockQty.availableOf(frameMap);
                                     String sku =
                                         frame['sku'] ?? "pos_tanpa_sku".tr();
                                     String fotoUrl = frame['foto_url'] ??
@@ -1508,7 +1517,9 @@ class _SalesPageState extends State<SalesPage> {
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold)),
                                         subtitle: Text(
-                                            "SKU: $sku\nStok: $stock | Rp ${frame['harga'] ?? 0}",
+                                            "SKU: $sku\n"
+                                            "Tersedia: $stock  ·  Real: $real  ·  Pending: $pending\n"
+                                            "Rp ${frame['harga'] ?? 0}",
                                             style: TextStyle(
                                                 color: stock > 0
                                                     ? Colors.greenAccent
@@ -1525,7 +1536,7 @@ class _SalesPageState extends State<SalesPage> {
                                             return;
                                           }
                                           setState(() {
-                                            selectedFrame = frame;
+                                            selectedFrame = frameMap;
                                             isFrameActive = true;
                                           });
                                           Navigator.pop(ctx);
@@ -1727,7 +1738,13 @@ class _SalesPageState extends State<SalesPage> {
                                   itemCount: searchResults.length,
                                   itemBuilder: (context, index) {
                                     var item = searchResults[index];
-                                    int stock = item['stock'] ?? 0;
+                                    final itemMap =
+                                        Map<String, dynamic>.from(item as Map);
+                                    final real = StockQty.realOf(itemMap);
+                                    final pending =
+                                        StockQty.pendingOf(itemMap);
+                                    final stock =
+                                        StockQty.availableOf(itemMap);
                                     String sku =
                                         item['sku'] ?? "pos_tanpa_sku".tr();
                                     String fotoUrl = item['foto_url'] ??
@@ -1771,7 +1788,9 @@ class _SalesPageState extends State<SalesPage> {
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold)),
                                         subtitle: Text(
-                                            "SKU: $sku\nStok: $stock | Rp ${item['harga'] ?? 0}",
+                                            "SKU: $sku\n"
+                                            "Tersedia: $stock  ·  Real: $real  ·  Pending: $pending\n"
+                                            "Rp ${item['harga'] ?? 0}",
                                             style: TextStyle(
                                                 color: stock > 0
                                                     ? Colors.greenAccent
@@ -1782,8 +1801,13 @@ class _SalesPageState extends State<SalesPage> {
                                             Icons.add_shopping_cart,
                                             color: Colors.orangeAccent),
                                         onTap: () {
+                                          if (stock <= 0) {
+                                            _showSnack("pos_stok_kosong".tr(),
+                                                Colors.red);
+                                            return;
+                                          }
                                           setState(() {
-                                            selectedAksesoris = item;
+                                            selectedAksesoris = itemMap;
                                             isLainnyaActive = true;
                                           });
                                           Navigator.pop(ctx);
@@ -1819,16 +1843,18 @@ class _SalesPageState extends State<SalesPage> {
         if (item['id'] != null) {
           final prodRes = await supabase
               .from('products')
-              .select('stock')
+              .select('stock, reserved_qty')
               .eq('id', item['id'])
               .maybeSingle();
 
-          stokGudangReal = prodRes != null ? (prodRes['stock'] ?? 0) : 0;
+          stokGudangReal = StockQty.availableOf(
+            prodRes != null ? Map<String, dynamic>.from(prodRes) : null,
+          );
         }
 
         int qtyDiKeranjang = item['qty'] ?? 1;
 
-        // Jika jumlah di keranjang sudah menyentuh atau melebihi stok asli (15), rem total & tawarkan PO!
+        // Jika jumlah di keranjang sudah menyentuh atau melebihi stok tersedia
         if (qtyDiKeranjang >= stokGudangReal) {
           _showPendingRequestDialog(item, stokGudangReal);
           return; // Menghentikan fungsi di sini agar angka tidak naik ke 16, 17, dst
@@ -4217,7 +4243,11 @@ class _SalesPageState extends State<SalesPage> {
                           const SizedBox(height: 15),
                           if (selectedFrame != null) ...[
                             Builder(builder: (context) {
-                              int stock = selectedFrame!['stock'] ?? 0;
+                              final fm = Map<String, dynamic>.from(
+                                  selectedFrame! as Map);
+                              final stock = StockQty.availableOf(fm);
+                              final real = StockQty.realOf(fm);
+                              final pending = StockQty.pendingOf(fm);
                               bool stokHabis = stock <= 0;
                               return ListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -4227,7 +4257,7 @@ class _SalesPageState extends State<SalesPage> {
                                 subtitle: Text(
                                   stokHabis
                                       ? "pos_stok_habis".tr()
-                                      : "${"pos_stok_tersedia".tr()} $stock | Rp ${selectedFrame!['harga']}",
+                                      : "${"pos_stok_tersedia".tr()} $stock  ·  Real $real  ·  Pending $pending | Rp ${selectedFrame!['harga']}",
                                   style: TextStyle(
                                       color: stokHabis
                                           ? Colors.redAccent

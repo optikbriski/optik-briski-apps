@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/app_update_service.dart';
@@ -240,21 +241,21 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
     final adaUpdate = info?.hasUpdate ?? false;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: OptikKaryawanTokens.darkBg,
       appBar: AppBar(
         title: Text("update_title".tr(),
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF121A2B),
+        backgroundColor: OptikKaryawanTokens.darkCard,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(color: OptikKaryawanTokens.gold))
           : Column(
               children: [
                 Container(
-                  color: const Color(0xFF121A2B),
+                  color: OptikKaryawanTokens.darkCard,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   child: Row(
@@ -286,7 +287,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                       const SizedBox(width: 10),
                       CupertinoSwitch(
                         value: _isAutoUpdateOn,
-                        activeColor: Colors.blueAccent,
+                        activeColor: OptikKaryawanTokens.gold,
                         onChanged: (val) async {
                           await _service.setAutoUpdateEnabled(val);
                           setState(() => _isAutoUpdateOn = val);
@@ -319,7 +320,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                     color: Colors.grey.shade500, fontSize: 14)),
                           ] else ...[
                             const Icon(Icons.system_update_rounded,
-                                size: 64, color: Colors.blueAccent),
+                                size: 64, color: OptikKaryawanTokens.gold),
                             const SizedBox(height: 20),
                             Text("update_available".tr(),
                                 textAlign: TextAlign.center,
@@ -360,7 +361,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                         ? _downloadProgress
                                         : null,
                                     backgroundColor: Colors.grey.shade800,
-                                    color: Colors.blueAccent,
+                                    color: OptikKaryawanTokens.gold,
                                     minHeight: 6,
                                     borderRadius: BorderRadius.circular(3),
                                   ),
@@ -391,7 +392,8 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                 icon: const Icon(Icons.download_rounded),
                                 label: Text("update_btn_download".tr()),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.blueAccent,
+                                  backgroundColor: OptikKaryawanTokens.gold,
+                                  foregroundColor: OptikKaryawanTokens.navyDeep,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 28, vertical: 14),
                                 ),

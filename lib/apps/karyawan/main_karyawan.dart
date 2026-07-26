@@ -22,6 +22,7 @@ import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
+import '../../shared/theme.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -180,7 +181,7 @@ class KaryawanPageState extends State<KaryawanPage>
             _showPremiumSnackbar(
               'Mengunduh update',
               'Update diunduh di belakang. App tetap bisa dipakai.',
-              Colors.blueAccent,
+              OptikKaryawanTokens.gold,
             );
           }
         case BackgroundDownloadStatus.failed:
@@ -212,7 +213,7 @@ class KaryawanPageState extends State<KaryawanPage>
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikKaryawanTokens.navyDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Penyimpanan kurang',
@@ -261,7 +262,7 @@ class KaryawanPageState extends State<KaryawanPage>
       builder: (ctx) => PopScope(
         canPop: !hardForce,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikKaryawanTokens.navyDeep,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
@@ -330,7 +331,7 @@ class KaryawanPageState extends State<KaryawanPage>
         return R.constrainedDialog(
           context: context,
           child: AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikKaryawanTokens.navyDeep,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
@@ -361,11 +362,11 @@ class KaryawanPageState extends State<KaryawanPage>
     return ListTile(
       title: Text(label,
           style: TextStyle(
-              color: isSelected ? Colors.blueAccent.shade100 : Colors.white70,
+              color: isSelected ? OptikKaryawanTokens.goldLite : Colors.white70,
               fontSize: 14,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
       trailing: isSelected
-          ? const Icon(Icons.check_circle_rounded, color: Colors.blueAccent)
+          ? const Icon(Icons.check_circle_rounded, color: OptikKaryawanTokens.gold)
           : null,
       onTap: () {
         context.setLocale(locale);
@@ -407,7 +408,7 @@ class KaryawanPageState extends State<KaryawanPage>
         builder: (ctx) => PopScope(
           canPop: !hardForce,
           child: AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: OptikKaryawanTokens.navyDeep,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text(
@@ -629,7 +630,7 @@ class KaryawanPageState extends State<KaryawanPage>
                         color: Colors.redAccent, fontWeight: FontWeight.bold))),
             ElevatedButton(
               style:
-                  ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                  ElevatedButton.styleFrom(backgroundColor: OptikKaryawanTokens.gold),
               onPressed: () async {
                 if (inputController.text.isNotEmpty) {
                   Navigator.pop(context);
@@ -661,7 +662,7 @@ class KaryawanPageState extends State<KaryawanPage>
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
-          color: Color(0xFF1E293B),
+          color: OptikKaryawanTokens.navyDeep,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -703,7 +704,7 @@ class KaryawanPageState extends State<KaryawanPage>
                 icon: const Icon(Icons.event_available_rounded, size: 18),
                 label: const Text('Ajukan ijin / tukar jadwal'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
+                  backgroundColor: OptikKaryawanTokens.gold,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -748,7 +749,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B))),
+                      color: OptikKaryawanTokens.navyDeep)),
               const SizedBox(height: 5),
               Text("poin_riwayat_desc".tr(),
                   style: const TextStyle(fontSize: 13, color: Colors.grey)),
@@ -836,7 +837,7 @@ class KaryawanPageState extends State<KaryawanPage>
               style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E293B))),
+                  color: OptikKaryawanTokens.navyDeep)),
         ),
       ],
     );
@@ -879,20 +880,20 @@ class KaryawanPageState extends State<KaryawanPage>
 
     return Scaffold(
       extendBody: true,
-      backgroundColor: const Color(0xFFF4F7FB),
+      backgroundColor: OptikKaryawanTokens.scaffold,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
         child: Container(
           decoration: BoxDecoration(
             gradient: _currentIndex == 2
                 ? const LinearGradient(
-                    colors: [Color(0xFF0A1628), Color(0xFF132F4C)],
+                    colors: [OptikKaryawanTokens.navyDeep, OptikKaryawanTokens.navySoft],
                   )
                 : null,
             color: _currentIndex == 2 ? null : Colors.white,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0A1628).withOpacity(0.06),
+                color: OptikKaryawanTokens.navyDeep.withOpacity(0.06),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               )
@@ -913,7 +914,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     letterSpacing: 0.3,
                     color: _currentIndex == 2
                         ? Colors.white
-                        : const Color(0xFF0A1628),
+                        : OptikKaryawanTokens.navyDeep,
                   ),
                 ),
                 Text(
@@ -923,15 +924,15 @@ class KaryawanPageState extends State<KaryawanPage>
                     letterSpacing: 1.8,
                     fontWeight: FontWeight.w600,
                     color: _currentIndex == 2
-                        ? const Color(0xFFD4AF37)
-                        : const Color(0xFFC4A35A),
+                        ? OptikKaryawanTokens.gold
+                        : OptikKaryawanTokens.goldSoft,
                   ),
                 ),
               ],
             ),
             backgroundColor: Colors.transparent,
             foregroundColor:
-                _currentIndex == 2 ? Colors.white : const Color(0xFF0A1628),
+                _currentIndex == 2 ? Colors.white : OptikKaryawanTokens.navyDeep,
             elevation: 0,
             centerTitle: true,
             actions: [
@@ -945,22 +946,22 @@ class KaryawanPageState extends State<KaryawanPage>
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1E3C72)))
+              child: CircularProgressIndicator(color: OptikKaryawanTokens.navyMid))
           : pages[_currentIndex],
       floatingActionButton: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
-            colors: [Color(0xFF1E3C72), Color(0xFF0A1628)],
+            colors: [OptikKaryawanTokens.navyMid, OptikKaryawanTokens.navyDeep],
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1E3C72).withOpacity(0.4),
+              color: OptikKaryawanTokens.navyMid.withOpacity(0.4),
               blurRadius: 14,
               offset: const Offset(0, 6),
             )
           ],
-          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.55), width: 1.5),
+          border: Border.all(color: OptikKaryawanTokens.gold.withOpacity(0.55), width: 1.5),
         ),
         child: FloatingActionButton(
           tooltip: 'scan_qr'.tr(),
@@ -987,7 +988,7 @@ class KaryawanPageState extends State<KaryawanPage>
           notchMargin: 8,
           color: Colors.white,
           elevation: 16,
-          shadowColor: const Color(0xFF0A1628).withOpacity(0.12),
+          shadowColor: OptikKaryawanTokens.navyDeep.withOpacity(0.12),
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
             height: 70,
@@ -1043,7 +1044,7 @@ class KaryawanPageState extends State<KaryawanPage>
               child: Icon(
                 icon,
                 color: isSelected
-                    ? const Color(0xFF1E3C72)
+                    ? OptikKaryawanTokens.navyMid
                     : Colors.grey.shade400,
                 size: isSelected ? 28 : 24,
               ),
@@ -1056,7 +1057,7 @@ class KaryawanPageState extends State<KaryawanPage>
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isSelected
-                    ? const Color(0xFF1E3C72)
+                    ? OptikKaryawanTokens.navyMid
                     : Colors.grey.shade400,
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -1077,15 +1078,11 @@ class KaryawanPageState extends State<KaryawanPage>
           Container(
             padding: const EdgeInsets.all(25),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(25),
+              gradient: OptikKaryawanTokens.navyGradient,
+              borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusGlass),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF0F172A).withOpacity(0.3),
+                  color: OptikKaryawanTokens.navyDeep.withOpacity(0.28),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1098,16 +1095,19 @@ class KaryawanPageState extends State<KaryawanPage>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+                      colors: [
+                        OptikKaryawanTokens.gold,
+                        OptikKaryawanTokens.goldLite,
+                      ],
                     ),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.blue.withOpacity(0.3), blurRadius: 10)
+                          color: OptikKaryawanTokens.gold.withOpacity(0.3), blurRadius: 10)
                     ],
                   ),
                   child: CircleAvatar(
                     radius: 32,
-                    backgroundColor: const Color(0xFF1E293B),
+                    backgroundColor: OptikKaryawanTokens.navyDeep,
                     // Jika URL foto dari database ada, pasang!
                     backgroundImage: _fotoProfileUrl != null
                         ? NetworkImage(_fotoProfileUrl!)
@@ -1147,7 +1147,7 @@ class KaryawanPageState extends State<KaryawanPage>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.storefront_rounded,
-                                color: Colors.blueAccent, size: 14),
+                                color: OptikKaryawanTokens.gold, size: 14),
                             const SizedBox(width: 6),
                             Text(_cabangKaryawan,
                                 style: const TextStyle(
@@ -1254,7 +1254,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B))),
+                        color: OptikKaryawanTokens.navyDeep)),
               ),
               TextButton.icon(
                 onPressed: () {
@@ -1293,7 +1293,9 @@ class KaryawanPageState extends State<KaryawanPage>
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color:
-                          isLibur ? Colors.red.shade100 : Colors.blue.shade50,
+                          isLibur
+                              ? Colors.red.shade100
+                              : OptikKaryawanTokens.gold.withOpacity(0.12),
                       width: 2,
                     ),
                     boxShadow: [
@@ -1314,7 +1316,7 @@ class KaryawanPageState extends State<KaryawanPage>
                               fontSize: 16,
                               color: isLibur
                                   ? Colors.red.shade700
-                                  : const Color(0xFF1E293B))),
+                                  : OptikKaryawanTokens.navyDeep)),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1329,14 +1331,15 @@ class KaryawanPageState extends State<KaryawanPage>
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
+                                  color: OptikKaryawanTokens.gold
+                                      .withOpacity(0.12),
                                   borderRadius: BorderRadius.circular(6)),
                               child: Icon(
                                   isEmpty
                                       ? Icons.info_outline_rounded
                                       : Icons.event_note_rounded,
                                   size: 14,
-                                  color: Colors.blueAccent),
+                                  color: OptikKaryawanTokens.gold),
                             ),
                           ),
                         ],
@@ -1355,7 +1358,7 @@ class KaryawanPageState extends State<KaryawanPage>
                             style: TextStyle(
                                 color: isLibur
                                     ? Colors.red.shade700
-                                    : const Color(0xFF2563EB),
+                                    : OptikKaryawanTokens.navyMid,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800)),
                       ),
@@ -1470,14 +1473,14 @@ class KaryawanPageState extends State<KaryawanPage>
                   style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF1E293B))),
+                      color: OptikKaryawanTokens.navyDeep)),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: progress == 1.0
                       ? Colors.green.shade100
-                      : Colors.blue.shade50,
+                      : OptikKaryawanTokens.gold.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -1485,7 +1488,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   style: TextStyle(
                       color: progress == 1.0
                           ? Colors.green.shade700
-                          : Colors.blueAccent,
+                          : OptikKaryawanTokens.gold,
                       fontWeight: FontWeight.w800,
                       fontSize: 12),
                 ),
@@ -1499,7 +1502,7 @@ class KaryawanPageState extends State<KaryawanPage>
               value: progress,
               minHeight: 8,
               backgroundColor: Colors.grey.shade200,
-              color: progress == 1.0 ? Colors.green : Colors.blueAccent,
+              color: progress == 1.0 ? Colors.green : OptikKaryawanTokens.gold,
             ),
           ),
           const SizedBox(height: 25),
@@ -1563,7 +1566,7 @@ class KaryawanPageState extends State<KaryawanPage>
                                 isSelesai ? FontWeight.w700 : FontWeight.w600,
                             color: isSelesai
                                 ? Colors.green.shade700
-                                : const Color(0xFF1E293B),
+                                : OptikKaryawanTokens.navyDeep,
                             decoration: isSelesai
                                 ? TextDecoration.lineThrough
                                 : TextDecoration.none,
@@ -1580,12 +1583,11 @@ class KaryawanPageState extends State<KaryawanPage>
           const SizedBox(height: 30),
           Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)]),
+              gradient: OptikKaryawanTokens.navyGradient,
               borderRadius: BorderRadius.circular(15),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.blue.withOpacity(0.3),
+                    color: OptikKaryawanTokens.gold.withOpacity(0.3),
                     blurRadius: 15,
                     offset: const Offset(0, 8))
               ],
@@ -1604,7 +1606,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   if (_karyawanId == null) return;
                   if (_sudahKlaimPoinHariIni) {
                     _showPremiumSnackbar("sop_sudah_disimpan_judul".tr(),
-                        "sop_sudah_disimpan_desc".tr(), Colors.blueAccent);
+                        "sop_sudah_disimpan_desc".tr(), OptikKaryawanTokens.gold);
                     return;
                   }
                   try {
@@ -1649,7 +1651,7 @@ class KaryawanPageState extends State<KaryawanPage>
 
   Widget _buildProfilTab() {
     return Container(
-      color: const Color(0xFF0F172A),
+      color: OptikKaryawanTokens.darkBg,
       child: ListView(
         padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
         children: [
@@ -1657,7 +1659,7 @@ class KaryawanPageState extends State<KaryawanPage>
             padding: const EdgeInsets.all(25),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                colors: [OptikKaryawanTokens.navyDeep, OptikKaryawanTokens.navySoft],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -1734,7 +1736,7 @@ class KaryawanPageState extends State<KaryawanPage>
           ),
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: OptikKaryawanTokens.navyDeep,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
@@ -1840,13 +1842,13 @@ class KaryawanPageState extends State<KaryawanPage>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.15),
+                      color: OptikKaryawanTokens.gold.withOpacity(0.15),
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: Colors.blueAccent.withOpacity(0.3), width: 1),
+                          color: OptikKaryawanTokens.gold.withOpacity(0.3), width: 1),
                     ),
                     child:
-                        Icon(icon, color: Colors.blueAccent.shade100, size: 22),
+                        Icon(icon, color: OptikKaryawanTokens.goldLite, size: 22),
                   ),
                   const SizedBox(width: 18),
                   Expanded(

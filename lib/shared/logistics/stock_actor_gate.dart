@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../admin/admin_code_login_service.dart';
 import '../qr/obr_codes.dart';
@@ -6,7 +7,8 @@ import '../qr/qr_route.dart';
 import '../qr/universal_qr_scan_page.dart';
 import '../theme.dart';
 
-/// Gate revisi/edit stok: wajib scan QR karyawan yang sama dengan "via siapa" login kode.
+/// Gate aksi sensitif: scan **barcode karyawan yang sama dipakai POS** (NIK),
+/// atau QR OBRKARY dari APK — harus cocok dengan "via siapa" login kode Admin.
 abstract final class StockActorGate {
   /// true = boleh lanjut. false = ditolak / batal.
   static Future<bool> requireMatchingViaKaryawanQr({
@@ -23,85 +25,55 @@ abstract final class StockActorGate {
         message:
             'Untuk $actionLabel, Admin harus login memakai kode dari APK Karyawan '
             'agar sistem tahu "via siapa".\n\n'
-            'Login password biasa tidak diizinkan untuk mengubah stok.',
+            'Login password biasa tidak diizinkan.',
       );
       return false;
     }
 
     final viaId = via.karyawanId!.trim();
     final viaNama = (via.nama ?? '').trim();
+    final viaNik = await _lookupNikForId(viaId);
 
     if (!context.mounted) return false;
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        title: const Text(
-          'Verifikasi QR Karyawan',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Scan QR karyawan yang sama dengan login via:\n\n'
-          '• $viaNama\n'
-          '${via.jabatan != null && via.jabatan!.isNotEmpty ? '• ${via.jabatan}\n' : ''}'
-          '${via.tokoId != null && via.tokoId!.isNotEmpty ? '• ${via.tokoId}\n' : ''}'
-          '\n'
-          'QR ada di APK Karyawan → menu Kode Login Admin.\n'
-          'Kalau beda orang, otomatis ditolak.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('BATAL'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('SCAN QR'),
-          ),
-        ],
-      ),
-    );
-    if (proceed != true || !context.mounted) return false;
-
-    final raw = await UniversalQrScanPage.scanRaw(
+    final scanned = await _promptKaryawanScan(
       context,
-      allowedTypes: {QrPayloadType.karyawan},
-      titleKey: 'Scan QR Karyawan',
-      hintKey: 'Arahkan kamera ke QR di APK karyawan (via $viaNama)',
+      actionLabel: actionLabel,
+      viaNama: viaNama,
+      viaNik: viaNik,
     );
     if (!context.mounted) return false;
-    if (raw == null || raw.trim().isEmpty) {
-      await _alert(
-        context,
-        title: 'Dibatalkan',
-        message: 'Scan QR dibatalkan. $actionLabel tidak dijalankan.',
-      );
-      return false;
-    }
-
-    final scanned = ObrKaryawan.parse(raw);
     if (scanned == null) {
       await _alert(
         context,
-        title: 'QR ditolak',
-        message: 'Bukan QR karyawan yang valid.',
+        title: 'Dibatalkan',
+        message: 'Scan dibatalkan. $actionLabel tidak dijalankan.',
       );
       return false;
     }
 
-    final scanId = scanned.karyawanId.trim();
+    final scanId = scanned.id.trim();
+    final scanNik = scanned.nik.trim();
     final scanNama = scanned.nama.trim();
 
-    if (scanId.toLowerCase() != viaId.toLowerCase()) {
+    final idMatch = scanId.isNotEmpty &&
+        scanId.toLowerCase() == viaId.toLowerCase();
+    final nikMatch = viaNik != null &&
+        viaNik.isNotEmpty &&
+        scanNik.isNotEmpty &&
+        scanNik == viaNik;
+    // via.karyawanId kadang terisi NIK (legacy / POS session)
+    final viaAsNikMatch =
+        scanNik.isNotEmpty && scanNik == viaId;
+
+    if (!idMatch && !nikMatch && !viaAsNikMatch) {
       await _alert(
         context,
-        title: 'QR ditolak',
+        title: 'Barcode / QR ditolak',
         message:
-            'QR milik "$scanNama", bukan "$viaNama" yang login.\n\n'
-            'Hanya karyawan yang memberi kode login Admin yang boleh '
-            'mengotorisasi $actionLabel.',
+            'Scan milik "$scanNama"${scanNik.isNotEmpty ? ' (NIK $scanNik)' : ''}, '
+            'bukan "$viaNama" yang login.\n\n'
+            'Pakai barcode karyawan yang sama dengan POS — harus orang yang sama '
+            'dengan via login Admin.',
       );
       return false;
     }
@@ -111,9 +83,9 @@ abstract final class StockActorGate {
         viaNama.toLowerCase() != scanNama.toLowerCase()) {
       await _alert(
         context,
-        title: 'QR ditolak',
+        title: 'Ditolak',
         message:
-            'Nama di QR ("$scanNama") tidak sama dengan via login ("$viaNama").',
+            'Nama di barcode/QR ("$scanNama") tidak sama dengan via login ("$viaNama").',
       );
       return false;
     }
@@ -124,6 +96,249 @@ abstract final class StockActorGate {
       backgroundColor: Colors.green,
     ));
     return true;
+  }
+
+  static Future<String?> _lookupNikForId(String karyawanId) async {
+    try {
+      final byId = await Supabase.instance.client
+          .from('karyawan')
+          .select('nik')
+          .eq('id', karyawanId)
+          .maybeSingle();
+      final nik = (byId?['nik'] ?? '').toString().trim();
+      if (nik.isNotEmpty) return nik;
+      // Fallback: id field sometimes stores NIK
+      final byNik = await Supabase.instance.client
+          .from('karyawan')
+          .select('nik')
+          .eq('nik', karyawanId)
+          .maybeSingle();
+      return (byNik?['nik'] ?? '').toString().trim().nullIfEmpty;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Dialog: HID barcode NIK (sama POS) + opsi kamera QR OBRKARY.
+  static Future<_ScannedKaryawan?> _promptKaryawanScan(
+    BuildContext context, {
+    required String actionLabel,
+    required String viaNama,
+    String? viaNik,
+  }) async {
+    final ctrl = TextEditingController();
+    final focus = FocusNode();
+
+    final result = await showDialog<_ScannedKaryawan>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        String? error;
+        var busy = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Future<void> submit(String raw) async {
+              if (busy) return;
+              setLocal(() {
+                busy = true;
+                error = null;
+              });
+              final resolved = await _resolveScanRaw(raw);
+              if (!ctx.mounted) return;
+              if (resolved == null) {
+                setLocal(() {
+                  busy = false;
+                  error =
+                      'Barcode/QR tidak dikenali. Scan NIK karyawan (barcode POS) '
+                      'atau QR OBRKARY dari APK.';
+                  ctrl.clear();
+                });
+                focus.requestFocus();
+                return;
+              }
+              if (!resolved.active) {
+                setLocal(() {
+                  busy = false;
+                  error = 'Karyawan tidak aktif.';
+                  ctrl.clear();
+                });
+                focus.requestFocus();
+                return;
+              }
+              Navigator.pop(ctx, resolved);
+            }
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (focus.canRequestFocus) focus.requestFocus();
+            });
+
+            return AlertDialog(
+              backgroundColor: OptikAdminTokens.card,
+              title: const Text(
+                'Scan barcode karyawan',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Untuk $actionLabel, scan barcode karyawan yang sama '
+                      'dipakai di POS (NIK).\n\n'
+                      'Harus cocok dengan via login:\n'
+                      '• $viaNama'
+                      '${viaNik != null && viaNik.isNotEmpty ? '\n• NIK $viaNik' : ''}',
+                      style: const TextStyle(
+                          color: Colors.white70, height: 1.4, fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      enabled: !busy,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Barcode NIK / tempel QR',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        hintText: 'Arahkan scanner toko ke sini…',
+                        hintStyle: const TextStyle(color: Colors.white24),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.06),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onSubmitted: submit,
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(error!,
+                          style: const TextStyle(
+                              color: Colors.redAccent, fontSize: 12)),
+                    ],
+                    if (busy) ...[
+                      const SizedBox(height: 12),
+                      const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(ctx),
+                  child: const Text('BATAL'),
+                ),
+                TextButton.icon(
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          final raw = await UniversalQrScanPage.scanRaw(
+                            ctx,
+                            allowedTypes: {
+                              QrPayloadType.karyawan,
+                              QrPayloadType.unknown,
+                            },
+                            titleKey: 'Scan barcode / QR karyawan',
+                            hintKey:
+                                'Barcode NIK (POS) atau QR di APK → Kode Login Admin',
+                          );
+                          if (raw != null && raw.trim().isNotEmpty) {
+                            await submit(raw);
+                          }
+                        },
+                  icon: const Icon(Icons.qr_code_scanner, size: 18),
+                  label: const Text('KAMERA'),
+                ),
+                ElevatedButton(
+                  onPressed: busy ? null : () => submit(ctrl.text),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    ctrl.dispose();
+    focus.dispose();
+    return result;
+  }
+
+  /// Terima NIK (POS) atau payload OBRKARY|v1|...
+  static Future<_ScannedKaryawan?> _resolveScanRaw(String raw) async {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+
+    final obr = ObrKaryawan.parse(s);
+    if (obr != null) {
+      final row = await Supabase.instance.client
+          .from('karyawan')
+          .select('id, nik, nama, status_approval')
+          .eq('id', obr.karyawanId)
+          .maybeSingle();
+      if (row != null) {
+        return _ScannedKaryawan(
+          id: (row['id'] ?? obr.karyawanId).toString(),
+          nik: (row['nik'] ?? '').toString(),
+          nama: (row['nama'] ?? obr.nama).toString(),
+          active: _isActive(row['status_approval']),
+        );
+      }
+      return _ScannedKaryawan(
+        id: obr.karyawanId,
+        nik: '',
+        nama: obr.nama,
+        active: true,
+      );
+    }
+
+    // Barcode POS = NIK
+    final byNik = await Supabase.instance.client
+        .from('karyawan')
+        .select('id, nik, nama, status_approval')
+        .eq('nik', s)
+        .maybeSingle();
+    if (byNik != null) {
+      return _ScannedKaryawan(
+        id: (byNik['id'] ?? '').toString(),
+        nik: (byNik['nik'] ?? s).toString(),
+        nama: (byNik['nama'] ?? '').toString(),
+        active: _isActive(byNik['status_approval']),
+      );
+    }
+
+    // Fallback: raw = UUID id
+    final byId = await Supabase.instance.client
+        .from('karyawan')
+        .select('id, nik, nama, status_approval')
+        .eq('id', s)
+        .maybeSingle();
+    if (byId != null) {
+      return _ScannedKaryawan(
+        id: (byId['id'] ?? '').toString(),
+        nik: (byId['nik'] ?? '').toString(),
+        nama: (byId['nama'] ?? '').toString(),
+        active: _isActive(byId['status_approval']),
+      );
+    }
+    return null;
+  }
+
+  static bool _isActive(dynamic status) {
+    final s = (status ?? '').toString().toLowerCase();
+    return s.isEmpty || s == 'aktif' || s == 'approved';
   }
 
   static Future<AdminCodeLoginActor?> _resolveVia(
@@ -166,6 +381,20 @@ abstract final class StockActorGate {
       ),
     );
   }
+}
+
+class _ScannedKaryawan {
+  const _ScannedKaryawan({
+    required this.id,
+    required this.nik,
+    required this.nama,
+    required this.active,
+  });
+
+  final String id;
+  final String nik;
+  final String nama;
+  final bool active;
 }
 
 extension on String {

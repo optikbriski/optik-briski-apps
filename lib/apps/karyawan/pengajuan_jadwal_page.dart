@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -162,9 +163,9 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: OptikKaryawanTokens.darkBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: OptikKaryawanTokens.darkBg,
         title: const Text('Pengajuan Jadwal', style: TextStyle(fontSize: 16)),
         actions: [
           IconButton(onPressed: _bootstrap, icon: const Icon(Icons.refresh)),
@@ -194,7 +195,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: OptikKaryawanTokens.navyDeep,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Column(
@@ -207,7 +208,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             value: _tipe,
-                            dropdownColor: const Color(0xFF1E293B),
+                            dropdownColor: OptikKaryawanTokens.navyDeep,
                             style: const TextStyle(color: Colors.white),
                             decoration: _fieldDeco('Jenis'),
                             items: const [
@@ -234,7 +235,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
                               value: _partnerId,
-                              dropdownColor: const Color(0xFF1E293B),
+                              dropdownColor: OptikKaryawanTokens.navyDeep,
                               style: const TextStyle(color: Colors.white),
                               decoration: _fieldDeco('Tukar dengan'),
                               items: _coworkers
@@ -271,14 +272,16 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                             child: ElevatedButton(
                               onPressed: _submitting ? null : _submit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blueAccent,
+                                backgroundColor: OptikKaryawanTokens.gold,
+                                foregroundColor: OptikKaryawanTokens.navyDeep,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
                               ),
                               child: Text(
                                 _submitting ? 'Mengirim…' : 'Kirim pengajuan',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,
+                                    color: OptikKaryawanTokens.navyDeep),
                               ),
                             ),
                           ),
@@ -307,7 +310,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
       labelText: label,
       labelStyle: const TextStyle(color: Colors.white54),
       filled: true,
-      fillColor: const Color(0xFF0F172A),
+      fillColor: OptikKaryawanTokens.darkBg,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -350,7 +353,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: OptikKaryawanTokens.navyDeep,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

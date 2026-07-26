@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart'; // <-- Senjata Utama
@@ -120,7 +121,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: OptikKaryawanTokens.darkBg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -147,10 +148,10 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                        color: Colors.blueAccent.withOpacity(0.1),
+                        color: OptikKaryawanTokens.gold.withOpacity(0.1),
                         shape: BoxShape.circle),
                     child: const Icon(Icons.mark_email_read_rounded,
-                        size: 80, color: Colors.blueAccent),
+                        size: 80, color: OptikKaryawanTokens.gold),
                   ),
                   const SizedBox(height: 30),
                   Text("otp_subtitle".tr(),
@@ -188,7 +189,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                       focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(15),
                           borderSide: const BorderSide(
-                              color: Colors.blueAccent, width: 2)),
+                              color: OptikKaryawanTokens.gold, width: 2)),
                     ),
                     validator: (v) => (v == null || v.length != 8)
                         ? "otp_err_digit".tr()
@@ -200,17 +201,20 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                     height: 55,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
+                          backgroundColor: OptikKaryawanTokens.gold,
+                          foregroundColor: OptikKaryawanTokens.navyDeep,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15))),
+                              borderRadius: BorderRadius.circular(
+                                  OptikKaryawanTokens.radiusSm))),
                       onPressed: isLoading ? null : _verifyOtp,
                       child: isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
+                          ? const CircularProgressIndicator(
+                              color: OptikKaryawanTokens.navyDeep)
                           : Text("otp_btn_verifikasi".tr(),
                               style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: OptikKaryawanTokens.navyDeep,
                                   letterSpacing: 1.2)),
                     ),
                   ),
@@ -226,7 +230,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                               onTap: isLoading ? null : _resendOtp,
                               child: Text("otp_btn_resend".tr(),
                                   style: const TextStyle(
-                                      color: Colors.blueAccent,
+                                      color: OptikKaryawanTokens.gold,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14)),
                             )

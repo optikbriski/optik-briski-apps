@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../qr/obr_codes.dart';
+import 'product_identity.dart';
 import 'receive_scan_service.dart';
 import 'request_order_service.dart';
 import 'stock_mutation_service.dart';
@@ -268,6 +270,31 @@ class DoPipelineService {
         );
     final url = _client.storage.from('attendance_photos').getPublicUrl(path);
     final moveId = row['id'].toString();
+    final dari =
+        (row['dari_lokasi'] ?? 'PUSAT').toString().trim().toUpperCase();
+
+    // PENDING → potong Real (TRANSFER_OUT) saat masuk TRANSIT
+    final mut = StockMutationService(client: _client);
+    final consumed = await mut.consumeReservationAndShipOut(
+      kind: StockReserveKind.doPreparing,
+      refType: 'stock_move',
+      refId: moveId,
+      tokoId: dari.isEmpty ? 'PUSAT' : dari,
+      alasanText: 'DO $resi → TRANSIT',
+      ledgerRefType: 'stock_move',
+      ledgerRefId: moveId,
+    );
+    final items = (consumed['items'] as List?) ?? const [];
+    if (items.isEmpty) {
+      // Legacy PREPARING tanpa reservation: potong Real dari keterangan
+      await _shipOutFromKeterangan(
+        mut: mut,
+        fromToko: dari.isEmpty ? 'PUSAT' : dari,
+        keterangan: (row['keterangan'] ?? '').toString(),
+        refId: moveId,
+        alasan: 'DO $resi → TRANSIT (legacy)',
+      );
+    }
 
     final patch = <String, dynamic>{
       'status': 'TRANSIT',
@@ -295,6 +322,43 @@ class DoPipelineService {
       becameTransit: true,
       message: 'Resi $resi sekarang TRANSIT. Driver: $kurirNama',
     );
+  }
+
+  Future<void> _shipOutFromKeterangan({
+    required StockMutationService mut,
+    required String fromToko,
+    required String keterangan,
+    required String refId,
+    required String alasan,
+  }) async {
+    List items = const [];
+    try {
+      if (keterangan.trim().startsWith('[')) {
+        items = jsonDecode(keterangan) as List;
+      } else if (keterangan.contains('[{')) {
+        final jsonPart =
+            keterangan.substring(keterangan.indexOf('[{'));
+        items = jsonDecode(jsonPart) as List;
+      }
+    } catch (_) {
+      items = const [];
+    }
+    for (final raw in items) {
+      if (raw is! Map) continue;
+      final itm = Map<String, dynamic>.from(raw);
+      final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
+      if (qty <= 0) continue;
+      final sku = ProductIdentity.skuOf(itm);
+      if (sku == null) continue;
+      await mut.shipOut(
+        fromToko: fromToko,
+        sku: sku,
+        qty: qty,
+        alasanText: alasan,
+        refType: 'stock_move',
+        refId: refId,
+      );
+    }
   }
 
   /// Cabang terima (wrapper ke ReceiveScanService logic untuk TRANSIT/PENDING).

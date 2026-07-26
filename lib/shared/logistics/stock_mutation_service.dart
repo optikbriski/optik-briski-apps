@@ -15,6 +15,34 @@ abstract final class StockReason {
   static const adjust = 'ADJUST';
 }
 
+/// Reservation kinds for stok PENDING (bayangan).
+abstract final class StockReserveKind {
+  static const doDraft = 'DO_DRAFT';
+  static const doPreparing = 'DO_PREPARING';
+  static const ro = 'RO';
+  static const posHold = 'POS_HOLD';
+}
+
+/// Real / Pending / Available helpers.
+abstract final class StockQty {
+  static int realOf(Map<String, dynamic>? row) =>
+      int.tryParse(row?['stock']?.toString() ?? '0') ?? 0;
+
+  static int pendingOf(Map<String, dynamic>? row) =>
+      int.tryParse(row?['reserved_qty']?.toString() ?? '0') ?? 0;
+
+  /// Total tersedia untuk dijual = Real − Pending.
+  static int availableOf(Map<String, dynamic>? row) {
+    final a = realOf(row) - pendingOf(row);
+    return a < 0 ? 0 : a;
+  }
+
+  static int available(int real, int pending) {
+    final a = real - pending;
+    return a < 0 ? 0 : a;
+  }
+}
+
 /// All stock changes go through Supabase RPCs (ledger + atomic update).
 class StockMutationService {
   StockMutationService({SupabaseClient? client})
@@ -91,6 +119,77 @@ class StockMutationService {
       'p_actor_nama': actorNama ?? _actorEmail,
       'p_meta': meta ?? {},
     });
+    return Map<String, dynamic>.from(res as Map);
+  }
+
+  /// Book PENDING stock (does not change Real `stock`).
+  Future<Map<String, dynamic>> reserve({
+    required String tokoId,
+    required String sku,
+    required int qty,
+    required String kind,
+    required String refType,
+    required String refId,
+    Map<String, dynamic>? meta,
+  }) async {
+    final normalized = ProductIdentity.normalizeSku(sku);
+    if (normalized == null) throw 'SKU wajib untuk reservasi stok.';
+    if (qty <= 0) throw 'Qty reservasi harus > 0.';
+
+    final res = await _client.rpc('reserve_stock', params: {
+      'p_toko': tokoId.trim().toUpperCase(),
+      'p_sku': normalized,
+      'p_qty': qty,
+      'p_kind': kind,
+      'p_ref_type': refType,
+      'p_ref_id': refId,
+      'p_meta': meta ?? {},
+    });
+    return Map<String, dynamic>.from(res as Map);
+  }
+
+  Future<Map<String, dynamic>> releaseReservation({
+    required String kind,
+    required String refType,
+    required String refId,
+    String? sku,
+    String? tokoId,
+  }) async {
+    final res = await _client.rpc('release_reservation', params: {
+      'p_kind': kind,
+      'p_ref_type': refType,
+      'p_ref_id': refId,
+      'p_sku': sku,
+      'p_toko': tokoId?.trim().toUpperCase(),
+    });
+    return Map<String, dynamic>.from(res as Map);
+  }
+
+  /// PREPARING/draft → TRANSIT: clear PENDING then cut Real via TRANSFER_OUT.
+  Future<Map<String, dynamic>> consumeReservationAndShipOut({
+    required String kind,
+    required String refType,
+    required String refId,
+    required String tokoId,
+    String? alasanText,
+    String? actorNama,
+    String? ledgerRefType,
+    String? ledgerRefId,
+  }) async {
+    final res = await _client.rpc(
+      'consume_reservation_and_transfer_out',
+      params: {
+        'p_kind': kind,
+        'p_ref_type': refType,
+        'p_ref_id': refId,
+        'p_toko': tokoId.trim().toUpperCase(),
+        'p_alasan_text': alasanText,
+        'p_actor_id': _actorId,
+        'p_actor_nama': actorNama ?? _actorEmail,
+        'p_ledger_ref_type': ledgerRefType,
+        'p_ledger_ref_id': ledgerRefId,
+      },
+    );
     return Map<String, dynamic>.from(res as Map);
   }
 

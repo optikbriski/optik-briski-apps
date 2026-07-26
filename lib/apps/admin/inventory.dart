@@ -171,180 +171,6 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     }
   }
 
-  Future<void> _showReviseStockDialog() async {
-    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
-      context: context,
-      profile: widget.profile,
-      actionLabel: 'revisi stok',
-    );
-    if (!allowed || !mounted) return;
-
-    final skuCtrl = TextEditingController();
-    final newStockCtrl = TextEditingController();
-    final alasanCtrl = TextEditingController();
-    final toko =
-        (widget.profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
-    String? previewText;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            Future<void> lookup() async {
-              final raw = skuCtrl.text.trim();
-              if (raw.isEmpty) return;
-              final prod = await ProductIdentity.findAtToko(
-                tokoId: toko,
-                sku: raw,
-                barcode: raw,
-              );
-              if (!ctx.mounted) return;
-              if (prod == null) {
-                setLocal(() => previewText = 'Produk tidak ditemukan di $toko');
-                return;
-              }
-              final stok =
-                  int.tryParse(prod['stock']?.toString() ?? '0') ?? 0;
-              setLocal(() {
-                previewText =
-                    '${prod['nama']} · stok sekarang: $stok pcs';
-                if (newStockCtrl.text.trim().isEmpty) {
-                  newStockCtrl.text = stok.toString();
-                }
-              });
-            }
-
-            return AlertDialog(
-              backgroundColor: OptikAdminTokens.card,
-              title: const Text(
-                'Revisi Stok',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Toko: $toko\n'
-                    'Isi stok hasil hitung fisik. Sistem hitung selisih '
-                    'otomatis dan catat sebagai ADJUST (wajib alasan).',
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12, height: 1.4),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: skuCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'SKU / Barcode',
-                      labelStyle: const TextStyle(color: Colors.white54),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.search, color: Colors.white54),
-                        onPressed: lookup,
-                      ),
-                    ),
-                    onSubmitted: (_) => lookup(),
-                  ),
-                  if (previewText != null) ...[
-                    const SizedBox(height: 8),
-                    Text(previewText!,
-                        style: const TextStyle(
-                            color: Colors.tealAccent, fontSize: 12)),
-                  ],
-                  TextField(
-                    controller: newStockCtrl,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Stok baru (hasil hitung)',
-                      labelStyle: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                  TextField(
-                    controller: alasanCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Alasan revisi (wajib)',
-                      labelStyle: TextStyle(color: Colors.white54),
-                      hintText: 'Contoh: stock opname Maret / selisih fisik',
-                      hintStyle: TextStyle(color: Colors.white24),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('BATAL'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('SIMPAN REVISI'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (ok != true || !mounted) {
-      skuCtrl.dispose();
-      newStockCtrl.dispose();
-      alasanCtrl.dispose();
-      return;
-    }
-
-    try {
-      final raw = skuCtrl.text.trim();
-      final newStock = int.tryParse(newStockCtrl.text.trim());
-      final alasan = alasanCtrl.text.trim();
-      skuCtrl.dispose();
-      newStockCtrl.dispose();
-      alasanCtrl.dispose();
-
-      if (newStock == null) throw 'Stok baru tidak valid.';
-      final prod = await ProductIdentity.findAtToko(
-        tokoId: toko,
-        sku: raw,
-        barcode: raw,
-      );
-      final sku = ProductIdentity.normalizeSku(prod?['sku']) ??
-          ProductIdentity.normalizeSku(raw) ??
-          ProductIdentity.normalizeBarcode(raw);
-      if (sku == null) throw 'Produk/SKU tidak ditemukan di $toko.';
-
-      final before = int.tryParse(prod?['stock']?.toString() ?? '0') ?? 0;
-      await StockMutationService().reviseTo(
-        tokoId: toko,
-        sku: sku,
-        newStock: newStock,
-        alasan: alasan,
-        actorNama:
-            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
-      );
-
-      if (!mounted) return;
-      final delta = newStock - before;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          'Revisi tercatat: $before → $newStock '
-          '(${delta >= 0 ? '+' : ''}$delta) · alasan wajib tersimpan.',
-        ),
-        backgroundColor: Colors.green,
-      ));
-      _fetchInventoryFinancials();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal revisi stok: $e'),
-        backgroundColor: Colors.redAccent,
-      ));
-    }
-  }
-
   Future<void> _runIntegrityCheck() async {
     final progress = ValueNotifier<StockLeakProgress>(
       const StockLeakProgress(
@@ -698,15 +524,6 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                 ),
 
                 PremiumListTile(
-                  title: 'Revisi Stok',
-                  subtitle:
-                      'Stock opname / koreksi: set stok baru + alasan (ADJUST)',
-                  icon: Icons.edit_note_rounded,
-                  iconColor: Colors.amberAccent,
-                  onTap: _showReviseStockDialog,
-                ),
-
-                PremiumListTile(
                   title: 'Stok Rusak / Write-off',
                   subtitle: 'Kurangi stok dengan alasan wajib (tercatat ledger)',
                   icon: Icons.report_gmailerrorred_rounded,
@@ -858,8 +675,18 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _infoRow("inv_stok_saat_ini".tr(),
-                        "${product['stock'] ?? 0} PCS", Colors.greenAccent),
+                    _infoRow(
+                        'Real',
+                        "${StockQty.realOf(Map<String, dynamic>.from(product))} PCS",
+                        Colors.greenAccent),
+                    _infoRow(
+                        'Pending',
+                        "${StockQty.pendingOf(Map<String, dynamic>.from(product))} PCS",
+                        Colors.orangeAccent),
+                    _infoRow(
+                        'Tersedia / Total jual',
+                        "${StockQty.availableOf(Map<String, dynamic>.from(product))} PCS",
+                        const Color(0xFF2DD4BF)),
                     _infoRow("inv_kategori".tr(), product['kategori'] ?? '-',
                         Colors.white70),
                     const Divider(color: Colors.white10, height: 16),

@@ -73,7 +73,7 @@ class AttendanceService {
     return approved.isEmpty ? list : approved;
   }
 
-  /// Verifikasi PIN absensi (opsional) sebelum face match di kiosk.
+  /// Verifikasi PIN akun (opsional) — absensi toko, detail pribadi, dll.
   bool verifyPinAbsensi(Map<String, dynamic> karyawan, String pin) {
     final expected = (karyawan['pin_absensi'] ?? '').toString().trim();
     if (expected.isEmpty) return true;

@@ -262,44 +262,396 @@ ThemeData buildAdminTheme() {
   );
 }
 
+/// Design tokens for Karyawan APK (navy–gold premium, login/register language).
+abstract final class OptikKaryawanTokens {
+  static const Color navyDeep = Color(0xFF0A1628);
+  static const Color navyMid = Color(0xFF1E3C72);
+  static const Color navySoft = Color(0xFF132F4C);
+  static const Color gold = Color(0xFFD4AF37);
+  static const Color goldSoft = Color(0xFFC4A35A);
+  static const Color goldLite = Color(0xFFE8C872);
+  static const Color scaffold = Color(0xFFF4F7FB);
+  static const Color surface = Colors.white;
+  static const Color surfaceMuted = Color(0xFFF7FAFC);
+  static const Color border = Color(0xFFE2E8F0);
+  static const Color ink = Color(0xFF0B1220);
+  static const Color muted = Color(0xFF64748B);
+  static const Color success = Color(0xFF16A34A);
+  static const Color danger = Color(0xFFF87171);
+  static const Color warning = Color(0xFFFBBF24);
+
+  /// Dark surfaces (absensi / OTP / camera-heavy).
+  static const Color darkBg = Color(0xFF0A1628);
+  static const Color darkCard = Color(0xFF132F4C);
+  static const Color darkLine = Color(0x24FFFFFF);
+
+  static const double radiusSm = 14;
+  static const double radiusMd = 16;
+  static const double radiusLg = 20;
+  static const double radiusXl = 22;
+  static const double radiusGlass = 24;
+
+  static LinearGradient get navyGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [navyMid, navyDeep],
+      );
+
+  static LinearGradient get goldGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [goldLite, gold, goldSoft],
+      );
+
+  static LinearGradient get authBgGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF071018),
+          navyDeep,
+          navySoft,
+          Color(0xFF1A3A5C),
+        ],
+      );
+
+  static LinearGradient get registerBgGradient => const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFF0F2744),
+          Color(0xFF163A5F),
+          Color(0xFFE8EEF5),
+          scaffold,
+        ],
+        stops: [0.0, 0.28, 0.55, 1.0],
+      );
+
+  static List<BoxShadow> get cardShadow => [
+        BoxShadow(
+          color: navyDeep.withOpacity(0.07),
+          blurRadius: 24,
+          offset: const Offset(0, 10),
+        ),
+      ];
+
+  static BoxDecoration get premiumCard => BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(radiusXl),
+        border: Border.all(color: border),
+        boxShadow: cardShadow,
+      );
+
+  static BoxDecoration get glassCard => BoxDecoration(
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(radiusGlass),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.28),
+            blurRadius: 40,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      );
+}
+
+/// Light in-app shell: white AppBar + soft `#F4F7FB` body (register light zone).
+class KaryawanPremiumScaffold extends StatelessWidget {
+  const KaryawanPremiumScaffold({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+    this.floatingActionButton,
+    this.bottomNavigationBar,
+    this.leading,
+    this.centerTitle = true,
+    this.eyebrow,
+    this.extendBodyBehindAppBar = false,
+    this.resizeToAvoidBottomInset,
+  });
+
+  final String title;
+  final Widget body;
+  final List<Widget>? actions;
+  final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
+  final Widget? leading;
+  final bool centerTitle;
+  final String? eyebrow;
+  final bool extendBodyBehindAppBar;
+  final bool? resizeToAvoidBottomInset;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleWidget = eyebrow == null || eyebrow!.isEmpty
+        ? Text(title)
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                eyebrow!,
+                style: const TextStyle(
+                  color: OptikKaryawanTokens.goldSoft,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.6,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: OptikKaryawanTokens.navyDeep,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          );
+
+    return Scaffold(
+      backgroundColor: OptikKaryawanTokens.scaffold,
+      extendBodyBehindAppBar: extendBodyBehindAppBar,
+      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: centerTitle,
+        backgroundColor: OptikKaryawanTokens.surface,
+        foregroundColor: OptikKaryawanTokens.navyDeep,
+        leading: leading,
+        title: titleWidget,
+        actions: actions,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: OptikKaryawanTokens.border),
+        ),
+      ),
+      body: body,
+      floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar,
+    );
+  }
+}
+
+/// Dark brand shell for camera / OTP / absensi flows.
+class KaryawanDarkScaffold extends StatelessWidget {
+  const KaryawanDarkScaffold({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+    this.leading,
+    this.floatingActionButton,
+    this.bottomNavigationBar,
+    this.centerTitle = true,
+  });
+
+  final String title;
+  final Widget body;
+  final List<Widget>? actions;
+  final Widget? leading;
+  final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
+  final bool centerTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: OptikKaryawanTokens.darkBg,
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: centerTitle,
+        backgroundColor: OptikKaryawanTokens.darkBg,
+        foregroundColor: Colors.white,
+        leading: leading,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        actions: actions,
+      ),
+      body: body,
+      floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar,
+    );
+  }
+}
+
+/// Section title used on light premium pages.
+class KaryawanSectionTitle extends StatelessWidget {
+  const KaryawanSectionTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: OptikKaryawanTokens.navyDeep,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+    );
+  }
+}
+
 ThemeData buildKaryawanTheme() {
-  const navy = Color(0xFF0A1628);
-  const navyMid = Color(0xFF1E3C72);
-  const gold = Color(0xFFC4A35A);
   return ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    scaffoldBackgroundColor: const Color(0xFFF4F7FB),
+    scaffoldBackgroundColor: OptikKaryawanTokens.scaffold,
     colorScheme: const ColorScheme.light(
-      primary: navyMid,
-      secondary: gold,
-      surface: Colors.white,
+      primary: OptikKaryawanTokens.navyMid,
+      secondary: OptikKaryawanTokens.goldSoft,
+      surface: OptikKaryawanTokens.surface,
       onPrimary: Colors.white,
-      onSecondary: navy,
+      onSecondary: OptikKaryawanTokens.navyDeep,
+      error: OptikKaryawanTokens.danger,
     ),
     appBarTheme: const AppBarTheme(
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: true,
-      backgroundColor: Colors.white,
-      foregroundColor: navy,
+      backgroundColor: OptikKaryawanTokens.surface,
+      foregroundColor: OptikKaryawanTokens.navyDeep,
       titleTextStyle: TextStyle(
-        color: navy,
+        color: OptikKaryawanTokens.navyDeep,
         fontSize: 17,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.3,
       ),
+      iconTheme: IconThemeData(color: OptikKaryawanTokens.navyDeep),
+    ),
+    cardTheme: CardThemeData(
+      color: OptikKaryawanTokens.surface,
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusXl),
+        side: const BorderSide(color: OptikKaryawanTokens.border),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: OptikKaryawanTokens.surfaceMuted,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikKaryawanTokens.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikKaryawanTokens.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        borderSide: const BorderSide(
+          color: OptikKaryawanTokens.navyMid,
+          width: 1.6,
+        ),
+      ),
+      labelStyle: const TextStyle(
+        color: OptikKaryawanTokens.muted,
+        fontSize: 13,
+      ),
+      hintStyle: TextStyle(
+        color: OptikKaryawanTokens.muted.withOpacity(0.75),
+        fontSize: 13,
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: OptikKaryawanTokens.navyMid,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(double.infinity, 50),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        ),
+        textStyle: const TextStyle(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
+          fontSize: 14,
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: OptikKaryawanTokens.navyMid,
+        side: const BorderSide(color: OptikKaryawanTokens.border),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: OptikKaryawanTokens.navyMid,
+        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+      ),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: navyMid,
+      backgroundColor: OptikKaryawanTokens.navyMid,
       foregroundColor: Colors.white,
     ),
     bottomAppBarTheme: const BottomAppBarThemeData(
-      color: Colors.white,
+      color: OptikKaryawanTokens.surface,
       elevation: 12,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: OptikKaryawanTokens.gold,
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+      ),
+    ),
+    listTileTheme: const ListTileThemeData(
+      iconColor: OptikKaryawanTokens.navyMid,
+      textColor: OptikKaryawanTokens.ink,
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return OptikKaryawanTokens.gold;
+        }
+        return OptikKaryawanTokens.muted;
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return OptikKaryawanTokens.goldSoft.withOpacity(0.45);
+        }
+        return OptikKaryawanTokens.border;
+      }),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: OptikKaryawanTokens.surfaceMuted,
+      selectedColor: OptikKaryawanTokens.goldSoft.withOpacity(0.28),
+      labelStyle: const TextStyle(
+        color: OptikKaryawanTokens.ink,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        side: const BorderSide(color: OptikKaryawanTokens.border),
+      ),
+      side: const BorderSide(color: OptikKaryawanTokens.border),
     ),
   );
 }

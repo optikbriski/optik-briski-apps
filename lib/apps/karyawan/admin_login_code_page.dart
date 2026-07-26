@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,9 +22,9 @@ class AdminLoginCodePage extends StatefulWidget {
 class _AdminLoginCodePageState extends State<AdminLoginCodePage>
     with TickerProviderStateMixin {
   static const _bgDeep = Color(0xFF070B14);
-  static const _accent = Color(0xFF2DD4BF);
+  static const _accent = OptikKaryawanTokens.gold;
   static const _accentWarm = Color(0xFFFBBF24);
-  static const _card = Color(0xFF1E293B);
+  static const _card = OptikKaryawanTokens.darkCard;
 
   String? _code;
   String? _karyawanId;
@@ -272,11 +273,11 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
               backgroundColor: Colors.white,
               eyeStyle: const QrEyeStyle(
                 eyeShape: QrEyeShape.square,
-                color: Color(0xFF0F172A),
+                color: OptikKaryawanTokens.darkBg,
               ),
               dataModuleStyle: const QrDataModuleStyle(
                 dataModuleShape: QrDataModuleShape.square,
-                color: Color(0xFF0F172A),
+                color: OptikKaryawanTokens.darkBg,
               ),
             ),
           ),
@@ -324,7 +325,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF14B8A6), Color(0xFF0F766E)],
+                    colors: [Color(0xFF14B8A6), OptikKaryawanTokens.navyMid],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -434,8 +435,8 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF1E293B).withOpacity(0.92),
-                  const Color(0xFF0F172A).withOpacity(0.96),
+                  OptikKaryawanTokens.navyDeep.withOpacity(0.92),
+                  OptikKaryawanTokens.darkBg.withOpacity(0.96),
                   const Color(0xFF134E4A).withOpacity(0.55),
                 ],
               ),
@@ -563,8 +564,14 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
               borderRadius: BorderRadius.circular(18),
               gradient: LinearGradient(
                 colors: _copied
-                    ? const [Color(0xFF0D9488), Color(0xFF115E59)]
-                    : const [Color(0xFF2DD4BF), Color(0xFF0F766E)],
+                    ? const [
+                        OptikKaryawanTokens.navyMid,
+                        OptikKaryawanTokens.navyDeep,
+                      ]
+                    : const [
+                        OptikKaryawanTokens.goldLite,
+                        OptikKaryawanTokens.gold,
+                      ],
               ),
               boxShadow: [
                 BoxShadow(
@@ -678,7 +685,7 @@ class _AtmosphereBackground extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             Color(0xFF070B14),
-            Color(0xFF0F172A),
+            OptikKaryawanTokens.darkBg,
             Color(0xFF0B2E2A),
             Color(0xFF070B14),
           ],
@@ -690,7 +697,7 @@ class _AtmosphereBackground extends StatelessWidget {
           Positioned(
             top: -80,
             right: -40,
-            child: _GlowBlob(color: Color(0x332DD4BF), size: 220),
+            child: _GlowBlob(color: Color(0x33D4AF37), size: 220),
           ),
           Positioned(
             bottom: 80,
@@ -740,7 +747,7 @@ class _DigitTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = isPrefix
-        ? (urgent ? const Color(0xFFFBBF24) : const Color(0xFF2DD4BF))
+        ? (urgent ? const Color(0xFFFBBF24) : OptikKaryawanTokens.gold)
         : Colors.white.withOpacity(0.12);
 
     return AnimatedSwitcher(
@@ -769,7 +776,7 @@ class _DigitTile extends StatelessWidget {
             colors: isPrefix
                 ? [
                     const Color(0xFF134E4A).withOpacity(0.95),
-                    const Color(0xFF0F172A).withOpacity(0.98),
+                    OptikKaryawanTokens.darkBg.withOpacity(0.98),
                   ]
                 : [
                     Colors.white.withOpacity(0.1),
@@ -781,7 +788,7 @@ class _DigitTile extends StatelessWidget {
                   BoxShadow(
                     color: (urgent
                             ? const Color(0xFFFBBF24)
-                            : const Color(0xFF2DD4BF))
+                            : OptikKaryawanTokens.gold)
                         .withOpacity(0.22),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
@@ -830,7 +837,7 @@ class _LegendPill extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              color: const Color(0xFF2DD4BF).withOpacity(0.18),
+              color: OptikKaryawanTokens.gold.withOpacity(0.18),
             ),
             child: Text(
               digit,

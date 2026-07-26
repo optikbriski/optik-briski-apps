@@ -19,6 +19,8 @@ class KtpOcrResult {
     required this.golonganDarah,
     required this.agama,
     required this.statusPerkawinan,
+    required this.pekerjaan,
+    required this.kewarganegaraan,
     required this.rawText,
   });
 
@@ -43,6 +45,8 @@ class KtpOcrResult {
   final String golonganDarah;
   final String agama;
   final String statusPerkawinan;
+  final String pekerjaan;
+  final String kewarganegaraan;
   final String rawText;
 
   bool get hasNik => nik.length == 16;
@@ -266,6 +270,19 @@ class KtpOcrService {
       'pekerjaan',
       'kewarganegaraan',
     ]));
+    final pekerjaan = _cleanTitle(_extractLabeled(lines, const [
+      'pekerjaan',
+    ], stopHints: const [
+      'kewarganegaraan',
+      'berlaku',
+    ]));
+    final kewarganegaraan = _cleanTitle(_extractLabeled(lines, const [
+      'kewarganegaraan',
+      'warga negara',
+    ], stopHints: const [
+      'berlaku',
+      'hingga',
+    ]));
 
     final alamat = _composeAlamat(
       jalan: jalan.isNotEmpty ? jalan : _extractAlamatFallback(raw, lines),
@@ -290,6 +307,8 @@ class KtpOcrService {
       golonganDarah: golDarah,
       agama: agama,
       statusPerkawinan: statusKawin,
+      pekerjaan: pekerjaan,
+      kewarganegaraan: kewarganegaraan,
       rawText: raw,
     );
   }
