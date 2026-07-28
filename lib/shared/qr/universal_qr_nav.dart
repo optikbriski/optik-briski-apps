@@ -3,7 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../apps/karyawan/absensi_page.dart';
-import '../../apps/member/member_rating_page.dart';
+import '../../apps/member/pages/member_invoice_hub_page.dart';
 import '../invoice/invoice_qr_opener.dart';
 import '../scanner_penerimaan_page.dart';
 import 'qr_route.dart';
@@ -94,7 +94,7 @@ class UniversalQrNav {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => MemberRatingPage(initialInvoice: inv),
+              builder: (_) => MemberInvoiceHubPage(noInvoice: inv),
             ),
           );
           return;

@@ -43,6 +43,7 @@ import 'absensi_toko_page.dart';
 import 'garansi_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/member/member_repository.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -225,6 +226,9 @@ class _SalesPageState extends State<SalesPage> {
   // KERANJANG BELANJA & DISKON GLOBAL
   List<Map<String, dynamic>> restockQueue = [];
   final TextEditingController discountCtrl = TextEditingController(text: "0");
+  final TextEditingController voucherCtrl = TextEditingController();
+  String? _appliedVoucherCode;
+  bool _lookingUpVoucher = false;
 
   // TOOGLE SELEKSI LAYOUT BARANG
   bool isFrameActive = false;
@@ -342,9 +346,69 @@ class _SalesPageState extends State<SalesPage> {
     emailCtrl.dispose();
     skuScanCtrl.dispose();
     discountCtrl.dispose();
+    voucherCtrl.dispose();
     paidCtrl.dispose();
     kasirCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _applyMemberVoucher() async {
+    final code = voucherCtrl.text.trim();
+    if (code.isEmpty) {
+      _showSnack('Masukkan kode voucher', Colors.orange);
+      return;
+    }
+    if (_subtotalBelanja <= 0) {
+      _showSnack('Isi keranjang dulu sebelum pakai voucher', Colors.orange);
+      return;
+    }
+    setState(() => _lookingUpVoucher = true);
+    try {
+      final res = await MemberRepository().lookupPromo(code);
+      if (!mounted) return;
+      if (res['ok'] != true) {
+        _showSnack(
+          (res['error'] ?? 'Voucher tidak valid').toString(),
+          Colors.redAccent,
+        );
+        return;
+      }
+      final type = (res['discount_type'] ?? 'nominal').toString();
+      final value = int.tryParse('${res['discount_value'] ?? 0}') ?? 0;
+      int nominal = 0;
+      if (type == 'info') {
+        _showSnack(
+          'Voucher info saja — tidak ada potongan otomatis. '
+          '${res['title'] ?? ''}',
+          Colors.orange,
+        );
+        return;
+      } else if (type == 'percent') {
+        nominal = ((_subtotalBelanja * value) / 100).round();
+      } else {
+        nominal = value;
+      }
+      if (nominal <= 0) {
+        _showSnack('Nilai diskon voucher 0', Colors.orange);
+        return;
+      }
+      if (nominal > _subtotalBelanja) nominal = _subtotalBelanja;
+      setState(() {
+        discountCtrl.text = '$nominal';
+        _appliedVoucherCode = (res['voucher_code'] ?? code).toString();
+        if (paymentStatus == 'Lunas') {
+          paidCtrl.text = _totalAkhir.toString();
+        }
+      });
+      final left = res['quantity_remaining'];
+      final leftNote = left == null ? '' : ' · sisa kuota $left';
+      _showSnack(
+        'Voucher ${res['title'] ?? code} diterapkan (−Rp $nominal)$leftNote',
+        Colors.green,
+      );
+    } finally {
+      if (mounted) setState(() => _lookingUpVoucher = false);
+    }
   }
 
   void _generateInvoice() {
@@ -5458,6 +5522,75 @@ class _SalesPageState extends State<SalesPage> {
                           ],
                         ),
                         const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: voucherCtrl,
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  labelText: 'Kode voucher Member',
+                                  hintText: 'Contoh: PROMO50',
+                                  filled: true,
+                                  fillColor: Colors.blueAccent.withOpacity(0.08),
+                                  suffixIcon: _appliedVoucherCode == null
+                                      ? null
+                                      : IconButton(
+                                          tooltip: 'Hapus voucher',
+                                          onPressed: () => setState(() {
+                                            voucherCtrl.clear();
+                                            _appliedVoucherCode = null;
+                                            discountCtrl.text = '0';
+                                            if (paymentStatus == 'Lunas') {
+                                              paidCtrl.text =
+                                                  _totalAkhir.toString();
+                                            }
+                                          }),
+                                          icon: const Icon(Icons.close,
+                                              color: Colors.white54),
+                                        ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: FilledButton(
+                                onPressed: _lookingUpVoucher
+                                    ? null
+                                    : _applyMemberVoucher,
+                                child: _lookingUpVoucher
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('Cek'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_appliedVoucherCode != null) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Voucher: $_appliedVoucherCode',
+                              style: const TextStyle(
+                                color: Colors.lightGreenAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
                         TextField(
                           controller: discountCtrl,
                           keyboardType: TextInputType.number,
@@ -5465,6 +5598,7 @@ class _SalesPageState extends State<SalesPage> {
                               color: Colors.orangeAccent,
                               fontWeight: FontWeight.bold),
                           onChanged: (v) => setState(() {
+                            _appliedVoucherCode = null;
                             if (paymentStatus == "Lunas") {
                               paidCtrl.text = _totalAkhir.toString();
                             }

@@ -656,20 +656,167 @@ ThemeData buildKaryawanTheme() {
   );
 }
 
+/// Member APK — putih–biru premium (konsisten semua halaman).
+abstract final class OptikMemberTokens {
+  static const Color blueDeep = Color(0xFF0B3D8C);
+  static const Color blue = Color(0xFF1565C0);
+  static const Color blueMid = Color(0xFF1E6FE0);
+  static const Color blueSoft = Color(0xFFE8F1FF);
+  static const Color blueMist = Color(0xFFF3F7FF);
+  static const Color white = Color(0xFFFFFFFF);
+  static const Color canvas = Color(0xFFF7FAFF);
+  static const Color ink = Color(0xFF0F172A);
+  static const Color inkSecondary = Color(0xFF475569);
+  static const Color inkMuted = Color(0xFF64748B);
+  static const Color line = Color(0xFFD7E3F5);
+  static const Color lineSoft = Color(0xFFE8EEF8);
+  static const Color success = Color(0xFF0F766E);
+  static const Color warning = Color(0xFFB45309);
+  static const Color danger = Color(0xFFB91C1C);
+
+  static const double radiusSm = 10;
+  static const double radiusMd = 14;
+  static const double radiusLg = 18;
+  static const double radiusXl = 24;
+
+  static List<BoxShadow> get cardShadow => [
+        BoxShadow(
+          color: blueDeep.withOpacity(0.06),
+          blurRadius: 18,
+          offset: const Offset(0, 8),
+        ),
+      ];
+}
+
 ThemeData buildMemberTheme() {
+  const blue = OptikMemberTokens.blue;
   return ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0F766E),
-      brightness: Brightness.light,
+    fontFamily: null,
+    colorScheme: const ColorScheme.light(
+      primary: OptikMemberTokens.blue,
+      onPrimary: OptikMemberTokens.white,
+      secondary: OptikMemberTokens.blueDeep,
+      onSecondary: OptikMemberTokens.white,
+      surface: OptikMemberTokens.white,
+      onSurface: OptikMemberTokens.ink,
+      error: OptikMemberTokens.danger,
+      outline: OptikMemberTokens.line,
     ),
-    scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+    scaffoldBackgroundColor: OptikMemberTokens.canvas,
+    dividerColor: OptikMemberTokens.lineSoft,
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
-      backgroundColor: Color(0xFFF8FAFC),
-      foregroundColor: Color(0xFF0F172A),
+      scrolledUnderElevation: 0,
+      backgroundColor: OptikMemberTokens.white,
+      foregroundColor: OptikMemberTokens.blueDeep,
+      titleTextStyle: TextStyle(
+        color: OptikMemberTokens.blueDeep,
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+      iconTheme: IconThemeData(color: OptikMemberTokens.blueDeep),
+    ),
+    cardTheme: CardThemeData(
+      color: OptikMemberTokens.white,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
+        side: const BorderSide(color: OptikMemberTokens.lineSoft),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: OptikMemberTokens.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      labelStyle: const TextStyle(color: OptikMemberTokens.inkMuted),
+      hintStyle: TextStyle(color: OptikMemberTokens.inkMuted.withOpacity(0.8)),
+      prefixIconColor: OptikMemberTokens.blue,
+      suffixIconColor: OptikMemberTokens.inkMuted,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikMemberTokens.line),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikMemberTokens.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+        borderSide: const BorderSide(color: blue, width: 1.6),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: OptikMemberTokens.blue,
+        foregroundColor: OptikMemberTokens.white,
+        disabledBackgroundColor: OptikMemberTokens.blueSoft,
+        disabledForegroundColor: OptikMemberTokens.inkMuted,
+        elevation: 0,
+        minimumSize: const Size(double.infinity, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: OptikMemberTokens.blueDeep,
+        side: const BorderSide(color: OptikMemberTokens.line),
+        minimumSize: const Size(double.infinity, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: OptikMemberTokens.blue,
+        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: OptikMemberTokens.blueDeep,
+      contentTextStyle: const TextStyle(color: OptikMemberTokens.white),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusSm),
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: OptikMemberTokens.white,
+      selectedItemColor: OptikMemberTokens.blue,
+      unselectedItemColor: OptikMemberTokens.inkMuted,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+      unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: OptikMemberTokens.blue,
+      foregroundColor: OptikMemberTokens.white,
+      elevation: 2,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: OptikMemberTokens.blue,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: OptikMemberTokens.blueSoft,
+      selectedColor: OptikMemberTokens.blue,
+      labelStyle: const TextStyle(
+        color: OptikMemberTokens.blueDeep,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+      ),
     ),
   );
 }

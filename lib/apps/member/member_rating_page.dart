@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import '../../shared/invoice/invoice_hub_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/invoice/invoice_rating_card.dart';
+import '../../shared/theme.dart';
+import 'member_widgets.dart';
 
-/// Rating kasir + pembuat kacamata — khusus APK Member (bukan Hub Invoice).
-/// Scan QR masuk lewat menu tunggal di [HomeMemberPage] → [UniversalQrNav].
+/// Rating kasir + pembuat — UI selaras Member putih–biru.
 class MemberRatingPage extends StatefulWidget {
   const MemberRatingPage({super.key, this.initialInvoice});
 
@@ -60,7 +61,6 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
         });
         return;
       }
-      // Member app: selalu tampilkan sebagai pelanggan untuk rating
       hub['role_view'] = 'customer';
       setState(() {
         _hub = hub;
@@ -86,16 +86,16 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('invoice_hub_rating_ok'.tr()),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text('invoice_hub_rating_ok'.tr())),
       );
       await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: OptikMemberTokens.danger,
+        ),
       );
     }
   }
@@ -105,36 +105,31 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
     final h = _hub;
     final bisa = h?['bisa_rating'] == true;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text('member_rating_title'.tr()),
-        backgroundColor: const Color(0xFF0F766E),
-        foregroundColor: Colors.white,
-      ),
+    return MemberPremiumScaffold(
+      title: 'member_rating_title'.tr(),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         children: [
           Text(
             'member_rating_desc'.tr(),
-            style: const TextStyle(color: Colors.black54, height: 1.4),
+            style: const TextStyle(
+              color: OptikMemberTokens.inkSecondary,
+              height: 1.45,
+              fontSize: 13.5,
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _invoiceCtrl,
             decoration: const InputDecoration(
               labelText: 'No. Invoice',
-              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.qr_code_2_rounded),
             ),
             onSubmitted: (_) => _load(),
           ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: _loading ? null : _load,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF0F766E),
-              minimumSize: const Size(double.infinity, 48),
-            ),
             child: _loading
                 ? const SizedBox(
                     width: 22,
@@ -148,26 +143,60 @@ class _MemberRatingPageState extends State<MemberRatingPage> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+            Text(
+              _error!,
+              style: const TextStyle(color: OptikMemberTokens.danger),
+            ),
           ],
           if (h != null) ...[
             const SizedBox(height: 20),
-            Text(
-              h['no_invoice']?.toString() ?? '-',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: OptikMemberTokens.white,
+                borderRadius:
+                    BorderRadius.circular(OptikMemberTokens.radiusMd),
+                border: Border.all(color: OptikMemberTokens.lineSoft),
               ),
-            ),
-            Text(
-              '${h['nama_pelanggan'] ?? '-'} · ${h['toko_id'] ?? '-'}',
-              style: const TextStyle(color: Colors.black54),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    h['no_invoice']?.toString() ?? '-',
+                    style: const TextStyle(
+                      color: OptikMemberTokens.blueDeep,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${h['nama_pelanggan'] ?? '-'} · ${h['toko_id'] ?? '-'}',
+                    style: const TextStyle(
+                      color: OptikMemberTokens.inkMuted,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             if (!bisa)
-              Text(
-                'invoice_hub_rating_locked'.tr(),
-                style: TextStyle(color: Colors.orange.shade800),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius:
+                      BorderRadius.circular(OptikMemberTokens.radiusSm),
+                  border: Border.all(color: const Color(0xFFFDBA74)),
+                ),
+                child: Text(
+                  'invoice_hub_rating_locked'.tr(),
+                  style: const TextStyle(
+                    color: OptikMemberTokens.warning,
+                    height: 1.4,
+                  ),
+                ),
               )
             else ...[
               InvoiceRatingCard(

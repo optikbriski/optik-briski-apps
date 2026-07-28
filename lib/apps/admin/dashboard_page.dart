@@ -12,6 +12,7 @@ import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
 import 'riwayat_transaksi_page.dart';
 import 'invoice_config_page.dart';
+import 'member_home_content_page.dart';
 import 'absensi_toko_page.dart';
 import 'attendance_monitor_page.dart';
 import 'jadwal_kerja_page.dart';
@@ -560,6 +561,26 @@ class _DashboardPageState extends State<DashboardPage> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (c) => InvoiceConfigPage(
+                                      profile: widget.profile,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                          if (!training &&
+                              (widget.profile['role'] == 'owner' ||
+                                  widget.profile['role'] == 'admin_pusat' ||
+                                  widget.profile['role'] == 'super_admin'))
+                            PremiumMenuTile(
+                              title: 'Konten Home Member',
+                              icon: Icons.phone_android_rounded,
+                              color: const Color(0xFF3B82F6),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (c) => MemberHomeContentPage(
                                       profile: widget.profile,
                                     ),
                                   ),
