@@ -208,6 +208,10 @@ class InvoiceLifecycleService {
   }
 
   /// Serah terima + aktifkan garansi + consume LUNAS + terbitkan CLAIM.
+  ///
+  /// [markReadyIfPending]: kasir mengonfirmasi barang sudah siap di toko
+  /// (PENDING_PO → SIAP_DIAMBIL) lalu lanjut serah terima — dipakai saat
+  /// scan QR LUNAS pelanggan untuk pengambilan.
   Future<Map<String, dynamic>> handoverAndIssueClaim({
     required String noInvoice,
     required String rawScan,
@@ -215,6 +219,7 @@ class InvoiceLifecycleService {
     String? fotoHasilUrl,
     String? tokoId,
     bool isPusat = false,
+    bool markReadyIfPending = false,
   }) async {
     final validated = await validateCustomerScan(rawScan);
     if (validated.phase != 'LUNAS') {
@@ -227,8 +232,14 @@ class InvoiceLifecycleService {
     final tracking =
         (validated.sale['tracking_status'] ?? '').toString().toUpperCase();
     if (tracking == 'PENDING_PO') {
-      throw 'Barang belum siap (PENDING_PO). '
-          'SOP: jangan serah terima sebelum barang selesai / diterima.';
+      if (!markReadyIfPending) {
+        throw 'Barang belum siap (PENDING_PO). '
+            'Konfirmasi barang sudah siap di toko, lalu serah terima.';
+      }
+      await _db.from('sales').update({
+        'tracking_status': 'SIAP_DIAMBIL',
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', validated.sale['id']);
     }
 
     final garansi = GaransiService(client: _db);

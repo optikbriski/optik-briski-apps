@@ -430,7 +430,10 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
   }
 
   /// Serah terima + aktifkan garansi + terbitkan QR CLAIM.
-  Future<void> _handoverConfirmed(Map<String, dynamic> h) async {
+  Future<void> _handoverConfirmed(
+    Map<String, dynamic> h, {
+    bool markReadyIfPending = false,
+  }) async {
     final inv = h['no_invoice']?.toString() ?? '';
     final raw = widget.rawScan;
     if (inv.isEmpty || raw == null || _busy) return;
@@ -456,6 +459,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         staffNik: staff['nik']?.toString() ?? '',
         tokoId: toko,
         isPusat: isPusat,
+        markReadyIfPending: markReadyIfPending,
       );
       final saleRow = res['sale'];
       if (saleRow is Map) {
@@ -941,29 +945,22 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     } else if (phase == 'LUNAS') {
       final tracking =
           (h['tracking_status'] ?? '').toString().toUpperCase();
+      final pendingPo = tracking == 'PENDING_PO';
       title = 'Konfirmasi serah terima';
-      question = tracking == 'PENDING_PO'
-          ? 'Status masih PENDING_PO — barang belum siap.\n'
-              'SOP: jangan serah terima sebelum barang selesai.'
+      question = pendingPo
+          ? 'Status masih PENDING_PO (antrian proses).\n\n'
+              'Jika barang sudah siap di toko dan akan diberikan ke pelanggan, '
+              'lanjutkan: status jadi SIAP_DIAMBIL → serah terima → '
+              'garansi aktif + QR CLAIM.\n\n'
+              'Lanjut → scan barcode karyawan.'
           : 'Produk sudah selesai dan akan diberikan ke pelanggan?\n\n'
               'Ini mengaktifkan garansi ${GaransiService.garansiHari} hari '
               'dan menerbitkan QR CLAIM (sekali pakai).\n'
               'Lanjut → scan barcode karyawan.';
-      yesLabel = tracking == 'PENDING_PO'
-          ? 'Tidak bisa (belum siap)'
+      yesLabel = pendingPo
+          ? 'Barang siap — serah terima'
           : 'Ya, sudah diberikan';
-      onYes = tracking == 'PENDING_PO'
-          ? () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'SOP: selesaikan barang dulu sebelum serah terima.',
-                  ),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
-          : () => _handoverConfirmed(h);
+      onYes = () => _handoverConfirmed(h, markReadyIfPending: pendingPo);
     } else if (phase == 'CLAIM') {
       if (InvoiceHubService.isCaseClosed(h)) {
         return [
