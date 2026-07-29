@@ -10,6 +10,7 @@ import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
 import '../qr/qr_route.dart';
 import '../qr/universal_qr_scan_page.dart';
+import 'invoice_delivery_service.dart';
 import 'invoice_detail_page.dart';
 import 'invoice_hub_service.dart';
 import 'invoice_lifecycle_service.dart';
@@ -58,6 +59,7 @@ class InvoiceHubPage extends StatefulWidget {
       );
       return;
     }
+    final lifecycle = result.invoiceCustomerLifecycle && !result.invoiceViewOnly;
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -65,9 +67,9 @@ class InvoiceHubPage extends StatefulWidget {
           noInvoice: inv,
           rawScan: result.raw,
           profile: profile,
-          // openScanner = kamera → bukan lifecycle HID
-          viewOnly: true,
-          fromAdminHidScanner: false,
+          // Kamera staff: QR pelanggan OBRINV tetap bisa pelunasan / serah terima.
+          viewOnly: !lifecycle,
+          fromAdminHidScanner: lifecycle,
         ),
       ),
     );
@@ -85,6 +87,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
   Map<String, dynamic>? _hub;
   bool _busy = false;
   String? _scanPhase;
+  /// True setelah QR pelanggan OBRINV lolos validasi token/fase.
+  bool _lifecycleValidated = false;
 
   @override
   void initState() {
@@ -96,6 +100,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _lifecycleValidated = false;
+      _scanPhase = null;
     });
     try {
       Map<String, dynamic>? data;
@@ -112,11 +118,16 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         });
         return;
       }
+
+      // Aksi mengikuti payload QR yang di-scan (OBRINV + token), bukan flag UI.
       String? phase;
-      if (_customerLifecycleEnabled && widget.rawScan != null) {
+      var lifecycleOk = false;
+      final raw = widget.rawScan;
+      if (raw != null && InvoiceLink.isCustomerLifecycleQr(raw)) {
         try {
-          final v = await _lifecycle.validateCustomerScan(widget.rawScan!);
+          final v = await _lifecycle.validateCustomerScan(raw);
           phase = v.phase;
+          lifecycleOk = true;
         } catch (e) {
           if (!mounted) return;
           setState(() {
@@ -124,14 +135,17 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             _loading = false;
             _error = e.toString();
             _scanPhase = null;
+            _lifecycleValidated = false;
           });
           return;
         }
       }
+
       setState(() {
         _hub = data;
         _loading = false;
         _scanPhase = phase;
+        _lifecycleValidated = lifecycleOk;
       });
     } catch (e) {
       if (!mounted) return;
@@ -142,11 +156,22 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     }
   }
 
+  Future<bool> _ensureCabangOk(Map<String, dynamic> h) async {
+    final msg = _cabangMismatchMessage(h);
+    if (msg == null) return true;
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.orange.shade800),
+    );
+    return false;
+  }
+
   /// Pelunasan: payment gateway kasir → scan NIK → finance+sales → QR LUNAS.
   Future<void> _settleDpConfirmed(Map<String, dynamic> h) async {
     final saleId = h['sale_id']?.toString();
     final raw = widget.rawScan;
     if (saleId == null || raw == null || _busy) return;
+    if (!await _ensureCabangOk(h)) return;
 
     final sisa = int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0;
     final metode = await _showPelunasanGateway(sisa);
@@ -168,13 +193,18 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         staffNama: staff['nama']?.toString() ?? '',
         rawScan: raw,
       );
+      // Kirim ulang QR LUNAS ke WA + email Member
+      try {
+        await InvoiceDeliveryService().deliver(sale: updated, sendEmail: true, sendWa: true);
+      } catch (_) {}
       if (!mounted) return;
       await _showCustomerQrDialog(
         title: 'QR pelanggan · LUNAS',
         body:
-            'Pelunasan berhasil. Berikan QR LUNAS ini ke pelanggan.\n'
+            'Pelunasan berhasil. QR LUNAS sudah dikirim ke WA/email pelanggan '
+            'dan sinkron di APK Member.\n'
             'QR DP lama sudah tidak berlaku.\n'
-            'Scan berikutnya (scanner toko): serah terima + aktifkan garansi.',
+            'Scan berikutnya: serah terima + aktifkan garansi.',
         payload: InvoiceLifecycleService.customerQrPayload(updated) ?? '',
       );
       if (!mounted) return;
@@ -404,6 +434,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final inv = h['no_invoice']?.toString() ?? '';
     final raw = widget.rawScan;
     if (inv.isEmpty || raw == null || _busy) return;
+    if (!await _ensureCabangOk(h)) return;
 
     final staff = await showStaffNikScanDialog(
       context,
@@ -426,13 +457,21 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         tokoId: toko,
         isPusat: isPusat,
       );
+      final saleRow = res['sale'];
+      if (saleRow is Map) {
+        try {
+          await InvoiceDeliveryService().deliver(
+            sale: Map<String, dynamic>.from(saleRow),
+          );
+        } catch (_) {}
+      }
       if (!mounted) return;
       final claimQr = res['claim_qr']?.toString() ?? '';
       await _showCustomerQrDialog(
         title: 'QR pelanggan · CLAIM',
         body:
             'Serah terima OK. Garansi aktif s/d ${res['tanggal_akhir']}.\n'
-            'QR LUNAS hangus. Berikan QR CLAIM ini ke pelanggan (sekali pakai).',
+            'QR CLAIM sudah dikirim ke WA/email & sinkron di APK Member.',
         payload: claimQr,
       );
       if (!mounted) return;
@@ -451,6 +490,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final inv = h['no_invoice']?.toString() ?? '';
     final raw = widget.rawScan;
     if (inv.isEmpty || raw == null || !mounted) return;
+    if (!await _ensureCabangOk(h)) return;
 
     if (InvoiceHubService.isCaseClosed(h)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -511,11 +551,19 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
 
   bool get _staff => _hub != null && InvoiceHubService.isStaffView(_hub!);
 
-  /// Aksi DP / serah terima / klaim: QR pelanggan + HID web admin saja.
-  bool get _customerLifecycleEnabled {
-    if (widget.viewOnly) return false;
-    if (!widget.fromAdminHidScanner) return false;
-    return InvoiceLink.isCustomerLifecycleQr(widget.rawScan);
+  /// Aksi DP / serah terima / klaim — hanya jika scan QR pelanggan OBRINV valid.
+  bool get _customerLifecycleEnabled => _lifecycleValidated;
+
+  /// Nota harus diproses di cabang pembuat (kecuali PUSAT).
+  String? _cabangMismatchMessage(Map<String, dynamic> sale) {
+    final saleToko = (sale['toko_id'] ?? '').toString().trim().toUpperCase();
+    final staffToko =
+        (_profileOrToko['toko_id'] ?? '').toString().trim().toUpperCase();
+    if (saleToko.isEmpty || staffToko.isEmpty) return null;
+    if (staffToko == 'PUSAT') return null;
+    if (saleToko == staffToko) return null;
+    return 'Nota ini dari cabang $saleToko. '
+        'Scan QR di POS $saleToko (bukan $staffToko) agar terdeteksi.';
   }
 
   Map<String, dynamic> get _profileOrToko =>
@@ -691,30 +739,10 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         const SizedBox(height: 8),
         ..._garansiTiles(h),
         const SizedBox(height: 20),
-        // Lifecycle (lunasi / serah terima / klaim) hanya dari QR pelanggan.
+        // Lifecycle: panel tindakan sesuai fase QR yang baru di-scan.
         if (_staff && _customerLifecycleEnabled) ..._confirmPanel(h),
         if (_staff && !_customerLifecycleEnabled) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Text(
-              'Mode lihat saja.\n'
-              'Aksi pelunasan / serah terima / klaim wajib scan QR pelanggan '
-              'lewat scanner yang terhubung ke web admin '
-              '(bukan kamera HP / link HTTPS).\n'
-              'QR toko (OBRTXN) hanya untuk detail.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.65),
-                fontSize: 12.5,
-                height: 1.4,
-              ),
-            ),
-          ),
+          _viewOnlyHint(h),
           const SizedBox(height: 12),
         ],
         if (!_staff) ..._customerActions(h),
@@ -777,6 +805,115 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         children: children,
       ),
     );
+  }
+
+  Widget _viewOnlyHint(Map<String, dynamic> h) {
+    final raw = (widget.rawScan ?? '').trim();
+    final needed = InvoiceHubService.isDpOpen(h)
+        ? 'DP (pelunasan)'
+        : InvoiceHubService.sudahDiambil(h)
+            ? 'CLAIM (klaim garansi)'
+            : 'LUNAS (serah terima)';
+
+    String why;
+    if (raw.isEmpty) {
+      why = 'Hub dibuka tanpa scan QR pelanggan (dari detail/menu).';
+    } else if (ObrTxn.parse(raw) != null) {
+      why = 'Yang di-scan: QR toko (OBRTXN) — hanya untuk lihat detail.';
+    } else if (raw.contains('http') || raw.contains('optikbriski://')) {
+      why = 'Yang di-scan: link nota — bukan QR tindakan.';
+    } else if (ObrInvoice.parse(raw) != null &&
+        !InvoiceLink.isCustomerLifecycleQr(raw)) {
+      why = 'QR invoice tanpa token fase — bukan QR pelanggan aktif.';
+    } else {
+      why = 'QR belum dikenali sebagai OBRINV pelanggan bertoken.';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Belum ada tindakan',
+            style: TextStyle(
+              color: Color(0xFFE8C872),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$why\n\n'
+            'Untuk tindakan, scan ulang QR pelanggan fase $needed '
+            'dari email / WhatsApp / APK Member '
+            '(format: OBRINV|v1|…|$needed|token).\n'
+            'Setelah scan benar, panel tindakan muncul di bagian ini.',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : () => _unlockLifecycleFromSale(h),
+            icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
+            label: Text('Mulai tindakan $needed'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFE8C872),
+              side: BorderSide(color: const Color(0xFFE8C872).withOpacity(0.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Buka ulang hub dengan payload OBRINV aktif (jika scan sebelumnya OBRTXN/link).
+  Future<void> _unlockLifecycleFromSale(Map<String, dynamic> h) async {
+    final inv = h['no_invoice']?.toString();
+    final saleId = h['sale_id']?.toString();
+    if (inv == null || saleId == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final sale = await _lifecycle.ensureTokens(saleId);
+      final payload = InvoiceLifecycleService.customerQrPayload(sale) ?? '';
+      if (!mounted) return;
+      if (payload.isEmpty || !InvoiceLink.isCustomerLifecycleQr(payload)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'QR pelanggan belum bisa diterbitkan untuk fase ini.',
+            ),
+          ),
+        );
+        return;
+      }
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => InvoiceHubPage(
+            noInvoice: inv,
+            rawScan: payload,
+            profile: widget.profile,
+            viewOnly: false,
+            fromAdminHidScanner: true,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   /// Panel konfirmasi di bawah — fase mengikuti QR yang di-scan (sekali pakai).

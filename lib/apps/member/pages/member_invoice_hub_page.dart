@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/invoice/invoice_hub_service.dart';
@@ -42,7 +44,10 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
       _error = null;
     });
     try {
-      final hub = await _hubSvc.loadByInvoice(widget.noInvoice);
+      final hub = await _hubSvc.loadByInvoice(
+        widget.noInvoice,
+        phone: MemberSession.instance.phoneForQuery,
+      );
       if (!mounted) return;
       if (hub == null) {
         setState(() {
@@ -210,50 +215,164 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
   }
 
   Widget _phaseCard(Map<String, dynamic> h) {
+    final phaseKey = (h['qr_phase'] ?? '').toString().toUpperCase();
     String phase;
     String tip;
-    if (InvoiceHubService.isDpOpen(h)) {
-      phase = 'QR fase DP';
+    if (phaseKey == 'DP' || InvoiceHubService.isDpOpen(h)) {
+      phase = 'QR fase DP · pelunasan';
       tip =
-          'Tunjukkan QR nota ke kasir untuk pelunasan. Ambil barang hanya setelah lunas.';
-    } else if (!InvoiceHubService.sudahDiambil(h)) {
-      phase = 'QR fase LUNAS / serah terima';
-      tip =
-          'Saat pengambilan, petugas akan scan QR LUNAS. Siapkan nota di HP Anda.';
-    } else {
-      phase = 'QR fase CLAIM garansi';
+          'Tunjukkan QR ini ke kasir POS untuk pelunasan. Ambil barang hanya setelah lunas.';
+    } else if (phaseKey == 'CLAIM' || InvoiceHubService.sudahDiambil(h)) {
+      phase = 'QR fase CLAIM · garansi';
       tip =
           'Untuk klaim, datang ke toko membawa barang + QR CLAIM. Keputusan hanya setelah dicek petugas.';
+    } else {
+      phase = 'QR fase LUNAS · serah terima';
+      tip =
+          'Saat pengambilan, petugas akan scan QR LUNAS di POS. Siapkan nota di HP Anda.';
     }
-    final payload = InvoiceLink.encode(
-      h['no_invoice']?.toString() ?? '',
-      paymentStatus: InvoiceHubService.isDpOpen(h)
-          ? 'DP'
-          : InvoiceHubService.sudahDiambil(h)
-              ? 'CLAIM'
-              : 'LUNAS',
+
+    final payload = (h['qr_payload'] ?? '').toString().trim();
+    final lifecycle = InvoiceLink.isCustomerLifecycleQr(payload);
+    final hubUrl = InvoiceLink.encodeHttps(
+      h['no_invoice']?.toString() ?? widget.noInvoice,
     );
+
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const MemberSectionLabel('Scan QR fase'),
-          Text(phase,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: OptikMemberTokens.blueDeep)),
-          const SizedBox(height: 6),
-          Text(tip,
-              style: const TextStyle(
-                  color: OptikMemberTokens.inkSecondary, height: 1.4)),
-          const SizedBox(height: 8),
           Text(
-            payload.isEmpty
-                ? 'Payload QR diterbitkan setelah konfirmasi kasir (token).'
-                : 'Format: ${ObrInvoice.prefix}|v1|… (sesuai ketentuan toko)',
+            phase,
             style: const TextStyle(
-                color: OptikMemberTokens.inkMuted, fontSize: 12),
+              fontWeight: FontWeight.w800,
+              color: OptikMemberTokens.blueDeep,
+            ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            tip,
+            style: const TextStyle(
+              color: OptikMemberTokens.inkSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: OptikMemberTokens.blueSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Cabang nota: ${(h['toko_id'] ?? '-').toString().toUpperCase()}\n'
+              'Scan di POS cabang ini (bukan cabang lain). '
+              'Kode QR sama dengan yang di email & WhatsApp.',
+              style: const TextStyle(
+                color: OptikMemberTokens.blueDeep,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (lifecycle)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      OptikMemberTokens.blueMist,
+                      OptikMemberTokens.white,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: OptikMemberTokens.lineSoft),
+                  boxShadow: OptikMemberTokens.cardShadow,
+                ),
+                child: Column(
+                  children: [
+                    QrImageView(
+                      data: payload,
+                      size: 196,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: OptikMemberTokens.blueDeep,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: OptikMemberTokens.blueDeep,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Sinkron POS ${(h['toko_id'] ?? '').toString().toUpperCase()} · ${ObrInvoice.prefix}|v1',
+                      style: const TextStyle(
+                        color: OptikMemberTokens.inkMuted,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: payload),
+                            );
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Kode QR disalin'),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 18),
+                          label: const Text('Salin kode'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => launchUrl(
+                            Uri.parse(hubUrl),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                          label: const Text('Link nota'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: OptikMemberTokens.blueSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                h['qr_owner_verified'] == true
+                    ? 'QR fase belum tersedia. Tarik refresh atau hubungi toko.'
+                    : 'Login Member dengan nomor WA yang sama seperti di nota '
+                        'agar QR POS tampil di sini.',
+                style: const TextStyle(
+                  color: OptikMemberTokens.blueDeep,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -15,6 +15,7 @@ import '../responsive.dart';
 import '../theme.dart';
 import '../widgets/admin/premium_app_bar.dart';
 import '../widgets/admin/premium_scaffold.dart';
+import 'invoice_delivery_service.dart';
 import 'invoice_hub_page.dart';
 import 'invoice_lifecycle_service.dart';
 import 'invoice_link.dart';
@@ -612,25 +613,27 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       );
 
       final pdfBytes = await pdf.save();
-      String pdfBase64 = base64Encode(pdfBytes);
+      final pdfBase64 = base64Encode(pdfBytes);
 
-      await supabase.functions.invoke(
-        'send-invoice-email',
-        body: {
-          'invoice': sale['no_invoice'] ?? 'INV-UNKNOWN',
-          'email': sale['email_pelanggan'] ?? '',
-          'customerName': sale['nama_pelanggan'] ?? 'Pelanggan Setia',
-          'netTotal': (sale['total_harga'] ?? 0).toString(),
-          'pdfBase64': pdfBase64,
-        },
+      final delivered = await InvoiceDeliveryService().deliver(
+        sale: Map<String, dynamic>.from(sale as Map),
+        pdfBase64: pdfBase64,
       );
 
       if (mounted) {
+        final parts = <String>[
+          if (delivered.email) 'Email',
+          if (delivered.wa) 'WhatsApp',
+        ];
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("✓ Resend Nota PDF Berhasil Terkirim!",
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text(
+              parts.isEmpty
+                  ? 'Gagal kirim (isi email/WA pelanggan + pastikan gateway aktif)'
+                  : '✓ Nota + QR terkirim: ${parts.join(' & ')}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: parts.isEmpty ? Colors.orange : Colors.green,
           ),
         );
       }

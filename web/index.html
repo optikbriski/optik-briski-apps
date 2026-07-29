@@ -18,18 +18,28 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Optik B. Riski — Sempurnakan Mata Anda">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Optik B. Riski">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="logo-web.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="logo-web.png"/>
 
   <title>Optik B. Riski</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #F7FAFF; }
+    .obr-boot {
+      position: fixed; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: #F7FAFF; z-index: 9999;
+      transition: opacity .25s ease;
+    }
+    .obr-boot img { height: 44px; width: auto; }
+    .obr-boot.dark { background: #0B1220; }
+  </style>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
@@ -44,6 +54,9 @@
   <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__"></script>
 </head>
 <body>
+  <div class="obr-boot" id="obr-boot">
+    <img src="logo-web.png" alt="Optik B. Riski" />
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -53,5 +66,13 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('obr-boot');
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 280);
+    });
+  </script>
 </body>
 </html>

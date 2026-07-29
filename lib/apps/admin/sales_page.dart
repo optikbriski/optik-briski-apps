@@ -21,6 +21,7 @@ import 'package:file_picker/file_picker.dart'; // Pastikan import ini ada
 import '../../shared/pos_print_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/garansi/garansi_service.dart';
+import '../../shared/invoice/invoice_delivery_service.dart';
 import '../../shared/invoice/invoice_detail_page.dart';
 import '../../shared/invoice/invoice_hub_page.dart';
 import '../../shared/invoice/invoice_lifecycle_service.dart';
@@ -864,6 +865,8 @@ class _SalesPageState extends State<SalesPage> {
         routed,
         profile: widget.profile,
         callerRole: UniversalQrCallerRole.admin,
+        // POS cabang (kamera/HID lokal): QR pelanggan harus bisa pelunasan/ambil.
+        fromAdminHidScanner: routed.invoiceCustomerLifecycle,
       );
       return;
     }
@@ -3006,11 +3009,11 @@ class _SalesPageState extends State<SalesPage> {
         }
       }
 
-      // 4. Kirim Nota Sultan Beserta PDF Terintegrasi ke Email Customer
+      // 4. Kirim nota + QR ke email & WA (sinkron APK Member)
       try {
         await _generateAndSharePDF(saleRes, cartItems);
       } catch (emailErr) {
-        debugPrint("Sistem background email tertunda: $emailErr");
+        debugPrint("Sistem background kirim nota tertunda: $emailErr");
       }
 
       if (!mounted) return;
@@ -3472,17 +3475,15 @@ class _SalesPageState extends State<SalesPage> {
       );
 
       final pdfBytes = await pdf.save();
-      String pdfBase64 = base64Encode(pdfBytes);
+      final pdfBase64 = base64Encode(pdfBytes);
 
-      await supabase.functions.invoke(
-        'send-invoice-email',
-        body: {
-          'invoice': sale['no_invoice'] ?? 'INV-UNKNOWN',
-          'email': sale['email_pelanggan'] ?? '',
-          'customerName': sale['nama_pelanggan'] ?? 'Pelanggan Setia',
-          'netTotal': totalHarga.toString(),
-          'pdfBase64': pdfBase64,
-        },
+      final delivered = await InvoiceDeliveryService().deliver(
+        sale: Map<String, dynamic>.from(sale as Map),
+        pdfBase64: pdfBase64,
+      );
+      debugPrint(
+        'Kirim nota ${sale['no_invoice']}: '
+        'email=${delivered.email} wa=${delivered.wa} fase=${delivered.phase}',
       );
     } catch (e) {
       debugPrint("Gagal orkestrasi pencetakan PDF: $e");

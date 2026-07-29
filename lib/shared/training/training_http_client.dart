@@ -162,6 +162,13 @@ class TrainingHttpClient extends http.BaseClient {
       'function': name,
     };
     switch (name) {
+      case 'send-invoice-whatsapp':
+        return {
+          ...base,
+          'sent': false,
+          'channel': 'training',
+          'message': 'Training stub — WA not sent.',
+        };
       case 'send-invoice-email':
         return {
           ...base,

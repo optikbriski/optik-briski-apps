@@ -99,23 +99,25 @@ class UniversalQrNav {
           );
           return;
         }
-        // Lifecycle (lunasi / serah terima / klaim) hanya scanner HID + role admin.
-        final lifecycleOk = fromAdminHidScanner &&
-            callerRole == UniversalQrCallerRole.admin &&
-            result.invoiceCustomerLifecycle &&
-            !result.invoiceViewOnly;
+        // Bawa raw scan utuh ke hub. Panel tindakan aktif hanya jika payload
+        // OBRINV bertoken lolos validasi (lihat InvoiceHubPage._load).
         final openInvoice = InvoiceQrOpener.open;
         if (openInvoice == null) {
           snack('universal_qr_unknown'.tr(), color: Colors.orange);
           return;
         }
+        final isStaff = callerRole == UniversalQrCallerRole.admin ||
+            callerRole == UniversalQrCallerRole.karyawan;
+        final looksLifecycle = isStaff &&
+            result.invoiceCustomerLifecycle &&
+            !result.invoiceViewOnly;
         await openInvoice(
           context,
           noInvoice: inv,
           rawScan: result.raw,
           profile: profile,
-          viewOnly: !lifecycleOk,
-          fromAdminHidScanner: lifecycleOk,
+          viewOnly: !looksLifecycle,
+          fromAdminHidScanner: looksLifecycle || fromAdminHidScanner,
         );
         return;
 

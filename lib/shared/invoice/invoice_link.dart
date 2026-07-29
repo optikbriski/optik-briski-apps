@@ -2,6 +2,11 @@ import '../qr/obr_codes.dart';
 
 /// Deep link / QR payload untuk hub invoice.
 ///
+/// **Sumber kebenaran tunggal:** token di baris `sales` (`qr_dp_token` /
+/// `qr_lunas_token` / `qr_claim_token`). Email, WhatsApp, APK Member, dan PDF
+/// POS harus memakai [encodeFromSale] / [InvoiceLifecycleService.customerQrPayload]
+/// agar scan di cabang pembuat nota (mis. CIMAHI) selalu cocok.
+///
 /// **QR pelanggan (lifecycle, sekali pakai per fase):**
 ///   `OBRINV|v1|<no_invoice>|<DP|LUNAS|CLAIM>|<token>`
 /// **QR toko (lihat detail saja):**

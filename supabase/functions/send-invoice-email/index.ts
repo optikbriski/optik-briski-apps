@@ -2,113 +2,179 @@
 declare const Deno: any;
 
 Deno.serve(async (req: Request) => {
-  
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Menangkap lemparan data dari Flutter, termasuk file PDF berbentuk string Base64
-    const { invoice, email, customerName, netTotal, pdfBase64 } = await req.json();
-    console.log(`[Resend Sandbox] Memproses kirim email ke: ${email} untuk Invoice: ${invoice}`);
+    const {
+      invoice,
+      email,
+      customerName,
+      netTotal,
+      pdfBase64,
+      qrPayload,
+      qrPhase,
+      hubUrl,
+      phaseTip,
+      tokoId,
+    } = await req.json();
 
-    const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    if (!RESEND_API_KEY) {
-      throw new Error("Eror: RESEND_API_KEY belum terpasang di Secrets Supabase!");
+    if (!email || !String(email).includes("@")) {
+      throw new Error("email pelanggan kosong / tidak valid");
     }
 
-    // Menyiapkan paket data email
-    const emailPayload: any = {
-      from: 'Optik B. Riski <onboarding@resend.dev>',
-      to: [email], // Selama uji coba, ini harus bernilai risctonn@gmail.com
-      subject: `Nota Pembelian Resmi ${invoice} - Optik B. Riski`,
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    if (!RESEND_API_KEY) {
+      throw new Error("RESEND_API_KEY belum terpasang di Secrets Supabase!");
+    }
+
+    const from = Deno.env.get("RESEND_FROM") ||
+      "Optik B. Riski <onboarding@resend.dev>";
+    const phase = String(qrPhase || "").toUpperCase();
+    const phaseLabel =
+      phase === "DP"
+        ? "DP — pelunasan"
+        : phase === "LUNAS"
+        ? "LUNAS — serah terima"
+        : phase === "CLAIM"
+        ? "CLAIM — garansi"
+        : "Nota";
+    const payload = String(qrPayload || "").trim();
+    const tip = String(phaseTip ||
+      "QR sama dengan yang di APK Member (login nomor WA yang sama).");
+    const link = String(hubUrl || "").trim();
+    const cabang = String(tokoId || "").trim().toUpperCase();
+    const qrImg = payload.startsWith("OBRINV|")
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${
+        encodeURIComponent(payload)
+      }`
+      : "";
+
+    const emailPayload: Record<string, unknown> = {
+      from,
+      to: [email],
+      subject: `Nota ${invoice} · QR ${phaseLabel} — Optik B. Riski`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; border: 1px solid #eaeaee; border-radius: 12px; color: #333333; background-color: #ffffff;">
-          <div style="text-align: center; margin-bottom: 25px;">
-            <h2 style="margin: 0; color: #111111; font-size: 24px; letter-spacing: 1px;">OPTIK B. RISKI</h2>
-            <p style="margin: 5px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase;">Digital Purchase Invoice</p>
+        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; border: 1px solid #e8eef8; border-radius: 14px; color: #0f172a; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: #0B3D8C; font-size: 22px; letter-spacing: 0.5px;">OPTIK B. RISKI</h2>
+            <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-transform: uppercase;">Nota digital + QR terintegrasi POS</p>
           </div>
-          
-          <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+
+          <div style="background: #F3F7FF; padding: 14px 16px; border-radius: 10px; margin-bottom: 18px; font-size: 14px;">
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
-                <td style="padding: 4px 0; color: #777777;">No. Invoice</td>
-                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #111111;">${invoice}</td>
+                <td style="padding: 4px 0; color: #64748b;">No. Invoice</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: 700;">${invoice}</td>
               </tr>
               <tr>
-                <td style="padding: 4px 0; color: #777777;">Pelanggan</td>
-                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #111111;">${customerName || 'Pelanggan Setia'}</td>
+                <td style="padding: 4px 0; color: #64748b;">Pelanggan</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: 700;">${customerName || "Pelanggan"}</td>
               </tr>
+              <tr>
+                <td style="padding: 4px 0; color: #64748b;">Total</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: 800; color: #0B3D8C;">Rp ${netTotal || "0"}</td>
+              </tr>
+              ${
+        cabang
+          ? `<tr>
+                <td style="padding: 4px 0; color: #64748b;">Cabang POS</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: 800; color: #0B3D8C;">${cabang}</td>
+              </tr>`
+          : ""
+      }
             </table>
           </div>
 
-          <p style="font-size: 15px; line-height: 1.6; color: #444444;">
-            Halo <b>${customerName || 'Pelanggan'}</b>,<br>
-            Terima kasih telah memercayakan kebutuhan optik Anda kepada kami. Dokumen nota digital resmi Anda telah kami lampirkan dalam bentuk PDF pada email ini.
+          <p style="font-size: 14.5px; line-height: 1.55; color: #334155; margin: 0 0 16px;">
+            Halo <b>${customerName || "Pelanggan"}</b>, nota Anda sudah terbit.
+            Karena tidak ada nota fisik, <b>QR wajib</b> untuk pelunasan / pengambilan.
+            Kode QR di email, WhatsApp, dan APK Member <b>sama</b> dan terhubung ke POS cabang yang menerbitkan nota.
           </p>
 
-          <hr style="border: none; border-top: 1px dashed #dddddd; margin: 20px 0;" />
+          ${
+        qrImg
+          ? `
+          <div style="text-align:center; padding: 18px; border: 1px solid #dbe7ff; border-radius: 14px; background: linear-gradient(180deg,#F3F7FF,#ffffff); margin-bottom: 14px;">
+            <div style="font-size: 12px; font-weight: 800; color: #0B3D8C; letter-spacing: 0.6px; margin-bottom: 8px;">QR FASE · ${phaseLabel}${cabang ? ` · ${cabang}` : ""}</div>
+            <img src="${qrImg}" width="220" height="220" alt="QR Invoice" style="display:block;margin:0 auto 10px;border-radius:8px;" />
+            <p style="margin:0;font-size:12.5px;color:#475569;line-height:1.45;">${tip}${cabang ? `<br/><b>Scan di POS ${cabang}</b>` : ""}</p>
+            <p style="margin:10px 0 0;font-size:11px;color:#94a3b8;word-break:break-all;">${payload}</p>
+          </div>`
+          : `
+          <div style="padding:14px;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:13px;margin-bottom:14px;">
+            QR fase sedang disiapkan. Buka APK Member → Pesanan → Nota digital.
+          </div>`
+      }
 
-          <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0;">
-            <span style="font-size: 16px; font-weight: bold; color: #111111;">TOTAL PEMBAYARAN</span>
-            <span style="font-size: 20px; font-weight: bold; color: #2e7d32; text-align: right; display: block; width: 100%;">Rp ${netTotal || '0'}</span>
-          </div>
+          ${
+        link
+          ? `<p style="text-align:center;margin:0 0 16px;">
+              <a href="${link}" style="display:inline-block;background:#0B3D8C;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700;font-size:13px;">
+                Buka nota digital
+              </a>
+            </p>`
+          : ""
+      }
 
-          <hr style="border: none; border-top: 1px dashed #dddddd; margin: 20px 0;" />
-
-          <p style="font-size: 12px; color: #999999; text-align: center; line-height: 1.5; margin-top: 25px;">
-            Nota fisik dan rekam medis lensa digital Anda dapat divalidasi langsung di toko via QR Code kapan saja.<br>
-            <br>
-            <b>Thank You for Your Visit!</b>
+          <p style="font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.5; margin: 0;">
+            PDF terlampir (jika ada). Login APK Member dengan nomor WhatsApp yang sama agar QR selalu terbaru setelah pelunasan / serah terima.
           </p>
         </div>
       `,
     };
 
-    // 📎 JALUR LAMPIRAN PDF: Jika Flutter mengirimkan data base64, pasang ke Resend
     if (pdfBase64) {
       emailPayload.attachments = [
         {
           filename: `Invoice-${invoice}.pdf`,
-          content: pdfBase64, // Resend otomatis membaca string Base64 ini menjadi file fisik PDF
-        }
+          content: pdfBase64,
+        },
       ];
     }
 
-    // Eksekusi tembakan HTTP ke Resend API
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
+    const resendResponse = await fetch("https://api.resend.com/emails", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify(emailPayload),
     });
 
     const resendResult = await resendResponse.json();
-
     if (!resendResponse.ok) {
       throw new Error(`Ditolak Resend: ${JSON.stringify(resendResult)}`);
     }
 
     return new Response(
-      JSON.stringify({ message: 'Email beserta Lampiran PDF sukses terkirim!', details: resendResult }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      JSON.stringify({
+        message: "Email nota + QR terkirim",
+        details: resendResult,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      },
     );
-
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("🔴 LOG EROR UTAMA:", errorMessage);
-    
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-    );
+    const errorMessage = error instanceof Error
+      ? error.message
+      : String(error);
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+      status: 400,
+    });
   }
 });

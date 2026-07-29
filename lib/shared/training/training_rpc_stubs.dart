@@ -113,6 +113,17 @@ class TrainingRpcStubs {
       'invoice_ratings',
       where: {'no_invoice': inv},
     );
+    final sisa = int.tryParse('${sale['sisa_tagihan'] ?? 0}') ?? 0;
+    final isDp =
+        (sale['status_pembayaran']?.toString().toUpperCase() == 'DP') ||
+            sisa > 0;
+    final diambil = sale['diambil_at'] != null ||
+        (sale['tracking_status']?.toString().toUpperCase() == 'DIAMBIL');
+    final phase = isDp ? 'DP' : (diambil ? 'CLAIM' : 'LUNAS');
+    final token = (sale['qr_${phase.toLowerCase()}_token'] ??
+            'trainingtoken${phase.toLowerCase()}0001')
+        .toString();
+    final payload = 'OBRINV|v1|$inv|$phase|$token';
     return {
       'role_view': 'staff',
       'sale_id': saleId,
@@ -133,6 +144,12 @@ class TrainingRpcStubs {
       'items': items,
       'garansi': garansi,
       'ratings': ratings,
+      'qr_phase': phase,
+      'qr_payload': payload,
+      'qr_owner_verified': true,
+      'qr_dp_ready': phase == 'DP',
+      'qr_lunas_ready': phase == 'LUNAS',
+      'qr_claim_ready': phase == 'CLAIM',
       'training': true,
     };
   }

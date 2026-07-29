@@ -16,12 +16,20 @@ class InvoiceHubService {
     return loadByInvoice(inv);
   }
 
-  Future<Map<String, dynamic>?> loadByInvoice(String noInvoice) async {
+  /// [phone] = nomor Member (pemilik) agar RPC mengembalikan `qr_payload` OBRINV.
+  Future<Map<String, dynamic>?> loadByInvoice(
+    String noInvoice, {
+    String? phone,
+  }) async {
     try {
-      final res = await _db.rpc(
-        'get_invoice_hub',
-        params: {'p_no_invoice': noInvoice.trim()},
-      );
+      final params = <String, dynamic>{
+        'p_no_invoice': noInvoice.trim(),
+      };
+      final p = phone?.trim();
+      if (p != null && p.isNotEmpty) {
+        params['p_phone'] = p;
+      }
+      final res = await _db.rpc('get_invoice_hub', params: params);
       if (res == null) return null;
       if (res is Map) return Map<String, dynamic>.from(res);
       return null;
@@ -94,6 +102,15 @@ class InvoiceHubService {
       'qr_dp_used': sale['qr_dp_used_at'] != null,
       'qr_lunas_used': sale['qr_lunas_used_at'] != null,
       'qr_claim_used': sale['qr_claim_used_at'] != null,
+      'qr_payload': InvoiceLink.encodeFromSale(
+        Map<String, dynamic>.from(sale),
+      ),
+      'qr_phase': () {
+        final p = InvoiceLink.encodeFromSale(Map<String, dynamic>.from(sale));
+        final parsed = ObrInvoice.parse(p);
+        return parsed?.phase;
+      }(),
+      'qr_owner_verified': true,
     };
   }
 
