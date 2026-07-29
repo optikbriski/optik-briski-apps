@@ -1,5 +1,5 @@
--- QR invoice sync: Member APK mendapat payload OBRINV aktif (hanya pemilik nota).
--- Token digenerate di RPC bila belum ada, supaya sinkron dengan POS / email / WA.
+-- QR customer hanya setelah admin Barang Ready (DP → SIAP_PELUNASAN; pending → SIAP_DIAMBIL).
+-- Jangan auto-terbitkan QR DP saat masih PENDING_PO.
 
 create or replace function public.get_invoice_hub(
   p_no_invoice text,
@@ -129,16 +129,22 @@ begin
   );
 
   if v_is_dp then
-    v_phase := 'DP';
-    v_token := nullif(trim(coalesce(v_sale.qr_dp_token, '')), '');
-    v_token_col := 'qr_dp_token';
-    if v_sale.qr_dp_used_at is not null then
+    -- QR DP hanya setelah admin Barang Ready (SIAP_PELUNASAN / token sudah ada).
+    if v_sale.qr_dp_used_at is null
+       and (
+         upper(trim(coalesce(v_sale.tracking_status, ''))) = 'SIAP_PELUNASAN'
+         or length(trim(coalesce(v_sale.qr_dp_token, ''))) >= 8
+       )
+    then
+      v_phase := 'DP';
+      v_token := nullif(trim(coalesce(v_sale.qr_dp_token, '')), '');
+      v_token_col := 'qr_dp_token';
+    else
       v_phase := null;
       v_token := null;
+      v_token_col := null;
     end if;
   elsif not v_diambil then
-    -- LUNAS ready hanya SIAP_DIAMBIL/CLEAR:
-    --   (A) setelah pelunasan DP, atau (B) setelah admin konfirmasi barang ready.
     if upper(trim(coalesce(v_sale.tracking_status, ''))) in ('SIAP_DIAMBIL', 'CLEAR') then
       v_phase := 'LUNAS';
       v_token := nullif(trim(coalesce(v_sale.qr_lunas_token, '')), '');
@@ -146,9 +152,10 @@ begin
       if v_sale.qr_lunas_used_at is not null then
         v_phase := null;
         v_token := null;
+        v_token_col := null;
       end if;
     else
-      -- Lunas pending (bayar lunas, stok belum ada): barcode hanya admin.
+      -- Lunas pending: belum ada QR pengambilan.
       v_phase := null;
       v_token := null;
       v_token_col := null;
@@ -160,11 +167,14 @@ begin
     if v_sale.qr_claim_used_at is not null then
       v_phase := null;
       v_token := null;
+      v_token_col := null;
     end if;
   end if;
 
+  -- Auto-token hanya jika fase QR sudah aktif (jangan terbitkan DP prematur).
   if (v_owner or v_is_staff)
      and v_phase is not null
+     and v_token_col is not null
      and (v_token is null or length(v_token) < 8)
   then
     v_token := encode(extensions.gen_random_bytes(16), 'hex');
@@ -185,10 +195,14 @@ begin
     v_payload := 'OBRINV|v1|' || trim(v_sale.no_invoice) || '|' || v_phase || '|' || v_token;
   else
     v_payload := null;
-    -- Jangan bocorkan token ke anon tanpa verifikasi pemilik
     if not (v_owner or v_is_staff) then
       v_phase := case
-        when v_is_dp and v_sale.qr_dp_used_at is null then 'DP'
+        when v_is_dp
+          and v_sale.qr_dp_used_at is null
+          and (
+            upper(trim(coalesce(v_sale.tracking_status, ''))) = 'SIAP_PELUNASAN'
+            or length(trim(coalesce(v_sale.qr_dp_token, ''))) >= 8
+          ) then 'DP'
         when not v_diambil
           and upper(trim(coalesce(v_sale.tracking_status, ''))) in ('SIAP_DIAMBIL', 'CLEAR')
           and v_sale.qr_lunas_used_at is null then 'LUNAS'

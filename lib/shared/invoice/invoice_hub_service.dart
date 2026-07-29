@@ -144,9 +144,12 @@ class InvoiceHubService {
 
   static String statusLabel(Map<String, dynamic> hub) {
     if (hub['diambil_at'] != null) return 'Sudah diambil';
-    final t = hub['tracking_status']?.toString() ?? '';
+    final t = (hub['tracking_status']?.toString() ?? '').trim().toUpperCase();
     if (t == 'DIAMBIL') return 'Sudah diambil';
     if (t == 'SIAP_DIAMBIL' || t == 'CLEAR') return 'Siap diambil';
+    if (t == 'SIAP_PELUNASAN') {
+      return 'Siap pelunasan & pengambilan';
+    }
     if (t == 'PENDING_PO') return 'Menunggu / proses';
     if (t == 'DIPROSES_DI_CABANG') return 'Diproses di cabang';
     return t.isEmpty ? 'Dalam proses' : t;

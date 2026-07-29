@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -242,16 +243,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(
-                  'assets/images/logo_briski.png',
-                  height: 120,
-                  fit: BoxFit.contain,
-                  errorBuilder: (c, e, s) => const Icon(
-                    Icons.broken_image_rounded,
-                    size: 72,
-                    color: OptikAdminTokens.accentSoft,
-                  ),
-                ),
+                const OptikBrandLogo.white(height: 56),
                 const SizedBox(height: 8),
                 Text(
                   "admin_login_subtitle".tr().toUpperCase(),

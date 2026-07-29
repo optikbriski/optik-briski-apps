@@ -31,10 +31,12 @@ Deno.serve(async (req: Request) => {
     const phone = digitsPhone(String(body.phone || ""));
     const customerName = String(body.customerName || "Pelanggan");
     const netTotal = body.netTotal;
-    const qrPayload = String(body.qrPayload || "").trim();
+    const wantQr = body.includeQr !== false;
+    const qrPayload = wantQr ? String(body.qrPayload || "").trim() : "";
     const qrPhase = String(body.qrPhase || "").trim().toUpperCase();
     const hubUrl = String(body.hubUrl || "").trim();
     const phaseTip = String(body.phaseTip || "").trim();
+    const headline = String(body.headlineMessage || "").trim();
     const sisa = Number(body.sisaTagihan) || 0;
     const tokoId = String(body.tokoId || "").trim();
 
@@ -46,30 +48,38 @@ Deno.serve(async (req: Request) => {
       qrPhase === "DP"
         ? "DP (pelunasan)"
         : qrPhase === "LUNAS"
-        ? "LUNAS / serah terima"
+        ? "LUNAS / pengambilan"
         : qrPhase === "CLAIM"
         ? "CLAIM garansi"
+        : qrPhase === "DP_CONFIRM"
+        ? "Konfirmasi DP"
+        : qrPhase === "PENDING_CONFIRM"
+        ? "Konfirmasi pembayaran"
         : qrPhase || "Nota";
 
     const cabang = (tokoId || "").toUpperCase();
+    const hasLifecycleQr = qrPayload.startsWith("OBRINV|");
     const lines = [
       `*Optik B. Riski — Nota digital*`,
       ``,
-      `Halo *${customerName}*,`,
-      `Nota *${invoice}*${cabang ? ` · cabang *${cabang}*` : ""} sudah siap.`,
+      headline || `Halo *${customerName}*,`,
+      `Nota *${invoice}*${cabang ? ` · cabang *${cabang}*` : ""}.`,
       `Total: Rp ${money(netTotal)}`,
       sisa > 0 ? `Sisa tagihan: Rp ${money(sisa)}` : `Status: LUNAS`,
       ``,
-      `*QR fase: ${phaseLabel}*`,
-      phaseTip || "Tunjukkan QR ke kasir/petugas.",
-      cabang
+      hasLifecycleQr ? `*QR fase: ${phaseLabel}*` : `*${phaseLabel}*`,
+      phaseTip ||
+      (hasLifecycleQr
+        ? "Tunjukkan QR ke kasir/petugas."
+        : "QR dikirim setelah admin menandai barang ready."),
+      hasLifecycleQr && cabang
         ? `⚠️ Scan QR di POS cabang *${cabang}* (tempat beli). Kode sama di email, WhatsApp, dan APK Member.`
         : null,
       ``,
       hubUrl ? `Buka nota: ${hubUrl}` : null,
       ``,
       `APK Member (login nomor WA yang sama) → Pesanan → Nota digital.`,
-      qrPayload ? `\nKode QR (untuk kasir):\n${qrPayload}` : null,
+      hasLifecycleQr ? `\nKode QR (untuk kasir):\n${qrPayload}` : null,
     ].filter((x) => x != null);
 
     const msg = lines.join("\n");

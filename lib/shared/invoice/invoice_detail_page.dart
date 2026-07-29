@@ -621,19 +621,16 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       );
 
       if (mounted) {
-        final parts = <String>[
-          if (delivered.email) 'Email',
-          if (delivered.wa) 'WhatsApp',
-        ];
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              parts.isEmpty
-                  ? 'Gagal kirim (isi email/WA pelanggan + pastikan gateway aktif)'
-                  : '✓ Nota + QR terkirim: ${parts.join(' & ')}',
+              delivered.summary,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: parts.isEmpty ? Colors.orange : Colors.green,
+            backgroundColor: delivered.anyOk || delivered.allRequestedOk
+                ? Colors.green
+                : Colors.orange,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

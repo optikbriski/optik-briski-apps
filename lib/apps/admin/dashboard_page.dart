@@ -10,9 +10,11 @@ import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
 import 'riwayat_transaksi_page.dart';
 import 'invoice_config_page.dart';
 import 'member_home_content_page.dart';
+import 'online_orders_page.dart';
 import 'absensi_toko_page.dart';
 import 'attendance_monitor_page.dart';
 import 'jadwal_kerja_page.dart';
@@ -186,11 +188,7 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Image.asset(
-          'assets/images/logo_briski.png',
-          height: 35,
-          fit: BoxFit.contain,
-        ),
+        title: const OptikBrandLogo.white(height: 32),
         actions: [
           ListenableBuilder(
             listenable: TrainingMode.instance,
@@ -482,7 +480,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           if (TrainingCurriculum.allows('history_dp'))
                             PremiumMenuTile(
-                              title: "History & Down Payment",
+                              title: "DP · PENDING · CLEAR",
                               icon: Icons.history_edu,
                               color: Colors.orangeAccent,
                               onTap: () => Navigator.push(
@@ -581,6 +579,23 @@ class _DashboardPageState extends State<DashboardPage> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (c) => MemberHomeContentPage(
+                                      profile: widget.profile,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                          if (!training)
+                            PremiumMenuTile(
+                              title: 'Pesanan Online',
+                              icon: Icons.shopping_bag_outlined,
+                              color: const Color(0xFF22D3EE),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (c) => OnlineOrdersPage(
                                       profile: widget.profile,
                                     ),
                                   ),

@@ -39,10 +39,10 @@ class InvoiceLink {
 
   /// Encode dari baris `sales` (pakai token fase yang masih aktif).
   ///
-  /// - DP → QR DP (dipegang customer; scan di kasir untuk pelunasan)
-  /// - LUNAS + belum siap → belum ada QR ambil (lunas pending = tugas karyawan)
-  /// - LUNAS + SIAP_DIAMBIL/CLEAR → QR LUNAS ready (customer; ambil + garansi)
-  /// - Sudah diambil → QR CLAIM (customer)
+  /// QR customer hanya setelah admin "Barang Ready":
+  /// - DP → QR pelunasan (token + SIAP_PELUNASAN)
+  /// - Lunas pending → QR pengambilan (SIAP_DIAMBIL)
+  /// - Lunas + stok ready di kasir → langsung QR LUNAS
   static String encodeFromSale(Map<String, dynamic> sale) {
     final no = (sale['no_invoice'] ?? '').toString().trim();
     if (no.isEmpty) return '';
@@ -58,6 +58,7 @@ class InvoiceLink {
     final lunasReady = tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
 
     if (isDp) {
+      // Token DP baru dibuat saat admin Barang Ready — tanpa token = tanpa QR.
       final t = (sale['qr_dp_token'] ?? '').toString().trim();
       if (t.length < 8 || sale['qr_dp_used_at'] != null) {
         return ObrTxn.encode(no);
@@ -65,7 +66,7 @@ class InvoiceLink {
       return encode(no, paymentStatus: 'DP', token: t);
     }
     if (!diambil) {
-      // Lunas pending: tunggu karyawan konfirmasi kacamata jadi.
+      // Lunas pending: tunggu admin konfirmasi barang ready.
       if (!lunasReady) return ObrTxn.encode(no);
       final t = (sale['qr_lunas_token'] ?? '').toString().trim();
       if (t.length < 8 || sale['qr_lunas_used_at'] != null) {

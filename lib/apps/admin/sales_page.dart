@@ -1413,6 +1413,47 @@ class _SalesPageState extends State<SalesPage> {
                   'tracking_status': 'DIPROSES_DI_CABANG'
                 }).select('id').single();
 
+                // Tandai item keranjang: stok belum ready → checkout bisa DP
+                // atau LUNAS pending (admin konfirmasi nanti).
+                setState(() {
+                  final nama =
+                      (item['nama_produk'] ?? item['nama'] ?? '').toString();
+                  final sku = (item['sku'] ?? '').toString();
+                  final idProduk = item['id'];
+                  final idx = cartItems.indexWhere((c) {
+                    if (idProduk != null && c['id'] == idProduk) return true;
+                    return c['sku'] == sku &&
+                        (c['nama_produk'] == nama || c['nama'] == nama);
+                  });
+                  if (idx >= 0) {
+                    cartItems[idx]['needs_fulfillment'] = true;
+                    cartItems[idx]['qty'] =
+                        (cartItems[idx]['qty'] as int? ?? 1) + qtyNeeded;
+                    final harga =
+                        cartItems[idx]['harga'] as int? ?? 0;
+                    cartItems[idx]['subtotal'] =
+                        (cartItems[idx]['qty'] as int) * harga;
+                  } else {
+                    final harga = int.tryParse(item['harga']?.toString() ??
+                            item['harga_jual']?.toString() ??
+                            '0') ??
+                        0;
+                    cartItems.add({
+                      'id': idProduk,
+                      'nama_produk': nama,
+                      'nama': nama,
+                      'sku': sku.isEmpty ? 'No SKU' : sku,
+                      'harga': harga,
+                      'harga_jual': harga,
+                      'qty': qtyNeeded,
+                      'subtotal': harga * qtyNeeded,
+                      'kategori': item['kategori'],
+                      'is_lensa_custom': false,
+                      'needs_fulfillment': true,
+                    });
+                  }
+                });
+
                 Navigator.pop(context);
                 if (TrainingMode.instance.isActive && mounted) {
                   final outcome = await TrainingApprovalSimulator
@@ -1428,7 +1469,8 @@ class _SalesPageState extends State<SalesPage> {
                   );
                 } else {
                   _showSnack(
-                      "✓ Berhasil mencatat $qtyNeeded pcs Pre-Order ke data pusat",
+                      "✓ Pre-Order $qtyNeeded pcs + masuk keranjang (stok pending). "
+                      "Bisa DP atau bayar lunas.",
                       Colors.green);
                 }
               } catch (e) {
@@ -1954,7 +1996,10 @@ class _SalesPageState extends State<SalesPage> {
     final item = cartItems[index];
 
     // 💡 GATES 1: Jika kasir menekan tombol PLUS (+), kunci dengan stok asli dari table products
-    if (delta > 0) {
+    // (skip untuk stok pending / lensa custom — sudah masuk skema DP / lunas pending)
+    if (delta > 0 &&
+        item['needs_fulfillment'] != true &&
+        item['is_lensa_custom'] != true) {
       try {
         int stokGudangReal = 0;
 
@@ -2818,10 +2863,29 @@ class _SalesPageState extends State<SalesPage> {
 
       final isDpCheckout = paymentStatus == "DP" || sisa > 0;
       final statusNorm = isDpCheckout ? 'DP' : 'LUNAS';
-      final qrDpToken =
-          isDpCheckout ? InvoiceLifecycleService.newToken() : null;
+
+      // Stok belum ada / masih diproses (lensa custom, PO, restock).
+      final cartNeedsFulfillment = cartItems.any((i) =>
+          i['is_lensa_custom'] == true || i['needs_fulfillment'] == true);
+      final pendingForInvoice = await supabase
+          .from('pending_requests')
+          .select('id')
+          .eq('no_invoice', noInvoice)
+          .limit(1);
+      final needsFulfillment = cartNeedsFulfillment ||
+          pendingLensRequests.isNotEmpty ||
+          (pendingForInvoice as List).isNotEmpty;
+
+      // DP / lunas pending: tanpa QR dulu (QR setelah admin Barang Ready).
+      // LUNAS + stok ready: langsung SIAP_DIAMBIL + QR LUNAS.
+      final trackingStatus = isDpCheckout
+          ? 'PENDING_PO'
+          : (needsFulfillment ? 'PENDING_PO' : 'SIAP_DIAMBIL');
       final qrLunasToken =
-          isDpCheckout ? null : InvoiceLifecycleService.newToken();
+          (!isDpCheckout && !needsFulfillment)
+              ? InvoiceLifecycleService.newToken()
+              : null;
+      final paymentConfirmOnly = isDpCheckout || needsFulfillment;
 
       debugPrint(
           "DEBUG KASIR ID: ${activeCashier?['id'] ?? widget.profile['id']}");
@@ -2855,12 +2919,9 @@ class _SalesPageState extends State<SalesPage> {
                 : 0,
             'status_pembayaran': statusNorm,
             'metode_pembayaran': paymentMethod,
-            // Lunas = siap diambil; garansi baru jalan setelah scan ambil + foto hasil
-            'tracking_status':
-                isDpCheckout ? 'PENDING_PO' : 'SIAP_DIAMBIL',
+            'tracking_status': trackingStatus,
             if (!isDpCheckout)
               'lunas_at': DateTime.now().toUtc().toIso8601String(),
-            if (qrDpToken != null) 'qr_dp_token': qrDpToken,
             if (qrLunasToken != null) 'qr_lunas_token': qrLunasToken,
           })
           .select()
@@ -2898,8 +2959,10 @@ class _SalesPageState extends State<SalesPage> {
               : resepKomplitFisik, // 🎯 DATA MASUK UTUH: Apa yang diketik di POS masuk ke detail invoice database harian
         });
 
-        // Potong stok via ledger SALE (beralasan + ref invoice)
-        if (item['id'] != null && item['is_lensa_custom'] == false) {
+        // Potong stok via ledger SALE (skip custom / stok pending)
+        if (item['id'] != null &&
+            item['is_lensa_custom'] == false &&
+            item['needs_fulfillment'] != true) {
           // Resolve SKU dari baris produk toko bila cart "No SKU"
           String? skuItem = ProductIdentity.normalizeSku(item['sku']) ??
               ProductIdentity.normalizeBarcode(item['barcode']);
@@ -3009,9 +3072,13 @@ class _SalesPageState extends State<SalesPage> {
         }
       }
 
-      // 4. Kirim nota + QR ke email & WA (sinkron APK Member)
+      // 4. Kirim nota (+ QR hanya bila stok ready / bukan DP·pending)
       try {
-        await _generateAndSharePDF(saleRes, cartItems);
+        await _generateAndSharePDF(
+          Map<String, dynamic>.from(saleRes),
+          cartItems,
+          paymentConfirmOnly: paymentConfirmOnly,
+        );
       } catch (emailErr) {
         debugPrint("Sistem background kirim nota tertunda: $emailErr");
       }
@@ -3045,16 +3112,21 @@ class _SalesPageState extends State<SalesPage> {
 
 // MESIN PDF 1: OTOMATIS SAAT KASIR CHECKOUT (JIPLAK MURNI 100% DARI MODAL PRATINJAU)
   Future<void> _generateAndSharePDF(
-      Map<String, dynamic> sale, List<dynamic> items) async {
+    Map<String, dynamic> sale,
+    List<dynamic> items, {
+    bool paymentConfirmOnly = false,
+  }) async {
     try {
-      // Pastikan token QR pelanggan ada (nota lama / sebelum migrasi).
-      try {
-        final sid = sale['id']?.toString();
-        if (sid != null && sid.isNotEmpty) {
-          sale = await InvoiceLifecycleService().ensureTokens(sid);
+      // Jangan terbitkan QR di DP / lunas pending — hanya setelah admin ready.
+      if (!paymentConfirmOnly) {
+        try {
+          final sid = sale['id']?.toString();
+          if (sid != null && sid.isNotEmpty) {
+            sale = await InvoiceLifecycleService().ensureTokens(sid);
+          }
+        } catch (e) {
+          debugPrint('ensureTokens QR invoice: $e');
         }
-      } catch (e) {
-        debugPrint('ensureTokens QR invoice: $e');
       }
 
       final pdf = pw.Document();
@@ -3371,14 +3443,18 @@ class _SalesPageState extends State<SalesPage> {
                                   fontSize: 8)),
                         ),
                         pw.SizedBox(height: 6),
-                        if (config['show_qr_invoice'] == true)
+                        if (config['show_qr_invoice'] == true &&
+                            !paymentConfirmOnly &&
+                            InvoiceLink.isCustomerLifecycleQr(
+                                InvoiceLink.encodeFromSale(
+                                    Map<String, dynamic>.from(sale))))
                           pw.Container(
                               height: 44,
                               width: 44,
                               child: pw.BarcodeWidget(
                                   barcode: pw.Barcode.qrCode(),
                                   data: InvoiceLink.encodeFromSale(
-                                      Map<String, dynamic>.from(sale as Map)),
+                                      Map<String, dynamic>.from(sale)),
                                   padding: pw.EdgeInsets.zero)),
                       ],
                     ),
@@ -3478,13 +3554,27 @@ class _SalesPageState extends State<SalesPage> {
       final pdfBase64 = base64Encode(pdfBytes);
 
       final delivered = await InvoiceDeliveryService().deliver(
-        sale: Map<String, dynamic>.from(sale as Map),
+        sale: Map<String, dynamic>.from(sale),
         pdfBase64: pdfBase64,
+        mode: paymentConfirmOnly
+            ? InvoiceDeliveryMode.paymentConfirm
+            : InvoiceDeliveryMode.withQr,
       );
       debugPrint(
-        'Kirim nota ${sale['no_invoice']}: '
-        'email=${delivered.email} wa=${delivered.wa} fase=${delivered.phase}',
+        'Kirim nota ${sale['no_invoice']}: ${delivered.summary} '
+        'confirmOnly=$paymentConfirmOnly',
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(delivered.summary),
+            backgroundColor: delivered.anyOk || delivered.allRequestedOk
+                ? Colors.green.shade700
+                : Colors.orange.shade800,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("Gagal orkestrasi pencetakan PDF: $e");
     }
@@ -3872,8 +3962,8 @@ class _SalesPageState extends State<SalesPage> {
         restockQueue.add(item);
       }
     });
-    _showSnack(
-        "${item['nama']} ${"pos_msg_restock".tr()}", Colors.orangeAccent);
+    // Juga buka jual stok pending (DP / lunas pending) untuk invoice aktif.
+    _showPendingRequestDialog(Map<String, dynamic>.from(item), 0);
   }
 
   // ==========================================================================

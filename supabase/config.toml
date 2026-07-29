@@ -25,3 +25,14 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/admin-login-with-code/deno.json"
 entrypoint = "./functions/admin-login-with-code/index.ts"
+
+# Daftar Member: anon boleh panggil (belum login)
+[functions.member-send-channel-otp]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/member-send-channel-otp/index.ts"
+
+[functions.member-send-register-otp]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/member-send-register-otp/index.ts"

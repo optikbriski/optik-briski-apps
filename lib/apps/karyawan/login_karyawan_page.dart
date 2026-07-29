@@ -9,6 +9,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/widgets/app_loading_overlay.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
 import 'main_karyawan.dart';
 import 'register_karyawan_page.dart';
 
@@ -280,18 +281,8 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                       child: Column(
                         children: [
                           // Brand hero — must dominate first viewport
-                          const Text(
-                            'OPTIK B. RISKI',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 3.2,
-                              height: 1.1,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
+                          const OptikBrandLogo.white(height: 48),
+                          const SizedBox(height: 12),
                           Container(
                             width: 48,
                             height: 2,

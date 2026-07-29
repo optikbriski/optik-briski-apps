@@ -14,6 +14,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const body = await req.json();
     const {
       invoice,
       email,
@@ -25,7 +26,9 @@ Deno.serve(async (req: Request) => {
       hubUrl,
       phaseTip,
       tokoId,
-    } = await req.json();
+      headlineMessage,
+      includeQr,
+    } = body;
 
     if (!email || !String(email).includes("@")) {
       throw new Error("email pelanggan kosong / tidak valid");
@@ -39,17 +42,23 @@ Deno.serve(async (req: Request) => {
     const from = Deno.env.get("RESEND_FROM") ||
       "Optik B. Riski <onboarding@resend.dev>";
     const phase = String(qrPhase || "").toUpperCase();
+    const wantQr = includeQr !== false;
     const phaseLabel =
       phase === "DP"
         ? "DP — pelunasan"
         : phase === "LUNAS"
-        ? "LUNAS — serah terima"
+        ? "LUNAS — pengambilan"
         : phase === "CLAIM"
         ? "CLAIM — garansi"
+        : phase === "DP_CONFIRM"
+        ? "Konfirmasi DP"
+        : phase === "PENDING_CONFIRM"
+        ? "Konfirmasi pembayaran"
         : "Nota";
-    const payload = String(qrPayload || "").trim();
+    const payload = wantQr ? String(qrPayload || "").trim() : "";
     const tip = String(phaseTip ||
       "QR sama dengan yang di APK Member (login nomor WA yang sama).");
+    const headline = String(headlineMessage || "").trim();
     const link = String(hubUrl || "").trim();
     const cabang = String(tokoId || "").trim().toUpperCase();
     const qrImg = payload.startsWith("OBRINV|")
@@ -57,16 +66,19 @@ Deno.serve(async (req: Request) => {
         encodeURIComponent(payload)
       }`
       : "";
+    const subject = qrImg
+      ? `Nota ${invoice} · QR ${phaseLabel} — Optik B. Riski`
+      : `Nota ${invoice} · ${phaseLabel} — Optik B. Riski`;
 
     const emailPayload: Record<string, unknown> = {
       from,
       to: [email],
-      subject: `Nota ${invoice} · QR ${phaseLabel} — Optik B. Riski`,
+      subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; border: 1px solid #e8eef8; border-radius: 14px; color: #0f172a; background: #ffffff;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h2 style="margin: 0; color: #0B3D8C; font-size: 22px; letter-spacing: 0.5px;">OPTIK B. RISKI</h2>
-            <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-transform: uppercase;">Nota digital + QR terintegrasi POS</p>
+            <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-transform: uppercase;">Nota digital</p>
           </div>
 
           <div style="background: #F3F7FF; padding: 14px 16px; border-radius: 10px; margin-bottom: 18px; font-size: 14px;">
@@ -95,9 +107,12 @@ Deno.serve(async (req: Request) => {
           </div>
 
           <p style="font-size: 14.5px; line-height: 1.55; color: #334155; margin: 0 0 16px;">
-            Halo <b>${customerName || "Pelanggan"}</b>, nota Anda sudah terbit.
-            Karena tidak ada nota fisik, <b>QR wajib</b> untuk pelunasan / pengambilan.
-            Kode QR di email, WhatsApp, dan APK Member <b>sama</b> dan terhubung ke POS cabang yang menerbitkan nota.
+            ${
+        headline ||
+          `Halo <b>${
+            customerName || "Pelanggan"
+          }</b>, nota Anda sudah terbit.`
+      }
           </p>
 
           ${
@@ -110,8 +125,8 @@ Deno.serve(async (req: Request) => {
             <p style="margin:10px 0 0;font-size:11px;color:#94a3b8;word-break:break-all;">${payload}</p>
           </div>`
           : `
-          <div style="padding:14px;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:13px;margin-bottom:14px;">
-            QR fase sedang disiapkan. Buka APK Member → Pesanan → Nota digital.
+          <div style="padding:14px;border-radius:10px;background:#eff6ff;color:#1e3a8a;font-size:13px;margin-bottom:14px;line-height:1.45;">
+            ${tip || "QR akan dikirim saat pesanan siap (setelah konfirmasi admin)."}
           </div>`
       }
 

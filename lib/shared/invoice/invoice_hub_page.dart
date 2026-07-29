@@ -10,6 +10,7 @@ import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
 import '../qr/qr_route.dart';
 import '../qr/universal_qr_scan_page.dart';
+import 'invoice_delivery_result.dart';
 import 'invoice_delivery_service.dart';
 import 'invoice_detail_page.dart';
 import 'invoice_hub_service.dart';
@@ -186,22 +187,43 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
 
     setState(() => _busy = true);
     try {
-      await _lifecycle.settleDpViaGateway(
+      final updated = await _lifecycle.settleDpViaGateway(
         saleId: saleId,
         metodePembayaran: metode,
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString() ?? '',
         rawScan: raw,
       );
+      final tracking =
+          (updated['tracking_status'] ?? '').toString().toUpperCase();
+      final ready = tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
+      final delivered = await InvoiceDeliveryService().deliver(
+        sale: updated,
+        mode: ready
+            ? InvoiceDeliveryMode.withQr
+            : InvoiceDeliveryMode.paymentConfirm,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Pelunasan OK. Status: lunas pending. '
-            'Karyawan konfirmasi kacamata jadi → QR LUNAS ready dikirim ke customer.',
-          ),
-          backgroundColor: Color(0xFF0F766E),
+        SnackBar(
+          content: Text(delivered.summary),
+          backgroundColor: delivered.anyOk || delivered.allRequestedOk
+              ? const Color(0xFF0F766E)
+              : Colors.orange.shade800,
+          duration: const Duration(seconds: 5),
         ),
+      );
+      final payload =
+          InvoiceLifecycleService.customerQrPayload(updated) ?? '';
+      await _showCustomerQrDialog(
+        title: ready ? 'QR pelanggan · LUNAS ready' : 'Pelunasan OK',
+        body: ready
+            ? 'Pelunasan OK. QR pengambilan dikirim ke email, WhatsApp, '
+                'dan APK Member.\n${delivered.summary}'
+            : 'Pelunasan OK. Barang belum ready — masuk PENDING. '
+                'QR pengambilan dikirim setelah admin Barang Ready.\n'
+                '${delivered.summary}',
+        payload: payload,
       );
       if (!mounted) return;
       Navigator.maybePop(context);
@@ -425,38 +447,59 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     );
   }
 
-  /// Karyawan: lunas pending → konfirmasi jadi → kirim QR LUNAS ready ke customer.
+  /// Admin: lunas pending → konfirmasi barang ready → kirim QR LUNAS ready.
   Future<void> _confirmGlassesReady(Map<String, dynamic> h) async {
     final saleId = h['sale_id']?.toString();
     if (saleId == null || _busy) return;
+    if (!_isAdminRole) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Konfirmasi barang ready hanya untuk admin '
+            '(scan barcode nota di web admin).',
+          ),
+        ),
+      );
+      return;
+    }
     if (!await _ensureCabangOk(h)) return;
 
     final staff = await showStaffNikScanDialog(
       context,
-      title: 'Scan karyawan · kacamata jadi',
-      subtitle: 'Scan NIK karyawan yang mengonfirmasi kacamata sudah jadi.',
+      title: 'Scan admin · barang ready',
+      subtitle: 'Scan NIK admin yang mengonfirmasi barang sudah siap diambil.',
     );
     if (staff == null || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      final updated = await _lifecycle.markGlassesReadyAndIssueLunasQr(
+      final updated = await _lifecycle.markGoodsReadyAndIssueCustomerQr(
         saleId: saleId,
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString(),
       );
-      try {
-        await InvoiceDeliveryService().deliver(sale: updated);
-      } catch (_) {}
+      final delivered = await InvoiceDeliveryService().deliver(
+        sale: updated,
+        mode: InvoiceDeliveryMode.goodsReady,
+      );
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(delivered.summary),
+          backgroundColor: delivered.anyOk || delivered.allRequestedOk
+              ? const Color(0xFF0F766E)
+              : Colors.orange.shade800,
+          duration: const Duration(seconds: 5),
+        ),
+      );
       final payload =
           InvoiceLifecycleService.customerQrPayload(updated) ?? '';
+      final isDp = InvoiceHubService.isDpOpen(updated);
       await _showCustomerQrDialog(
-        title: 'QR pelanggan · LUNAS ready',
-        body:
-            'Kacamata sudah jadi. QR LUNAS ready dikirim ke email, WhatsApp, '
-            'dan APK Member pelanggan.\n'
-            'Customer yang memegang QR ini untuk pengambilan + aktifkan garansi.',
+        title: isDp ? 'QR pelanggan · pelunasan' : 'QR pelanggan · pengambilan',
+        body: isDp
+            ? 'Barang ready. Pesan + QR pelunasan dikirim.\n${delivered.summary}'
+            : 'Barang ready. Pesan + QR pengambilan dikirim.\n${delivered.summary}',
         payload: payload,
       );
       if (!mounted) return;
@@ -500,20 +543,30 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         isPusat: isPusat,
       );
       final saleRow = res['sale'];
+      InvoiceDeliveryResult? delivered;
       if (saleRow is Map) {
-        try {
-          await InvoiceDeliveryService().deliver(
-            sale: Map<String, dynamic>.from(saleRow),
-          );
-        } catch (_) {}
+        delivered = await InvoiceDeliveryService().deliver(
+          sale: Map<String, dynamic>.from(saleRow),
+        );
       }
       if (!mounted) return;
+      if (delivered != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(delivered.summary),
+            backgroundColor: delivered.anyOk || delivered.allRequestedOk
+                ? const Color(0xFF0F766E)
+                : Colors.orange.shade800,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       final claimQr = res['claim_qr']?.toString() ?? '';
       await _showCustomerQrDialog(
         title: 'QR pelanggan · CLAIM',
         body:
             'Serah terima OK. Garansi aktif s/d ${res['tanggal_akhir']}.\n'
-            'QR CLAIM sudah dikirim ke WA/email & sinkron di APK Member.',
+            '${delivered?.summary ?? 'QR CLAIM untuk APK Member / WA / email.'}',
         payload: claimQr,
       );
       if (!mounted) return;
@@ -608,6 +661,18 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     if (InvoiceHubService.sudahDiambil(h)) return false;
     final t = (h['tracking_status'] ?? '').toString().trim().toUpperCase();
     return t == 'SIAP_DIAMBIL' || t == 'CLEAR';
+  }
+
+  /// Lunas pending (bayar lunas, stok belum ada) — barcode/aksi khusus admin.
+  bool get _isAdminRole {
+    final r = (_profileOrToko['role'] ?? '').toString().trim().toLowerCase();
+    if (r == 'karyawan' || r == 'staff' || r == 'kasir') return false;
+    return r == 'owner' ||
+        r == 'admin_pusat' ||
+        r == 'admin_toko' ||
+        r == 'admin' ||
+        // Web admin sering buka hub tanpa profile → anggap admin.
+        (widget.profile == null && _staff);
   }
 
   /// Nota harus diproses di cabang pembuat (kecuali PUSAT).
@@ -796,9 +861,13 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         const SizedBox(height: 8),
         ..._garansiTiles(h),
         const SizedBox(height: 20),
-        // Karyawan: lunas pending → konfirmasi kacamata jadi (tanpa QR customer).
-        if (_staff && _isLunasPending(h)) ...[
-          ..._lunasPendingStaffPanel(h),
+        // Admin: lunas pending → scan barcode nota → konfirmasi barang ready.
+        if (_staff && _isAdminRole && _isLunasPending(h)) ...[
+          ..._lunasPendingAdminPanel(h),
+          const SizedBox(height: 12),
+        ],
+        if (_staff && !_isAdminRole && _isLunasPending(h)) ...[
+          _lunasPendingKaryawanHint(),
           const SizedBox(height: 12),
         ],
         // Customer QR: DP / LUNAS ready / CLAIM.
@@ -871,8 +940,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     );
   }
 
-  /// Panel karyawan untuk fase lunas pending (bukan QR customer).
-  List<Widget> _lunasPendingStaffPanel(Map<String, dynamic> h) {
+  /// Panel admin untuk fase lunas pending (barcode hanya admin).
+  List<Widget> _lunasPendingAdminPanel(Map<String, dynamic> h) {
     return [
       Container(
         width: double.infinity,
@@ -886,7 +955,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Lunas pending · tugas karyawan',
+              'Lunas pending · konfirmasi admin',
               style: TextStyle(
                 color: Color(0xFFE8C872),
                 fontWeight: FontWeight.w800,
@@ -895,11 +964,11 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Nota sudah lunas, kacamata masih diproses.\n\n'
-              'Konfirmasi jika kacamata sudah jadi. Sistem akan mengirim '
-              'QR LUNAS ready ke email, WhatsApp, dan APK Member pelanggan '
-              'untuk pengambilan + aktifkan kartu garansi.\n\n'
-              'QR DP / LUNAS ready / CLAIM dipegang customer.',
+              'Customer sudah bayar lunas, barang belum ready.\n\n'
+              'Scan barcode nota (admin), lalu konfirmasi barang ready. '
+              'Sistem mengirim pesan “barang siap diambil” + nota + '
+              'QR LUNAS ready ke email, WhatsApp, dan APK Member.\n\n'
+              'Customer memegang: QR DP, QR LUNAS ready, QR CLAIM.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.78),
                 height: 1.4,
@@ -915,7 +984,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 minimumSize: const Size.fromHeight(48),
               ),
               child: const Text(
-                'Ya, kacamata sudah jadi — kirim QR LUNAS ready',
+                'Konfirmasi barang ready — kirim QR LUNAS',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -923,6 +992,23 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         ),
       ),
     ];
+  }
+
+  Widget _lunasPendingKaryawanHint() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.35)),
+      ),
+      child: const Text(
+        'Lunas pending — barcode & konfirmasi barang ready hanya di web admin. '
+        'Setelah admin konfirmasi, customer menerima QR LUNAS ready.',
+        style: TextStyle(color: Colors.white70, height: 1.4),
+      ),
+    );
   }
 
   Widget _viewOnlyHint(Map<String, dynamic> h) {
@@ -933,7 +1019,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             ? 'CLAIM (klaim garansi)'
             : _isLunasReady(h)
                 ? 'LUNAS ready (serah terima)'
-                : 'LUNAS ready (setelah karyawan konfirmasi jadi)';
+                : 'LUNAS ready (setelah admin konfirmasi barang ready)';
 
     String why;
     if (raw.isEmpty) {
@@ -1055,7 +1141,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       question =
           'Sisa yang belum dibayar akan dilunasi 1× lewat payment gateway.\n\n'
           'Sudah DP: Rp ${_fmt(dp)}\nSisa: Rp ${_fmt(sisa)}\n\n'
-          'Setelah bayar sukses: QR DP hangus, QR LUNAS baru muncul.';
+          'Setelah bayar sukses: QR DP hangus, langsung QR LUNAS ready '
+          '(ambil + aktifkan garansi).';
       yesLabel = 'Ya, buka payment gateway';
       onYes = () => _settleDpConfirmed(h);
     } else if (phase == 'LUNAS') {
@@ -1071,8 +1158,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             ),
             child: const Text(
               'QR LUNAS ready belum aktif.\n'
-              'Ini masih lunas pending — karyawan harus konfirmasi '
-              'kacamata sudah jadi dulu (panel di atas).',
+              'Ini lunas pending — admin harus scan barcode nota dan '
+              'konfirmasi barang ready dulu.',
               style: TextStyle(color: Colors.white70, height: 1.4),
             ),
           ),
