@@ -23,6 +23,7 @@ import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -917,16 +918,12 @@ class KaryawanPageState extends State<KaryawanPage>
                         : OptikKaryawanTokens.navyDeep,
                   ),
                 ),
-                Text(
-                  'OPTIK B. RISKI',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    letterSpacing: 1.8,
-                    fontWeight: FontWeight.w600,
-                    color: _currentIndex == 2
-                        ? OptikKaryawanTokens.gold
-                        : OptikKaryawanTokens.goldSoft,
-                  ),
+                const SizedBox(height: 2),
+                OptikBrandLogo(
+                  tone: _currentIndex == 2
+                      ? OptikLogoTone.white
+                      : OptikLogoTone.color,
+                  height: 16,
                 ),
               ],
             ),
@@ -972,6 +969,12 @@ class KaryawanPageState extends State<KaryawanPage>
               cabangKaryawan: _cabangKaryawan,
               karyawanId: _karyawanId,
               karyawanNama: _namaKaryawan,
+              profile: {
+                'toko_id': _cabangKaryawan,
+                'role': 'karyawan',
+                'id': _karyawanId,
+                'nama': _namaKaryawan,
+              },
             );
           },
           backgroundColor: Colors.transparent,

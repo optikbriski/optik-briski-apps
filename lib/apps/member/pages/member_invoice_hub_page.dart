@@ -215,24 +215,39 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
   }
 
   Widget _phaseCard(Map<String, dynamic> h) {
+    final tracking =
+        (h['tracking_status'] ?? '').toString().trim().toUpperCase();
+    final lunasPending = InvoiceHubService.isLunas(h) &&
+        !InvoiceHubService.sudahDiambil(h) &&
+        tracking != 'SIAP_DIAMBIL' &&
+        tracking != 'CLEAR';
     final phaseKey = (h['qr_phase'] ?? '').toString().toUpperCase();
     String phase;
     String tip;
     if (phaseKey == 'DP' || InvoiceHubService.isDpOpen(h)) {
       phase = 'QR fase DP · pelunasan';
       tip =
-          'Tunjukkan QR ini ke kasir POS untuk pelunasan. Ambil barang hanya setelah lunas.';
+          'QR ini dipegang Anda. Tunjukkan ke kasir untuk pelunasan.';
     } else if (phaseKey == 'CLAIM' || InvoiceHubService.sudahDiambil(h)) {
       phase = 'QR fase CLAIM · garansi';
       tip =
-          'Untuk klaim, datang ke toko membawa barang + QR CLAIM. Keputusan hanya setelah dicek petugas.';
-    } else {
-      phase = 'QR fase LUNAS · serah terima';
+          'QR CLAIM dipegang Anda. Bawa barang + QR ini saat klaim.';
+    } else if (lunasPending) {
+      phase = 'Lunas pending';
       tip =
-          'Saat pengambilan, petugas akan scan QR LUNAS di POS. Siapkan nota di HP Anda.';
+          'Pembayaran lunas, kacamata masih diproses. '
+          'QR ambil (LUNAS ready) muncul di sini setelah karyawan '
+          'mengonfirmasi kacamata sudah jadi — lalu dikirim juga ke email & WA.';
+    } else {
+      phase = 'QR fase LUNAS ready · pengambilan';
+      tip =
+          'QR ini dipegang Anda. Tunjukkan saat ambil barang untuk '
+          'serah terima + aktifkan kartu garansi.';
     }
 
-    final payload = (h['qr_payload'] ?? '').toString().trim();
+    final payload = lunasPending
+        ? ''
+        : (h['qr_payload'] ?? '').toString().trim();
     final lifecycle = InvoiceLink.isCustomerLifecycleQr(payload);
     final hubUrl = InvoiceLink.encodeHttps(
       h['no_invoice']?.toString() ?? widget.noInvoice,

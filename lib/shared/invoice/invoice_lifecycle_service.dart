@@ -188,7 +188,9 @@ class InvoiceLifecycleService {
         'status_pembayaran': 'LUNAS',
         'dibayarkan': dibayar + bayarPelunasan,
         'sisa_tagihan': 0,
-        'tracking_status': 'SIAP_DIAMBIL',
+        // Setelah lunas: pending proses. QR LUNAS ready baru setelah admin
+        // konfirmasi kacamata jadi.
+        'tracking_status': 'PENDING_PO',
         'metode_pembayaran': metode,
         'lunas_at': now.toUtc().toIso8601String(),
         'qr_dp_used_at': now.toUtc().toIso8601String(),
@@ -207,11 +209,57 @@ class InvoiceLifecycleService {
     return Map<String, dynamic>.from(updated ?? sale);
   }
 
+  /// Karyawan: konfirmasi kacamata sudah jadi (lunas pending)
+  /// → SIAP_DIAMBIL + terbitkan QR LUNAS ready untuk customer.
+  Future<Map<String, dynamic>> markGlassesReadyAndIssueLunasQr({
+    required String saleId,
+    required String staffNik,
+    String? staffNama,
+  }) async {
+    final sale =
+        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    if (sale == null) throw 'Transaksi tidak ditemukan.';
+
+    final pay = ObrInvoice.normalizePayStatus(
+      sale['status_pembayaran']?.toString(),
+    );
+    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    if (pay == 'DP' || sisa > 0) {
+      throw 'Nota masih DP. Lunasi dulu sebelum konfirmasi kacamata jadi.';
+    }
+    final tracking =
+        (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
+    if (sale['diambil_at'] != null || tracking == 'DIAMBIL') {
+      throw 'Barang sudah diambil. Tidak perlu konfirmasi jadi.';
+    }
+    if (tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR') {
+      // Sudah ready — pastikan token ada, boleh kirim ulang.
+      return ensureTokens(saleId);
+    }
+
+    final lunasToken = newToken();
+    final now = DateTime.now().toUtc().toIso8601String();
+    final by = [
+      if ((staffNama ?? '').trim().isNotEmpty) staffNama!.trim(),
+      if (staffNik.trim().isNotEmpty) staffNik.trim(),
+    ].join(' · ');
+
+    await _db.from('sales').update({
+      'tracking_status': 'SIAP_DIAMBIL',
+      'qr_lunas_token': lunasToken,
+      'qr_lunas_used_at': null,
+      'qr_lunas_used_by': null,
+      'updated_at': now,
+      if (by.isNotEmpty) 'nama_kasir': sale['nama_kasir'] ?? by,
+    }).eq('id', saleId);
+
+    final updated =
+        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    return Map<String, dynamic>.from(updated ?? sale);
+  }
+
   /// Serah terima + aktifkan garansi + consume LUNAS + terbitkan CLAIM.
-  ///
-  /// [markReadyIfPending]: kasir mengonfirmasi barang sudah siap di toko
-  /// (PENDING_PO → SIAP_DIAMBIL) lalu lanjut serah terima — dipakai saat
-  /// scan QR LUNAS pelanggan untuk pengambilan.
+  /// Hanya untuk QR LUNAS ready (tracking sudah SIAP_DIAMBIL/CLEAR).
   Future<Map<String, dynamic>> handoverAndIssueClaim({
     required String noInvoice,
     required String rawScan,
@@ -219,11 +267,10 @@ class InvoiceLifecycleService {
     String? fotoHasilUrl,
     String? tokoId,
     bool isPusat = false,
-    bool markReadyIfPending = false,
   }) async {
     final validated = await validateCustomerScan(rawScan);
     if (validated.phase != 'LUNAS') {
-      throw 'Scan QR LUNAS pelanggan untuk serah terima.';
+      throw 'Scan QR LUNAS ready pelanggan untuk serah terima / aktifkan garansi.';
     }
     if (validated.sale['no_invoice']?.toString() != noInvoice) {
       throw 'Invoice tidak cocok dengan QR.';
@@ -231,15 +278,9 @@ class InvoiceLifecycleService {
 
     final tracking =
         (validated.sale['tracking_status'] ?? '').toString().toUpperCase();
-    if (tracking == 'PENDING_PO') {
-      if (!markReadyIfPending) {
-        throw 'Barang belum siap (PENDING_PO). '
-            'Konfirmasi barang sudah siap di toko, lalu serah terima.';
-      }
-      await _db.from('sales').update({
-        'tracking_status': 'SIAP_DIAMBIL',
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', validated.sale['id']);
+    if (tracking != 'SIAP_DIAMBIL' && tracking != 'CLEAR') {
+      throw 'QR LUNAS ready belum berlaku. '
+          'Karyawan harus konfirmasi kacamata sudah jadi dulu.';
     }
 
     final garansi = GaransiService(client: _db);

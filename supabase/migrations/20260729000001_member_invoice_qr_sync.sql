@@ -137,12 +137,20 @@ begin
       v_token := null;
     end if;
   elsif not v_diambil then
-    v_phase := 'LUNAS';
-    v_token := nullif(trim(coalesce(v_sale.qr_lunas_token, '')), '');
-    v_token_col := 'qr_lunas_token';
-    if v_sale.qr_lunas_used_at is not null then
+    -- LUNAS ready hanya jika SIAP_DIAMBIL/CLEAR (setelah karyawan konfirmasi jadi).
+    if upper(trim(coalesce(v_sale.tracking_status, ''))) in ('SIAP_DIAMBIL', 'CLEAR') then
+      v_phase := 'LUNAS';
+      v_token := nullif(trim(coalesce(v_sale.qr_lunas_token, '')), '');
+      v_token_col := 'qr_lunas_token';
+      if v_sale.qr_lunas_used_at is not null then
+        v_phase := null;
+        v_token := null;
+      end if;
+    else
+      -- Lunas pending: belum terbitkan QR ambil ke customer.
       v_phase := null;
       v_token := null;
+      v_token_col := null;
     end if;
   else
     v_phase := 'CLAIM';
@@ -180,7 +188,9 @@ begin
     if not (v_owner or v_is_staff) then
       v_phase := case
         when v_is_dp and v_sale.qr_dp_used_at is null then 'DP'
-        when not v_diambil and v_sale.qr_lunas_used_at is null then 'LUNAS'
+        when not v_diambil
+          and upper(trim(coalesce(v_sale.tracking_status, ''))) in ('SIAP_DIAMBIL', 'CLEAR')
+          and v_sale.qr_lunas_used_at is null then 'LUNAS'
         when v_diambil and v_sale.qr_claim_used_at is null then 'CLAIM'
         else null
       end;

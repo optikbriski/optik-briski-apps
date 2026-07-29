@@ -105,14 +105,12 @@ class InvoiceDeliveryService {
   static String _phaseTip(String phase) {
     switch (phase) {
       case 'DP':
-        return 'Wajib tunjukkan QR ini di kasir cabang tempat beli untuk '
-            'pelunasan. QR sama di email, WhatsApp, dan APK Member.';
+        return 'Simpan QR ini (customer). Tunjukkan ke kasir untuk pelunasan.';
       case 'LUNAS':
-        return 'Wajib scan QR ini di POS cabang tempat beli saat ambil barang. '
-            'QR sama di email, WhatsApp, dan APK Member.';
+        return 'QR LUNAS ready (customer). Tunjukkan saat ambil barang — '
+            'aktifkan garansi. Sama di email, WhatsApp, dan APK Member.';
       case 'CLAIM':
-        return 'Untuk klaim, datang ke cabang membawa barang + QR CLAIM '
-            '(email / WA / APK Member — kode sama).';
+        return 'QR CLAIM (customer). Bawa barang + QR ini saat klaim garansi.';
       default:
         return 'QR nota sinkron di email, WhatsApp, dan APK Member.';
     }

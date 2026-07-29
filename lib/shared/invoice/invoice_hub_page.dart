@@ -186,26 +186,22 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
 
     setState(() => _busy = true);
     try {
-      final updated = await _lifecycle.settleDpViaGateway(
+      await _lifecycle.settleDpViaGateway(
         saleId: saleId,
         metodePembayaran: metode,
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString() ?? '',
         rawScan: raw,
       );
-      // Kirim ulang QR LUNAS ke WA + email Member
-      try {
-        await InvoiceDeliveryService().deliver(sale: updated, sendEmail: true, sendWa: true);
-      } catch (_) {}
       if (!mounted) return;
-      await _showCustomerQrDialog(
-        title: 'QR pelanggan · LUNAS',
-        body:
-            'Pelunasan berhasil. QR LUNAS sudah dikirim ke WA/email pelanggan '
-            'dan sinkron di APK Member.\n'
-            'QR DP lama sudah tidak berlaku.\n'
-            'Scan berikutnya: serah terima + aktifkan garansi.',
-        payload: InvoiceLifecycleService.customerQrPayload(updated) ?? '',
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pelunasan OK. Status: lunas pending. '
+            'Karyawan konfirmasi kacamata jadi → QR LUNAS ready dikirim ke customer.',
+          ),
+          backgroundColor: Color(0xFF0F766E),
+        ),
       );
       if (!mounted) return;
       Navigator.maybePop(context);
@@ -429,11 +425,54 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     );
   }
 
-  /// Serah terima + aktifkan garansi + terbitkan QR CLAIM.
-  Future<void> _handoverConfirmed(
-    Map<String, dynamic> h, {
-    bool markReadyIfPending = false,
-  }) async {
+  /// Karyawan: lunas pending → konfirmasi jadi → kirim QR LUNAS ready ke customer.
+  Future<void> _confirmGlassesReady(Map<String, dynamic> h) async {
+    final saleId = h['sale_id']?.toString();
+    if (saleId == null || _busy) return;
+    if (!await _ensureCabangOk(h)) return;
+
+    final staff = await showStaffNikScanDialog(
+      context,
+      title: 'Scan karyawan · kacamata jadi',
+      subtitle: 'Scan NIK karyawan yang mengonfirmasi kacamata sudah jadi.',
+    );
+    if (staff == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final updated = await _lifecycle.markGlassesReadyAndIssueLunasQr(
+        saleId: saleId,
+        staffNik: staff['nik']?.toString() ?? '',
+        staffNama: staff['nama']?.toString(),
+      );
+      try {
+        await InvoiceDeliveryService().deliver(sale: updated);
+      } catch (_) {}
+      if (!mounted) return;
+      final payload =
+          InvoiceLifecycleService.customerQrPayload(updated) ?? '';
+      await _showCustomerQrDialog(
+        title: 'QR pelanggan · LUNAS ready',
+        body:
+            'Kacamata sudah jadi. QR LUNAS ready dikirim ke email, WhatsApp, '
+            'dan APK Member pelanggan.\n'
+            'Customer yang memegang QR ini untuk pengambilan + aktifkan garansi.',
+        payload: payload,
+      );
+      if (!mounted) return;
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Serah terima + aktifkan garansi + terbitkan QR CLAIM (QR LUNAS ready customer).
+  Future<void> _handoverConfirmed(Map<String, dynamic> h) async {
     final inv = h['no_invoice']?.toString() ?? '';
     final raw = widget.rawScan;
     if (inv.isEmpty || raw == null || _busy) return;
@@ -459,7 +498,6 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         staffNik: staff['nik']?.toString() ?? '',
         tokoId: toko,
         isPusat: isPusat,
-        markReadyIfPending: markReadyIfPending,
       );
       final saleRow = res['sale'];
       if (saleRow is Map) {
@@ -555,8 +593,22 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
 
   bool get _staff => _hub != null && InvoiceHubService.isStaffView(_hub!);
 
-  /// Aksi DP / serah terima / klaim — hanya jika scan QR pelanggan OBRINV valid.
+  /// Aksi DP / LUNAS ready / CLAIM — scan QR pelanggan OBRINV valid.
   bool get _customerLifecycleEnabled => _lifecycleValidated;
+
+  bool _isLunasPending(Map<String, dynamic> h) {
+    if (!InvoiceHubService.isLunas(h)) return false;
+    if (InvoiceHubService.sudahDiambil(h)) return false;
+    final t = (h['tracking_status'] ?? '').toString().trim().toUpperCase();
+    return t != 'SIAP_DIAMBIL' && t != 'CLEAR';
+  }
+
+  bool _isLunasReady(Map<String, dynamic> h) {
+    if (!InvoiceHubService.isLunas(h)) return false;
+    if (InvoiceHubService.sudahDiambil(h)) return false;
+    final t = (h['tracking_status'] ?? '').toString().trim().toUpperCase();
+    return t == 'SIAP_DIAMBIL' || t == 'CLEAR';
+  }
 
   /// Nota harus diproses di cabang pembuat (kecuali PUSAT).
   String? _cabangMismatchMessage(Map<String, dynamic> sale) {
@@ -574,6 +626,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       widget.profile ??
       {
         'toko_id': _hub?['toko_id']?.toString() ?? 'PUSAT',
+        // Default web admin; APK karyawan wajib mengirim profile.role=karyawan.
         'role': _staff ? 'admin_toko' : 'guest',
       };
 
@@ -743,9 +796,16 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         const SizedBox(height: 8),
         ..._garansiTiles(h),
         const SizedBox(height: 20),
-        // Lifecycle: panel tindakan sesuai fase QR yang baru di-scan.
+        // Karyawan: lunas pending → konfirmasi kacamata jadi (tanpa QR customer).
+        if (_staff && _isLunasPending(h)) ...[
+          ..._lunasPendingStaffPanel(h),
+          const SizedBox(height: 12),
+        ],
+        // Customer QR: DP / LUNAS ready / CLAIM.
         if (_staff && _customerLifecycleEnabled) ..._confirmPanel(h),
-        if (_staff && !_customerLifecycleEnabled) ...[
+        if (_staff &&
+            !_customerLifecycleEnabled &&
+            !_isLunasPending(h)) ...[
           _viewOnlyHint(h),
           const SizedBox(height: 12),
         ],
@@ -811,13 +871,69 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     );
   }
 
+  /// Panel karyawan untuk fase lunas pending (bukan QR customer).
+  List<Widget> _lunasPendingStaffPanel(Map<String, dynamic> h) {
+    return [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE8C872).withOpacity(0.45)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Lunas pending · tugas karyawan',
+              style: TextStyle(
+                color: Color(0xFFE8C872),
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Nota sudah lunas, kacamata masih diproses.\n\n'
+              'Konfirmasi jika kacamata sudah jadi. Sistem akan mengirim '
+              'QR LUNAS ready ke email, WhatsApp, dan APK Member pelanggan '
+              'untuk pengambilan + aktifkan kartu garansi.\n\n'
+              'QR DP / LUNAS ready / CLAIM dipegang customer.',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.78),
+                height: 1.4,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(
+              onPressed: _busy ? null : () => _confirmGlassesReady(h),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE8C872),
+                foregroundColor: const Color(0xFF0F172A),
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: const Text(
+                'Ya, kacamata sudah jadi — kirim QR LUNAS ready',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
   Widget _viewOnlyHint(Map<String, dynamic> h) {
     final raw = (widget.rawScan ?? '').trim();
     final needed = InvoiceHubService.isDpOpen(h)
         ? 'DP (pelunasan)'
         : InvoiceHubService.sudahDiambil(h)
             ? 'CLAIM (klaim garansi)'
-            : 'LUNAS (serah terima)';
+            : _isLunasReady(h)
+                ? 'LUNAS ready (serah terima)'
+                : 'LUNAS ready (setelah karyawan konfirmasi jadi)';
 
     String why;
     if (raw.isEmpty) {
@@ -943,24 +1059,33 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       yesLabel = 'Ya, buka payment gateway';
       onYes = () => _settleDpConfirmed(h);
     } else if (phase == 'LUNAS') {
-      final tracking =
-          (h['tracking_status'] ?? '').toString().toUpperCase();
-      final pendingPo = tracking == 'PENDING_PO';
+      if (_isLunasPending(h)) {
+        return [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withOpacity(0.35)),
+            ),
+            child: const Text(
+              'QR LUNAS ready belum aktif.\n'
+              'Ini masih lunas pending — karyawan harus konfirmasi '
+              'kacamata sudah jadi dulu (panel di atas).',
+              style: TextStyle(color: Colors.white70, height: 1.4),
+            ),
+          ),
+        ];
+      }
       title = 'Konfirmasi serah terima';
-      question = pendingPo
-          ? 'Status masih PENDING_PO (antrian proses).\n\n'
-              'Jika barang sudah siap di toko dan akan diberikan ke pelanggan, '
-              'lanjutkan: status jadi SIAP_DIAMBIL → serah terima → '
-              'garansi aktif + QR CLAIM.\n\n'
-              'Lanjut → scan barcode karyawan.'
-          : 'Produk sudah selesai dan akan diberikan ke pelanggan?\n\n'
-              'Ini mengaktifkan garansi ${GaransiService.garansiHari} hari '
-              'dan menerbitkan QR CLAIM (sekali pakai).\n'
-              'Lanjut → scan barcode karyawan.';
-      yesLabel = pendingPo
-          ? 'Barang siap — serah terima'
-          : 'Ya, sudah diberikan';
-      onYes = () => _handoverConfirmed(h, markReadyIfPending: pendingPo);
+      question =
+          'Produk diberikan ke pelanggan?\n\n'
+          'Ini mengaktifkan garansi ${GaransiService.garansiHari} hari '
+          'dan menerbitkan QR CLAIM (dipegang customer).\n'
+          'Lanjut → scan barcode karyawan.';
+      yesLabel = 'Ya, sudah diberikan';
+      onYes = () => _handoverConfirmed(h);
     } else if (phase == 'CLAIM') {
       if (InvoiceHubService.isCaseClosed(h)) {
         return [
