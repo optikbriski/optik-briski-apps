@@ -205,16 +205,29 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     await _evaluateStep(showErrors: false);
   }
 
-  String _moveLabel(_MoveChallenge m) {
+  String _moveAction(_MoveChallenge m) {
     switch (m) {
       case _MoveChallenge.turnLeft:
-        return 'web_liveness_step_left'.tr();
+        return 'web_liveness_action_left'.tr();
       case _MoveChallenge.turnRight:
-        return 'web_liveness_step_right'.tr();
+        return 'web_liveness_action_right'.tr();
       case _MoveChallenge.lookUp:
-        return 'web_liveness_step_up'.tr();
+        return 'web_liveness_action_up'.tr();
       case _MoveChallenge.lookDown:
-        return 'web_liveness_step_down'.tr();
+        return 'web_liveness_action_down'.tr();
+    }
+  }
+
+  IconData _moveIcon(_MoveChallenge m) {
+    switch (m) {
+      case _MoveChallenge.turnLeft:
+        return Icons.arrow_back_rounded;
+      case _MoveChallenge.turnRight:
+        return Icons.arrow_forward_rounded;
+      case _MoveChallenge.lookUp:
+        return Icons.arrow_upward_rounded;
+      case _MoveChallenge.lookDown:
+        return Icons.arrow_downward_rounded;
     }
   }
 
@@ -225,13 +238,27 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         },
       );
 
-  String get _statusText {
+  String get _actionTitle {
+    switch (_step) {
+      case _WebLiveStep.position:
+        return 'web_liveness_action_position'.tr();
+      case _WebLiveStep.move:
+        return _moveAction(_currentMove);
+      case _WebLiveStep.returnCenter:
+        return 'web_liveness_action_return'.tr();
+      case _WebLiveStep.holdStill:
+        return 'web_liveness_action_still'.tr();
+      case _WebLiveStep.capturing:
+        return 'web_liveness_action_capturing'.tr();
+    }
+  }
+
+  String get _actionSubtitle {
     switch (_step) {
       case _WebLiveStep.position:
         return 'web_liveness_step_position'.tr();
       case _WebLiveStep.move:
-        // Gerakan 2 tidak muncul sebelum gerakan 1 lolos.
-        return '$_moveProgressLabel — ${_moveLabel(_currentMove)}';
+        return _moveProgressLabel;
       case _WebLiveStep.returnCenter:
         return 'web_liveness_step_return'.tr(
           namedArgs: {
@@ -246,6 +273,21 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     }
   }
 
+  IconData get _actionIcon {
+    switch (_step) {
+      case _WebLiveStep.position:
+        return Icons.face_retouching_natural_rounded;
+      case _WebLiveStep.move:
+        return _moveIcon(_currentMove);
+      case _WebLiveStep.returnCenter:
+        return Icons.center_focus_strong_rounded;
+      case _WebLiveStep.holdStill:
+        return Icons.accessibility_new_rounded;
+      case _WebLiveStep.capturing:
+        return Icons.check_circle_rounded;
+    }
+  }
+
   Color get _statusColor {
     if (_feedback != null && _lastVerdict == _MoveVerdict.wrong) {
       return Colors.redAccent;
@@ -253,14 +295,15 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     if (_feedback != null && _lastVerdict == _MoveVerdict.correct) {
       return Colors.greenAccent;
     }
-    if (_colorActive) {
-      return _flashColors[_flashIndex.clamp(0, _flashColors.length - 1)];
+    if (_colorActive && _step == _WebLiveStep.move) {
+      // Saat gerakan: panah tetap biru terang agar instruksi kebaca di atas flash.
+      return const Color(0xFF7DD3FC);
     }
     switch (_step) {
       case _WebLiveStep.position:
         return Colors.orangeAccent;
       case _WebLiveStep.move:
-        return Colors.lightBlueAccent;
+        return const Color(0xFF7DD3FC);
       case _WebLiveStep.returnCenter:
         return Colors.amberAccent;
       case _WebLiveStep.holdStill:
@@ -695,48 +738,120 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     );
   }
 
-  Widget _verdictChip() {
-    if (_feedback == null ||
-        (_step != _WebLiveStep.move &&
-            _step != _WebLiveStep.returnCenter)) {
-      return const SizedBox.shrink();
-    }
-    final ok = _lastVerdict == _MoveVerdict.correct;
+  Widget _instructionBanner() {
+    final accent = _statusColor;
     final bad = _lastVerdict == _MoveVerdict.wrong;
-    final color = ok
-        ? Colors.greenAccent
-        : bad
-            ? Colors.redAccent
-            : Colors.amberAccent;
-    final icon = ok
-        ? Icons.check_circle_rounded
-        : bad
-            ? Icons.cancel_rounded
-            : Icons.info_outline_rounded;
+    final ok = _lastVerdict == _MoveVerdict.correct &&
+        (_step == _WebLiveStep.move || _step == _WebLiveStep.returnCenter);
+
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.8)),
+          color: Colors.black.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: accent,
+            width: 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.35),
+              blurRadius: 18,
+              spreadRadius: 1,
+            ),
+          ],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
           children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _feedback!,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
+            if (_step == _WebLiveStep.move ||
+                _step == _WebLiveStep.returnCenter) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  _moveProgressLabel,
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: 0.4,
+                  ),
                 ),
               ),
+              const SizedBox(height: 10),
+            ],
+            Icon(_actionIcon, color: accent, size: 52),
+            const SizedBox(height: 8),
+            Text(
+              _actionTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 28,
+                height: 1.15,
+                letterSpacing: 0.6,
+              ),
             ),
+            const SizedBox(height: 6),
+            Text(
+              _actionSubtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                height: 1.3,
+              ),
+            ),
+            if (_feedback != null &&
+                (_step == _WebLiveStep.move ||
+                    _step == _WebLiveStep.returnCenter)) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: (ok
+                          ? Colors.greenAccent
+                          : bad
+                              ? Colors.redAccent
+                              : Colors.amberAccent)
+                      .withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: ok
+                        ? Colors.greenAccent
+                        : bad
+                            ? Colors.redAccent
+                            : Colors.amberAccent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  _feedback!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: ok
+                        ? Colors.greenAccent
+                        : bad
+                            ? const Color(0xFFFF8A80)
+                            : Colors.amberAccent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -748,29 +863,65 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (var i = 0; i < _moves.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Container(
-            width: 10,
-            height: 10,
+          if (i > 0) const SizedBox(width: 10),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: i == _moveIndex && _step == _WebLiveStep.move ? 28 : 12,
+            height: 12,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i < _moveIndex ||
-                      (i == _moveIndex &&
-                          _step != _WebLiveStep.move &&
-                          _step != _WebLiveStep.returnCenter &&
-                          i < _movesPassed)
+              borderRadius: BorderRadius.circular(999),
+              color: i < _movesPassed
                   ? Colors.tealAccent
-                  : i < _movesPassed
-                      ? Colors.tealAccent
-                      : i == _moveIndex &&
-                              (_step == _WebLiveStep.move ||
-                                  _step == _WebLiveStep.returnCenter)
-                          ? Colors.lightBlueAccent
-                          : Colors.white24,
+                  : i == _moveIndex &&
+                          (_step == _WebLiveStep.move ||
+                              _step == _WebLiveStep.returnCenter)
+                      ? const Color(0xFF7DD3FC)
+                      : Colors.white24,
             ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _directionOverlay(double frameW, double frameH, Color accent) {
+    if (_step != _WebLiveStep.move) return const SizedBox.shrink();
+    final icon = _moveIcon(_currentMove);
+    Alignment align;
+    switch (_currentMove) {
+      case _MoveChallenge.turnLeft:
+        align = Alignment.centerLeft;
+        break;
+      case _MoveChallenge.turnRight:
+        align = Alignment.centerRight;
+        break;
+      case _MoveChallenge.lookUp:
+        align = Alignment.topCenter;
+        break;
+      case _MoveChallenge.lookDown:
+        align = Alignment.bottomCenter;
+        break;
+    }
+    return IgnorePointer(
+      child: SizedBox(
+        width: frameW,
+        height: frameH,
+        child: Align(
+          alignment: align,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: BoxShape.circle,
+                border: Border.all(color: accent, width: 2),
+              ),
+              child: Icon(icon, color: accent, size: 36),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -784,78 +935,50 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     return SafeArea(
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: inFlash ? 0.35 : 0.25),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: accent.withValues(alpha: 0.85)),
-              ),
-              child: Text(
-                _statusText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: inFlash ? Colors.white : accent,
-                  fontWeight: FontWeight.w700,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ),
-          _verdictChip(),
+          _instructionBanner(),
           const SizedBox(height: 10),
           _moveProgressDots(),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              _step == _WebLiveStep.move || _step == _WebLiveStep.returnCenter
-                  ? 'web_liveness_random_hint'.tr()
-                  : 'web_liveness_disclaimer'.tr(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: inFlash ? Colors.white70 : Colors.white38,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final maxW = constraints.maxWidth - 48;
-                final frameW = maxW.clamp(180.0, 320.0);
+                final frameW = maxW.clamp(180.0, 340.0);
                 final frameH = frameW * 4 / 3;
                 return Center(
-                  child: Container(
-                    width: frameW,
-                    height: frameH,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(frameW / 2),
-                      border: Border.all(color: accent, width: inFlash ? 8 : 4),
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              accent.withValues(alpha: inFlash ? 0.55 : 0.25),
-                          blurRadius: inFlash ? 36 : 18,
-                          spreadRadius: inFlash ? 6 : 2,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: frameW,
+                        height: frameH,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(frameW / 2),
+                          border:
+                              Border.all(color: accent, width: inFlash ? 7 : 5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accent.withValues(
+                                  alpha: inFlash ? 0.55 : 0.28),
+                              blurRadius: inFlash ? 36 : 18,
+                              spreadRadius: inFlash ? 6 : 2,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(frameW / 2),
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: viewW,
-                          height: viewH,
-                          child: CameraPreview(_camera!),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(frameW / 2),
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            child: SizedBox(
+                              width: viewW,
+                              height: viewH,
+                              child: CameraPreview(_camera!),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      _directionOverlay(frameW, frameH, accent),
+                    ],
                   ),
                 );
               },
@@ -868,17 +991,18 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                 Text(
                   inFlash
                       ? 'web_liveness_colors_with_move_hint'.tr()
-                      : 'Ikuti petunjuk — benar = lanjut, salah = ulangi.',
+                      : 'web_liveness_disclaimer'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: inFlash ? Colors.white70 : Colors.white38,
-                    fontSize: 11,
+                    color: inFlash ? Colors.white70 : Colors.white54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 54,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF38BDF8),
@@ -900,7 +1024,10 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                             _step == _WebLiveStep.holdStill
                                 ? 'web_liveness_capture'.tr()
                                 : 'web_liveness_next'.tr(),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
                   ),
                 ),
