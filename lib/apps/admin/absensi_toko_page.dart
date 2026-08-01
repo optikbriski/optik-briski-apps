@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -365,57 +364,6 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     unawaited(_rotateQr());
   }
 
-  Future<bool> _confirmPinIfNeeded() async {
-    final karyawan = _selected;
-    if (karyawan == null) return false;
-    final pin = (karyawan['pin_absensi'] ?? '').toString().trim();
-    if (pin.isEmpty) return true;
-
-    final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: Text(
-          'absensi_toko_pin_title'.tr(),
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: TextField(
-          controller: ctrl,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          maxLength: 8,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            labelText: 'absensi_toko_pin_label'.tr(),
-            labelStyle: const TextStyle(color: Colors.white70),
-            counterText: '',
-          ),
-          autofocus: true,
-          onSubmitted: (_) => Navigator.pop(ctx, true),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('appr_btn_batal'.tr()),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('absensi_toko_pin_lanjut'.tr()),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return false;
-    if (!_service.verifyPinAbsensi(karyawan, ctrl.text)) {
-      _snack('absensi_toko_pin_salah'.tr(), Colors.redAccent);
-      return false;
-    }
-    return true;
-  }
-
   Future<void> _runFaceClock(String action) async {
     final karyawan = _selected;
     final tokoId = _tokoId;
@@ -466,11 +414,6 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
 
     setState(() => _busy = true);
     try {
-      if (!await _confirmPinIfNeeded()) {
-        await _returnToQr(consume: true);
-        return;
-      }
-
       // Lokasi dari unlock HP karyawan — tanpa GPS Admin/Mac.
       if (unlock.latitude == null || unlock.longitude == null) {
         _snack('absensi_toko_unlock_no_gps'.tr(), Colors.redAccent);

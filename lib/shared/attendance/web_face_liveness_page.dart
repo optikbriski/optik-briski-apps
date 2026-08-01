@@ -8,11 +8,11 @@ import 'package:flutter/material.dart';
 
 import 'liveness_result.dart';
 import 'web_face_signature.dart';
+import 'web_liveness_speech.dart';
 
 enum _WebLiveStep {
   position,
   move,
-  returnCenter,
   holdStill,
   capturing,
 }
@@ -27,7 +27,8 @@ enum _MoveChallenge {
 enum _MoveVerdict { correct, wrong, noMotion, unclear }
 
 /// Liveness gratis Admin web:
-/// posisi → gerakan acak (benar/salah) sambil flash warna → diam → foto.
+/// posisi → gerakan 1 → gerakan 2 (langsung) → lihat lurus + foto.
+/// Flash warna jalan bersamaan; instruksi pakai TTS browser.
 class WebFaceLivenessPage extends StatefulWidget {
   const WebFaceLivenessPage({super.key});
 
@@ -86,9 +87,10 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   static const _motionStillMax = 0.22;
   static const _minAxisShift = 0.032;
   static const _wrongAxisShift = 0.028;
-  static const _centerSlack = 0.04;
+  static const _centerSlack = 0.045;
   static const _minFlashLumaSpan = 0.018;
   static const _movesPerScan = 2;
+  String? _lastSpoken;
 
   @override
   void initState() {
@@ -244,8 +246,6 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         return 'web_liveness_action_position'.tr();
       case _WebLiveStep.move:
         return _moveAction(_currentMove);
-      case _WebLiveStep.returnCenter:
-        return 'web_liveness_action_return'.tr();
       case _WebLiveStep.holdStill:
         return 'web_liveness_action_still'.tr();
       case _WebLiveStep.capturing:
@@ -259,13 +259,6 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         return 'web_liveness_step_position'.tr();
       case _WebLiveStep.move:
         return _moveProgressLabel;
-      case _WebLiveStep.returnCenter:
-        return 'web_liveness_step_return'.tr(
-          namedArgs: {
-            'n': '${_moveIndex + 1}',
-            'next': '${_moveIndex + 2}',
-          },
-        );
       case _WebLiveStep.holdStill:
         return 'web_liveness_step_still'.tr();
       case _WebLiveStep.capturing:
@@ -279,8 +272,6 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         return Icons.face_retouching_natural_rounded;
       case _WebLiveStep.move:
         return _moveIcon(_currentMove);
-      case _WebLiveStep.returnCenter:
-        return Icons.center_focus_strong_rounded;
       case _WebLiveStep.holdStill:
         return Icons.accessibility_new_rounded;
       case _WebLiveStep.capturing:
@@ -304,8 +295,6 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         return Colors.orangeAccent;
       case _WebLiveStep.move:
         return const Color(0xFF7DD3FC);
-      case _WebLiveStep.returnCenter:
-        return Colors.amberAccent;
       case _WebLiveStep.holdStill:
         return Colors.tealAccent;
       case _WebLiveStep.capturing:
@@ -332,11 +321,40 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     await _evaluateStep(showErrors: true);
   }
 
-  void _enterMoveStep() {
+  String get _speechLang {
+    final code = context.locale.languageCode.toLowerCase();
+    switch (code) {
+      case 'en':
+        return 'en-US';
+      case 'ms':
+        return 'ms-MY';
+      case 'zh':
+        return 'zh-CN';
+      default:
+        return 'id-ID';
+    }
+  }
+
+  void _speak(String text, {bool force = false}) {
+    final t = text.trim();
+    if (t.isEmpty) return;
+    if (!force && _lastSpoken == t) return;
+    _lastSpoken = t;
+    speakLiveness(t, lang: _speechLang);
+  }
+
+  /// [fromPose] = posisi saat gerakan sebelumnya lolos (langsung ke gerakan berikutnya).
+  void _enterMoveStep({WebFacePose? fromPose, bool announce = true}) {
     _wrongStreak = 0;
     _correctSince = null;
-    _baselineH = _neutralH;
-    _baselineV = _neutralV;
+    if (fromPose != null) {
+      _baselineH = fromPose.horizontal;
+      _baselineV = fromPose.vertical;
+      _prevSig = fromPose.signature;
+    } else {
+      _baselineH = _neutralH;
+      _baselineV = _neutralV;
+    }
     _startColorCycle(); // Flash warna jalan bersamaan dengan gerakan.
     setState(() {
       _step = _WebLiveStep.move;
@@ -346,19 +364,25 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
       _feedback = null;
       _busy = false;
     });
+    if (announce) {
+      _speak(_moveAction(_currentMove), force: true);
+    }
   }
 
-  void _enterHoldStill() {
-    // Warna tetap jalan sebentar sampai foto; penilaian luma di _stopColorCycle.
+  void _enterHoldStill({bool announce = true}) {
+    // Lihat lurus + foto (satu tahap).
     setState(() {
       _step = _WebLiveStep.holdStill;
       _stepEnteredAt = DateTime.now();
       _stillStableSince = null;
       _correctSince = null;
-      _lastVerdict = _MoveVerdict.correct;
-      _feedback = 'web_liveness_correct'.tr();
+      _lastVerdict = null;
+      _feedback = null;
       _busy = false;
     });
+    if (announce) {
+      _speak('web_liveness_action_still'.tr(), force: true);
+    }
   }
 
   /// Putar sumbu H/V ke ruang "instruksi user" (kiri = kiri user).
@@ -506,16 +530,20 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             _prevSig = pose.signature;
             _movesPassed = _moveIndex + 1;
             if (_moveIndex < _moves.length - 1) {
-              // Belum naik index: gerakan 2 menunggu sampai kembali lurus.
-              setState(() {
-                _step = _WebLiveStep.returnCenter;
-                _stepEnteredAt = DateTime.now();
-                _correctSince = null;
-                _feedback = 'web_liveness_correct'.tr();
-                _lastVerdict = _MoveVerdict.correct;
-              });
+              // Langsung gerakan 2 — tanpa "lihat lurus" di tengah.
+              final next = _moves[_moveIndex + 1];
+              _speak(
+                '${'web_liveness_correct'.tr()}. ${_moveAction(next)}',
+                force: true,
+              );
+              _moveIndex++;
+              _enterMoveStep(fromPose: pose, announce: false);
             } else {
-              _enterHoldStill();
+              _speak(
+                '${'web_liveness_correct'.tr()}. ${'web_liveness_action_still'.tr()}',
+                force: true,
+              );
+              _enterHoldStill(announce: false);
             }
             return;
           }
@@ -529,14 +557,17 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                 _lastVerdict = _MoveVerdict.unclear;
                 _feedback = 'web_liveness_recalibrated'.tr();
               });
+              _speak('web_liveness_recalibrated'.tr(), force: true);
               if (showErrors) _toast('web_liveness_recalibrated'.tr());
               return;
             }
+            final wrong = _wrongMessage();
             setState(() {
               _lastVerdict = _MoveVerdict.wrong;
-              _feedback = _wrongMessage();
+              _feedback = wrong;
             });
-            if (showErrors) _toast(_wrongMessage());
+            _speak(wrong);
+            if (showErrors) _toast(wrong);
             return;
           }
 
@@ -548,61 +579,34 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             _baselineV = pose.vertical;
             _prevSig = pose.signature;
           }
+          final hint = verdict == _MoveVerdict.noMotion
+              ? 'web_liveness_need_turn'.tr()
+              : 'web_liveness_need_clearer'.tr();
           setState(() {
             _lastVerdict = verdict;
-            _feedback = verdict == _MoveVerdict.noMotion
-                ? 'web_liveness_need_turn'.tr()
-                : 'web_liveness_need_clearer'.tr();
+            _feedback = hint;
           });
+          // Jangan spam TTS tiap poll — hanya tombol manual.
           if (showErrors) {
-            throw verdict == _MoveVerdict.noMotion
-                ? 'web_liveness_need_turn'.tr()
-                : 'web_liveness_need_clearer'.tr();
-          }
-          break;
-
-        case _WebLiveStep.returnCenter:
-          // Gerakan berikutnya baru dibuka setelah gerakan sebelumnya benar
-          // dan wajah kembali ke tengah.
-          final dH = (pose.horizontal - _neutralH).abs();
-          final dV = (pose.vertical - _neutralV).abs();
-          final motion =
-              WebFaceSignature.motionScore(_prevSig, pose.signature);
-          final centered = dH <= _centerSlack && dV <= _centerSlack;
-          if (centered && motion <= _motionStillMax) {
-            _prevSig = pose.signature;
-            if (_moveIndex < _moves.length - 1) {
-              _moveIndex++;
-              _enterMoveStep();
-            }
-            return;
-          }
-          _prevSig = pose.signature;
-          setState(() {
-            _lastVerdict = null;
-            _feedback = 'web_liveness_step_return'.tr(
-              namedArgs: {
-                'n': '${_moveIndex + 1}',
-                'next': '${_moveIndex + 2}',
-              },
-            );
-          });
-          if (showErrors && !centered) {
-            throw 'web_liveness_step_return'.tr(
-              namedArgs: {
-                'n': '${_moveIndex + 1}',
-                'next': '${_moveIndex + 2}',
-              },
-            );
+            _speak(hint, force: true);
+            throw hint;
           }
           break;
 
         case _WebLiveStep.holdStill:
+          // Foto hanya saat lihat lurus (dekat posisi netral) + diam.
+          final dH = (pose.horizontal - _neutralH).abs();
+          final dV = (pose.vertical - _neutralV).abs();
+          final centered = dH <= _centerSlack && dV <= _centerSlack;
           final motion =
               WebFaceSignature.motionScore(_prevSig, pose.signature);
-          if (motion > _motionStillMax) {
+          if (!centered || motion > _motionStillMax) {
             _stillStableSince = null;
             _prevSig = pose.signature;
+            setState(() {
+              _feedback = 'web_liveness_action_still'.tr();
+              _lastVerdict = null;
+            });
             if (showErrors) throw 'web_liveness_need_still'.tr();
             return;
           }
@@ -610,9 +614,9 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             await _finish(bytes, pose.signature);
             return;
           }
-          final now = DateTime.now();
-          _stillStableSince ??= now;
-          if (now.difference(_stillStableSince!).inMilliseconds >=
+          final holdNow = DateTime.now();
+          _stillStableSince ??= holdNow;
+          if (holdNow.difference(_stillStableSince!).inMilliseconds >=
               _holdStableMs) {
             await _finish(bytes, pose.signature);
             return;
@@ -635,6 +639,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   Future<void> _finish(Uint8List bytes, List<double> sig) async {
     _pollTimer?.cancel();
     _stopColorCycle();
+    stopLivenessSpeech();
     setState(() {
       _step = _WebLiveStep.capturing;
       _busy = true;
@@ -670,6 +675,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   void dispose() {
     _pollTimer?.cancel();
     _colorTimer?.cancel();
+    stopLivenessSpeech();
     _camera?.dispose();
     super.dispose();
   }
@@ -741,8 +747,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   Widget _instructionBanner() {
     final accent = _statusColor;
     final bad = _lastVerdict == _MoveVerdict.wrong;
-    final ok = _lastVerdict == _MoveVerdict.correct &&
-        (_step == _WebLiveStep.move || _step == _WebLiveStep.returnCenter);
+    final ok = _lastVerdict == _MoveVerdict.correct && _step == _WebLiveStep.move;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -766,8 +771,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         ),
         child: Column(
           children: [
-            if (_step == _WebLiveStep.move ||
-                _step == _WebLiveStep.returnCenter) ...[
+            if (_step == _WebLiveStep.move) ...[
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -813,7 +817,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             ),
             if (_feedback != null &&
                 (_step == _WebLiveStep.move ||
-                    _step == _WebLiveStep.returnCenter)) ...[
+                    _step == _WebLiveStep.holdStill)) ...[
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -872,9 +876,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
               borderRadius: BorderRadius.circular(999),
               color: i < _movesPassed
                   ? Colors.tealAccent
-                  : i == _moveIndex &&
-                          (_step == _WebLiveStep.move ||
-                              _step == _WebLiveStep.returnCenter)
+                  : i == _moveIndex && _step == _WebLiveStep.move
                       ? const Color(0xFF7DD3FC)
                       : Colors.white24,
             ),
