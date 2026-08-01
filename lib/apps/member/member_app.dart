@@ -6,6 +6,7 @@ import '../../shared/member/member_status_watch.dart';
 import '../../shared/theme.dart';
 import 'login_member_page.dart';
 import 'member_shell.dart';
+import 'member_update_coordinator.dart';
 
 class MemberApp extends StatefulWidget {
   const MemberApp({super.key});
@@ -16,6 +17,8 @@ class MemberApp extends StatefulWidget {
 
 class _MemberAppState extends State<MemberApp> {
   bool _ready = false;
+  final _navKey = GlobalKey<NavigatorState>();
+  final _update = MemberUpdateCoordinator();
 
   @override
   void initState() {
@@ -29,11 +32,17 @@ class _MemberAppState extends State<MemberApp> {
       await MemberStatusWatch.instance.start();
     }
     if (mounted) setState(() => _ready = true);
+    // Cek update juga dari layar login (belum login) — jangan lewatkan.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _navKey.currentContext;
+      if (ctx != null) _update.checkSilent(ctx);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navKey,
       title: 'Optik B. Riski — Member',
       debugShowCheckedModeBanner: false,
       localizationsDelegates: context.localizationDelegates,

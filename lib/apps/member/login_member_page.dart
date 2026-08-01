@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
+import 'member_forgot_password_page.dart';
+import 'member_register_page.dart';
 
-/// Fitur 4 — login HP + OTP.
+/// Login Member: email/HP + password.
 class LoginMemberPage extends StatefulWidget {
   const LoginMemberPage({super.key});
 
@@ -16,70 +18,52 @@ class LoginMemberPage extends StatefulWidget {
 
 class _LoginMemberPageState extends State<LoginMemberPage> {
   final _repo = MemberRepository();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  bool _otpSent = false;
+  final _idCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
   bool _busy = false;
-  String? _debugOtp;
+  bool _obscure = true;
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
+    _idCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _requestOtp() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length < 9) {
+  Future<void> _loginPassword() async {
+    final id = _idCtrl.text.trim();
+    final pass = _passCtrl.text;
+    if (id.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Isi nomor HP yang valid.')),
+        const SnackBar(content: Text('Isi email/HP dan password')),
       );
       return;
     }
     setState(() => _busy = true);
     try {
-      final res = await _repo.requestOtp(phone);
+      final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
-      setState(() {
-        _otpSent = true;
-        _debugOtp = res['otp']?.toString();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _debugOtp == null
-                ? 'OTP dikirim.'
-                : 'OTP (sementara di app): $_debugOtp — ganti WA gateway nanti.',
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${res['error'] ?? 'Login gagal'}'),
+            backgroundColor: OptikMemberTokens.danger,
           ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('$e'), backgroundColor: OptikMemberTokens.danger),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _verify() async {
-    setState(() => _busy = true);
-    try {
-      await _repo.verifyOtp(
-        _phoneController.text.trim(),
-        _otpController.text.trim(),
-      );
-      await MemberStatusWatch.instance.start();
+        );
+        return;
+      }
+      try {
+        await MemberStatusWatch.instance.start();
+      } catch (_) {}
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/home');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('$e'), backgroundColor: OptikMemberTokens.danger),
+          content: Text('$e'),
+          backgroundColor: OptikMemberTokens.danger,
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -90,158 +74,353 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
+  InputDecoration _fieldDec({
+    required String label,
+    required IconData icon,
+    Widget? suffix,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: OptikMemberTokens.blue),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: OptikMemberTokens.blueMist.withOpacity(0.55),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: OptikMemberTokens.lineSoft),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: OptikMemberTokens.blue, width: 1.6),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final already = MemberSession.instance.isLoggedIn;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
-      backgroundColor: OptikMemberTokens.canvas,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      OptikMemberTokens.blueDeep,
-                      OptikMemberTokens.blue,
-                    ],
-                  ),
-                  borderRadius:
-                      BorderRadius.circular(OptikMemberTokens.radiusMd),
-                ),
-                child: const Icon(Icons.visibility_rounded,
-                    color: Colors.white, size: 28),
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'OPTIK B. RISKI',
-                style: TextStyle(
-                  color: OptikMemberTokens.blue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Member',
-                style: TextStyle(
-                  color: OptikMemberTokens.blueDeep,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Login dengan nomor HP yang sama saat belanja agar nota, '
-                'status, dan garansi muncul otomatis.',
-                style: TextStyle(
-                  color: OptikMemberTokens.inkSecondary,
-                  fontSize: 14.5,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 28),
-              if (already) ...[
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.of(context).pushReplacementNamed('/home'),
-                  child: Text(
-                    'Lanjut sebagai ${MemberSession.instance.phoneRaw ?? MemberSession.instance.phoneE164}',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: () async {
-                    await MemberSession.instance.logout();
-                    MemberStatusWatch.instance.stop();
-                    setState(() {});
-                  },
-                  child: const Text('Ganti akun'),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: OptikMemberTokens.white,
-                  borderRadius:
-                      BorderRadius.circular(OptikMemberTokens.radiusLg),
-                  border: Border.all(color: OptikMemberTokens.lineSoft),
-                  boxShadow: OptikMemberTokens.cardShadow,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Masuk dengan OTP',
-                      style: TextStyle(
-                        color: OptikMemberTokens.blueDeep,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Nomor HP / WhatsApp',
-                        prefixIcon: Icon(Icons.phone_android_rounded),
-                      ),
-                    ),
-                    if (_otpSent) ...[
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _otpController,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        decoration: const InputDecoration(
-                          labelText: 'Kode OTP',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: _busy
-                          ? null
-                          : (_otpSent ? _verify : _requestOtp),
-                      child: _busy
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : Text(_otpSent ? 'Verifikasi & masuk' : 'Kirim OTP'),
-                    ),
-                    if (_otpSent) ...[
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: _busy ? null : _requestOtp,
-                        child: const Text('Kirim ulang OTP'),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: _guest,
-                      child: const Text('Jelajahi tanpa login'),
-                    ),
-                  ],
-                ),
-              ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFEAF2FF),
+              OptikMemberTokens.white,
+              Color(0xFFF7FAFF),
             ],
+            stops: [0, 0.42, 1],
           ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -80,
+              right: -60,
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikMemberTokens.blue.withOpacity(0.08),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 120,
+              left: -70,
+              child: Container(
+                width: 160,
+                height: 160,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikMemberTokens.blueDeep.withOpacity(0.06),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(22, 20, 22, 24 + bottom),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 12),
+                        const Center(child: OptikBrandLogo.color(height: 48)),
+                        const SizedBox(height: 28),
+                        const Text(
+                          'Selamat datang',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: OptikMemberTokens.blueDeep,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Login untuk pengalaman Member yang lebih lengkap dan praktis.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: OptikMemberTokens.inkMuted,
+                            fontSize: 14.5,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        if (already) ...[
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: OptikMemberTokens.blueSoft,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: OptikMemberTokens.blue.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'Lanjut sebagai ${MemberSession.instance.nama ?? MemberSession.instance.phoneRaw ?? MemberSession.instance.email ?? 'Member'}',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: OptikMemberTokens.blueDeep,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(context)
+                                      .pushReplacementNamed('/home'),
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size.fromHeight(48),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: const Text('Lanjut'),
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    await MemberSession.instance.logout();
+                                    MemberStatusWatch.instance.stop();
+                                    setState(() {});
+                                  },
+                                  child: const Text('Ganti akun'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                          decoration: BoxDecoration(
+                            color: OptikMemberTokens.white.withOpacity(0.92),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: OptikMemberTokens.lineSoft,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: OptikMemberTokens.blueDeep
+                                    .withOpacity(0.08),
+                                blurRadius: 28,
+                                offset: const Offset(0, 14),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 4,
+                                    height: 18,
+                                    decoration: BoxDecoration(
+                                      color: OptikMemberTokens.blue,
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    'Masuk akun',
+                                    style: TextStyle(
+                                      color: OptikMemberTokens.blueDeep,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 18),
+                              TextField(
+                                controller: _idCtrl,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                decoration: _fieldDec(
+                                  label: 'Email atau nomor HP',
+                                  icon: Icons.person_outline_rounded,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _passCtrl,
+                                obscureText: _obscure,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) =>
+                                    _busy ? null : _loginPassword(),
+                                decoration: _fieldDec(
+                                  label: 'Password',
+                                  icon: Icons.lock_outline_rounded,
+                                  suffix: IconButton(
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
+                                    icon: Icon(
+                                      _obscure
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: OptikMemberTokens.inkMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            MemberForgotPasswordPage(
+                                          initialIdentifier:
+                                              _idCtrl.text.trim(),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: OptikMemberTokens.blue,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Lupa password?',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              FilledButton(
+                                onPressed: _busy ? null : _loginPassword,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: OptikMemberTokens.blueDeep,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size.fromHeight(52),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: _busy
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.4,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Masuk',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15.5,
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const MemberRegisterPage(),
+                                    ),
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: OptikMemberTokens.blueDeep,
+                                  side: const BorderSide(
+                                    color: OptikMemberTokens.blue,
+                                    width: 1.2,
+                                  ),
+                                  minimumSize: const Size.fromHeight(50),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Daftar akun baru',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _guest,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: OptikMemberTokens.inkMuted,
+                                ),
+                                child: const Text(
+                                  'Jelajahi tanpa login',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Pakai nomor yang sama saat belanja di toko\nagar nota & garansi muncul otomatis.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: OptikMemberTokens.inkMuted.withOpacity(0.9),
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

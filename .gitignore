@@ -51,3 +51,18 @@ app.*.map.json
 # Vercel
 .vercel
 
+# Face-shape training local data / venv (jangan commit dataset)
+scripts/face_shape/.venv/
+scripts/face_shape/data/
+scripts/face_shape/models/
+scripts/face_shape/archive.zip
+scripts/face_shape/*.zip
+scripts/face_shape/FaceShape Dataset/
+scripts/face_shape/face shape detection*/
+scripts/face_shape/**/*.zip
+scripts/face_shape/**/*.jpg
+scripts/face_shape/**/*.jpeg
+scripts/face_shape/**/*.png
+scripts/face_shape/**/*.webp
+scripts/face_shape/**/*.task
+

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/invoice/invoice_hub_service.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
+import '../../../shared/member/member_status_watch.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
 import 'member_invoice_hub_page.dart';
@@ -28,11 +31,21 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _sales = const [];
+  StreamSubscription<void>? _watchSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _watchSub = MemberStatusWatch.instance.onRefresh.listen((_) {
+      if (mounted) unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    _watchSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

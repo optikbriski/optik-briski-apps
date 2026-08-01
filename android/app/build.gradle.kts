@@ -27,14 +27,30 @@ compileOptions {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Base ID — tiap flavor punya applicationId sendiri agar tidak saling “update”.
         applicationId = "com.example.toko_kacamata_natan"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "app"
+    productFlavors {
+        create("karyawan") {
+            dimension = "app"
+            // Tetap ID lama supaya update Karyawan yang sudah terpasang tidak putus.
+            applicationId = "com.example.toko_kacamata_natan"
+        }
+        create("member") {
+            dimension = "app"
+            // ID baru → install berdampingan, bukan overwrite Karyawan.
+            applicationId = "com.optikbriski.member"
+        }
+        create("admin") {
+            dimension = "app"
+            applicationId = "com.optikbriski.admin"
+        }
     }
 
     buildTypes {
@@ -49,6 +65,14 @@ compileOptions {
                 "proguard-rules.pro",
             )
         }
+    }
+}
+
+// Member tidak pakai OCR KTP — buang native/model OCR (~12 MB) agar lolos WA <50 MB desimal.
+androidComponents {
+    onVariants(selector().withFlavor("app" to "member")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libmlkit_google_ocr_pipeline.so")
+        variant.packaging.resources.excludes.add("**/mlkit-google-ocr-models/**")
     }
 }
 

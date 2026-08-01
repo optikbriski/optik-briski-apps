@@ -37,8 +37,8 @@ class _MemberNotificationsPageState extends State<MemberNotificationsPage> {
             title: const Text('Pantau perubahan status',
                 style: TextStyle(fontWeight: FontWeight.w700)),
             subtitle: const Text(
-              'Notifikasi lokal saat status pesanan berubah '
-              '(contoh: siap diambil). Tanpa jatuh tempo DP.',
+              'Realtime saat admin update status / kirim nota. '
+              'Poll jadi cadangan jika koneksi broadcast putus.',
             ),
             value: _enabled,
             onChanged: (v) async {

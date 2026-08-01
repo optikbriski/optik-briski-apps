@@ -4,7 +4,7 @@ import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
-import 'member_claim_page.dart';
+import 'member_claim_terms_gate.dart';
 import 'member_invoice_hub_page.dart';
 
 class MemberWarrantyListPage extends StatefulWidget {
@@ -157,13 +157,9 @@ class _MemberWarrantyListPageState extends State<MemberWarrantyListPage> {
                                         child: FilledButton(
                                           style: FilledButton.styleFrom(
                                               minimumSize: const Size(0, 42)),
-                                          onPressed: () => Navigator.push(
+                                          onPressed: () => openMemberClaimPage(
                                             context,
-                                            MaterialPageRoute(
-                                              builder: (_) => MemberClaimPage(
-                                                initialKartu: g,
-                                              ),
-                                            ),
+                                            initialKartu: g,
                                           ),
                                           child: const Text('Klaim'),
                                         ),

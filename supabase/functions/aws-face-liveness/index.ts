@@ -247,7 +247,27 @@ function livenessUiHtml(): string {
           window.LivenessBridge.postMessage(JSON.stringify(payload));
         }
       } catch (_) {}
+      // Flutter web Admin: UI di-embed iframe → parent.postMessage (string JSON)
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(
+            JSON.stringify(Object.assign({ source: 'optik-aws-liveness' }, payload)),
+            '*'
+          );
+        }
+      } catch (_) {}
     }
+
+    window.addEventListener('message', (ev) => {
+      try {
+        let data = ev && ev.data;
+        if (typeof data === 'string') {
+          try { data = JSON.parse(data); } catch (_) { return; }
+        }
+        if (!data || data.type !== 'optik-start-liveness' || !data.cfg) return;
+        window.__startLiveness(data.cfg);
+      } catch (_) {}
+    });
 
     window.__startLiveness = function (cfg) {
       try {
@@ -330,6 +350,8 @@ Deno.serve(async (req: Request) => {
           ...corsHeaders,
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
+          // Agar kamera bisa dipakai dari iframe Flutter web Admin.
+          "Permissions-Policy": "camera=*, microphone=*, autoplay=*",
         },
       });
     }

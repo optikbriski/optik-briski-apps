@@ -25,23 +25,59 @@ fi
 BEFORE=$(stat -f%z "$APK" 2>/dev/null || stat -c%s "$APK")
 echo "==> Shrink (non-quality) $APK ($(python3 -c "print(f'{$BEFORE/1024/1024:.2f} MB')"))"
 
-# Windows BLE helper + Cupertino font (tidak dipakai di kode) + Flutter license blob
-# + package logos/JSON never loaded by Karyawan runtime paths
-# + ML Kit face models unused by our FaceDetectorOptions:
-#   - contours (enableContours=false)
-#   - fssd_25 / fast (we use FaceDetectorMode.accurate → medium models)
-zip -d "$APK" \
-  "assets/flutter_assets/packages/win_ble/assets/BLEServer.exe" \
-  "assets/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf" \
-  "assets/flutter_assets/packages/flutter_map/lib/assets/flutter_map_logo.png" \
-  "assets/flutter_assets/packages/esc_pos_utils_plus/resources/capabilities.json" \
-  "assets/flutter_assets/NOTICES.Z" \
-  "assets/models_bundled/contours.tfl" \
-  "assets/models_bundled/fssd_25_8bit_v2.tflite" \
-  "assets/models_bundled/fssd_25_8bit_gray_v2.tflite" \
-  "assets/models_bundled/fssd_anchors_v2.pb" \
-  "assets/models_bundled/MFT_fssd_fastgray.pb" \
-  2>/dev/null || true
+# KEEP_FACE_CONTOURS=1 → Member (bentuk wajah butuh contours.tfl)
+# Default Karyawan: buang contours (enableContours=false di absensi)
+KEEP_FACE_CONTOURS="${KEEP_FACE_CONTOURS:-0}"
+
+# Windows BLE helper + Cupertino font + Flutter license blob
+# + package logos/JSON never loaded on Android runtime paths
+# + ML Kit face models unused when FaceDetectorMode.accurate:
+#   - fssd_25 / fast
+DROP=(
+  "assets/flutter_assets/packages/win_ble/assets/BLEServer.exe"
+  "assets/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf"
+  "assets/flutter_assets/packages/flutter_map/lib/assets/flutter_map_logo.png"
+  "assets/flutter_assets/packages/esc_pos_utils_plus/resources/capabilities.json"
+  "assets/flutter_assets/NOTICES.Z"
+  "assets/models_bundled/fssd_25_8bit_v2.tflite"
+  "assets/models_bundled/fssd_25_8bit_gray_v2.tflite"
+  "assets/models_bundled/fssd_anchors_v2.pb"
+  "assets/models_bundled/MFT_fssd_fastgray.pb"
+)
+if [[ "$KEEP_FACE_CONTOURS" != "1" ]]; then
+  DROP+=("assets/models_bundled/contours.tfl")
+  echo "==> Dropping contours.tfl (Karyawan / non-Member)"
+else
+  echo "==> Keeping contours.tfl (Member face-shape)"
+fi
+
+# DROP_OCR=1 → Member (OCR KTP tidak dipakai). Hemat ~12 MB.
+DROP_OCR="${DROP_OCR:-0}"
+if [[ "$DROP_OCR" == "1" ]]; then
+  echo "==> Dropping ML Kit OCR (Member)"
+  python3 - <<'PY' "$APK"
+import sys, subprocess, zipfile
+apk = sys.argv[1]
+with zipfile.ZipFile(apk) as z:
+    kill = [
+        n for n in z.namelist()
+        if "mlkit-google-ocr" in n
+        or n.endswith("libmlkit_google_ocr_pipeline.so")
+    ]
+if kill:
+    for i in range(0, len(kill), 40):
+        subprocess.run(
+            ["zip", "-d", apk, *kill[i : i + 40]],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    print(f"==> Removed {len(kill)} OCR entries")
+else:
+    print("==> No OCR entries found (already excluded at build)")
+PY
+fi
+zip -d "$APK" "${DROP[@]}" 2>/dev/null || true
 
 # Kotlin coroutines debug probes (release junk) + license / VCS / OSGI / library version markers
 # + kotlin reflection builtins (tidak dipakai Flutter app; metadata saja)
@@ -133,8 +169,35 @@ os.replace(tmp_apk, apk)
 print(f"==> Lossless PNG: {len(original)} -> {len(optimized)} bytes (-{len(original)-len(optimized)})")
 PY
 
+# EXTRA_ASSET_RECOMPRESS=1 → deflate aset max; native .so tetap STORED (aman install).
+# Tidak menghapus fitur — hanya packing ulang.
+if [[ "${EXTRA_ASSET_RECOMPRESS:-0}" == "1" ]]; then
+  echo "==> EXTRA_ASSET_RECOMPRESS=1 (so=STORED, assets=deflate-9)"
+  python3 - <<'PY' "$APK"
+import sys, zipfile
+from pathlib import Path
+apk = Path(sys.argv[1])
+tmp = apk.with_suffix(".repack.apk")
+with zipfile.ZipFile(apk, "r") as zin, zipfile.ZipFile(tmp, "w") as zout:
+    for info in zin.infolist():
+        data = zin.read(info.filename)
+        ni = zipfile.ZipInfo(filename=info.filename)
+        ni.external_attr = info.external_attr
+        ni.date_time = info.date_time
+        if info.filename.startswith("lib/") and info.filename.endswith(".so"):
+            ni.compress_type = zipfile.ZIP_STORED
+            zout.writestr(ni, data)
+        else:
+            ni.compress_type = zipfile.ZIP_DEFLATED
+            zout.writestr(ni, data, compresslevel=9)
+tmp.replace(apk)
+print("==> Repack selesai")
+PY
+fi
+
 ALIGNED="$(mktemp -t optik-apk).apk"
-"$ZIPALIGN" -f 4 "$APK" "$ALIGNED"
+# -p: page-align .so (disarankan Android)
+"$ZIPALIGN" -f -p 4 "$APK" "$ALIGNED"
 "$APKSIGNER" sign \
   --ks "$KS" \
   --ks-pass pass:android \
@@ -146,14 +209,15 @@ rm -f "$ALIGNED"
 "$APKSIGNER" verify "$APK" >/dev/null
 
 AFTER=$(stat -f%z "$APK" 2>/dev/null || stat -c%s "$APK")
-LIMIT=$((50 * 1024 * 1024))
+# Ketat: 50.000.000 byte (aman WA desimal + Supabase Free).
+LIMIT=$((50 * 1000 * 1000))
 python3 - <<PY
 before=$BEFORE
 after=$AFTER
 limit=$LIMIT
-print(f"==> Hasil: {after/1024/1024:.3f} MB (was {before/1024/1024:.3f} MB)")
+print(f"==> Hasil: {after/1e6:.3f} MB desimal / {after/1024/1024:.3f} MiB (was {before/1e6:.3f} MB)")
 print(f"==> Bytes: {after} (limit {limit})")
-print(f"==> Supabase Free 50 MB: {'OK' if after < limit else 'MASIH KELEBIHAN'} (margin {(limit-after)/1024:.1f} KB)")
+print(f"==> <50 MB: {'OK' if after < limit else 'MASIH KELEBIHAN'} (margin {(limit-after)/1024:.1f} KB)")
 PY
 if [[ "$AFTER" -ge "$LIMIT" ]]; then
   exit 2

@@ -42,7 +42,7 @@ class AppLoadingOverlay extends StatefulWidget {
 
 class _AppLoadingOverlayState extends State<AppLoadingOverlay>
     with SingleTickerProviderStateMixin {
-  static const _logoAsset = 'assets/images/logo_briski.png';
+  static const _logoAsset = 'assets/images/logo-web-white.png';
   static const _accent = Color(0xFFC4A35A);
 
   late final AnimationController _breathe;

@@ -1,0 +1,9 @@
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+opencv-python-headless>=4.8
+mediapipe>=0.10.9
+Pillow>=10.0
+tqdm>=4.66
+requests>=2.31
+imagehash>=4.3

@@ -9,13 +9,14 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../config.dart';
 import 'attendance_config.dart';
 import 'aws_face_liveness_service.dart';
+import 'aws_face_liveness_web_embed.dart';
 import 'face_from_image.dart';
 import 'liveness_result.dart';
 
-/// AWS Rekognition Face Liveness via Amplify UI (HTML) di WebView.
+/// AWS Rekognition Face Liveness via Amplify UI.
 ///
-/// Alur: create_session → inject credentials ke WebView → onComplete → get_results
-/// → template lokal dari reference image (opsional fallback kamera lokal tidak di sini).
+/// - Native: WebView + LivenessBridge
+/// - Web Admin: iframe embed + postMessage (layar ganti warna / anti-spoof)
 class AwsFaceLivenessPage extends StatefulWidget {
   const AwsFaceLivenessPage({super.key});
 
@@ -26,6 +27,8 @@ class AwsFaceLivenessPage extends StatefulWidget {
 class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
   final _service = AwsFaceLivenessService();
   WebViewController? _controller;
+  AwsFaceLivenessWebEmbed? _webEmbed;
+  String? _webViewType;
   bool _booting = true;
   bool _finishing = false;
   String? _error;
@@ -38,18 +41,35 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
     _boot();
   }
 
-  Future<void> _boot() async {
-    if (kIsWeb) {
-      setState(() {
-        _booting = false;
-        _error = 'aws_liveness_web_unsupported'.tr();
-      });
-      return;
-    }
+  @override
+  void dispose() {
+    _webEmbed?.dispose();
+    super.dispose();
+  }
 
+  Future<void> _boot() async {
     try {
       final session = await _service.createSession();
       if (!mounted) return;
+
+      if (kIsWeb) {
+        final viewType =
+            'aws-face-liveness-${DateTime.now().microsecondsSinceEpoch}';
+        final embed = AwsFaceLivenessWebEmbed(
+          viewType: viewType,
+          uiUrl: _service.uiUrl,
+          session: session,
+          onEvent: _onWebEvent,
+        );
+        embed.register();
+        setState(() {
+          _session = session;
+          _webEmbed = embed;
+          _webViewType = viewType;
+          _booting = false;
+        });
+        return;
+      }
 
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -73,7 +93,6 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
         });
       }
 
-      // Supabase gateway biasanya wajib apikey / Authorization.
       await controller.loadRequest(
         Uri.parse(_service.uiUrl),
         headers: {
@@ -93,6 +112,23 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
         _booting = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  void _onWebEvent(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    if (type == 'cancel') {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+    if (type == 'error') {
+      setState(() {
+        _error = data['message']?.toString() ?? 'aws_liveness_failed'.tr();
+      });
+      return;
+    }
+    if (type == 'complete') {
+      _finishSession();
     }
   }
 
@@ -165,7 +201,8 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
 
       List<double>? template;
       if (AttendanceConfig.useLocalFaceMatch &&
-          results.referenceImageBytes != null) {
+          results.referenceImageBytes != null &&
+          !kIsWeb) {
         template = await faceTemplateFromJpeg(results.referenceImageBytes!);
       }
 
@@ -200,7 +237,9 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
       ),
       body: Stack(
         children: [
-          if (_controller != null)
+          if (kIsWeb && _webViewType != null)
+            HtmlElementView(viewType: _webViewType!)
+          else if (_controller != null)
             WebViewWidget(controller: _controller!)
           else if (_booting)
             Center(
@@ -254,11 +293,14 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
+                        _webEmbed?.dispose();
                         setState(() {
                           _error = null;
                           _booting = true;
                           _injected = false;
                           _controller = null;
+                          _webEmbed = null;
+                          _webViewType = null;
                           _session = null;
                         });
                         _boot();

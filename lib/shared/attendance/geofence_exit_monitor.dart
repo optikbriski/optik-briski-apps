@@ -98,9 +98,13 @@ class GeofenceExitMonitor {
   Future<void> ensureNotificationsReady() async {
     if (_notifReady || kIsWeb) return;
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
+    const darwin = DarwinInitializationSettings();
     await _notifications.initialize(
-      const InitializationSettings(android: android, iOS: ios),
+      const InitializationSettings(
+        android: android,
+        iOS: darwin,
+        macOS: darwin,
+      ),
     );
     final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();

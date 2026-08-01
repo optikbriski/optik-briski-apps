@@ -109,6 +109,7 @@ class AppUpdateService {
   final Dio _dio;
   final _disk = DiskSpacePlus();
 
+  /// Prefs lama Karyawan (kompatibel). Flavor lain pakai suffix `_<flavor>`.
   static const prefAutoUpdate = 'auto_update_karyawan';
   static const prefPendingVersion = 'update_pending_version';
   static const prefFailCount = 'update_fail_count';
@@ -119,6 +120,12 @@ class AppUpdateService {
   static const storageBufferBytes = 40 * 1024 * 1024; // +40 MB buffer
 
   static bool _downloadBusy = false;
+
+  static String _prefKey(String base, String appFlavor) {
+    final f = appFlavor.trim().toLowerCase();
+    if (f.isEmpty || f == 'karyawan') return base;
+    return '${base}_$f';
+  }
 
   static String formatBytes(int bytes) {
     if (bytes <= 0) return '0 B';
@@ -162,57 +169,67 @@ class AppUpdateService {
     return true;
   }
 
-  Future<bool> isAutoUpdateEnabled() async {
+  Future<bool> isAutoUpdateEnabled({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
     // Default ON: auto-unduh di background; install tetap konfirmasi.
-    return prefs.getBool(prefAutoUpdate) ?? true;
+    return prefs.getBool(_prefKey(prefAutoUpdate, appFlavor)) ?? true;
   }
 
-  Future<void> setAutoUpdateEnabled(bool value) async {
+  Future<void> setAutoUpdateEnabled(
+    bool value, {
+    String appFlavor = 'karyawan',
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(prefAutoUpdate, value);
+    await prefs.setBool(_prefKey(prefAutoUpdate, appFlavor), value);
   }
 
-  Future<bool> shouldEnforceForceUpdate() async {
+  Future<bool> shouldEnforceForceUpdate({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    final until = prefs.getInt(prefSkipForceUntil) ?? 0;
+    final until = prefs.getInt(_prefKey(prefSkipForceUntil, appFlavor)) ?? 0;
     return DateTime.now().millisecondsSinceEpoch >= until;
   }
 
-  Future<void> registerDownloadFailure() async {
+  Future<void> registerDownloadFailure({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    final n = (prefs.getInt(prefFailCount) ?? 0) + 1;
-    await prefs.setInt(prefFailCount, n);
+    final keyFail = _prefKey(prefFailCount, appFlavor);
+    final keySkip = _prefKey(prefSkipForceUntil, appFlavor);
+    final n = (prefs.getInt(keyFail) ?? 0) + 1;
+    await prefs.setInt(keyFail, n);
     if (n >= 3) {
       final until = DateTime.now()
           .add(const Duration(hours: 6))
           .millisecondsSinceEpoch;
-      await prefs.setInt(prefSkipForceUntil, until);
-      await prefs.setInt(prefFailCount, 0);
+      await prefs.setInt(keySkip, until);
+      await prefs.setInt(keyFail, 0);
     }
   }
 
-  Future<void> clearFailureState() async {
+  Future<void> clearFailureState({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(prefFailCount);
-    await prefs.remove(prefSkipForceUntil);
+    await prefs.remove(_prefKey(prefFailCount, appFlavor));
+    await prefs.remove(_prefKey(prefSkipForceUntil, appFlavor));
   }
 
-  Future<void> markInstallPending(String expectedVersion) async {
+  Future<void> markInstallPending(
+    String expectedVersion, {
+    String appFlavor = 'karyawan',
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefPendingVersion, expectedVersion);
+    await prefs.setString(_prefKey(prefPendingVersion, appFlavor), expectedVersion);
   }
 
-  Future<void> clearInstallPending() async {
+  Future<void> clearInstallPending({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(prefPendingVersion);
+    await prefs.remove(_prefKey(prefPendingVersion, appFlavor));
   }
 
-  Future<InstallOutcome> checkPendingInstallResult() async {
+  Future<InstallOutcome> checkPendingInstallResult({
+    String appFlavor = 'karyawan',
+  }) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final local = packageInfo.version;
     final prefs = await SharedPreferences.getInstance();
-    final expected = prefs.getString(prefPendingVersion);
+    final expected = prefs.getString(_prefKey(prefPendingVersion, appFlavor));
 
     if (expected == null || expected.isEmpty) {
       return InstallOutcome(updated: false, localVersion: local);
@@ -220,9 +237,9 @@ class AppUpdateService {
 
     final updated = compareSemver(local, expected) >= 0;
     if (updated) {
-      await clearInstallPending();
-      await clearFailureState();
-      await clearReadyApk();
+      await clearInstallPending(appFlavor: appFlavor);
+      await clearFailureState(appFlavor: appFlavor);
+      await clearReadyApk(appFlavor: appFlavor);
     }
     return InstallOutcome(
       updated: updated,
@@ -295,25 +312,21 @@ class AppUpdateService {
   Future<AppUpdateInfo> checkForUpdate({String appFlavor = 'karyawan'}) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final local = packageInfo.version;
+    final flavor = appFlavor.trim().toLowerCase();
 
     Map<String, dynamic>? data;
     try {
       data = await _client
           .from('versi_app')
           .select()
-          .eq('app_flavor', appFlavor)
+          .eq('app_flavor', flavor)
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
     } catch (_) {
       data = null;
     }
-    data ??= await _client
-        .from('versi_app')
-        .select()
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+    // Jangan fallback ke flavor lain — Member/Karyawan harus terpisah.
 
     final server = (data?['versi_terbaru'] ?? local).toString().trim();
     final url = (data?['url_download'] ?? '').toString().trim();
@@ -328,7 +341,8 @@ class AppUpdateService {
       if (reachable) remoteSize = await probeRemoteSizeBytes(url);
     }
 
-    final enforceForce = await shouldEnforceForceUpdate();
+    final enforceForce =
+        await shouldEnforceForceUpdate(appFlavor: flavor);
     final force = newer && forceFlag && reachable && enforceForce;
 
     return AppUpdateInfo(
@@ -343,35 +357,39 @@ class AppUpdateService {
     );
   }
 
-  Future<String?> readyApkPath() async {
+  Future<String?> readyApkPath({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString(prefReadyPath);
-    final ver = prefs.getString(prefReadyVersion);
+    final path = prefs.getString(_prefKey(prefReadyPath, appFlavor));
+    final ver = prefs.getString(_prefKey(prefReadyVersion, appFlavor));
     if (path == null || ver == null) return null;
     final f = File(path);
     if (!await f.exists()) {
-      await clearReadyApk();
+      await clearReadyApk(appFlavor: appFlavor);
       return null;
     }
     return path;
   }
 
-  Future<String?> readyApkVersion() async {
+  Future<String?> readyApkVersion({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(prefReadyVersion);
+    return prefs.getString(_prefKey(prefReadyVersion, appFlavor));
   }
 
-  Future<void> _markReadyApk(String path, String version) async {
+  Future<void> _markReadyApk(
+    String path,
+    String version, {
+    String appFlavor = 'karyawan',
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefReadyPath, path);
-    await prefs.setString(prefReadyVersion, version);
+    await prefs.setString(_prefKey(prefReadyPath, appFlavor), path);
+    await prefs.setString(_prefKey(prefReadyVersion, appFlavor), version);
   }
 
-  Future<void> clearReadyApk() async {
+  Future<void> clearReadyApk({String appFlavor = 'karyawan'}) async {
     final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString(prefReadyPath);
-    await prefs.remove(prefReadyPath);
-    await prefs.remove(prefReadyVersion);
+    final path = prefs.getString(_prefKey(prefReadyPath, appFlavor));
+    await prefs.remove(_prefKey(prefReadyPath, appFlavor));
+    await prefs.remove(_prefKey(prefReadyVersion, appFlavor));
     if (path != null) {
       try {
         final f = File(path);
@@ -397,9 +415,12 @@ class AppUpdateService {
     }
   }
 
-  String _apkPathFor(String version) {
+  String _apkPathFor(String version, {String appFlavor = 'karyawan'}) {
     final safe = version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
-    return 'optik_karyawan_$safe.apk';
+    final flavor = appFlavor.trim().toLowerCase().isEmpty
+        ? 'karyawan'
+        : appFlavor.trim().toLowerCase();
+    return 'optik_${flavor}_$safe.apk';
   }
 
   /// Auto-unduh di background. Tidak membuka installer.
@@ -430,8 +451,8 @@ class AppUpdateService {
     }
 
     // Sudah siap?
-    final existing = await readyApkPath();
-    final readyVer = await readyApkVersion();
+    final existing = await readyApkPath(appFlavor: appFlavor);
+    final readyVer = await readyApkVersion(appFlavor: appFlavor);
     if (existing != null && readyVer == info.serverVersion) {
       return BackgroundDownloadResult(
         status: BackgroundDownloadStatus.readyToInstall,
@@ -465,7 +486,8 @@ class AppUpdateService {
 
     _downloadBusy = true;
     final dir = await getTemporaryDirectory();
-    final finalPath = '${dir.path}/${_apkPathFor(info.serverVersion)}';
+    final finalPath =
+        '${dir.path}/${_apkPathFor(info.serverVersion, appFlavor: appFlavor)}';
     final partPath = '$finalPath.part';
     final partFile = File(partPath);
     final finalFile = File(finalPath);
@@ -482,7 +504,7 @@ class AppUpdateService {
       );
 
       if (!await _isValidApkFile(partFile)) {
-        await registerDownloadFailure();
+        await registerDownloadFailure(appFlavor: appFlavor);
         if (await partFile.exists()) await partFile.delete();
         return BackgroundDownloadResult(
           status: BackgroundDownloadStatus.failed,
@@ -493,8 +515,12 @@ class AppUpdateService {
 
       if (await finalFile.exists()) await finalFile.delete();
       await partFile.rename(finalPath);
-      await _markReadyApk(finalPath, info.serverVersion);
-      await clearFailureState();
+      await _markReadyApk(
+        finalPath,
+        info.serverVersion,
+        appFlavor: appFlavor,
+      );
+      await clearFailureState(appFlavor: appFlavor);
 
       return BackgroundDownloadResult(
         status: BackgroundDownloadStatus.readyToInstall,
@@ -503,7 +529,7 @@ class AppUpdateService {
         message: 'Update ${info.serverVersion} siap. Konfirmasi untuk memasang.',
       );
     } on DioException catch (e) {
-      await registerDownloadFailure();
+      await registerDownloadFailure(appFlavor: appFlavor);
       final lowSpace = (e.error?.toString() ?? '').contains('ENOSPC') ||
           (e.message ?? '').toLowerCase().contains('space');
       if (lowSpace) {
@@ -524,7 +550,7 @@ class AppUpdateService {
         message: 'Gagal unduh update. App lama tetap bisa dipakai.',
       );
     } catch (e) {
-      await registerDownloadFailure();
+      await registerDownloadFailure(appFlavor: appFlavor);
       return BackgroundDownloadResult(
         status: BackgroundDownloadStatus.failed,
         info: info,
@@ -540,18 +566,19 @@ class AppUpdateService {
     }
   }
 
-  /// Setelah karyawan konfirmasi — buka installer sistem.
+  /// Setelah user konfirmasi — buka installer sistem.
   Future<void> confirmAndOpenInstaller({
     required String apkPath,
     required String expectedVersion,
+    String appFlavor = 'karyawan',
   }) async {
     final file = File(apkPath);
     if (!await _isValidApkFile(file)) {
-      await clearReadyApk();
+      await clearReadyApk(appFlavor: appFlavor);
       throw Exception('File update hilang/rusak. Akan diunduh ulang.');
     }
 
-    await markInstallPending(expectedVersion);
+    await markInstallPending(expectedVersion, appFlavor: appFlavor);
     final result = await OpenFile.open(
       apkPath,
       type: 'application/vnd.android.package-archive',
@@ -571,9 +598,13 @@ class AppUpdateService {
   Future<String> downloadOnly(
     String url, {
     required String expectedVersion,
+    String appFlavor = 'karyawan',
     void Function(double progress)? onProgress,
   }) async {
-    final result = await downloadInBackground(onProgress: onProgress);
+    final result = await downloadInBackground(
+      appFlavor: appFlavor,
+      onProgress: onProgress,
+    );
     if (result.status == BackgroundDownloadStatus.readyToInstall &&
         result.apkPath != null) {
       return result.apkPath!;

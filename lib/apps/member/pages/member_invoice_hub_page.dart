@@ -4,10 +4,13 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'dart:async';
+
 import '../../../shared/invoice/invoice_hub_service.dart';
 import '../../../shared/invoice/invoice_link.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
+import '../../../shared/member/member_status_watch.dart';
 import '../../../shared/qr/obr_codes.dart';
 import '../../../shared/theme.dart';
 import '../../../shared/whatsapp_launcher.dart';
@@ -31,11 +34,21 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
   Map<String, dynamic>? _hub;
   bool _loading = true;
   String? _error;
+  StreamSubscription<void>? _watchSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _watchSub = MemberStatusWatch.instance.onRefresh.listen((_) {
+      if (mounted) unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    _watchSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -222,22 +235,32 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
         tracking != 'SIAP_DIAMBIL' &&
         tracking != 'CLEAR';
     final phaseKey = (h['qr_phase'] ?? '').toString().toUpperCase();
+    final rawPayload = (h['qr_payload'] ?? '').toString().trim();
+    final hasQr = InvoiceLink.isCustomerLifecycleQr(rawPayload);
+    final dpWaiting = InvoiceHubService.isDpOpen(h) && !hasQr;
     String phase;
     String tip;
-    if (phaseKey == 'DP' || InvoiceHubService.isDpOpen(h)) {
+    if (dpWaiting) {
+      phase = 'DP · menunggu barang ready';
+      tip =
+          'Pembayaran DP dikonfirmasi (nota tanpa QR). '
+          'QR pelunasan dikirim ke email, WA, dan di sini setelah admin '
+          'menandai barang ready.';
+    } else if (phaseKey == 'DP' || InvoiceHubService.isDpOpen(h)) {
       phase = 'QR fase DP · pelunasan';
       tip =
-          'QR ini dipegang Anda. Tunjukkan ke kasir untuk pelunasan.';
+          'QR DP dipegang Anda. Tunjukkan ke kasir untuk pelunasan. '
+          'Setelah lunas, QR pengambilan aktif bila barang sudah ready.';
     } else if (phaseKey == 'CLAIM' || InvoiceHubService.sudahDiambil(h)) {
       phase = 'QR fase CLAIM · garansi';
       tip =
           'QR CLAIM dipegang Anda. Bawa barang + QR ini saat klaim.';
     } else if (lunasPending) {
-      phase = 'Lunas pending';
+      phase = 'Lunas pending · menunggu barang ready';
       tip =
-          'Pembayaran lunas, kacamata masih diproses. '
-          'QR ambil (LUNAS ready) muncul di sini setelah karyawan '
-          'mengonfirmasi kacamata sudah jadi — lalu dikirim juga ke email & WA.';
+          'Pembayaran lunas dikonfirmasi (nota tanpa QR). '
+          'QR pengambilan muncul di sini (juga email & WA) setelah admin '
+          'menandai barang ready.';
     } else {
       phase = 'QR fase LUNAS ready · pengambilan';
       tip =
@@ -245,9 +268,7 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
           'serah terima + aktifkan kartu garansi.';
     }
 
-    final payload = lunasPending
-        ? ''
-        : (h['qr_payload'] ?? '').toString().trim();
+    final payload = (dpWaiting || lunasPending) ? '' : rawPayload;
     final lifecycle = InvoiceLink.isCustomerLifecycleQr(payload);
     final hubUrl = InvoiceLink.encodeHttps(
       h['no_invoice']?.toString() ?? widget.noInvoice,

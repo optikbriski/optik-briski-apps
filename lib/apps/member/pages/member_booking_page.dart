@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
+import 'member_option_picker.dart';
+import 'member_schedule_picker.dart';
 
 class MemberBookingPage extends StatefulWidget {
   const MemberBookingPage({super.key});
@@ -62,21 +63,16 @@ class _MemberBookingPageState extends State<MemberBookingPage> {
   }
 
   Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _when,
+    final picked = await pickMemberSchedule(
+      context,
+      initial: _when,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 90)),
+      dateHelpText: 'Tanggal janji kontrol',
+      confirmTitle: 'Konfirmasi janji kontrol',
     );
-    if (d == null || !mounted) return;
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_when),
-    );
-    if (t == null) return;
-    setState(() {
-      _when = DateTime(d.year, d.month, d.day, t.hour, t.minute);
-    });
+    if (picked == null || !mounted) return;
+    setState(() => _when = picked);
   }
 
   Future<void> _submit() async {
@@ -118,7 +114,6 @@ class _MemberBookingPageState extends State<MemberBookingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('EEE, d MMM yyyy · HH:mm', 'id_ID');
     return MemberPremiumScaffold(
       title: 'Janji kontrol',
       subtitle: 'Prioritas yang sudah booking',
@@ -127,22 +122,40 @@ class _MemberBookingPageState extends State<MemberBookingPage> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                DropdownButtonFormField<String>(
-                  value: _tokoId,
-                  decoration: const InputDecoration(labelText: 'Cabang'),
-                  items: _toko
-                      .map((t) => DropdownMenuItem(
-                            value: t['toko_id']?.toString(),
-                            child: Text('${t['toko_id']}'),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _tokoId = v),
+                MemberPickerField(
+                  label: 'Cabang',
+                  icon: Icons.storefront_outlined,
+                  valueLabel: _tokoId,
+                  placeholder: 'Pilih cabang',
+                  onTap: () async {
+                    final picked = await showMemberOptionPicker<String>(
+                      context,
+                      title: 'Pilih cabang',
+                      icon: Icons.storefront_outlined,
+                      selected: _tokoId,
+                      searchHint: 'Cari cabang…',
+                      options: _toko
+                          .map(
+                            (t) => MemberPickerOption<String>(
+                              value: t['toko_id']?.toString() ?? '',
+                              label: '${t['toko_id']}',
+                              subtitle: t['shop_name']?.toString(),
+                              icon: Icons.storefront_outlined,
+                            ),
+                          )
+                          .where((o) => o.value.isNotEmpty)
+                          .toList(),
+                    );
+                    if (picked != null && mounted) {
+                      setState(() => _tokoId = picked);
+                    }
+                  },
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _pickDate,
                   icon: const Icon(Icons.event_available_outlined),
-                  label: Text(fmt.format(_when)),
+                  label: Text(formatMemberSchedule(_when)),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -171,7 +184,9 @@ class _MemberBookingPageState extends State<MemberBookingPage> {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
-                        at == null ? '${b['scheduled_at']}' : fmt.format(at.toLocal()),
+                        at == null
+                            ? '${b['scheduled_at']}'
+                            : formatMemberSchedule(at.toLocal()),
                       ),
                       trailing: b['status'] == 'booked'
                           ? TextButton(

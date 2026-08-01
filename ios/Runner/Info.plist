@@ -29,7 +29,7 @@
 <key>NSFaceIDUsageDescription</key>
     <string>Aplikasi ini membutuhkan Face ID untuk mempermudah Anda masuk ke akun dengan aman.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Kamera dipakai untuk absensi wajah dan liveness.</string>
+	<string>Kamera dipakai untuk absensi wajah, liveness, dan scan bentuk wajah Member.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko, dan untuk memantau area selama shift aktif.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

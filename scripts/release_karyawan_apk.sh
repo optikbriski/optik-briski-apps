@@ -21,6 +21,7 @@ fi
 
 FLUTTER_ARGS=(
   build apk --release --split-per-abi
+  --flavor karyawan
   --target-platform android-arm64,android-arm
   -t "lib/main_karyawan.dart"
   --obfuscate --split-debug-info=build/app/outputs/symbols
@@ -29,13 +30,29 @@ FLUTTER_ARGS=(
 flutter "${FLUTTER_ARGS[@]}"
 
 # HP modern (2018+) hampir semua arm64 — ini yang dibagikan.
-cp -f "$OUT_DIR/app-arm64-v8a-release.apk" "$DEST_ARM64"
+ARM64_SRC=""
+for candidate in \
+  "$OUT_DIR/app-karyawan-arm64-v8a-release.apk" \
+  "$OUT_DIR/app-arm64-v8a-release.apk"; do
+  if [[ -f "$candidate" ]]; then ARM64_SRC="$candidate"; break; fi
+done
+if [[ -z "$ARM64_SRC" ]]; then
+  echo "ERROR: APK arm64 tidak ditemukan di $OUT_DIR"
+  ls -la "$OUT_DIR" || true
+  exit 1
+fi
+cp -f "$ARM64_SRC" "$DEST_ARM64"
 # Lolos Supabase Free 50MB: buang aset non-Android / tidak dipakai (kualitas fitur tetap).
 bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
 # HP lama 32-bit (opsional)
-if [[ -f "$OUT_DIR/app-armeabi-v7a-release.apk" ]]; then
-  cp -f "$OUT_DIR/app-armeabi-v7a-release.apk" "$DEST_ARM32"
-fi
+for candidate in \
+  "$OUT_DIR/app-karyawan-armeabi-v7a-release.apk" \
+  "$OUT_DIR/app-armeabi-v7a-release.apk"; do
+  if [[ -f "$candidate" ]]; then
+    cp -f "$candidate" "$DEST_ARM32"
+    break
+  fi
+done
 
 echo ""
 echo "==> APK utama (arm64, direkomendasikan):"

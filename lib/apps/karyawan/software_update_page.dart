@@ -36,11 +36,12 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
   }
 
   Future<void> _inisialisasiData() async {
-    _isAutoUpdateOn = await _service.isAutoUpdateEnabled();
+    _isAutoUpdateOn =
+        await _service.isAutoUpdateEnabled(appFlavor: 'karyawan');
     try {
       _info = await _service.checkForUpdate(appFlavor: 'karyawan');
-      final readyPath = await _service.readyApkPath();
-      final readyVer = await _service.readyApkVersion();
+      final readyPath = await _service.readyApkPath(appFlavor: 'karyawan');
+      final readyVer = await _service.readyApkVersion(appFlavor: 'karyawan');
       if (readyPath != null &&
           readyVer != null &&
           _info != null &&
@@ -191,6 +192,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
       await _service.confirmAndOpenInstaller(
         apkPath: path,
         expectedVersion: info.serverVersion,
+        appFlavor: 'karyawan',
       );
       if (!mounted) return;
       setState(() {
@@ -289,7 +291,10 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                         value: _isAutoUpdateOn,
                         activeColor: OptikKaryawanTokens.gold,
                         onChanged: (val) async {
-                          await _service.setAutoUpdateEnabled(val);
+                          await _service.setAutoUpdateEnabled(
+                            val,
+                            appFlavor: 'karyawan',
+                          );
                           setState(() => _isAutoUpdateOn = val);
                         },
                       ),

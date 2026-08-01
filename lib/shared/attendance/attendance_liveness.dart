@@ -13,23 +13,7 @@ Future<LivenessCaptureResult?> captureAttendanceLiveness(
   BuildContext context, {
   void Function(String message)? onInfo,
 }) async {
-  // Admin / kiosk di browser: challenge lokal + signature foto (tanpa AWS / ML Kit).
-  if (kIsWeb) {
-    final raw = await Navigator.push<Object?>(
-      context,
-      MaterialPageRoute(builder: (_) => const WebFaceLivenessPage()),
-    );
-    final web = _asLiveness(raw);
-    if (web == null) return null;
-    return LivenessCaptureResult(
-      success: web.success,
-      photoBytes: web.photoBytes,
-      faceTemplate: web.faceTemplate,
-      livenessProvider: 'web',
-      livenessConfidence: web.livenessConfidence ?? (web.success ? 70 : 0),
-    );
-  }
-
+  // AWS Face Liveness (warna layar) — web Admin iframe + native WebView.
   if (AttendanceConfig.useAwsFaceLiveness) {
     final raw = await Navigator.push<Object?>(
       context,
@@ -37,6 +21,11 @@ Future<LivenessCaptureResult?> captureAttendanceLiveness(
     );
     var result = _asLiveness(raw);
     if (result == null || !result.success) return result;
+
+    // Absensi Toko Admin web: foto referensi AWS cukup (tanpa ML Kit template).
+    if (kIsWeb) {
+      return result;
+    }
 
     if (result.faceTemplate == null && result.photoBytes != null) {
       final tpl = await faceTemplateFromJpeg(result.photoBytes!);
@@ -75,6 +64,23 @@ Future<LivenessCaptureResult?> captureAttendanceLiveness(
       );
     }
     return result;
+  }
+
+  // Fallback tanpa AWS: web lokal / kamera ML Kit.
+  if (kIsWeb) {
+    final raw = await Navigator.push<Object?>(
+      context,
+      MaterialPageRoute(builder: (_) => const WebFaceLivenessPage()),
+    );
+    final web = _asLiveness(raw);
+    if (web == null) return null;
+    return LivenessCaptureResult(
+      success: web.success,
+      photoBytes: web.photoBytes,
+      faceTemplate: web.faceTemplate,
+      livenessProvider: 'web',
+      livenessConfidence: web.livenessConfidence ?? (web.success ? 70 : 0),
+    );
   }
 
   final raw = await Navigator.push<Object?>(

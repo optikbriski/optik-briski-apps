@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/invoice/invoice_hub_service.dart';
+import '../../shared/member/member_cart.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
 import 'member_rating_page.dart';
 import 'pages/member_booking_page.dart';
 import 'pages/member_care_page.dart';
+import 'pages/member_cart_page.dart';
 import 'pages/member_catalog_page.dart';
+import 'pages/member_face_shape_page.dart';
 import 'pages/member_feature_pages.dart';
 import 'pages/member_invoice_hub_page.dart';
 import 'pages/member_orders_list_page.dart';
@@ -40,25 +44,33 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
   void initState() {
     super.initState();
     MemberSession.instance.addListener(_onSession);
+    MemberCart.instance.addListener(_onCart);
+    MemberCart.instance.ensureLoaded();
     _load();
   }
 
   @override
   void dispose() {
     MemberSession.instance.removeListener(_onSession);
+    MemberCart.instance.removeListener(_onCart);
     super.dispose();
   }
 
+  void _onCart() {
+    if (mounted) setState(() {});
+  }
+
   void _onSession() {
+    if (!mounted) return;
     _load();
   }
 
   Future<void> _load() async {
     final session = MemberSession.instance;
     final content = await _repo.homeContent();
+    if (!mounted) return;
 
     if (!session.isLoggedIn) {
-      if (!mounted) return;
       setState(() {
         _loading = false;
         _points = 0;
@@ -75,11 +87,15 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     try {
       final phone = session.phoneForQuery;
       final sales = await _repo.listSales(phone);
+      if (!mounted) return;
       final garansi = await _repo.listGaransi(phone);
+      if (!mounted) return;
       final bookings = await _repo.listBookings(phone);
+      if (!mounted) return;
       final pts = (session.memberId == null || session.memberId!.isEmpty)
           ? 0
           : await _repo.pointsBalance(session.memberId!);
+      if (!mounted) return;
 
       final active = <Map<String, dynamic>>[];
       final reminders = <_HomeReminder>[];
@@ -394,6 +410,9 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
           if (_flag('perawatan'))
             _GridItem(Icons.menu_book_outlined, 'Perawatan',
                 () => _open(const MemberCarePage())),
+          if (_flag('bentuk_wajah'))
+            _GridItem(Icons.face_retouching_natural_rounded, 'Bentuk\nWajah',
+                () => _open(const MemberFaceShapePage())),
         ];
         if (grid.isNotEmpty) {
           bodyChildren.add(const Text(
@@ -446,10 +465,36 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
       ),
     );
 
+    final cartBtn = Positioned(
+      top: top + 6,
+      right: 12,
+      child: Material(
+        color: Colors.white.withOpacity(0.92),
+        shape: const CircleBorder(),
+        elevation: 2,
+        child: IconButton(
+          tooltip: 'Keranjang',
+          onPressed: () => _open(const MemberCartPage()),
+          icon: Badge(
+            isLabelVisible: MemberCart.instance.totalQty > 0,
+            label: Text('${MemberCart.instance.totalQty}'),
+            child: const Icon(Icons.shopping_cart_outlined,
+                color: OptikMemberTokens.blueDeep),
+          ),
+        ),
+      ),
+    );
+
     if (widget.embedded) {
-      return ColoredBox(color: OptikMemberTokens.canvas, child: body);
+      return ColoredBox(
+        color: OptikMemberTokens.canvas,
+        child: Stack(children: [body, cartBtn]),
+      );
     }
-    return Scaffold(backgroundColor: OptikMemberTokens.canvas, body: body);
+    return Scaffold(
+      backgroundColor: OptikMemberTokens.canvas,
+      body: Stack(children: [body, cartBtn]),
+    );
   }
 }
 
@@ -603,16 +648,8 @@ class _HeroBannerState extends State<_HeroBanner> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                widget.brandLabel,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.75),
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(height: 8),
+              const OptikBrandLogo.white(height: 28),
+              const SizedBox(height: 10),
               Text(
                 title,
                 style: const TextStyle(

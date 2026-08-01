@@ -2,7 +2,7 @@
 class AttendanceConfig {
   AttendanceConfig._();
 
-  /// AWS Face Liveness — dimatikan (Admin web pakai liveness browser lokal).
+  /// AWS Face Liveness berbayar — off dulu; web pakai liveness gratis + flash warna.
   static const bool useAwsFaceLiveness = false;
 
   /// Ambang legacy AWS (tidak dipakai saat [useAwsFaceLiveness] = false).

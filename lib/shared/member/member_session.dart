@@ -18,6 +18,7 @@ class MemberSession extends ChangeNotifier {
   String? nama;
   String? email;
   String? alamat;
+  DateTime? tanggalLahir;
   double fontScale = 1.0;
   String locale = 'id';
   bool loaded = false;
@@ -41,6 +42,7 @@ class MemberSession extends ChangeNotifier {
         nama = m['nama']?.toString();
         email = m['email']?.toString();
         alamat = m['alamat']?.toString();
+        tanggalLahir = _parseDate(m['tanggal_lahir']);
         fontScale = double.tryParse('${m['font_scale'] ?? 1}') ?? 1.0;
         locale = m['locale']?.toString() ?? 'id';
       } catch (_) {}
@@ -56,6 +58,8 @@ class MemberSession extends ChangeNotifier {
     nama = member['nama']?.toString();
     email = member['email']?.toString();
     alamat = member['alamat']?.toString();
+    final dob = _parseDate(member['tanggal_lahir']);
+    if (dob != null) tanggalLahir = dob;
     fontScale = double.tryParse('${member['font_scale'] ?? fontScale}') ?? 1.0;
     locale = member['locale']?.toString() ?? locale;
     await _persist();
@@ -66,12 +70,16 @@ class MemberSession extends ChangeNotifier {
     String? nama,
     String? email,
     String? alamat,
+    String? phoneRaw,
+    DateTime? tanggalLahir,
     double? fontScale,
     String? locale,
   }) async {
     if (nama != null) this.nama = nama;
     if (email != null) this.email = email;
     if (alamat != null) this.alamat = alamat;
+    if (phoneRaw != null) this.phoneRaw = phoneRaw;
+    if (tanggalLahir != null) this.tanggalLahir = tanggalLahir;
     if (fontScale != null) this.fontScale = fontScale;
     if (locale != null) this.locale = locale;
     await _persist();
@@ -85,11 +93,19 @@ class MemberSession extends ChangeNotifier {
     nama = null;
     email = null;
     alamat = null;
+    tanggalLahir = null;
     fontScale = 1.0;
     locale = 'id';
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
     notifyListeners();
+  }
+
+  DateTime? _parseDate(dynamic raw) {
+    if (raw == null) return null;
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s.length >= 10 ? s.substring(0, 10) : s);
   }
 
   Future<void> _persist() async {
@@ -103,6 +119,7 @@ class MemberSession extends ChangeNotifier {
         'nama': nama,
         'email': email,
         'alamat': alamat,
+        'tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
         'font_scale': fontScale,
         'locale': locale,
       }),

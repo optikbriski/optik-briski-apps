@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/theme.dart';
+import '../../shared/widgets/optik_brand_logo.dart';
+import 'member_layout.dart';
 
 /// Scaffold putih–biru premium — dipakai di semua halaman Member.
 class MemberPremiumScaffold extends StatelessWidget {
@@ -27,21 +29,29 @@ class MemberPremiumScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m = MemberLayout.of(context);
     return Scaffold(
       backgroundColor: OptikMemberTokens.canvas,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: AppBar(
         leading: leading,
         title: subtitle == null || subtitle!.isEmpty
-            ? Text(title)
+            ? Text(
+                title,
+                style: TextStyle(
+                  color: OptikMemberTokens.blueDeep,
+                  fontSize: m.isTablet ? 19 : 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
             : Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikMemberTokens.blueDeep,
-                      fontSize: 17,
+                      fontSize: m.isTablet ? 19 : 17,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -115,16 +125,8 @@ class MemberHeroHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'OPTIK B. RISKI',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const OptikBrandLogo.white(height: 28),
+                  const SizedBox(height: 10),
                   Text(
                     title,
                     style: const TextStyle(
@@ -164,13 +166,14 @@ class MemberSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m = MemberLayout.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10, top: 4),
+      padding: EdgeInsets.only(bottom: m.isTablet ? 12 : 10, top: 4),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikMemberTokens.blueDeep,
-          fontSize: 11,
+          fontSize: m.isTablet ? 12.5 : 11,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.1,
         ),
@@ -197,6 +200,8 @@ class MemberFeatureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m = MemberLayout.of(context);
+    final iconBox = m.isTablet ? 52.0 : 46.0;
     return Material(
       color: OptikMemberTokens.white,
       borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
@@ -204,7 +209,7 @@ class MemberFeatureTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(m.isTablet ? 16 : 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
             border: Border.all(color: OptikMemberTokens.lineSoft),
@@ -213,16 +218,16 @@ class MemberFeatureTile extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: iconBox,
+                height: iconBox,
                 decoration: BoxDecoration(
                   color: OptikMemberTokens.blueSoft,
                   borderRadius:
                       BorderRadius.circular(OptikMemberTokens.radiusSm),
                 ),
-                child: Icon(icon, color: OptikMemberTokens.blue, size: 24),
+                child: Icon(icon, color: OptikMemberTokens.blue, size: m.iconSize),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: m.isTablet ? 14 : 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,10 +237,10 @@ class MemberFeatureTile extends StatelessWidget {
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikMemberTokens.ink,
                               fontWeight: FontWeight.w700,
-                              fontSize: 14.5,
+                              fontSize: m.menuTitleSize,
                             ),
                           ),
                         ),
@@ -249,9 +254,9 @@ class MemberFeatureTile extends StatelessWidget {
                             ),
                             child: Text(
                               badge!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikMemberTokens.blueDeep,
-                                fontSize: 10,
+                                fontSize: m.isTablet ? 11 : 10,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -261,9 +266,9 @@ class MemberFeatureTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikMemberTokens.inkMuted,
-                        fontSize: 12.5,
+                        fontSize: m.menuSubtitleSize,
                         height: 1.35,
                       ),
                     ),

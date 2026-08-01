@@ -134,9 +134,6 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     return tracking != 'SIAP_DIAMBIL' && tracking != 'CLEAR';
   }
 
-  static bool isClear(Map<String, dynamic> sale) =>
-      !isDp(sale) && !isPending(sale);
-
   static _PayBucket bucketOf(Map<String, dynamic> sale) {
     if (isDp(sale)) return _PayBucket.dp;
     if (isPending(sale)) return _PayBucket.pending;

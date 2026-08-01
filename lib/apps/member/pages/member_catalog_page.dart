@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/theme.dart';
-import '../member_widgets.dart';
+import '../member_layout.dart';
+import 'member_cart_page.dart';
+import 'member_option_picker.dart';
 
-/// Katalog Member — sinkron katalog PUSAT (sama sumber POS / catalog parity).
+enum _CatalogSort { namaAsc, hargaAsc, hargaDesc }
+
+/// Katalog Member — grid belanja (2 kolom) ala e-commerce.
 class MemberCatalogPage extends StatefulWidget {
   const MemberCatalogPage({super.key});
 
@@ -16,13 +21,16 @@ class MemberCatalogPage extends StatefulWidget {
 class _MemberCatalogPageState extends State<MemberCatalogPage> {
   final _repo = MemberRepository();
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
   bool _loading = true;
+  bool _showSearch = false;
   String? _error;
   /// null = Semua; 'Lainnya' = bukan Frame/Lensa (sama pola Product Master).
   String? _kategori;
   String? _subKategori;
   /// null = semua harga; selain itu harga tepat (harga_jual/harga).
   int? _harga;
+  _CatalogSort _sort = _CatalogSort.namaAsc;
   List<Map<String, dynamic>> _all = const [];
 
   static const _mainCats = ['Semua', 'Frame', 'Lensa', 'Lainnya'];
@@ -37,33 +45,31 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
 
   bool get _hasActiveFilter => _activeFilterCount > 0;
 
-  String get _filterSummary {
-    if (!_hasActiveFilter) return 'Semua produk';
-    final parts = <String>[
-      if (_kategori != null) _kategori!,
-      if (_subKategori != null) _subKategori!,
-      if (_harga != null) _money(_harga),
-    ];
-    return parts.join(' · ');
-  }
-
   void _clearFilters() {
     _kategori = null;
     _subKategori = null;
     _harga = null;
   }
 
-  void _resetFilters() => setState(_clearFilters);
-
   @override
   void initState() {
     super.initState();
+    MemberCart.instance.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
+    MemberCart.instance.addListener(_onCart);
     _load();
+  }
+
+  void _onCart() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    MemberCart.instance.removeListener(_onCart);
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -103,7 +109,7 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
 
   List<Map<String, dynamic>> get _filtered {
     final q = _search.text.trim().toLowerCase();
-    return _all.where((p) {
+    final list = _all.where((p) {
       if (!_matchKategori(p)) return false;
       if (_subKategori != null) {
         final sub = (p['sub_kategori'] ?? '').toString().trim();
@@ -122,6 +128,91 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
           warna.contains(q) ||
           sub.contains(q);
     }).toList();
+
+    list.sort((a, b) {
+      switch (_sort) {
+        case _CatalogSort.hargaAsc:
+          return _priceOf(a).compareTo(_priceOf(b));
+        case _CatalogSort.hargaDesc:
+          return _priceOf(b).compareTo(_priceOf(a));
+        case _CatalogSort.namaAsc:
+          return (a['nama'] ?? '')
+              .toString()
+              .toLowerCase()
+              .compareTo((b['nama'] ?? '').toString().toLowerCase());
+      }
+    });
+    return list;
+  }
+
+  Future<void> _openSortSheet() async {
+    final picked = await showMemberOptionPicker<_CatalogSort>(
+      context,
+      title: 'Urutkan',
+      icon: Icons.swap_vert_rounded,
+      selected: _sort,
+      searchable: false,
+      options: const [
+        MemberPickerOption(
+          value: _CatalogSort.namaAsc,
+          label: 'Nama A–Z',
+          icon: Icons.sort_by_alpha_rounded,
+        ),
+        MemberPickerOption(
+          value: _CatalogSort.hargaAsc,
+          label: 'Harga terendah',
+          icon: Icons.arrow_upward_rounded,
+        ),
+        MemberPickerOption(
+          value: _CatalogSort.hargaDesc,
+          label: 'Harga tertinggi',
+          icon: Icons.arrow_downward_rounded,
+        ),
+      ],
+    );
+    if (picked != null && mounted) setState(() => _sort = picked);
+  }
+
+  Widget _squareAction({
+    required IconData icon,
+    required VoidCallback onTap,
+    int badge = 0,
+  }) {
+    return Material(
+      color: OptikMemberTokens.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: OptikMemberTokens.lineSoft),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(icon, color: OptikMemberTokens.ink, size: 22),
+              if (badge > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: OptikMemberTokens.danger,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   List<String> get _subOptions {
@@ -221,105 +312,6 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
         fontWeight: FontWeight.w800,
         fontSize: 10.5,
         letterSpacing: 1.1,
-      ),
-    );
-  }
-
-  Widget _filterBar() {
-    return Material(
-      color: OptikMemberTokens.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: _openFilterSheet,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _hasActiveFilter
-                  ? OptikMemberTokens.blue.withOpacity(0.45)
-                  : OptikMemberTokens.lineSoft,
-            ),
-            boxShadow: OptikMemberTokens.cardShadow,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      OptikMemberTokens.blueDeep,
-                      OptikMemberTokens.blue,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.tune_rounded,
-                    color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Filter',
-                      style: TextStyle(
-                        color: OptikMemberTokens.blueDeep,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _filterSummary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptikMemberTokens.inkMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_hasActiveFilter) ...[
-                Container(
-                  margin: const EdgeInsets.only(right: 4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: OptikMemberTokens.blueSoft,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '$_activeFilterCount',
-                    style: const TextStyle(
-                      color: OptikMemberTokens.blueDeep,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Hapus filter',
-                  onPressed: _resetFilters,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  color: OptikMemberTokens.inkMuted,
-                ),
-              ],
-              Icon(
-                Icons.keyboard_arrow_up_rounded,
-                color: OptikMemberTokens.blueDeep.withOpacity(0.8),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -490,90 +482,156 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final items = _filtered;
+    final cartQty = MemberCart.instance.totalQty;
+    final layout = MemberLayout.of(context);
+    final cols = layout.isTablet ? 3 : 2;
 
-    return MemberPremiumScaffold(
-      title: 'Katalog',
-      subtitle: 'Sinkron katalog pusat',
+    return Scaffold(
+      backgroundColor: OptikMemberTokens.white,
+      appBar: AppBar(
+        backgroundColor: OptikMemberTokens.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          color: OptikMemberTokens.ink,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: Text(
+          (_kategori ?? 'BELANJA').toUpperCase(),
+          style: const TextStyle(
+            color: OptikMemberTokens.ink,
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            letterSpacing: 1.2,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Cari',
+            onPressed: () {
+              setState(() => _showSearch = !_showSearch);
+              if (_showSearch) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _searchFocus.requestFocus();
+                });
+              }
+            },
+            icon: Icon(
+              _showSearch ? Icons.close_rounded : Icons.search_rounded,
+              color: OptikMemberTokens.ink,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Keranjang',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MemberCartPage()),
+              );
+            },
+            icon: Badge(
+              isLabelVisible: cartQty > 0,
+              backgroundColor: OptikMemberTokens.danger,
+              label: Text('$cartQty'),
+              child: const Icon(
+                Icons.shopping_bag_outlined,
+                color: OptikMemberTokens.ink,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: RefreshIndicator(
         color: OptikMemberTokens.blue,
         onRefresh: _load,
-        // Satu scroll: search/filter ikut naik — produk tidak kepotong.
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: EdgeInsets.fromLTRB(
+                layout.pagePadding,
+                4,
+                layout.pagePadding,
+                0,
+              ),
               sliver: SliverToBoxAdapter(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: _search,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: 'Cari nama, SKU, barcode…',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _search.text.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear_rounded),
-                                onPressed: () {
-                                  _search.clear();
-                                  setState(() {});
-                                },
-                              ),
-                        filled: true,
-                        fillColor: OptikMemberTokens.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                              color: OptikMemberTokens.lineSoft),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                              color: OptikMemberTokens.lineSoft),
-                        ),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                      onSubmitted: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 10),
-                    _filterBar(),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _loading
-                                ? 'Memuat katalog pusat…'
-                                : '${items.length} produk'
-                                    '${_hasActiveFilter ? ' · terfilter' : ''}',
-                            style: const TextStyle(
-                              color: OptikMemberTokens.inkMuted,
-                              fontSize: 12.5,
-                            ),
+                    if (_showSearch) ...[
+                      TextField(
+                        controller: _search,
+                        focusNode: _searchFocus,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Cari nama, SKU, barcode…',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _search.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.clear_rounded),
+                                  onPressed: () {
+                                    _search.clear();
+                                    setState(() {});
+                                  },
+                                ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5F5F5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Muat ulang',
-                          onPressed: _loading ? null : _load,
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          color: OptikMemberTokens.blue,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Row(
+                      children: [
+                        _squareAction(
+                          icon: Icons.swap_vert_rounded,
+                          onTap: _openSortSheet,
+                        ),
+                        const SizedBox(width: 10),
+                        _squareAction(
+                          icon: Icons.tune_rounded,
+                          onTap: _openFilterSheet,
+                          badge: _activeFilterCount,
+                        ),
+                        const Spacer(),
+                        Text(
+                          _loading
+                              ? 'Memuat…'
+                              : '${items.length} produk',
+                          style: TextStyle(
+                            color: OptikMemberTokens.inkMuted,
+                            fontSize: layout.menuSubtitleSize,
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
                   ],
                 ),
               ),
             ),
-            ..._buildProductSlivers(items),
+            ..._buildProductSlivers(items, cols),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _buildProductSlivers(List<Map<String, dynamic>> items) {
+  List<Widget> _buildProductSlivers(
+    List<Map<String, dynamic>> items,
+    int cols,
+  ) {
     if (_loading && _all.isEmpty) {
       return [
         const SliverFillRemaining(
@@ -643,20 +701,21 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
       ];
     }
 
+    final pad = MemberLayout.of(context).pagePadding;
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 32),
+        padding: EdgeInsets.fromLTRB(pad, 0, pad, 32),
         sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 0.68,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: 18,
+            crossAxisSpacing: 12,
+            childAspectRatio: cols >= 3 ? 0.62 : 0.58,
           ),
           delegate: SliverChildBuilderDelegate(
             (context, i) => _ProductCard(
               product: items[i],
-              priceLabel: _money(items[i]['harga']),
+              money: _money,
             ),
             childCount: items.length,
           ),
@@ -667,120 +726,179 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
 }
 
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product, required this.priceLabel});
+  const _ProductCard({required this.product, required this.money});
 
   final Map<String, dynamic> product;
-  final String priceLabel;
+  final String Function(dynamic) money;
+
+  int get _harga => int.tryParse('${product['harga'] ?? 0}') ?? 0;
+  int? get _hargaAsli {
+    final v = int.tryParse('${product['harga_asli'] ?? ''}');
+    if (v == null || v <= _harga) return null;
+    return v;
+  }
+
+  int? get _diskonPersen {
+    final asli = _hargaAsli;
+    if (asli == null || asli <= 0 || _harga <= 0) return null;
+    return (((asli - _harga) / asli) * 100).round();
+  }
 
   @override
   Widget build(BuildContext context) {
     final nama = (product['nama'] ?? '-').toString();
-    final kat = (product['kategori'] ?? '').toString().trim();
     final img = (product['image_url'] ?? '').toString().trim();
+    final blocked = MemberCart.isOnlineBlocked(product);
+    final diskon = _diskonPersen;
+    final asli = _hargaAsli;
 
-    return Material(
-      color: OptikMemberTokens.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _showDetail(context),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: OptikMemberTokens.lineSoft),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1) Foto
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ColoredBox(
-                      color: OptikMemberTokens.blueMist,
-                      child: img.isEmpty
-                          ? const Center(
-                              child: Icon(
-                                Icons.visibility_outlined,
-                                size: 22,
-                                color: OptikMemberTokens.blue,
-                              ),
-                            )
-                          : Image.network(
-                              img,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorBuilder: (_, __, ___) => const Center(
-                                child: Icon(
-                                  Icons.visibility_outlined,
-                                  size: 22,
-                                  color: OptikMemberTokens.blue,
-                                ),
-                              ),
-                            ),
-                    ),
-                    if (kat.isNotEmpty)
-                      Positioned(
-                        left: 4,
-                        top: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: OptikMemberTokens.blueDeep.withOpacity(0.88),
-                            borderRadius: BorderRadius.circular(6),
+    return InkWell(
+      onTap: () => _showDetail(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(
+                  color: const Color(0xFFF3F3F3),
+                  child: img.isEmpty
+                      ? const Center(
+                          child: Icon(
+                            Icons.visibility_outlined,
+                            size: 36,
+                            color: OptikMemberTokens.inkMuted,
                           ),
-                          child: Text(
-                            kat.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800,
+                        )
+                      : Image.network(
+                          img,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(
+                              Icons.visibility_outlined,
+                              size: 36,
+                              color: OptikMemberTokens.inkMuted,
                             ),
                           ),
                         ),
-                      ),
-                  ],
                 ),
-              ),
-              // 2) Nama → 3) Harga
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      nama,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptikMemberTokens.blueDeep,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10,
-                        height: 1.2,
+                if (diskon != null && diskon > 0)
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      color: OptikMemberTokens.white,
+                      child: Text(
+                        '-$diskon%',
+                        style: const TextStyle(
+                          color: Color(0xFFC45C4A),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      priceLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: OptikMemberTokens.blue,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 10.5,
+                  ),
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Material(
+                    color: blocked
+                        ? OptikMemberTokens.inkMuted
+                        : OptikMemberTokens.ink,
+                    shape: const CircleBorder(),
+                    elevation: 2,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: blocked
+                          ? () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Lensa custom tidak dijual online.',
+                                  ),
+                                ),
+                              );
+                            }
+                          : () => _quickAdd(context),
+                      child: const SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: Icon(
+                          Icons.shopping_bag_outlined,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            nama,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: OptikMemberTokens.ink,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            children: [
+              if (asli != null)
+                Text(
+                  money(asli),
+                  style: const TextStyle(
+                    color: OptikMemberTokens.inkMuted,
+                    fontSize: 12,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+              Text(
+                money(_harga),
+                style: TextStyle(
+                  color: asli != null
+                      ? const Color(0xFFC45C4A)
+                      : OptikMemberTokens.ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
                 ),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _quickAdd(BuildContext context) async {
+    final err = await MemberCart.instance.addProduct(product);
+    if (!context.mounted) return;
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Ditambah ke keranjang'),
+        action: SnackBarAction(
+          label: 'Lihat',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MemberCartPage()),
+            );
+          },
         ),
       ),
     );
@@ -795,6 +913,7 @@ class _ProductCard extends StatelessWidget {
     final barcode = (product['barcode'] ?? '-').toString();
     final lensa = (product['jenis_lensa'] ?? '').toString();
     final img = (product['image_url'] ?? '').toString().trim();
+    final asli = _hargaAsli;
 
     showModalBottomSheet<void>(
       context: context,
@@ -830,37 +949,54 @@ class _ProductCard extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: AspectRatio(
-                    aspectRatio: 16 / 10,
+                    aspectRatio: 4 / 5,
                     child: Image.network(img, fit: BoxFit.cover),
                   ),
                 )
               else
                 Container(
-                  height: 120,
+                  height: 180,
                   decoration: BoxDecoration(
-                    color: OptikMemberTokens.blueMist,
+                    color: const Color(0xFFF3F3F3),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(Icons.visibility_outlined,
-                      size: 48, color: OptikMemberTokens.blue),
+                      size: 48, color: OptikMemberTokens.inkMuted),
                 ),
               const SizedBox(height: 14),
               Text(
                 nama,
                 style: const TextStyle(
-                  color: OptikMemberTokens.blueDeep,
+                  color: OptikMemberTokens.ink,
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                priceLabel,
-                style: const TextStyle(
-                  color: OptikMemberTokens.blue,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  if (asli != null)
+                    Text(
+                      money(asli),
+                      style: const TextStyle(
+                        color: OptikMemberTokens.inkMuted,
+                        fontSize: 14,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                  Text(
+                    money(_harga),
+                    style: TextStyle(
+                      color: asli != null
+                          ? const Color(0xFFC45C4A)
+                          : OptikMemberTokens.ink,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               _kv('Kategori', sub.isEmpty ? kat : '$kat · $sub'),
@@ -870,7 +1006,8 @@ class _ProductCard extends StatelessWidget {
               _kv('Barcode', barcode),
               const SizedBox(height: 8),
               const Text(
-                'Harga referensi dari katalog pusat. Ketersediaan stok dicek di cabang.',
+                'Harga referensi dari katalog pusat. Stok dicek di cabang saat checkout. '
+                'Lensa custom tidak dijual online.',
                 style: TextStyle(
                   color: OptikMemberTokens.inkMuted,
                   fontSize: 12,
@@ -878,9 +1015,57 @@ class _ProductCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Tutup'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: MemberCart.isOnlineBlocked(product)
+                          ? null
+                          : () async {
+                              final err =
+                                  await MemberCart.instance.addProduct(product);
+                              if (!ctx.mounted) return;
+                              if (err != null) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(err)),
+                                );
+                                return;
+                              }
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('Ditambah ke keranjang'),
+                                  action: SnackBarAction(
+                                    label: 'Lihat',
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MemberCartPage(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.shopping_bag_outlined),
+                      label: Text(
+                        MemberCart.isOnlineBlocked(product)
+                            ? 'Tidak bisa online'
+                            : 'Ke keranjang',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

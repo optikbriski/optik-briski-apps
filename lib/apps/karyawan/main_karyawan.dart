@@ -29,6 +29,7 @@ import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/scanner_penerimaan_page.dart';
+import '../member/pages/member_face_shape_page.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -139,7 +140,9 @@ class KaryawanPageState extends State<KaryawanPage>
   /// dan tampilkan sukses jika versi sudah naik.
   Future<void> _cekHasilInstallSetelahResume() async {
     try {
-      final outcome = await _updateService.checkPendingInstallResult();
+      final outcome = await _updateService.checkPendingInstallResult(
+        appFlavor: 'karyawan',
+      );
       if (!mounted) return;
       if (outcome.updated) {
         setState(() => _adaUpdateBaru = false);
@@ -160,7 +163,8 @@ class KaryawanPageState extends State<KaryawanPage>
 
   Future<void> _mulaiAutoDownloadUpdate({bool silent = false}) async {
     if (kIsWeb || _autoDownloadRunning) return;
-    final autoOn = await _updateService.isAutoUpdateEnabled();
+    final autoOn =
+        await _updateService.isAutoUpdateEnabled(appFlavor: 'karyawan');
     if (!autoOn) return;
 
     _autoDownloadRunning = true;
@@ -291,6 +295,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   await _updateService.confirmAndOpenInstaller(
                     apkPath: path,
                     expectedVersion: info.serverVersion,
+                    appFlavor: 'karyawan',
                   );
                   if (!mounted) return;
                   _showPremiumSnackbar(
@@ -392,7 +397,8 @@ class KaryawanPageState extends State<KaryawanPage>
       setState(() => _adaUpdateBaru = true);
 
       // Prefer auto-unduh; install tetap minta konfirmasi karyawan.
-      final autoOn = await _updateService.isAutoUpdateEnabled();
+      final autoOn =
+          await _updateService.isAutoUpdateEnabled(appFlavor: 'karyawan');
       if (autoOn && info.urlReachable) {
         await _mulaiAutoDownloadUpdate();
         return;
@@ -1753,6 +1759,11 @@ class KaryawanPageState extends State<KaryawanPage>
                     'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
                     true),
                 _buildMenuProfil(
+                    Icons.face_outlined,
+                    'Bentuk Wajah',
+                    'Scan landmark + rekomendasi frame (konsultasi)',
+                    true),
+                _buildMenuProfil(
                     Icons.settings_rounded,
                     "menu_pengaturan_akun".tr(),
                     "sub_pengaturan_akun".tr(),
@@ -1804,6 +1815,11 @@ class KaryawanPageState extends State<KaryawanPage>
                     context,
                     MaterialPageRoute(
                         builder: (context) => const AbsensiPage()));
+              } else if (title == 'Bentuk Wajah') {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const MemberFaceShapePage()));
               } else if (title == "menu_pengaturan_akun".tr()) {
                 Navigator.push(
                     context,
