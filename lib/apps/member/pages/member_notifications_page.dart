@@ -53,9 +53,10 @@ class _MemberNotificationsPageState extends State<MemberNotificationsPage> {
           const SizedBox(height: 12),
           const MemberSectionLabel('Yang dikirim'),
           ...const [
-            'Pesanan diproses',
-            'Kacamata selesai & siap diambil',
-            'Sudah diambil',
+            'Pesanan diproses / dikemas (termasuk Belanja Online)',
+            'Siap diambil atau siap dikirim',
+            'Dalam pengiriman / resi kurir',
+            'Sudah diambil / pesanan selesai',
             'Reminder janji kontrol (jadwal booking)',
             'Info garansi dari data asli sistem',
           ].map(

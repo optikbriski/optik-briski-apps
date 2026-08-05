@@ -60,10 +60,12 @@ class MemberCart extends ChangeNotifier {
     if (sku.isEmpty) return 'Produk tanpa SKU tidak bisa dibeli online.';
     final harga = int.tryParse('${product['harga'] ?? 0}') ?? 0;
     if (harga <= 0) return 'Harga produk tidak valid.';
+    // Stok cabang dicek di checkout; jika kurang → pre-order → RO cabang.
 
     final i = _items.indexWhere((e) => e.sku.toUpperCase() == sku.toUpperCase());
+    final nextQty = (i >= 0 ? _items[i].qty : 0) + qty;
     if (i >= 0) {
-      _items[i] = _items[i].copyWith(qty: _items[i].qty + qty);
+      _items[i] = _items[i].copyWith(qty: nextQty);
     } else {
       _items.add(MemberCartItem(
         sku: sku,

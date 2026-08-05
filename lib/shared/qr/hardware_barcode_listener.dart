@@ -215,7 +215,8 @@ class _HardwareBarcodeListenerState extends State<HardwareBarcodeListener> {
       case LeavePageAction.cancel:
         return;
       case LeavePageAction.leaveSave:
-        await intake?.saveBeforeLeave();
+        final saved = await intake?.saveBeforeLeave() ?? true;
+        if (!saved) return;
         break;
       case LeavePageAction.leaveDiscard:
         break;

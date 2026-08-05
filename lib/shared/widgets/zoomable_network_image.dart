@@ -27,9 +27,9 @@ class ZoomableNetworkImagePane extends StatelessWidget {
             ? Container(
                 color: OptikAdminTokens.bgMid,
                 alignment: Alignment.center,
-                child: const Text(
+                child: Text(
                   'Foto tidak tersedia',
-                  style: TextStyle(color: Colors.white38),
+                  style: TextStyle(color: OptikAdminTokens.slate),
                 ),
               )
             : Stack(
@@ -48,7 +48,7 @@ class ZoomableNetworkImagePane extends StatelessWidget {
                     right: 8,
                     bottom: 8,
                     child: Material(
-                      color: Colors.black54,
+                      color: OptikAdminTokens.navy,
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
@@ -62,12 +62,12 @@ class ZoomableNetworkImagePane extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.zoom_in_rounded,
-                                  color: Colors.white, size: 16),
+                                  color: OptikAdminTokens.snow, size: 16),
                               SizedBox(width: 4),
                               Text(
                                 'Perbesar',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: OptikAdminTokens.snow,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -88,7 +88,7 @@ class ZoomableNetworkImagePane extends StatelessWidget {
 void showZoomableImageDialog(BuildContext context, String url) {
   showDialog<void>(
     context: context,
-    barrierColor: Colors.black.withOpacity(0.92),
+    barrierColor: OptikAdminTokens.navy.withOpacity(0.92),
     builder: (_) => _ZoomableImageDialog(url: url),
   );
 }
@@ -143,7 +143,7 @@ class _ZoomableImageDialogState extends State<_ZoomableImageDialog> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     return Dialog.fullscreen(
-      backgroundColor: Colors.black,
+      backgroundColor: OptikAdminTokens.navy,
       child: Stack(
         children: [
           Positioned.fill(
@@ -166,10 +166,10 @@ class _ZoomableImageDialogState extends State<_ZoomableImageDialog> {
                     tooltip: 'Tutup',
                     onPressed: () => Navigator.pop(context),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white12,
-                      foregroundColor: Colors.white,
+                      backgroundColor: OptikAdminTokens.snow.withOpacity(0.12),
+                      foregroundColor: OptikAdminTokens.snow,
                     ),
-                    icon: const Icon(Icons.close_rounded),
+                    icon: Icon(Icons.close_rounded),
                   ),
                   const Spacer(),
                   _ZoomChip(
@@ -184,13 +184,13 @@ class _ZoomableImageDialogState extends State<_ZoomableImageDialog> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white12,
+                      color: OptikAdminTokens.snow.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '${(_scale * 100).round()}%',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: OptikAdminTokens.snow,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -222,7 +222,7 @@ class _ZoomableImageDialogState extends State<_ZoomableImageDialog> {
                     ? 'Scroll untuk zoom · drag untuk geser'
                     : 'Pinch untuk zoom · drag untuk geser',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(color: OptikAdminTokens.snow.withOpacity(0.54), fontSize: 12),
               ),
             ),
           ),
@@ -249,8 +249,8 @@ class _ZoomChip extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: Colors.white12,
-        foregroundColor: Colors.white,
+        backgroundColor: OptikAdminTokens.snow.withOpacity(0.12),
+        foregroundColor: OptikAdminTokens.snow,
       ),
       icon: Icon(icon),
     );
@@ -321,8 +321,8 @@ class _ZoomableImageState extends State<_ZoomableImage> {
     final image = Image.network(
       widget.url,
       fit: widget.fit,
-      errorBuilder: (_, __, ___) => const Center(
-        child: Icon(Icons.broken_image, color: Colors.white38, size: 40),
+      errorBuilder: (_, __, ___) => Center(
+        child: Icon(Icons.broken_image, color: OptikAdminTokens.snow.withOpacity(0.38), size: 40),
       ),
     );
 

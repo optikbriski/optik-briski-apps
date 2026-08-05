@@ -226,7 +226,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Gagal approve: $e'),
-        backgroundColor: Colors.red,
+        backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -240,14 +240,14 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.bgMid,
         title: const Text('Tolak pendaftaran?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: alasanCtrl,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: OptikAdminTokens.navy),
           maxLines: 3,
           decoration: InputDecoration(
             hintText: 'Alasan penolakan wajib diisi…',
-            hintStyle: const TextStyle(color: Colors.white38),
+            hintStyle: const TextStyle(color: OptikAdminTokens.slate),
             filled: true,
             fillColor: OptikAdminTokens.card,
             border: OutlineInputBorder(
@@ -259,10 +259,13 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal', style: TextStyle(color: Colors.white54)),
+            child: const Text('Batal', style: TextStyle(color: OptikAdminTokens.slate)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptikAdminTokens.danger,
+              foregroundColor: OptikAdminTokens.snow,
+            ),
             onPressed: () {
               if (alasanCtrl.text.trim().isEmpty) return;
               Navigator.pop(ctx, true);
@@ -287,7 +290,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Gagal menolak: $e'),
-        backgroundColor: Colors.red,
+        backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -358,7 +361,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
 
   Widget _photoPane(String photo) {
     return Container(
-      color: const Color(0xFF020617),
+      color: OptikAdminTokens.navy,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -366,15 +369,18 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           const Text(
             'Foto KTP',
             style: TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.snow,
               fontWeight: FontWeight.bold,
               fontSize: 15,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Pinch / scroll untuk zoom. Foto ditampilkan utuh (tidak dipotong).',
-            style: TextStyle(color: Colors.white54, fontSize: 11.5),
+            style: TextStyle(
+              color: OptikAdminTokens.snow.withOpacity(0.72),
+              fontSize: 11.5,
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(child: _ktpViewer(photo)),
@@ -390,11 +396,11 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         decoration: BoxDecoration(
           color: OptikAdminTokens.card,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white12),
+          border: Border.all(color: OptikAdminTokens.line),
         ),
         child: const Text(
           'Belum ada foto KTP',
-          style: TextStyle(color: Colors.orangeAccent),
+          style: TextStyle(color: OptikAdminTokens.warning),
         ),
       );
     }
@@ -414,7 +420,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                 padding: EdgeInsets.all(24),
                 child: Text(
                   'Foto KTP gagal dimuat',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: OptikAdminTokens.slate),
                 ),
               ),
             ),
@@ -444,7 +450,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               Text(
                 nama,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -452,7 +458,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               const SizedBox(height: 6),
               Text(
                 '$jabatan · $cabang',
-                style: const TextStyle(color: Colors.white70, fontSize: 13.5),
+                style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13.5),
               ),
               const SizedBox(height: 12),
               _metaRow(Icons.email_outlined, email),
@@ -480,14 +486,14 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.12),
+              color: OptikAdminTokens.warning.withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.withOpacity(0.45)),
+              border: Border.all(color: OptikAdminTokens.warning.withOpacity(0.45)),
             ),
             child: Text(
               'Ada $_conflictCount data beda. Pilih opsi yang valid di bawah sebelum Approve.',
               style: const TextStyle(
-                color: Colors.amber,
+                color: OptikAdminTokens.warning,
                 fontSize: 13,
                 height: 1.35,
               ),
@@ -499,15 +505,15 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.12),
+              color: OptikAdminTokens.success.withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
               border:
-                  Border.all(color: Colors.greenAccent.withOpacity(0.35)),
+                  Border.all(color: OptikAdminTokens.success.withOpacity(0.35)),
             ),
             child: const Text(
               'OCR & form cocok. Review foto KTP lalu putuskan.',
               style: TextStyle(
-                color: Colors.greenAccent,
+                color: OptikAdminTokens.success,
                 fontSize: 13,
                 height: 1.35,
               ),
@@ -601,7 +607,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           _sectionCard(
             title: 'Alamat domisili vs KTP',
             subtitle: 'Wajib pilih sebelum Approve',
-            accent: Colors.blueAccent,
+            accent: OptikAdminTokens.navy,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -617,17 +623,53 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                   value: _alamatDomisili,
                 ),
                 const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _chip('Pakai alamat KTP', 'ocr', _alamatChoice,
-                        (v) => setState(() => _alamatChoice = v)),
-                    _chip('Pakai domisili', 'edit', _alamatChoice,
-                        (v) => setState(() => _alamatChoice = v)),
-                    _chip('Simpan keduanya', 'both', _alamatChoice,
-                        (v) => setState(() => _alamatChoice = v)),
-                  ],
+                AdminPickerField(
+                  label: 'Sumber alamat',
+                  valueText: switch (_alamatChoice) {
+                    'ocr' => 'Pakai alamat KTP',
+                    'edit' => 'Pakai domisili',
+                    'both' => 'Simpan keduanya',
+                    _ => 'Belum dipilih',
+                  },
+                  hint: 'Belum dipilih',
+                  icon: Icons.home_work_outlined,
+                  badgeColor: OptikAdminTokens.warning,
+                  onTap: () async {
+                    final sel = await showAdminPicker<String>(
+                      context: context,
+                      title: 'Pilih sumber alamat',
+                      searchable: false,
+                      selected: _alamatChoice,
+                      headerIcon: Icons.home_work_outlined,
+                      headerBadgeColor: OptikAdminTokens.warning,
+                      options: [
+                        AdminPickerOption(
+                          value: 'ocr',
+                          label: 'Pakai alamat KTP',
+                          subtitle: _alamatKtpEdit.isNotEmpty
+                              ? _alamatKtpEdit
+                              : _alamatKtpOcr,
+                          icon: Icons.badge_outlined,
+                        ),
+                        AdminPickerOption(
+                          value: 'edit',
+                          label: 'Pakai domisili',
+                          subtitle: _alamatDomisili.isEmpty
+                              ? '(kosong)'
+                              : _alamatDomisili,
+                          icon: Icons.home_outlined,
+                        ),
+                        const AdminPickerOption(
+                          value: 'both',
+                          label: 'Simpan keduanya',
+                          subtitle: 'KTP + domisili',
+                          icon: Icons.merge_type_rounded,
+                        ),
+                      ],
+                    );
+                    if (sel == null || sel.isClear) return;
+                    setState(() => _alamatChoice = sel.value);
+                  },
                 ),
               ],
             ),
@@ -651,8 +693,8 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                 child: OutlinedButton.icon(
                   onPressed: _saving ? null : _reject,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
-                    side: const BorderSide(color: Colors.redAccent),
+                    foregroundColor: OptikAdminTokens.danger,
+                    side: const BorderSide(color: OptikAdminTokens.danger),
                     minimumSize: const Size(0, 50),
                   ),
                   icon: const Icon(Icons.close_rounded, size: 18),
@@ -666,8 +708,10 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                 child: FilledButton.icon(
                   onPressed: (!_canApprove || _saving) ? null : _approve,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    disabledBackgroundColor: Colors.white12,
+                    backgroundColor: OptikAdminTokens.success,
+                    foregroundColor: OptikAdminTokens.snow,
+                    disabledBackgroundColor: OptikAdminTokens.line,
+                    disabledForegroundColor: OptikAdminTokens.slate,
                     minimumSize: const Size(0, 50),
                   ),
                   icon: _saving
@@ -675,12 +719,15 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: OptikAdminTokens.snow),
                         )
                       : const Icon(Icons.check_rounded, size: 18),
                   label: Text(
                     _canApprove ? 'Approve & aktifkan' : 'Pilih data dulu',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: OptikAdminTokens.snow,
+                    ),
                   ),
                 ),
               ),
@@ -694,7 +741,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
   Widget _sectionCard({
     required String title,
     String? subtitle,
-    Color accent = Colors.blueAccent,
+    Color accent = OptikAdminTokens.navy,
     required Widget child,
   }) {
     return Container(
@@ -703,7 +750,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       decoration: BoxDecoration(
         color: OptikAdminTokens.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: OptikAdminTokens.lineStrong),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -720,7 +767,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+              style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11.5),
             ),
           ],
           const SizedBox(height: 14),
@@ -733,12 +780,12 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
   Widget _metaRow(IconData icon, String value) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.white38),
+        Icon(icon, size: 16, color: OptikAdminTokens.slate),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
           ),
         ),
       ],
@@ -758,8 +805,8 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white54,
+            style: TextStyle(
+              color: OptikAdminTokens.slate,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -768,7 +815,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           Text(
             value.isEmpty ? '-' : value,
             style: const TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.navy,
               fontSize: 13.5,
               height: 1.4,
             ),
@@ -797,8 +844,8 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               width: 96,
               child: Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white54,
+                style: TextStyle(
+                  color: OptikAdminTokens.slate,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -807,18 +854,18 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             Expanded(
               child: Text(
                 shown.isEmpty ? '-' : shown,
-                style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.15),
+                color: OptikAdminTokens.success.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
                 'sama',
-                style: TextStyle(color: Colors.greenAccent, fontSize: 11),
+                style: TextStyle(color: OptikAdminTokens.success, fontSize: 11),
               ),
             ),
           ],
@@ -836,7 +883,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               Text(
                 title,
                 style: const TextStyle(
-                  color: Colors.amber,
+                  color: OptikAdminTokens.warning,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),
@@ -845,12 +892,12 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15),
+                  color: OptikAdminTokens.warning.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
                   'beda — wajib pilih',
-                  style: TextStyle(color: Colors.amber, fontSize: 11),
+                  style: TextStyle(color: OptikAdminTokens.warning, fontSize: 11),
                 ),
               ),
             ],
@@ -860,38 +907,45 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           const SizedBox(height: 8),
           _compareBox(label: 'Edit karyawan', value: edit),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _chip('Pakai OCR', 'ocr', value, onChanged),
-              _chip('Pakai edit karyawan', 'edit', value, onChanged),
-            ],
+          AdminPickerField(
+            label: 'Sumber data — $title',
+            valueText: value == 'ocr'
+                ? 'Pakai OCR'
+                : value == 'edit'
+                    ? 'Pakai edit karyawan'
+                    : 'Belum dipilih',
+            hint: 'Belum dipilih',
+            icon: Icons.compare_arrows_rounded,
+            badgeColor: OptikAdminTokens.warning,
+            onTap: () async {
+              final sel = await showAdminPicker<String>(
+                context: context,
+                title: 'Pilih sumber — $title',
+                searchable: false,
+                selected: value,
+                headerIcon: Icons.compare_arrows_rounded,
+                headerBadgeColor: OptikAdminTokens.warning,
+                options: [
+                  AdminPickerOption(
+                    value: 'ocr',
+                    label: 'Pakai OCR',
+                    subtitle: ocr.isEmpty ? '(kosong)' : ocr,
+                    icon: Icons.document_scanner_outlined,
+                  ),
+                  AdminPickerOption(
+                    value: 'edit',
+                    label: 'Pakai edit karyawan',
+                    subtitle: edit.isEmpty ? '(kosong)' : edit,
+                    icon: Icons.edit_outlined,
+                  ),
+                ],
+              );
+              if (sel == null || sel.isClear) return;
+              onChanged(sel.value!);
+            },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _chip(
-    String label,
-    String key,
-    String? selected,
-    ValueChanged<String> onChanged,
-  ) {
-    final on = selected == key;
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          color: on ? Colors.black : Colors.white70,
-        ),
-      ),
-      selected: on,
-      selectedColor: Colors.greenAccent,
-      backgroundColor: OptikAdminTokens.bgMid,
-      onSelected: (_) => onChanged(key),
     );
   }
 }

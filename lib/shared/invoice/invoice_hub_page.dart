@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../apps/admin/garansi_page.dart';
@@ -17,7 +18,12 @@ import 'invoice_hub_service.dart';
 import 'invoice_lifecycle_service.dart';
 import 'invoice_link.dart';
 import 'invoice_qr_anti_copy_beta.dart';
+import 'pickup_item_picker_dialog.dart';
+import 'sale_fulfillment_service.dart';
 import 'staff_nik_scan_dialog.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
+import '../widgets/admin/premium_app_bar.dart';
 
 /// Hub multi-fungsi dari QR invoice.
 /// - Customer / guest: ringkasan status + garansi + CTA Google Review
@@ -120,6 +126,12 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         return;
       }
 
+      // Lengkapi channel/fulfillment bila RPC hub belum mengembalikan kolom itu.
+      data = await _enrichSaleChannelFields(data);
+      data = await _enrichItemFulfillment(data);
+      data = await _healGaransiIfDiambil(data);
+      data = await _healClaimQrIfNeeded(data);
+
       // Aksi mengikuti payload QR yang di-scan (OBRINV + token), bukan flag UI.
       String? phase;
       var lifecycleOk = false;
@@ -157,12 +169,134 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     }
   }
 
+  /// Line sudah DIAMBIL tapi kartu masih menunggu_ambil → aktifkan (repair).
+  Future<Map<String, dynamic>> _healGaransiIfDiambil(
+    Map<String, dynamic> data,
+  ) async {
+    final saleId = (data['sale_id'] ?? '').toString().trim();
+    if (saleId.isEmpty) return data;
+    if (!InvoiceHubService.hasDiambilLines(data)) return data;
+    try {
+      await GaransiService().syncAktifDariLineDiambil(saleId);
+      final rows = await Supabase.instance.client
+          .from('garansi_kartu')
+          .select(
+            'id, jenis_garansi, nama_produk, status, tanggal_mulai, '
+            'tanggal_akhir, klaim_digunakan, spesifikasi_produk',
+          )
+          .eq('sale_id', saleId);
+      final list = rows as List;
+      final today = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      );
+      final claimable = list.any((raw) {
+        final g = Map<String, dynamic>.from(raw as Map);
+        if (g['status']?.toString() != 'aktif') return false;
+        if (g['klaim_digunakan'] == true) return false;
+        final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
+        if (akhir == null) return false;
+        return !DateTime(akhir.year, akhir.month, akhir.day).isBefore(today);
+      });
+      return {...data, 'garansi': rows, 'garansi_claimable': claimable};
+    } catch (_) {
+      return data;
+    }
+  }
+
+  /// Ada item diambil + garansi aktif tapi QR CLAIM hilang → terbitkan ulang.
+  Future<Map<String, dynamic>> _healClaimQrIfNeeded(
+    Map<String, dynamic> data,
+  ) async {
+    final saleId = (data['sale_id'] ?? '').toString().trim();
+    if (saleId.isEmpty) return data;
+    if (!InvoiceHubService.hasDiambilLines(data)) return data;
+    if (data['qr_claim_ready'] == true) return data;
+    try {
+      final claimQr = await _lifecycle.ensureClaimQrIfNeeded(saleId);
+      if (claimQr == null || claimQr.isEmpty) return data;
+      return {
+        ...data,
+        'qr_claim_ready': true,
+        'qr_claim_used': false,
+        if (data['qr_lunas_ready'] != true) 'qr_payload': claimQr,
+      };
+    } catch (_) {
+      return data;
+    }
+  }
+
+  /// Pastikan items punya fulfillment_status (RPC lama mungkin belum kirim).
+  Future<Map<String, dynamic>> _enrichItemFulfillment(
+    Map<String, dynamic> data,
+  ) async {
+    final saleId = (data['sale_id'] ?? '').toString().trim();
+    if (saleId.isEmpty) return data;
+    final items = data['items'];
+    final needsEnrich = items is! List ||
+        items.isEmpty ||
+        items.any((raw) {
+          if (raw is! Map) return true;
+          return !raw.containsKey('fulfillment_status');
+        });
+    if (!needsEnrich) return data;
+    try {
+      final rows = await SaleFulfillmentService().listItems(saleId);
+      if (rows.isEmpty) return data;
+      return {...data, 'items': rows};
+    } catch (_) {
+      return data;
+    }
+  }
+
+  Future<Map<String, dynamic>> _enrichSaleChannelFields(
+    Map<String, dynamic> data,
+  ) async {
+    final needsChannel = (data['channel'] ?? '').toString().trim().isEmpty;
+    final needsFulfill =
+        (data['fulfillment'] ?? '').toString().trim().isEmpty;
+    final needsOid =
+        (data['online_order_id'] ?? '').toString().trim().isEmpty;
+    if (!needsChannel && !needsFulfill && !needsOid) return data;
+
+    final saleId = (data['sale_id'] ?? '').toString().trim();
+    final inv = (data['no_invoice'] ?? widget.noInvoice ?? '').toString().trim();
+    try {
+      Map<String, dynamic>? sale;
+      if (saleId.isNotEmpty) {
+        sale = await Supabase.instance.client
+            .from('sales')
+            .select('channel, fulfillment, courier, online_order_id')
+            .eq('id', saleId)
+            .maybeSingle();
+      } else if (inv.isNotEmpty) {
+        sale = await Supabase.instance.client
+            .from('sales')
+            .select('channel, fulfillment, courier, online_order_id')
+            .eq('no_invoice', inv)
+            .maybeSingle();
+      }
+      if (sale == null) return data;
+      return {
+        ...data,
+        if (needsChannel) 'channel': sale['channel'],
+        if (needsFulfill) 'fulfillment': sale['fulfillment'],
+        if ((data['courier'] ?? '').toString().trim().isEmpty)
+          'courier': sale['courier'],
+        if (needsOid) 'online_order_id': sale['online_order_id'],
+      };
+    } catch (_) {
+      return data;
+    }
+  }
+
   Future<bool> _ensureCabangOk(Map<String, dynamic> h) async {
     final msg = _cabangMismatchMessage(h);
     if (msg == null) return true;
     if (!mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.orange.shade800),
+      SnackBar(content: Text(msg), backgroundColor: OptikAdminTokens.warning),
     );
     return false;
   }
@@ -208,8 +342,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         SnackBar(
           content: Text(delivered.summary),
           backgroundColor: delivered.anyOk || delivered.allRequestedOk
-              ? const Color(0xFF0F766E)
-              : Colors.orange.shade800,
+              ? OptikAdminTokens.success
+              : OptikAdminTokens.warning,
           duration: const Duration(seconds: 5),
         ),
       );
@@ -230,7 +364,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -246,10 +380,10 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             return AlertDialog(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: OptikAdminTokens.bg,
               title: const Text(
                 'Payment Gateway · Pelunasan',
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -259,35 +393,33 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     'Bayar sisa tagihan sekali lunas.\n'
                     'Jumlah: Rp ${_fmt(sisa)}',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
+                      color: OptikAdminTokens.slate.withOpacity(0.75),
                       fontSize: 13.5,
                       height: 1.4,
                     ),
                   ),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    value: metode,
-                    dropdownColor: const Color(0xFF0F172A),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Metode bayar',
-                      labelStyle:
-                          TextStyle(color: Colors.white.withOpacity(0.55)),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'Tunai', child: Text('Tunai')),
-                      DropdownMenuItem(value: 'Debit', child: Text('Debit')),
-                      DropdownMenuItem(
-                          value: 'Transfer', child: Text('Transfer')),
-                      DropdownMenuItem(value: 'QRIS', child: Text('QRIS')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setLocal(() => metode = v);
+                  AdminPickerField(
+                    label: 'Metode bayar',
+                    valueText: metode,
+                    icon: Icons.payments_rounded,
+                    badgeColor: OptikAdminTokens.ice,
+                    onTap: () async {
+                      const metodes = ['Tunai', 'Debit', 'Transfer', 'QRIS'];
+                      final picked = await showAdminPicker<String>(
+                        context: ctx,
+                        title: 'Metode bayar',
+                        options: metodes
+                            .map(
+                              (m) => AdminPickerOption(value: m, label: m),
+                            )
+                            .toList(),
+                        selected: metode,
+                        searchable: false,
+                      );
+                      if (picked != null && picked.value != null) {
+                        setLocal(() => metode = picked.value!);
+                      }
                     },
                   ),
                   const SizedBox(height: 10),
@@ -295,7 +427,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     'Konfirmasi hanya setelah pembayaran benar-benar diterima. '
                     'QR LUNAS muncul setelah sukses; QR DP hangus.',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                      color: OptikAdminTokens.slate.withOpacity(0.5),
                       fontSize: 11.5,
                       height: 1.35,
                     ),
@@ -310,8 +442,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, metode),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8C872),
-                    foregroundColor: const Color(0xFF0F172A),
+                    backgroundColor: OptikAdminTokens.ice,
+                    foregroundColor: OptikAdminTokens.navy,
                   ),
                   child: const Text('Bayar & lanjut'),
                 ),
@@ -324,26 +456,31 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
   }
 
   Future<void> _showStoreViewQr(String inv) async {
-    final payload = InvoiceLink.encodeStoreView(inv);
+    final payload = InvoiceLink.encodeStoreView(
+      inv,
+      sale: _hub,
+      channel: _resolvedChannel,
+    );
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: OptikAdminTokens.bg,
         title: const Text('QR toko · lihat detail',
-            style: TextStyle(color: Colors.white, fontSize: 16)),
+            style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'QR internal toko. Hanya membuka data & riwayat transaksi — '
               'bukan untuk lunasi DP, serah terima, atau klaim garansi.',
-              style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
+              style: TextStyle(
+                  color: OptikAdminTokens.slate.withOpacity(0.7), fontSize: 13),
             ),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: OptikAdminTokens.snow,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: QrImageView(data: payload, size: 180),
@@ -353,7 +490,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
               payload,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.55),
+                color: OptikAdminTokens.slate.withOpacity(0.55),
                 fontSize: 11,
               ),
             ),
@@ -378,68 +515,81 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('QR pelanggan gagal dibuat (token kosong).'),
-          backgroundColor: Colors.red,
+          backgroundColor: OptikAdminTokens.danger,
         ),
       );
       return;
     }
+    // Tunggu frame setelah NIK scan page pop — hindari dialog “invisible”
+    // (barrier gelap, konten 0px) yang mengunci seluruh UI.
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      useRootNavigator: true,
+      barrierDismissible: true,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: OptikAdminTokens.bg,
         title: Text(title,
-            style: const TextStyle(color: Colors.white, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              body,
-              style:
-                  TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: QrImageView(data: payload, size: 180),
-            ),
-            const SizedBox(height: 10),
-            SelectableText(
-              payload,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.55),
-                fontSize: 11,
-              ),
-            ),
-            if (InvoiceQrAntiCopyBeta.isUsable) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Beta anti-copy aktif',
-                style: TextStyle(
-                  color: Colors.orange.withOpacity(0.8),
-                  fontSize: 11,
+            style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 16)),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  body,
+                  style: TextStyle(
+                      color: OptikAdminTokens.slate.withOpacity(0.7),
+                      fontSize: 13),
                 ),
-              ),
-            ] else ...[
-              const SizedBox(height: 8),
-              Text(
-                'Pelanggan wajib jaga QR ini. Fitur anti-copy masih beta (belum aktif).',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
-                  fontSize: 11,
+                const SizedBox(height: 14),
+                Container(
+                  width: 204,
+                  height: 204,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: OptikAdminTokens.snow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: QrImageView(data: payload, size: 180),
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 10),
+                SelectableText(
+                  payload,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: OptikAdminTokens.slate.withOpacity(0.55),
+                    fontSize: 11,
+                  ),
+                ),
+                if (InvoiceQrAntiCopyBeta.isUsable) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Beta anti-copy aktif',
+                    style: TextStyle(
+                      color: OptikAdminTokens.warning.withOpacity(0.8),
+                      fontSize: 11,
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Pelanggan wajib jaga QR ini. Fitur anti-copy masih beta (belum aktif).',
+                    style: TextStyle(
+                      color: OptikAdminTokens.slate.withOpacity(0.45),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
             child: const Text('Tutup'),
           ),
         ],
@@ -478,53 +628,96 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString(),
       );
-      final delivered = await InvoiceDeliveryService().deliver(
-        sale: updated,
-        mode: InvoiceDeliveryMode.goodsReady,
-      );
+      InvoiceDeliveryResult? delivered;
+      try {
+        delivered = await InvoiceDeliveryService().deliver(
+          sale: updated,
+          mode: InvoiceDeliveryMode.goodsReady,
+        );
+      } catch (e) {
+        // DB sudah READY (SIAP_DIAMBIL) + QR — jangan gagalkan UI karena email/WA.
+        delivered = null;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('QR sudah diterbitkan, kirim gagal: $e'),
+              backgroundColor: OptikAdminTokens.warning,
+            ),
+          );
+        }
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(delivered.summary),
-          backgroundColor: delivered.anyOk || delivered.allRequestedOk
-              ? const Color(0xFF0F766E)
-              : Colors.orange.shade800,
-          duration: const Duration(seconds: 5),
-        ),
-      );
       final payload =
           InvoiceLifecycleService.customerQrPayload(updated) ?? '';
       final isDp = InvoiceHubService.isDpOpen(updated);
+      final track =
+          (updated['tracking_status'] ?? '').toString().toUpperCase();
+      // Dialog QR dulu (bisa ditutup / tap luar), baru toast kirim —
+      // hindari barrier “gelap tanpa dialog” yang mengunci klik.
       await _showCustomerQrDialog(
-        title: isDp ? 'QR pelanggan · pelunasan' : 'QR pelanggan · pengambilan',
+        title: isDp
+            ? 'QR pelanggan · pelunasan'
+            : 'QR pelanggan · pengambilan (READY)',
         body: isDp
-            ? 'Barang ready. Pesan + QR pelunasan dikirim.\n${delivered.summary}'
-            : 'Barang ready. Pesan + QR pengambilan dikirim.\n${delivered.summary}',
+            ? 'Barang ready. QR pelunasan siap.\n${delivered?.summary ?? ''}'
+            : 'Status $track (board READY). QR pengambilan siap di-scan pelanggan.\n'
+                '${delivered?.summary ?? 'Email/WA bisa gagal — QR di bawah tetap valid.'}',
         payload: payload,
       );
       if (!mounted) return;
+      if (delivered != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(delivered.summary),
+            backgroundColor: delivered.anyOk || delivered.allRequestedOk
+                ? OptikAdminTokens.success
+                : OptikAdminTokens.warning,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  /// Serah terima + aktifkan garansi + terbitkan QR CLAIM (QR LUNAS ready customer).
+  /// Serah terima: pilih item → aktifkan garansi batch itu + QR CLAIM.
   Future<void> _handoverConfirmed(Map<String, dynamic> h) async {
     final inv = h['no_invoice']?.toString() ?? '';
     final raw = widget.rawScan;
     if (inv.isEmpty || raw == null || _busy) return;
     if (!await _ensureCabangOk(h)) return;
 
+    // Pastikan list line terbaru (status READY / RO / DIAMBIL).
+    final saleId = h['sale_id']?.toString() ?? '';
+    List<Map<String, dynamic>> lines = const [];
+    if (saleId.isNotEmpty) {
+      try {
+        lines = await SaleFulfillmentService().listItems(saleId);
+      } catch (_) {
+        final rawItems = h['items'];
+        if (rawItems is List) {
+          lines = rawItems
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        }
+      }
+    }
+
+    final picked = await showPickupItemPickerDialog(context, items: lines);
+    if (picked == null || picked.isEmpty || !mounted) return;
+
     final staff = await showStaffNikScanDialog(
       context,
       title: 'Scan karyawan · serah terima',
-      subtitle: 'Scan NIK karyawan yang menyerahkan barang ke pelanggan.',
+      subtitle:
+          'Scan barcode NIK karyawan yang menyerahkan ${picked.length} item terpilih.',
     );
     if (staff == null || !mounted) return;
 
@@ -539,15 +732,32 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         noInvoice: inv,
         rawScan: raw,
         staffNik: staff['nik']?.toString() ?? '',
+        saleItemIds: picked,
         tokoId: toko,
         isPusat: isPusat,
       );
       final saleRow = res['sale'];
+      final claimQr = res['claim_qr']?.toString() ?? '';
+      final keepLunas = res['lunas_qr_kept'] == true;
+      final nextLunas = res['next_lunas_qr']?.toString() ?? '';
       InvoiceDeliveryResult? delivered;
       if (saleRow is Map) {
+        final saleMap = Map<String, dynamic>.from(saleRow);
+        // Selalu kirim CLAIM eksplisit (jangan encodeFromSale yang prefer LUNAS).
         delivered = await InvoiceDeliveryService().deliver(
-          sale: Map<String, dynamic>.from(saleRow),
+          sale: saleMap,
+          qrPayloadOverride: claimQr.isNotEmpty ? claimQr : null,
         );
+        // READY ditunda → kirim juga QR LUNAS yang sama (ambil sisa nanti).
+        if (keepLunas && nextLunas.isNotEmpty) {
+          try {
+            await InvoiceDeliveryService().deliver(
+              sale: saleMap,
+              mode: InvoiceDeliveryMode.goodsReady,
+              qrPayloadOverride: nextLunas,
+            );
+          } catch (_) {}
+        }
       }
       if (!mounted) return;
       if (delivered != null) {
@@ -555,26 +765,44 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           SnackBar(
             content: Text(delivered.summary),
             backgroundColor: delivered.anyOk || delivered.allRequestedOk
-                ? const Color(0xFF0F766E)
-                : Colors.orange.shade800,
+                ? OptikAdminTokens.success
+                : OptikAdminTokens.warning,
             duration: const Duration(seconds: 5),
           ),
         );
       }
-      final claimQr = res['claim_qr']?.toString() ?? '';
+      final partial = res['partial'] == true;
+      final deferred = int.tryParse('${res['deferred_ready'] ?? 0}') ?? 0;
+      final pendingRo = int.tryParse('${res['pending_ro'] ?? 0}') ?? 0;
+      final remainHint = [
+        if (deferred > 0)
+          keepLunas
+              ? '$deferred READY ditunda — scan QR LUNAS yang sama lagi'
+              : '$deferred READY ditunda',
+        if (pendingRo > 0) '$pendingRo RO pending — QR baru setelah RO ready',
+      ].join(' · ');
       await _showCustomerQrDialog(
         title: 'QR pelanggan · CLAIM',
-        body:
-            'Serah terima OK. Garansi aktif s/d ${res['tanggal_akhir']}.\n'
-            '${delivered?.summary ?? 'QR CLAIM untuk APK Member / WA / email.'}',
+        body: partial
+            ? 'Diambil ${res['taken_count'] ?? picked.length} item · '
+                'garansi batch aktif s/d ${res['tanggal_akhir']}.'
+                '${remainHint.isEmpty ? '' : '\nSisa: $remainHint.'}\n'
+                '${delivered?.summary ?? 'QR CLAIM untuk batch ini.'}'
+            : 'Semua item selesai diambil. Garansi aktif s/d ${res['tanggal_akhir']}.\n'
+                '${delivered?.summary ?? 'QR CLAIM untuk APK Member / WA / email.'}',
         payload: claimQr,
       );
       if (!mounted) return;
-      Navigator.maybePop(context);
+      // Masih ada sisa → tetap di hub (jangan pop) biar bisa refresh status.
+      if (partial) {
+        await _load();
+      } else {
+        Navigator.maybePop(context);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -591,9 +819,9 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Case closed: garansi habis / sudah diklaim. Tidak bisa diproses.',
+            'CLEAR · Garansi mati (habis / sudah diklaim). Tidak bisa diproses.',
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: OptikAdminTokens.danger,
         ),
       );
       return;
@@ -602,16 +830,14 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final staff = await showStaffNikScanDialog(
       context,
       title: 'Scan karyawan · klaim garansi',
-      subtitle: 'Scan NIK karyawan yang menangani klaim garansi.',
+      subtitle: 'Scan barcode NIK karyawan yang menangani klaim garansi.',
     );
     if (staff == null || !mounted) return;
 
     setState(() => _busy = true);
     try {
-      await _lifecycle.consumeClaimQr(
-        rawScan: raw,
-        staffNik: staff['nik']?.toString() ?? '',
-      );
+      // Validasi saja — hanguskan QR setelah klaim tersimpan (bukan sebelum).
+      await _lifecycle.validateClaimScan(raw);
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -623,11 +849,28 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           ),
         ),
       );
+      if (!mounted) return;
+      // Klaim sukses menandai kartu klaim_digunakan → baru hanguskan QR CLAIM.
+      try {
+        final cards = await Supabase.instance.client
+            .from('garansi_kartu')
+            .select('klaim_digunakan')
+            .eq('sale_id', h['sale_id']?.toString() ?? '');
+        final burned = (cards as List).any(
+          (raw) => Map<String, dynamic>.from(raw as Map)['klaim_digunakan'] == true,
+        );
+        if (burned) {
+          await _lifecycle.consumeClaimQr(
+            rawScan: raw,
+            staffNik: staff['nik']?.toString() ?? '',
+          );
+        }
+      } catch (_) {}
       if (mounted) Navigator.maybePop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -644,16 +887,264 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     return buf.toString();
   }
 
+  Future<void> _shipOnlineOrder(Map<String, dynamic> h) async {
+    final oid = (h['online_order_id'] ?? '').toString().trim();
+    if (oid.isEmpty || _busy) return;
+    if (!await _ensureCabangOk(h)) return;
+
+    final tracking = TextEditingController(
+      text: (h['courier'] ?? '').toString(),
+    );
+    final note = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.bg,
+        title: const Text(
+          'Kirim pesanan online',
+          style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Terdeteksi beli dari APK Member (ONLINE).\n'
+              'Kurir: ${h['courier'] ?? '-'} · '
+              'Serahkan paket ke kurir / isi resi.',
+              style: TextStyle(
+                color: OptikAdminTokens.slate.withOpacity(0.75),
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: tracking,
+              style: const TextStyle(color: OptikAdminTokens.navy),
+              decoration: const InputDecoration(
+                labelText: 'No. resi / tracking kurir',
+                labelStyle: TextStyle(color: OptikAdminTokens.slate),
+              ),
+            ),
+            TextField(
+              controller: note,
+              style: const TextStyle(color: OptikAdminTokens.navy),
+              decoration: const InputDecoration(
+                labelText: 'Catatan toko',
+                labelStyle: TextStyle(color: OptikAdminTokens.slate),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptikAdminTokens.ice,
+              foregroundColor: OptikAdminTokens.navy,
+            ),
+            child: const Text('Kirim'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      // Utama: panggil Biteship create-order.
+      final bite = await _svc.createBiteshipShipment(onlineOrderId: oid);
+      if (!mounted) return;
+      if (bite['ok'] == true) {
+        final waybill =
+            (bite['waybill'] ?? bite['courier_tracking'] ?? '-').toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              bite['already'] == true
+                  ? 'Sudah ada order Biteship · $waybill'
+                  : 'Kurir Biteship dipanggil · resi $waybill',
+            ),
+            backgroundColor: OptikAdminTokens.success,
+          ),
+        );
+        await _load();
+        return;
+      }
+
+      // Fallback: resi manual bila Biteship gagal / meta belum ada.
+      final res = await _svc.markOnlineShipped(
+        onlineOrderId: oid,
+        courierTracking: tracking.text.trim().isNotEmpty
+            ? tracking.text.trim()
+            : null,
+        storeNote:
+            '${note.text.trim()}\nBiteship: ${bite['error'] ?? 'gagal'}'
+                .trim(),
+      );
+      if (!mounted) return;
+      if (res['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${bite['error'] ?? res['error'] ?? 'Gagal kirim'}',
+            ),
+            backgroundColor: OptikAdminTokens.danger,
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Ditandai dikirim (manual). Biteship: ${bite['error'] ?? '-'}',
+          ),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _channelBadge() {
+    final online = _isOnlineChannel;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: online
+            ? OptikAdminTokens.navy.withOpacity(0.35)
+            : OptikAdminTokens.snow.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(
+          color: online
+              ? OptikAdminTokens.ice.withOpacity(0.7)
+              : OptikAdminTokens.lineStrong,
+        ),
+      ),
+      child: Text(
+        online ? 'Online · APK Member' : 'Toko · Offline',
+        style: TextStyle(
+          color: online ? OptikAdminTokens.ice : OptikAdminTokens.slate,
+          fontWeight: FontWeight.w800,
+          fontSize: 11.5,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _onlineShipPanel(Map<String, dynamic> h) {
+    return [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: OptikAdminTokens.navy,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Pesanan online · siap kirim',
+              style: TextStyle(
+                color: OptikAdminTokens.navy,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'QR terdeteksi ONLINE (beli di APK Member).\n'
+              'Fulfillment: kirim ke alamat · Kurir: ${h['courier'] ?? '-'}.\n'
+              'Tekan Kirim setelah paket diserahkan ke kurir.',
+              style: TextStyle(
+                color: OptikAdminTokens.snow,
+                height: 1.4,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _shipOnlineOrder(h),
+              style: FilledButton.styleFrom(
+                backgroundColor: OptikAdminTokens.navy,
+                foregroundColor: OptikAdminTokens.snow,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              icon: const Icon(Icons.local_shipping_rounded),
+              label: const Text(
+                'Panggil Biteship / Kirim',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
   bool get _staff => _hub != null && InvoiceHubService.isStaffView(_hub!);
 
   /// Aksi DP / LUNAS ready / CLAIM — scan QR pelanggan OBRINV valid.
   bool get _customerLifecycleEnabled => _lifecycleValidated;
+
+  /// Channel dari QR scan dulu; fallback `sales.channel`.
+  String get _resolvedChannel {
+    final fromQr = InvoiceLink.channelFromRaw(widget.rawScan);
+    if (fromQr == ObrSaleChannel.online) return ObrSaleChannel.online;
+    final fromSale =
+        ObrSaleChannel.fromSaleChannel(_hub?['channel']?.toString());
+    return fromSale;
+  }
+
+  bool get _isOnlineChannel => _resolvedChannel == ObrSaleChannel.online;
+
+  bool _isOnlineDelivery(Map<String, dynamic> h) {
+    if (!_isOnlineChannel) return false;
+    final f = (h['fulfillment'] ?? '').toString().trim().toLowerCase();
+    return f == 'delivery';
+  }
+
+  /// Online delivery siap dikirim (belum diambil / belum shipped).
+  bool _canShipOnline(Map<String, dynamic> h) {
+    if (!_staff || !_isOnlineDelivery(h)) return false;
+    if (InvoiceHubService.sudahDiambil(h)) return false;
+    final oid = (h['online_order_id'] ?? '').toString().trim();
+    if (oid.isEmpty) return false;
+    final t = (h['tracking_status'] ?? '').toString().trim().toUpperCase();
+    if (t == 'DIKIRIM' || t == 'SHIPPED') return false;
+    // Siap kirim: barang ready / masih diproses online lunas.
+    return InvoiceHubService.isLunas(h);
+  }
 
   bool _isLunasPending(Map<String, dynamic> h) {
     if (!InvoiceHubService.isLunas(h)) return false;
     if (InvoiceHubService.sudahDiambil(h)) return false;
     final t = (h['tracking_status'] ?? '').toString().trim().toUpperCase();
     return t != 'SIAP_DIAMBIL' && t != 'CLEAR';
+  }
+
+  /// Ada line READY tapi QR LUNAS belum aktif / sudah dipakai batch sebelumnya.
+  bool _needsLunasQrRefresh(Map<String, dynamic> h) {
+    if (!InvoiceHubService.isLunas(h)) return false;
+    if (InvoiceHubService.sudahDiambil(h)) return false;
+    if (!InvoiceHubService.hasReadyLines(h)) return false;
+    final ready = h['qr_lunas_ready'] == true;
+    final used = h['qr_lunas_used'] == true;
+    return used || !ready;
   }
 
   bool _isLunasReady(Map<String, dynamic> h) {
@@ -666,13 +1157,19 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
   /// Lunas pending (bayar lunas, stok belum ada) — barcode/aksi khusus admin.
   bool get _isAdminRole {
     final r = (_profileOrToko['role'] ?? '').toString().trim().toLowerCase();
-    if (r == 'karyawan' || r == 'staff' || r == 'kasir') return false;
-    return r == 'owner' ||
+    if (r == 'karyawan' || r == 'staff' || r == 'kasir' || r == 'guest') {
+      return false;
+    }
+    if (r == 'owner' ||
         r == 'admin_pusat' ||
         r == 'admin_toko' ||
-        r == 'admin' ||
-        // Web admin sering buka hub tanpa profile → anggap admin.
-        (widget.profile == null && _staff);
+        r == 'admin') {
+      return true;
+    }
+    // Web admin: profile kosong + buka dari HID/scanner lifecycle.
+    return widget.profile == null &&
+        _staff &&
+        (widget.fromAdminHidScanner || _lifecycleValidated);
   }
 
   /// Nota harus diproses di cabang pembuat (kecuali PUSAT).
@@ -691,26 +1188,29 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       widget.profile ??
       {
         'toko_id': _hub?['toko_id']?.toString() ?? 'PUSAT',
-        // Default web admin; APK karyawan wajib mengirim profile.role=karyawan.
-        'role': _staff ? 'admin_toko' : 'guest',
+        // Jangan default admin_toko — APK karyawan harus kirim profile.role.
+        // Web admin tanpa profile tetap bisa lewat fromAdminHidScanner.
+        'role': widget.fromAdminHidScanner || _lifecycleValidated
+            ? 'admin_toko'
+            : (_staff ? 'staff' : 'guest'),
       };
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF071018),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        title: Text('invoice_hub_title'.tr()),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'invoice_hub_title'.tr(),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice),
+            )
           : _error != null
               ? Center(
                   child: Padding(
@@ -720,11 +1220,15 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                       children: [
                         Text(_error!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white70)),
+                            style: const TextStyle(color: OptikAdminTokens.slate)),
                         const SizedBox(height: 16),
                         FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: OptikAdminTokens.navy,
+                            foregroundColor: OptikAdminTokens.snow,
+                          ),
                           onPressed: _load,
-                          child: Text('Retry'),
+                          child: const Text('Coba lagi'),
                         ),
                       ],
                     ),
@@ -734,156 +1238,458 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     );
   }
 
-  Widget _buildBody() {
-    final h = _hub!;
-    final inv = h['no_invoice']?.toString() ?? '-';
-    final sisa = InvoiceHubService.garansiSisaHariMax(h);
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, top: 4),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          color: OptikAdminTokens.slate,
+          fontWeight: FontWeight.w800,
+          fontSize: 11,
+          letterSpacing: 0.7,
+        ),
+      ),
+    );
+  }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+  Widget _pill(String label, {required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _moneyRow(String label, String value,
+      {bool bold = false, Color? valueColor}) {
+    return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF0F172A), Color(0xFF1E3C72)],
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: OptikAdminTokens.slate,
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
             ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8C872).withOpacity(0.35)),
           ),
-          child: Column(
+        ),
+        Text(
+          'Rp $value',
+          style: TextStyle(
+            color: valueColor ?? OptikAdminTokens.navy,
+            fontSize: bold ? 15 : 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _surface({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+    Color? color,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color ?? OptikAdminTokens.snow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: OptikAdminTokens.lineStrong),
+        boxShadow: [
+          BoxShadow(
+            color: OptikAdminTokens.navy.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _fulfillmentMeter(Map<String, dynamic> h) {
+    final items = h['items'];
+    final maps = items is List
+        ? items.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final c = SaleFulfillmentService.counts(maps);
+    final total = c.total <= 0 ? 1 : c.total;
+
+    Widget cell(String label, int n, Color color) {
+      return Expanded(
+        child: Column(
+          children: [
+            Text(
+              '$n',
+              style: TextStyle(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: OptikAdminTokens.slate,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: n / total,
+                minHeight: 5,
+                backgroundColor: OptikAdminTokens.bgMid,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _surface(
+      child: Row(
+        children: [
+          cell('Ready', c.ready, OptikAdminTokens.navy),
+          const SizedBox(width: 14),
+          cell('RO', c.pendingRo, OptikAdminTokens.warning),
+          const SizedBox(width: 14),
+          cell('Diambil', c.diambil, OptikAdminTokens.success),
+        ],
+      ),
+    );
+  }
+
+  Widget _identityHeader(Map<String, dynamic> h) {
+    final inv = h['no_invoice']?.toString() ?? '-';
+    final name = h['nama_pelanggan']?.toString() ?? '-';
+    final toko = h['toko_id']?.toString() ?? '-';
+    final pay = (h['status_pembayaran'] ?? '-').toString().toUpperCase();
+    final status = InvoiceHubService.statusLabel(h);
+    final metode = h['metode_pembayaran']?.toString() ?? '-';
+
+    return _surface(
+      padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       inv,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: OptikAdminTokens.navy,
                         fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.2,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$name · $toko · $metode',
+                      style: const TextStyle(
+                        color: OptikAdminTokens.slate,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Salin invoice',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: inv));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'invoice_hub_copied'.tr(),
+                        style: const TextStyle(color: OptikAdminTokens.snow),
+                      ),
+                      backgroundColor: OptikAdminTokens.navy,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy_rounded,
+                    color: OptikAdminTokens.navy, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _pill(pay,
+                  color: pay == 'LUNAS'
+                      ? OptikAdminTokens.success
+                      : OptikAdminTokens.warning),
+              _pill(status, color: OptikAdminTokens.navy),
+              _channelBadge(),
+              if (_staff)
+                _pill(
+                  _staff
+                      ? 'invoice_hub_mode_staff'.tr()
+                      : 'invoice_hub_mode_customer'.tr(),
+                  color: OptikAdminTokens.slate,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Zona CTA utama — selalu di atas konten sekunder.
+  List<Widget> _primaryActionZone(Map<String, dynamic> h) {
+    final out = <Widget>[
+      _sectionLabel('Tindakan'),
+    ];
+
+    if (_canShipOnline(h)) {
+      out.addAll(_onlineShipPanel(h));
+      out.add(const SizedBox(height: 10));
+    }
+
+    final dpOpen = InvoiceHubService.isDpOpen(h);
+    final showAdminReady = _staff &&
+        _isAdminRole &&
+        !InvoiceHubService.sudahDiambil(h) &&
+        !_isOnlineDelivery(h) &&
+        (dpOpen ||
+            _isLunasPending(h) ||
+            _needsLunasQrRefresh(h) ||
+            (InvoiceHubService.isLunas(h) &&
+                InvoiceHubService.hasPendingRoLines(h)) ||
+            (InvoiceHubService.isLunas(h) &&
+                InvoiceHubService.hasReadyLines(h)));
+
+    if (showAdminReady) {
+      out.addAll(_adminReadyPanel(h));
+      out.add(const SizedBox(height: 10));
+    }
+
+    if (_staff &&
+        !_isAdminRole &&
+        (dpOpen ||
+            _isLunasPending(h) ||
+            _needsLunasQrRefresh(h) ||
+            InvoiceHubService.hasPendingRoLines(h)) &&
+        !_isOnlineDelivery(h)) {
+      out.add(_lunasPendingKaryawanHint());
+      out.add(const SizedBox(height: 10));
+    }
+
+    if (_staff &&
+        _customerLifecycleEnabled &&
+        !_isOnlineDelivery(h)) {
+      out.addAll(_confirmPanel(h));
+      out.add(const SizedBox(height: 10));
+    }
+
+    if (_staff &&
+        !_customerLifecycleEnabled &&
+        !_isLunasPending(h) &&
+        !dpOpen &&
+        !showAdminReady) {
+      out.add(_viewOnlyHint(h));
+      out.add(const SizedBox(height: 10));
+    }
+
+    if (!_staff) {
+      out.addAll(_customerActions(h));
+    }
+
+    if (out.length == 1) {
+      // hanya label — jangan tampilkan kosong
+      return const [];
+    }
+    return out;
+  }
+
+  Widget _buildBody() {
+    final h = _hub!;
+    final sisaGaransi = InvoiceHubService.garansiSisaHariMax(h);
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+          children: [
+            // 1) Identitas nota (ringan, bukan blok navy penuh)
+            _identityHeader(h),
+            const SizedBox(height: 12),
+            // 2) Meter fulfillment — fokus partial RO/Ready
+            _sectionLabel('Pemenuhan barang'),
+            _fulfillmentMeter(h),
+            if (InvoiceHubService.sudahDiambil(h)) ...[
+              const SizedBox(height: 8),
+              Text(
+                InvoiceHubService.isCaseClosed(h) ||
+                        !InvoiceHubService.isGaransiClaimable(h)
+                    ? 'CLEAR · Garansi mati'
+                    : (sisaGaransi != null && sisaGaransi >= 0
+                        ? 'CLEAR · Garansi aktif · $sisaGaransi hari lagi'
+                        : 'CLEAR · Garansi aktif'),
+                style: TextStyle(
+                  color: InvoiceHubService.isCaseClosed(h) ||
+                          !InvoiceHubService.isGaransiClaimable(h)
+                      ? OptikAdminTokens.danger
+                      : OptikAdminTokens.success,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                ),
+              ),
+            ] else if (sisaGaransi != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                sisaGaransi >= 0
+                    ? 'invoice_hub_garansi_sisa'.tr(args: ['$sisaGaransi'])
+                    : 'invoice_hub_garansi_habis'.tr(),
+                style: TextStyle(
+                  color: sisaGaransi >= 0
+                      ? OptikAdminTokens.slate
+                      : OptikAdminTokens.danger,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            // 3) CTA utama dulu
+            ..._primaryActionZone(h),
+            const SizedBox(height: 8),
+            // 4) Items = konten utama
+            _sectionLabel('invoice_hub_items'.tr()),
+            _surface(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                children: [
+                  ..._itemTiles(h),
+                  const Divider(height: 20, color: OptikAdminTokens.lineStrong),
+                  _moneyRow(
+                    'Total',
+                    _fmt(int.tryParse(h['total_harga']?.toString() ?? '0') ?? 0),
+                    bold: true,
                   ),
-                  IconButton(
-                    tooltip: 'Copy',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: inv));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('invoice_hub_copied'.tr())),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded,
-                        color: Color(0xFFE8C872), size: 20),
+                  const SizedBox(height: 6),
+                  _moneyRow(
+                    'Dibayar',
+                    _fmt(int.tryParse(h['dibayarkan']?.toString() ?? '0') ?? 0),
+                  ),
+                  const SizedBox(height: 6),
+                  _moneyRow(
+                    'Sisa',
+                    _fmt(int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0),
+                    valueColor:
+                        (int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0) >
+                                0
+                            ? OptikAdminTokens.danger
+                            : OptikAdminTokens.success,
                   ),
                 ],
               ),
-              Text(
-                _staff
-                    ? 'invoice_hub_mode_staff'.tr()
-                    : 'invoice_hub_mode_customer'.tr(),
-                style: TextStyle(
-                  color: const Color(0xFFE8C872).withOpacity(0.9),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: 14),
+            // 5) Detail sekunder (collapse)
+            _sectionLabel('Detail'),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: _surface(
+                padding: EdgeInsets.zero,
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+                  childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  iconColor: OptikAdminTokens.navy,
+                  collapsedIconColor: OptikAdminTokens.slate,
+                  title: Text(
+                    h['nama_pelanggan']?.toString() ?? 'Pelanggan',
+                    style: const TextStyle(
+                      color: OptikAdminTokens.navy,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'WhatsApp / alamat / kasir',
+                    style: TextStyle(
+                      color: OptikAdminTokens.slate.withOpacity(0.9),
+                      fontSize: 12,
+                    ),
+                  ),
+                  children: [
+                    ..._customerDetailRows(h, dense: true).map(
+                      (w) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: w,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Kasir: ${h['nama_kasir'] ?? '-'}',
+                      style: const TextStyle(
+                        color: OptikAdminTokens.slate,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '${'invoice_hub_status'.tr()}: ${InvoiceHubService.statusLabel(h)}'
-                ' · ${'invoice_hub_bayar'.tr()}: ${h['status_pembayaran'] ?? '-'}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-              if (sisa != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  sisa >= 0
-                      ? 'invoice_hub_garansi_sisa'.tr(args: ['$sisa'])
-                      : 'invoice_hub_garansi_habis'.tr(),
-                  style: TextStyle(
-                    color: sisa >= 0
-                        ? const Color(0xFFE8C872)
-                        : Colors.redAccent.shade100,
-                    fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: 10),
+            _surface(
+              padding: EdgeInsets.zero,
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                iconColor: OptikAdminTokens.navy,
+                collapsedIconColor: OptikAdminTokens.slate,
+                title: Text(
+                  'invoice_hub_garansi'.tr(),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.navy,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
                   ),
                 ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Data pelanggan',
-          style: TextStyle(
-            color: Color(0xFFE8C872),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _infoCard(_customerDetailRows(h, dense: true)),
-        const SizedBox(height: 16),
-        Text(
-          'invoice_hub_items'.tr(),
-          style: const TextStyle(
-            color: Color(0xFFE8C872),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ..._itemTiles(h),
-        const SizedBox(height: 8),
-        _infoCard([
-          Text(
-            'Total: Rp ${_fmt(int.tryParse(h['total_harga']?.toString() ?? '0') ?? 0)}\n'
-            'Dibayar: Rp ${_fmt(int.tryParse(h['dibayarkan']?.toString() ?? '0') ?? 0)}\n'
-            'Sisa: Rp ${_fmt(int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0)}\n'
-            'Metode: ${h['metode_pembayaran'] ?? '-'} · Kasir: ${h['nama_kasir'] ?? '-'}',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.75),
-              fontSize: 13,
-              height: 1.4,
+                children: _garansiTiles(h),
+              ),
             ),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        Text(
-          'invoice_hub_garansi'.tr(),
-          style: const TextStyle(
-            color: Color(0xFFE8C872),
-            fontWeight: FontWeight.w700,
-          ),
+            if (_staff) ...[
+              const SizedBox(height: 18),
+              _sectionLabel('Lainnya'),
+              ..._staffSecondaryActions(h),
+            ],
+          ],
         ),
-        const SizedBox(height: 8),
-        ..._garansiTiles(h),
-        const SizedBox(height: 20),
-        // Admin: lunas pending → scan barcode nota → konfirmasi barang ready.
-        if (_staff && _isAdminRole && _isLunasPending(h)) ...[
-          ..._lunasPendingAdminPanel(h),
-          const SizedBox(height: 12),
-        ],
-        if (_staff && !_isAdminRole && _isLunasPending(h)) ...[
-          _lunasPendingKaryawanHint(),
-          const SizedBox(height: 12),
-        ],
-        // Customer QR: DP / LUNAS ready / CLAIM.
-        if (_staff && _customerLifecycleEnabled) ..._confirmPanel(h),
-        if (_staff &&
-            !_customerLifecycleEnabled &&
-            !_isLunasPending(h)) ...[
-          _viewOnlyHint(h),
-          const SizedBox(height: 12),
-        ],
-        if (!_staff) ..._customerActions(h),
-        if (_staff) ...[
-          const SizedBox(height: 8),
-          ..._staffSecondaryActions(h),
-        ],
-      ],
+      ),
     );
   }
 
@@ -897,27 +1703,24 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Text(
         h['nama_pelanggan']?.toString() ?? '-',
         style: TextStyle(
-          color: Colors.white.withOpacity(dense ? 0.9 : 0.85),
+          color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
           fontSize: dense ? 14 : 15,
         ),
       ),
       Text(
         'Toko: ${h['toko_id'] ?? '-'}',
-        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12.5),
+        style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
       ),
       if (wa != null && wa.isNotEmpty)
         Text('WhatsApp: $wa',
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12.5)),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
       if (email != null && email.isNotEmpty)
         Text('Email: $email',
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12.5)),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
       if (alamat != null && alamat.isNotEmpty)
         Text('Alamat: $alamat',
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12.5)),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
     ];
     if (dense) return rows;
     return rows
@@ -925,67 +1728,117 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         .toList();
   }
 
-  Widget _infoCard(List<Widget> children) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
-      ),
-    );
-  }
 
-  /// Panel admin untuk fase lunas pending (barcode hanya admin).
-  List<Widget> _lunasPendingAdminPanel(Map<String, dynamic> h) {
+  /// Panel admin: DP Barang Ready / Lunas pending / kirim ulang QR.
+  List<Widget> _adminReadyPanel(Map<String, dynamic> h) {
+    final dpOpen = InvoiceHubService.isDpOpen(h);
+    final tracking =
+        (h['tracking_status'] ?? '').toString().trim().toUpperCase();
+    final dpQrReady = dpOpen && tracking == 'SIAP_PELUNASAN';
+    final hasRo = InvoiceHubService.hasPendingRoLines(h);
+    final hasReady = InvoiceHubService.hasReadyLines(h);
+
+    late final String title;
+    late final String body;
+    late final String btn;
+    if (dpOpen) {
+      title = dpQrReady ? 'DP · siap pelunasan' : 'DP · menunggu barang ready';
+      body = dpQrReady
+          ? 'QR pelunasan sudah aktif. Bisa kirim ulang ke pelanggan, '
+              'atau pelanggan scan QR DP untuk lunasi.'
+          : 'Konfirmasi stok ready untuk menerbitkan QR pelunasan (DP). '
+              'Setelah lunas → langsung board READY (QR pengambilan).';
+      btn = dpQrReady
+          ? 'Kirim ulang QR pelunasan'
+          : hasRo
+              ? 'Tandai RO ready & kirim QR pelunasan'
+              : 'Barang Ready · kirim QR pelunasan';
+    } else {
+      final lunasPending = _isLunasPending(h);
+      final lunasReady = _isLunasReady(h);
+      if (hasRo) {
+        title = hasReady
+            ? 'Partial · RO masih pending'
+            : 'Partial · RO pending (belum Ready)';
+        body = hasReady
+            ? 'Ambil item READY lewat scan QR LUNAS, atau tandai RO siap '
+                'lalu refresh QR pengambilan.'
+            : 'Masih ada item RO. Tandai RO ready dulu — QR pengambilan '
+                'akan di-refresh untuk item itu. '
+                '(Email/WA boleh gagal; QR di app tetap valid.)';
+        btn = 'Tandai RO ready & kirim QR';
+      } else if (lunasPending) {
+        title = 'Lunas · menunggu konfirmasi READY';
+        body = 'Item boleh sudah Ready di gudang, tapi QR pengambilan belum aktif '
+            'sampai admin konfirmasi Barang Ready → board READY.';
+        btn = hasReady
+            ? 'Barang Ready · terbitkan QR READY'
+            : 'Konfirmasi ready & terbitkan QR READY';
+      } else if (lunasReady) {
+        title = 'Siap diambil (READY)';
+        body = 'QR pengambilan aktif. Bisa kirim ulang ke pelanggan. '
+            'Setelah serah terima → board CLEAR (Garansi aktif / mati). '
+            '(Email/WA boleh gagal; QR di dialog tetap valid.)';
+        btn = 'Kirim ulang QR pengambilan';
+      } else {
+        title = 'Konfirmasi barang';
+        body = 'Konfirmasi stok ready dan terbitkan QR pelanggan.';
+        btn = 'Konfirmasi ready & kirim QR';
+      }
+    }
+
     return [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE8C872).withOpacity(0.45)),
-        ),
+      _surface(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Lunas pending · konfirmasi admin',
-              style: TextStyle(
-                color: Color(0xFFE8C872),
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: OptikAdminTokens.warning,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: OptikAdminTokens.navy,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
-              'Customer sudah bayar lunas, barang belum ready.\n\n'
-              'Scan barcode nota (admin), lalu konfirmasi barang ready. '
-              'Sistem mengirim pesan “barang siap diambil” + nota + '
-              'QR LUNAS ready ke email, WhatsApp, dan APK Member.\n\n'
-              'Customer memegang: QR DP, QR LUNAS ready, QR CLAIM.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.78),
+              body,
+              style: const TextStyle(
+                color: OptikAdminTokens.slate,
                 height: 1.4,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 14),
-            FilledButton(
+            FilledButton.icon(
               onPressed: _busy ? null : () => _confirmGlassesReady(h),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE8C872),
-                foregroundColor: const Color(0xFF0F172A),
+                backgroundColor: OptikAdminTokens.navy,
+                foregroundColor: OptikAdminTokens.snow,
                 minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text(
-                'Konfirmasi barang ready — kirim QR LUNAS',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              icon: const Icon(Icons.verified_outlined, size: 18),
+              label: Text(
+                btn,
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -995,18 +1848,22 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
   }
 
   Widget _lunasPendingKaryawanHint() {
+    final dp = _hub != null && InvoiceHubService.isDpOpen(_hub!);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.12),
+        color: OptikAdminTokens.warning.withOpacity(0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withOpacity(0.35)),
+        border: Border.all(color: OptikAdminTokens.warning.withOpacity(0.35)),
       ),
-      child: const Text(
-        'Lunas pending — barcode & konfirmasi barang ready hanya di web admin. '
-        'Setelah admin konfirmasi, customer menerima QR LUNAS ready.',
-        style: TextStyle(color: Colors.white70, height: 1.4),
+      child: Text(
+        dp
+            ? 'DP — Barang Ready & QR pelunasan hanya di web admin. '
+                'Setelah ready, pelanggan scan QR DP untuk lunasi → READY.'
+            : 'Lunas pending — Barang Ready hanya di web admin. '
+                'Setelah admin konfirmasi, customer menerima QR LUNAS ready.',
+        style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
       ),
     );
   }
@@ -1035,91 +1892,55 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       why = 'QR belum dikenali sebagai OBRINV pelanggan bertoken.';
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
+    return _surface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Belum ada tindakan',
+            'Belum ada tindakan lifecycle',
             style: TextStyle(
-              color: Color(0xFFE8C872),
-              fontWeight: FontWeight.w800,
+              color: OptikAdminTokens.navy,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '$why\n\n'
-            'Untuk tindakan, scan ulang QR pelanggan fase $needed '
-            'dari email / WhatsApp / APK Member '
-            '(format: OBRINV|v1|…|$needed|token).\n'
-            'Setelah scan benar, panel tindakan muncul di bagian ini.',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 12.5,
+            'Aksi pelunasan / serah terima / klaim hanya setelah '
+            'scan QR pelanggan fase $needed (email / WA / Member / print). '
+            'Tidak bisa dibuka dari token di database.',
+            style: const TextStyle(
+              color: OptikAdminTokens.slate,
+              fontSize: 13,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : () => _unlockLifecycleFromSale(h),
-            icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
-            label: Text('Mulai tindakan $needed'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFE8C872),
-              side: BorderSide(color: const Color(0xFFE8C872).withOpacity(0.5)),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _busy
+                ? null
+                : () => InvoiceHubPage.openScanner(
+                      context,
+                      profile: widget.profile ?? _profileOrToko,
+                    ),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptikAdminTokens.navy,
+              foregroundColor: OptikAdminTokens.snow,
+              minimumSize: const Size.fromHeight(46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+            label: Text(
+              'Scan QR $needed',
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ],
       ),
     );
-  }
-
-  /// Buka ulang hub dengan payload OBRINV aktif (jika scan sebelumnya OBRTXN/link).
-  Future<void> _unlockLifecycleFromSale(Map<String, dynamic> h) async {
-    final inv = h['no_invoice']?.toString();
-    final saleId = h['sale_id']?.toString();
-    if (inv == null || saleId == null || _busy) return;
-    setState(() => _busy = true);
-    try {
-      final sale = await _lifecycle.ensureTokens(saleId);
-      final payload = InvoiceLifecycleService.customerQrPayload(sale) ?? '';
-      if (!mounted) return;
-      if (payload.isEmpty || !InvoiceLink.isCustomerLifecycleQr(payload)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'QR pelanggan belum bisa diterbitkan untuk fase ini.',
-            ),
-          ),
-        );
-        return;
-      }
-      await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => InvoiceHubPage(
-            noInvoice: inv,
-            rawScan: payload,
-            profile: widget.profile,
-            viewOnly: false,
-            fromAdminHidScanner: true,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   /// Panel konfirmasi di bawah — fase mengikuti QR yang di-scan (sekali pakai).
@@ -1141,37 +1962,42 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       question =
           'Sisa yang belum dibayar akan dilunasi 1× lewat payment gateway.\n\n'
           'Sudah DP: Rp ${_fmt(dp)}\nSisa: Rp ${_fmt(sisa)}\n\n'
-          'Setelah bayar sukses: QR DP hangus, langsung QR LUNAS ready '
-          '(ambil + aktifkan garansi).';
+          'Setelah bayar sukses: QR DP hangus. '
+          'Jika barang sudah ready → QR LUNAS; jika belum → menunggu konfirmasi ready.';
       yesLabel = 'Ya, buka payment gateway';
       onYes = () => _settleDpConfirmed(h);
     } else if (phase == 'LUNAS') {
-      if (_isLunasPending(h)) {
+      if (_isLunasPending(h) || !InvoiceHubService.hasReadyLines(h)) {
+        final noReady = !InvoiceHubService.hasReadyLines(h);
         return [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.12),
+              color: OptikAdminTokens.warning.withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange.withOpacity(0.35)),
+              border: Border.all(color: OptikAdminTokens.warning.withOpacity(0.35)),
             ),
-            child: const Text(
-              'QR LUNAS ready belum aktif.\n'
-              'Ini lunas pending — admin harus scan barcode nota dan '
-              'konfirmasi barang ready dulu.',
-              style: TextStyle(color: Colors.white70, height: 1.4),
+            child: Text(
+              noReady
+                  ? 'Tidak ada item READY untuk diserahkan.\n'
+                      'Tandai RO ready dulu, lalu scan ulang QR LUNAS pelanggan '
+                      'yang baru dikirim.'
+                  : 'QR LUNAS ready belum aktif.\n'
+                      'Admin harus konfirmasi barang ready dulu.',
+              style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
             ),
           ),
         ];
       }
       title = 'Konfirmasi serah terima';
       question =
-          'Produk diberikan ke pelanggan?\n\n'
-          'Ini mengaktifkan garansi ${GaransiService.garansiHari} hari '
-          'dan menerbitkan QR CLAIM (dipegang customer).\n'
-          'Lanjut → scan barcode karyawan.';
-      yesLabel = 'Ya, sudah diberikan';
+          'Pilih produk yang diambil sekarang.\n\n'
+          'Item READY bisa dicentang sebagian (tidak wajib ambil semua). '
+          'RO pending tidak bisa dipilih. Yang ditunda / RO bisa scan lagi nanti.\n'
+          'Lanjut → pilih item → scan barcode karyawan · '
+          'garansi ${GaransiService.garansiHari} hari aktif per item terpilih.';
+      yesLabel = 'Pilih item & serahkan';
       onYes = () => _handoverConfirmed(h);
     } else if (phase == 'CLAIM') {
       if (InvoiceHubService.isCaseClosed(h)) {
@@ -1180,15 +2006,15 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.12),
+              color: OptikAdminTokens.danger.withOpacity(0.12),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+              border: Border.all(color: OptikAdminTokens.danger.withOpacity(0.4)),
             ),
             child: const Text(
-              'Case closed\n'
-              'Garansi sudah habis masa, sudah diklaim, atau QR CLAIM sudah dipakai. '
+              'CLEAR · Garansi mati\n'
+              'Masa garansi habis, sudah diklaim, atau QR CLAIM sudah dipakai. '
               'Tidak ada tindak lanjut.',
-              style: TextStyle(color: Colors.white70, height: 1.4),
+              style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
             ),
           ),
         ];
@@ -1204,31 +2030,25 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     }
 
     return [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE8C872).withOpacity(0.45)),
-        ),
+      _surface(
+        color: OptikAdminTokens.bgMid,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               title,
               style: const TextStyle(
-                color: Color(0xFFE8C872),
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
+                color: OptikAdminTokens.navy,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               question,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
-                fontSize: 13.5,
+              style: const TextStyle(
+                color: OptikAdminTokens.slate,
+                fontSize: 13,
                 height: 1.4,
               ),
             ),
@@ -1239,11 +2059,14 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                   child: OutlinedButton(
                     onPressed: _busy ? null : () => Navigator.maybePop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: BorderSide(color: Colors.white.withOpacity(0.25)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      foregroundColor: OptikAdminTokens.slate,
+                      side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text('Tidak'),
+                    child: const Text('Batal'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1252,15 +2075,21 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                   child: FilledButton(
                     onPressed: _busy ? null : onYes,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFE8C872),
-                      foregroundColor: const Color(0xFF0F172A),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: OptikAdminTokens.navy,
+                      foregroundColor: OptikAdminTokens.snow,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: _busy
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: OptikAdminTokens.snow,
+                            ),
                           )
                         : Text(yesLabel,
                             style:
@@ -1279,25 +2108,65 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final items = h['items'];
     if (items is! List || items.isEmpty) {
       return [
-        Text('—', style: TextStyle(color: Colors.white.withOpacity(0.4))),
+        const Text('Tidak ada item',
+            style: TextStyle(color: OptikAdminTokens.slate)),
       ];
     }
-    return items.map((raw) {
-      final it = Map<String, dynamic>.from(raw as Map);
-      return Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          '${it['nama_produk'] ?? '-'} · ${it['tipe_produk'] ?? ''} × ${it['qty'] ?? 1}'
-          '${_staff && it['subtotal'] != null ? ' · Rp ${it['subtotal']}' : ''}',
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
-        ),
-      );
-    }).toList();
+    final list = items.toList();
+    return [
+      for (var i = 0; i < list.length; i++) ...[
+        if (i > 0) const Divider(height: 1, color: OptikAdminTokens.line),
+        Builder(builder: (_) {
+          final it = Map<String, dynamic>.from(list[i] as Map);
+          final st =
+              (it['fulfillment_status'] ?? 'READY').toString().toUpperCase();
+          final badge = switch (st) {
+            'PENDING_RO' || 'PENDING' => 'RO pending',
+            'DIAMBIL' => 'Diambil',
+            _ => 'Ready',
+          };
+          final badgeColor = switch (st) {
+            'PENDING_RO' || 'PENDING' => OptikAdminTokens.warning,
+            'DIAMBIL' => OptikAdminTokens.success,
+            _ => OptikAdminTokens.navy,
+          };
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (it['nama_produk'] ?? '-').toString(),
+                        style: const TextStyle(
+                          color: OptikAdminTokens.navy,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${it['tipe_produk'] ?? '-'} × ${it['qty'] ?? 1}'
+                        '${_staff && it['subtotal'] != null ? ' · Rp ${it['subtotal']}' : ''}',
+                        style: const TextStyle(
+                          color: OptikAdminTokens.slate,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _pill(badge, color: badgeColor),
+              ],
+            ),
+          );
+        }),
+      ],
+    ];
   }
 
   List<Widget> _garansiTiles(Map<String, dynamic> h) {
@@ -1306,28 +2175,50 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       return [
         Text(
           'invoice_hub_garansi_empty'.tr(),
-          style: TextStyle(color: Colors.white.withOpacity(0.45)),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
       ];
     }
     return list.map((raw) {
       final g = Map<String, dynamic>.from(raw as Map);
-      return Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          '${g['nama_produk'] ?? '-'} (${g['jenis_garansi']})\n'
-          '${g['status']} · ${g['tanggal_mulai'] ?? '-'} → ${g['tanggal_akhir'] ?? '-'}'
-          '${g['klaim_digunakan'] == true ? ' · klaim dipakai' : ''}',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 12.5,
-            height: 1.35,
-          ),
+      final st = (g['status'] ?? '-').toString();
+      final stLabel = GaransiService.statusLabel(g);
+      final stColor = st == 'aktif'
+          ? OptikAdminTokens.success
+          : OptikAdminTokens.warning;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${g['nama_produk'] ?? '-'}',
+                    style: const TextStyle(
+                      color: OptikAdminTokens.navy,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${g['jenis_garansi'] ?? '-'} · '
+                    '${g['tanggal_mulai'] ?? '—'} → ${g['tanggal_akhir'] ?? '—'}'
+                    '${g['klaim_digunakan'] == true ? ' · klaim dipakai' : ''}',
+                    style: const TextStyle(
+                      color: OptikAdminTokens.slate,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _pill(stLabel, color: stColor),
+          ],
         ),
       );
     }).toList();
@@ -1339,14 +2230,6 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final inv = h['no_invoice']?.toString() ?? '';
 
     return [
-      Text(
-        'Lainnya',
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 10),
       _actionBtn(
         icon: Icons.receipt_long_rounded,
         label: 'invoice_hub_btn_detail'.tr(),
@@ -1369,7 +2252,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Text(
         'invoice_hub_assign_pembuat'.tr(),
         style: TextStyle(
-          color: const Color(0xFFE8C872).withOpacity(0.9),
+          color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1378,7 +2261,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         h['nama_pembuat_kacamata'] != null
             ? '${'invoice_hub_pembuat_current'.tr()}: ${h['nama_pembuat_kacamata']}'
             : 'invoice_hub_pembuat_empty'.tr(),
-        style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12.5),
+        style: TextStyle(color: OptikAdminTokens.slate.withOpacity(0.55), fontSize: 12.5),
       ),
       const SizedBox(height: 8),
       _actionBtn(
@@ -1402,7 +2285,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
       return;
     }
@@ -1414,60 +2297,41 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       return;
     }
 
-    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+    final result = await showAdminPicker<String>(
       context: context,
-      backgroundColor: const Color(0xFF0F172A),
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'invoice_hub_pick_pembuat'.tr(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
-              ),
+      title: 'invoice_hub_pick_pembuat'.tr(),
+      options: list
+          .map(
+            (k) => AdminPickerOption<String>(
+              value: k['id'].toString(),
+              label: k['nama']?.toString() ?? '-',
+              subtitle: k['jabatan']?.toString(),
+              icon: Icons.engineering_rounded,
             ),
-            ...list.map(
-              (k) => ListTile(
-                title: Text(
-                  k['nama']?.toString() ?? '-',
-                  style: const TextStyle(color: Colors.white),
-                ),
-                subtitle: Text(
-                  k['jabatan']?.toString() ?? '',
-                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
-                ),
-                onTap: () => Navigator.pop(ctx, k),
-              ),
-            ),
-          ],
-        ),
-      ),
+          )
+          .toList(),
+      headerIcon: Icons.engineering_rounded,
+      searchable: list.length > 6,
     );
-    if (picked == null || !mounted) return;
+    if (result == null || result.value == null || !mounted) return;
 
     try {
       await _svc.setPembuat(
         noInvoice: inv,
-        karyawanId: picked['id'].toString(),
+        karyawanId: result.value!,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('invoice_hub_pembuat_ok'.tr()),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikAdminTokens.success,
         ),
       );
       await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -1478,7 +2342,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Text(
         'invoice_hub_customer_actions'.tr(),
         style: const TextStyle(
-          color: Colors.white,
+          color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1486,13 +2350,13 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: OptikAdminTokens.slate,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Text(
           'invoice_hub_customer_info'.tr(),
           style: TextStyle(
-            color: Colors.white.withOpacity(0.65),
+            color: OptikAdminTokens.slate,
             height: 1.4,
             fontSize: 13,
           ),
@@ -1502,8 +2366,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       _actionBtn(
         icon: Icons.reviews_rounded,
         label: 'invoice_hub_btn_google'.tr(),
-        color: const Color(0xFFE8C872),
-        foreground: const Color(0xFF0F172A),
+        color: OptikAdminTokens.ice,
+        foreground: OptikAdminTokens.navy,
         onTap: googleUrl.isEmpty
             ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1527,7 +2391,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Text(
         'invoice_hub_rating_via_member'.tr(),
         style: TextStyle(
-          color: Colors.white.withOpacity(0.45),
+          color: OptikAdminTokens.slate.withOpacity(0.45),
           fontSize: 12,
           height: 1.35,
         ),
@@ -1537,7 +2401,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         Text(
           'invoice_hub_foto_hasil'.tr(),
           style: const TextStyle(
-            color: Color(0xFFE8C872),
+            color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1551,7 +2415,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Text(
               '—',
-              style: TextStyle(color: Colors.white.withOpacity(0.4)),
+              style: TextStyle(color: OptikAdminTokens.slate.withOpacity(0.4)),
             ),
           ),
         ),
@@ -1565,7 +2429,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       return [
         Text(
           'invoice_hub_rating_none'.tr(),
-          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.slate.withOpacity(0.4), fontSize: 12),
         ),
       ];
     }
@@ -1573,7 +2437,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       Text(
         'invoice_hub_rating_title'.tr(),
         style: const TextStyle(
-          color: Color(0xFFE8C872),
+          color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1582,7 +2446,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         final r = Map<String, dynamic>.from(raw as Map);
         return Text(
           '• ${r['peran']}: ${r['nama_karyawan'] ?? '-'} → ${r['skor']}/5',
-          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12.5),
+          style: TextStyle(color: OptikAdminTokens.slate.withOpacity(0.6), fontSize: 12.5),
         );
       }),
     ];
@@ -1595,21 +2459,41 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     Color? color,
     Color? foreground,
   }) {
+    final primary = color != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SizedBox(
         width: double.infinity,
-        child: FilledButton.icon(
-          onPressed: onTap,
-          style: FilledButton.styleFrom(
-            backgroundColor: color ?? const Color(0xFF1E3C72),
-            foregroundColor: foreground ?? Colors.white,
-            disabledBackgroundColor: Colors.white12,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-          icon: Icon(icon, size: 20),
-          label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
+        child: primary
+            ? FilledButton.icon(
+                onPressed: onTap,
+                style: FilledButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: foreground ?? OptikAdminTokens.snow,
+                  disabledBackgroundColor: OptikAdminTokens.line,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: Icon(icon, size: 20),
+                label: Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              )
+            : OutlinedButton.icon(
+                onPressed: onTap,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: OptikAdminTokens.navy,
+                  side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: Icon(icon, size: 20),
+                label: Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
       ),
     );
   }

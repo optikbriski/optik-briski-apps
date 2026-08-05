@@ -213,10 +213,11 @@ class LeavePageGuard {
   }
 
   /// Intercept back / system pop. Panggil [onSave] jika user pilih simpan.
+  /// [onSave] boleh return `false` / throw → tetap di halaman (simpan gagal).
   static Future<bool> handlePop(
     BuildContext context, {
     required bool hasEdits,
-    Future<void> Function()? onSave,
+    Future<dynamic> Function()? onSave,
   }) async {
     final action = await confirm(context, hasEdits: hasEdits);
     switch (action) {
@@ -226,8 +227,14 @@ class LeavePageGuard {
       case LeavePageAction.leaveDiscard:
         return true;
       case LeavePageAction.leaveSave:
-        if (onSave != null) await onSave();
-        return true;
+        if (onSave == null) return true;
+        try {
+          final result = await onSave();
+          if (result is bool && result == false) return false;
+          return true;
+        } catch (_) {
+          return false;
+        }
     }
   }
 

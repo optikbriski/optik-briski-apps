@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'face_shape_type.dart';
+import '../theme.dart';
 
 /// Siluet bentuk wajah + contoh frame rekomendasi (ilustrasi).
 class FaceShapeVisual extends StatelessWidget {
@@ -58,13 +59,13 @@ class _FaceShapePainter extends CustomPainter {
     canvas.drawPath(
       facePath,
       Paint()
-        ..color = const Color(0xFFDBEAFE)
+        ..color = OptikAdminTokens.ice
         ..style = PaintingStyle.fill,
     );
     canvas.drawPath(
       facePath,
       Paint()
-        ..color = const Color(0xFF2563EB)
+        ..color = OptikAdminTokens.navy
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.4
         ..strokeJoin = StrokeJoin.round,
@@ -161,7 +162,7 @@ class _FaceShapePainter extends CustomPainter {
     final eyeY = c.dy - size.height * 0.06;
     final eyeDx = size.width * 0.14;
     final eyePaint = Paint()
-      ..color = const Color(0xFF93C5FD)
+      ..color = OptikAdminTokens.ice
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.8;
     canvas.drawOval(
@@ -185,7 +186,7 @@ class _FaceShapePainter extends CustomPainter {
       Offset(c.dx, eyeY + size.height * 0.04),
       Offset(c.dx, eyeY + size.height * 0.14),
       Paint()
-        ..color = const Color(0xFF93C5FD)
+        ..color = OptikAdminTokens.ice
         ..strokeWidth = 1.6
         ..strokeCap = StrokeCap.round,
     );
@@ -201,13 +202,13 @@ class _FaceShapePainter extends CustomPainter {
     final rightCx = c.dx + halfGap + lensW / 2;
 
     final stroke = Paint()
-      ..color = const Color(0xFF0F172A)
+      ..color = OptikAdminTokens.navy
       ..style = PaintingStyle.stroke
       ..strokeWidth = style.bold ? 3.2 : 2.2
       ..strokeJoin = StrokeJoin.round;
 
     final fill = Paint()
-      ..color = const Color(0x220F172A)
+      ..color = OptikAdminTokens.navy.withOpacity(0.13)
       ..style = PaintingStyle.fill;
 
     Path lens(double cx) {
@@ -282,7 +283,7 @@ class _FaceShapePainter extends CustomPainter {
         Offset(leftCx - lensW / 2, eyeY - lensH / 2),
         Offset(leftCx + lensW / 2, eyeY - lensH / 2),
         Paint()
-          ..color = const Color(0xFF0F172A)
+          ..color = OptikAdminTokens.navy
           ..strokeWidth = 4
           ..strokeCap = StrokeCap.round,
       );
@@ -290,7 +291,7 @@ class _FaceShapePainter extends CustomPainter {
         Offset(rightCx - lensW / 2, eyeY - lensH / 2),
         Offset(rightCx + lensW / 2, eyeY - lensH / 2),
         Paint()
-          ..color = const Color(0xFF0F172A)
+          ..color = OptikAdminTokens.navy
           ..strokeWidth = 4
           ..strokeCap = StrokeCap.round,
       );

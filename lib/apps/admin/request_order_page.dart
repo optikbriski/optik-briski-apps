@@ -7,6 +7,7 @@ import '../../shared/logistics/request_order_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import 'request_order_pusat_page.dart';
+import 'verifikasi_terima.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -23,6 +24,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
   final _svc = RequestOrderService();
   List<Map<String, dynamic>> pendingRequestsList = [];
   bool isLoading = true;
+  bool _sending = false;
 
   final TextEditingController trackingSearchCtrl = TextEditingController();
   List<Map<String, dynamic>> trackingResults = [];
@@ -31,6 +33,9 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     final toko = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
     return toko == 'PUSAT' || toko == 'CABANG-PUSAT';
   }
+
+  String get _tokoId =>
+      (widget.profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
 
   @override
   void initState() {
@@ -41,8 +46,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                RequestOrderPusatPage(profile: widget.profile),
+            builder: (_) => RequestOrderPusatPage(profile: widget.profile),
           ),
         );
       });
@@ -51,22 +55,27 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     }
   }
 
+  @override
+  void dispose() {
+    trackingSearchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadTodayRequests() async {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
-      final todayDate = DateTime.now().toIso8601String().split('T')[0];
-      final startOfDay = "${todayDate}T00:00:00.000Z";
-      final endOfDay = "${todayDate}T23:59:59.999Z";
+      // Antrian "hari ini" = hari lokal device (bukan UTC calendar day).
+      final bounds = RequestOrderService.localDayBoundsUtc();
 
       final res = await supabase
           .from('pending_requests')
           .select()
-          .eq('toko_id', tokoId)
+          .eq('toko_id', _tokoId)
           .eq('status', 'PENDING')
-          .gte('created_at', startOfDay)
-          .lte('created_at', endOfDay);
+          .gte('created_at', bounds.startUtc.toIso8601String())
+          .lt('created_at', bounds.endExclusiveUtc.toIso8601String())
+          .order('created_at', ascending: true);
 
       if (mounted) {
         setState(() {
@@ -77,18 +86,60 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     } catch (e) {
       if (mounted) {
         setState(() => isLoading = false);
-        _showSnack("Gagal memuat data request: $e", Colors.red);
+        _showSnack('Gagal memuat antrian: $e', OptikAdminTokens.danger);
       }
     }
   }
 
   Future<void> _kirimKePusatMassal() async {
+    if (_sending) return;
     if (pendingRequestsList.isEmpty) {
-      _showSnack("Tidak ada antrean request order hari ini.", Colors.orange);
+      _showSnack(
+        'Tidak ada antrian Request Order hari ini.',
+        OptikAdminTokens.warning,
+      );
       return;
     }
 
-    setState(() => isLoading = true);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Kirim ke Pusat?',
+          style: TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          '${pendingRequestsList.length} request akan dikirim ke Gudang Pusat '
+          'untuk approval.\n\n'
+          'Setelah dikirim, lacak status di panel Tracking di atas.',
+          style: const TextStyle(
+            color: OptikAdminTokens.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Kirim'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() {
+      isLoading = true;
+      _sending = true;
+    });
     try {
       final idsToUpdate =
           pendingRequestsList.map((e) => e['id']).whereType<Object>().toList();
@@ -103,8 +154,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         );
         if (!mounted) return;
         final outcome = sim?.outcome ?? TrainingApprovalOutcome.pending;
-        final status =
-            TrainingApprovalSimulator.requestOrderStatus(outcome);
+        final status = TrainingApprovalSimulator.requestOrderStatus(outcome);
         for (final id in idsToUpdate) {
           await TrainingApprovalSimulator.applySandboxOutcome(
             table: 'pending_requests',
@@ -121,60 +171,67 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         _showSnack(
           'training_ro_outcome_${outcome.name}'.tr(),
           outcome == TrainingApprovalOutcome.rejected
-              ? Colors.redAccent
-              : const Color(0xFFB45309),
+              ? OptikAdminTokens.danger
+              : OptikAdminTokens.training,
         );
-        _loadTodayRequests();
+        await _loadTodayRequests();
         return;
       }
 
       _showSnack(
-          "✓ Sukses mengirim ${idsToUpdate.length} pesanan ke Gudang Pusat!",
-          Colors.green);
-      _loadTodayRequests();
+        'Berhasil kirim ${idsToUpdate.length} request ke Gudang Pusat.',
+        OptikAdminTokens.success,
+      );
+      await _loadTodayRequests();
     } catch (e) {
       if (mounted) setState(() => isLoading = false);
-      _showSnack("Gagal mengirim ke pusat: $e", Colors.red);
+      _showSnack('Gagal mengirim ke pusat: $e', OptikAdminTokens.danger);
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
   Future<void> _lacakStatusTransaksi(String query) async {
     if (query.trim().isEmpty) return;
     try {
-      final tokoId = widget.profile['toko_id']?.toString();
       var q = supabase
           .from('pending_requests')
           .select()
-          .or('no_invoice.ilike.%$query%,nama_pelanggan.ilike.%$query%');
-      if (tokoId != null && tokoId.isNotEmpty && !_isPusat) {
-        q = q.eq('toko_id', tokoId);
+          .or('no_invoice.ilike.%$query%,nama_pelanggan.ilike.%$query%,'
+              'stock_move_resi.ilike.%$query%,nama_produk.ilike.%$query%');
+      if (!_isPusat && _tokoId.isNotEmpty) {
+        q = q.eq('toko_id', _tokoId);
       }
       final res = await q.order('created_at', ascending: false).limit(40);
 
       setState(() {
         trackingResults = List<Map<String, dynamic>>.from(res);
       });
+      if (trackingResults.isEmpty) {
+        _showSnack('Tidak ada hasil untuk pencarian ini.', OptikAdminTokens.warning);
+      }
     } catch (e) {
-      _showSnack("Gagal melacak transaksi: $e", Colors.red);
+      _showSnack('Gagal melacak: $e', OptikAdminTokens.danger);
     }
   }
 
   Color _trackColor(String? status) {
     switch ((status ?? '').toUpperCase()) {
       case 'APPROVED':
-        return Colors.tealAccent;
       case 'PREPARING':
-        return Colors.orangeAccent;
+        return OptikAdminTokens.navy;
       case 'SHIPPING':
-        return Colors.blueAccent;
+        return OptikAdminTokens.warning;
       case 'SUCCESS':
-        return Colors.greenAccent;
+        return OptikAdminTokens.success;
       case 'REJECTED':
-        return Colors.redAccent;
+        return OptikAdminTokens.danger;
       case 'SENT_TO_HQ':
-        return Colors.amberAccent;
+        return OptikAdminTokens.ice;
+      case 'PENDING':
+        return OptikAdminTokens.warning;
       default:
-        return Colors.white54;
+        return OptikAdminTokens.textMuted;
     }
   }
 
@@ -198,11 +255,12 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'REQUEST ORDER CABANG',
+        title: 'Request Order Cabang',
         actions: [
           IconButton(
-            onPressed: _loadTodayRequests,
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Muat ulang',
+            onPressed: isLoading ? null : _loadTodayRequests,
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
@@ -214,48 +272,53 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
             PremiumPanel(
               padding: const EdgeInsets.all(18),
               borderRadius: 20,
-              borderColor: Colors.orangeAccent.withOpacity(0.28),
+              borderColor: OptikAdminTokens.warning.withOpacity(0.28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PremiumSectionHeader(
-                    label: 'Tracking Request Order',
+                  const PremiumSectionHeader(
+                    label: 'Lacak Request Order',
                     padding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Alur: Cabang kirim → Approval Pusat → Preparing → '
-                    'Pengiriman → Selesai (terima di cabang).',
+                    'Alur: Cabang kirim → Approval Pusat → Disiapkan → '
+                    'Dalam perjalanan → Terima di Verifikasi Terima.',
                     style: TextStyle(
-                        color: Colors.white38, fontSize: 11, height: 1.3),
+                      color: OptikAdminTokens.textMuted,
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: trackingSearchCtrl,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style:
+                        const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: "Nomor Invoice / Nama Customer...",
-                      hintStyle:
-                          const TextStyle(color: Colors.grey, fontSize: 12),
+                      hintText: 'Invoice / pelanggan / resi / produk…',
+                      hintStyle: const TextStyle(
+                          color: OptikAdminTokens.textMuted, fontSize: 12),
                       prefixIcon: const Icon(Icons.track_changes,
-                          color: Colors.blueAccent, size: 18),
+                          color: OptikAdminTokens.navy, size: 18),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.search,
-                            color: Colors.orangeAccent, size: 18),
+                            color: OptikAdminTokens.warning, size: 18),
                         onPressed: () =>
                             _lacakStatusTransaksi(trackingSearchCtrl.text),
                       ),
                       filled: true,
                       fillColor: OptikAdminTokens.bgMid,
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
-                    onSubmitted: (val) => _lacakStatusTransaksi(val),
+                    onSubmitted: _lacakStatusTransaksi,
                   ),
                   if (trackingResults.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    const Divider(color: Colors.white10),
+                    const Divider(color: OptikAdminTokens.line),
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -264,104 +327,195 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                         final track = trackingResults[idx];
                         final st = track['status']?.toString() ?? '';
                         final color = _trackColor(st);
+                        final resi =
+                            (track['stock_move_resi'] ?? '').toString().trim();
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                              "${track['nama_produk']} (${track['qty_request']} pcs)",
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold)),
+                            '${track['nama_produk']} (${track['qty_request']} pcs)',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: OptikAdminTokens.navy,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           subtitle: Text(
-                              "Invoice: ${track['no_invoice']} | "
-                              "${track['nama_pelanggan']}"
-                              "${track['stock_move_resi'] != null ? ' | Resi ${track['stock_move_resi']}' : ''}",
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 11)),
+                            'Invoice: ${track['no_invoice']} · '
+                            '${track['nama_pelanggan']}'
+                            '${resi.isNotEmpty ? ' · Resi $resi' : ''}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: OptikAdminTokens.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
                           trailing: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 120),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                  color: color.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(20)),
+                                color: color.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: color.withOpacity(0.35)),
+                              ),
                               child: Text(
                                 RequestOrderService.labelStatus(st),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                    color: color,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold),
+                                  color: color,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
                         );
                       },
-                    )
+                    ),
+                    if (trackingResults.any((t) =>
+                        (t['status'] ?? '')
+                            .toString()
+                            .toUpperCase() ==
+                        'SHIPPING')) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => IncomingVerification(
+                                  profile: widget.profile,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.fact_check_outlined, size: 16),
+                          label: const Text('Buka Verifikasi Terima'),
+                        ),
+                      ),
+                    ],
                   ]
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            PremiumSectionHeader(label: 'Antrean Request Hari Ini'),
+            const PremiumSectionHeader(label: 'Antrian Request Hari Ini'),
+            const SizedBox(height: 6),
+            const Text(
+              'Kirim manual ke Pusat kapan saja. '
+              'Sisa yang lupa dikirim otomatis ke Pusat jam 23:59.',
+              style: TextStyle(
+                color: OptikAdminTokens.textMuted,
+                fontSize: 11,
+                height: 1.3,
+              ),
+            ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: OptikAdminTokens.navy,
+                  foregroundColor: OptikAdminTokens.bg,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                icon: const Icon(Icons.send_sharp,
-                    size: 14, color: Colors.white),
-                label: const Text(
-                  "KIRIM KE PUSAT",
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
+                icon: _sending
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: OptikAdminTokens.bg,
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded, size: 16),
+                label: Text(
+                  pendingRequestsList.isEmpty
+                      ? 'Kirim ke Pusat'
+                      : 'Kirim ke Pusat (${pendingRequestsList.length})',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                onPressed: _kirimKePusatMassal,
+                onPressed: (_sending || isLoading) ? null : _kirimKePusatMassal,
               ),
             ),
             const SizedBox(height: 12),
             Expanded(
               child: isLoading
-                  ? const Center(
-                      child:
-                          CircularProgressIndicator(color: Colors.blueAccent))
+                  ? const Center(child: CircularProgressIndicator())
                   : pendingRequestsList.isEmpty
-                      ? const Center(
-                          child: Text(
-                              "Belum ada request order masuk untuk sesi hari ini.",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12)))
+                      ? PremiumEmptyState(
+                          message:
+                              'Belum ada Request Order antrian untuk hari ini.\n'
+                              'Yang sudah dikirim bisa dilacak di panel atas.',
+                          icon: Icons.assignment_outlined,
+                          accent: OptikAdminTokens.ice,
+                        )
                       : ListView.builder(
                           itemCount: pendingRequestsList.length,
                           itemBuilder: (context, index) {
                             final req = pendingRequestsList[index];
+                            final tipe =
+                                (req['tipe_request'] ?? '').toString();
+                            final isPre = tipe.toUpperCase() == 'PRE_ORDER';
+                            final detail =
+                                (req['detail_resep'] ?? '').toString();
+                            final isOnline = detail
+                                    .toLowerCase()
+                                    .contains('online member') ||
+                                (req['no_invoice'] ?? '')
+                                    .toString()
+                                    .toUpperCase()
+                                    .startsWith('ON-');
                             return PremiumListTile(
                               title: req['nama_produk'] ?? 'Produk',
                               subtitle:
-                                  "Kekurangan: ${req['qty_request']} pcs | Tipe: ${req['tipe_request']}",
-                              icon: Icons.shopping_basket_rounded,
-                              iconColor: req['tipe_request'] == 'PRE_ORDER'
-                                  ? Colors.orange
-                                  : Colors.redAccent,
-                              trailing: const Text(
-                                "PENDING",
-                                style: TextStyle(
-                                    color: Colors.orangeAccent,
+                                  'Kurang ${req['qty_request']} pcs · '
+                                  '${isOnline ? 'Online Member · ' : ''}'
+                                  '${isPre ? 'Pre-order' : (tipe.isEmpty ? 'Stok' : tipe)}'
+                                  '${req['no_invoice'] != null ? ' · ${req['no_invoice']}' : ''}',
+                              icon: isOnline
+                                  ? Icons.shopping_bag_outlined
+                                  : Icons.shopping_basket_rounded,
+                              iconColor: isOnline
+                                  ? OptikAdminTokens.navy
+                                  : (isPre
+                                      ? OptikAdminTokens.warning
+                                      : OptikAdminTokens.danger),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color:
+                                      OptikAdminTokens.warning.withOpacity(0.14),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: OptikAdminTokens.warning
+                                        .withOpacity(0.4),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Antrian',
+                                  style: TextStyle(
+                                    color: OptikAdminTokens.warning,
                                     fontSize: 11,
-                                    fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
                               margin: const EdgeInsets.only(bottom: 8),
                             );

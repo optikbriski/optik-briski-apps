@@ -10,7 +10,7 @@ import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Board pipeline Request Order untuk Admin Pusat.
-/// Tabs: Approval → Preparing → Shipping → Histori
+/// Tabs: Approval → Disiapkan → Perjalanan → Histori
 class RequestOrderPusatPage extends StatefulWidget {
   const RequestOrderPusatPage({super.key, required this.profile});
 
@@ -43,16 +43,16 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   List<Map<String, dynamic>> _tokoOptions = [];
   static const _maxFilterToko = 5;
 
-  static const _bg = Color(0xFF0B1220);
-  static const _panel = Color(0xFF152033);
-  static const _panelSoft = Color(0xFF1A2740);
-  static const _line = Color(0xFF2A3A55);
+  static const _bg = OptikAdminTokens.bg;
+  static const _panel = OptikAdminTokens.panel;
+  static const _panelSoft = OptikAdminTokens.panel;
+  static const _line = OptikAdminTokens.cardElevated;
 
-  static const _tabLabels = ['Approval', 'Preparing', 'Shipping', 'Histori'];
+  static const _tabLabels = ['Approval', 'Disiapkan', 'Perjalanan', 'Histori'];
   static const _tabHints = [
     'Menunggu keputusan Pusat',
     'Reservasi aktif — siapkan barang',
-    'Dalam perjalanan ke cabang',
+    'Dalam perjalanan · cabang terima di Verifikasi Terima',
     'Selesai diterima atau ditolak',
   ];
   static const _tabIcons = [
@@ -62,10 +62,10 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     Icons.history_rounded,
   ];
   static const _tabColors = [
-    Color(0xFF38BDF8),
-    Color(0xFFFBBF24),
-    Color(0xFF60A5FA),
-    Color(0xFF94A3B8),
+    OptikAdminTokens.ice,
+    OptikAdminTokens.warning,
+    OptikAdminTokens.ice,
+    OptikAdminTokens.textMuted,
   ];
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -165,9 +165,12 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             s == 'SENT_TO_HQ' ||
             s == 'APPROVED' ||
             s == 'PREPARING';
-      });
-      for (final r in open) {
-        final id = r['id'] as int;
+      }).toList();
+
+      // Parallel snapshot — hindari N+1 lambat di antrian besar.
+      final snaps = await Future.wait(open.map((r) async {
+        final id = RequestOrderService.requestIdOf(r);
+        if (id == null) return null;
         final snap = await _svc.stockSnapshot(
           sku: r['sku']?.toString(),
           namaProduk: r['nama_produk']?.toString(),
@@ -181,11 +184,14 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         final availableForThis = status == 'APPROVED' || status == 'PREPARING'
             ? snap.stock - reservedShown
             : snap.available;
-        _snap[id] = (
+        return MapEntry(id, (
           stock: snap.stock,
           reserved: reservedShown < 0 ? 0 : reservedShown,
           available: availableForThis < 0 ? 0 : availableForThis,
-        );
+        ));
+      }));
+      for (final e in snaps) {
+        if (e != null) _snap[e.key] = e.value;
       }
     } catch (e) {
       _error = '$e';
@@ -236,157 +242,35 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     }
 
     if (!mounted) return;
-    final draft = List<String>.from(_filterTokoIds);
-    var query = '';
 
-    final ok = await showDialog<bool>(
+    final options = _tokoOptions
+        .map((t) {
+          final id = t['id']?.toString() ?? '';
+          return AdminPickerOption<String>(
+            value: id,
+            label: _tokoLabel(id),
+            subtitle: 'Kode: $id',
+            icon: Icons.storefront_rounded,
+          );
+        })
+        .toList();
+
+    final result = await showAdminMultiPicker<String>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            final q = query.trim().toLowerCase();
-            final filtered = _tokoOptions.where((t) {
-              if (q.isEmpty) return true;
-              final id = (t['id'] ?? '').toString().toLowerCase();
-              final nama = (t['toko_id'] ?? '').toString().toLowerCase();
-              return id.contains(q) || nama.contains(q);
-            }).toList();
-
-            return AlertDialog(
-              backgroundColor: _panel,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              title: const Text('Pilih toko (maks. 5)',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16)),
-              content: SizedBox(
-                width: R.dialogMaxWidth(context, 420),
-                height: 420,
-                child: Column(
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Cari nama / kode toko…',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        prefixIcon: const Icon(Icons.search_rounded,
-                            color: Colors.white54),
-                        filled: true,
-                        fillColor: _bg,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: _line),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: _line),
-                        ),
-                      ),
-                      onChanged: (v) => setModal(() => query = v),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Terpilih ${draft.length}/$_maxFilterToko',
-                        style: TextStyle(
-                          color: draft.length >= _maxFilterToko
-                              ? const Color(0xFFFBBF24)
-                              : const Color(0xFF94A3B8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? const Center(
-                              child: Text('Tidak ada toko cocok.',
-                                  style: TextStyle(color: Colors.white38)))
-                          : ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) {
-                                final t = filtered[i];
-                                final id = t['id']?.toString() ?? '';
-                                final selected = draft.contains(id);
-                                final locked = !selected &&
-                                    draft.length >= _maxFilterToko;
-                                return CheckboxListTile(
-                                  dense: true,
-                                  value: selected,
-                                  activeColor: const Color(0xFF3B82F6),
-                                  checkColor: Colors.white,
-                                  enabled: !locked,
-                                  title: Text(
-                                    _tokoLabel(id),
-                                    style: TextStyle(
-                                      color: locked
-                                          ? Colors.white30
-                                          : Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  subtitle: Text('Kode: $id',
-                                      style: const TextStyle(
-                                          color: Colors.white38, fontSize: 11)),
-                                  onChanged: locked
-                                      ? null
-                                      : (v) {
-                                          setModal(() {
-                                            if (v == true) {
-                                              if (draft.length <
-                                                  _maxFilterToko) {
-                                                draft.add(id);
-                                              }
-                                            } else {
-                                              draft.remove(id);
-                                            }
-                                          });
-                                        },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    draft.clear();
-                    setModal(() {});
-                  },
-                  child: const Text('Hapus semua'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Batal'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6)),
-                  child: const Text('Terapkan'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      title: 'Pilih toko (maks. 5)',
+      options: options,
+      selected: _filterTokoIds.toSet(),
+      maxSelect: _maxFilterToko,
+      searchHint: 'Cari nama / kode toko…',
     );
 
-    if (ok == true) {
-      setState(() {
-        _filterTokoIds
-          ..clear()
-          ..addAll(draft);
-      });
-      await _load();
-    }
+    if (result == null) return;
+    setState(() {
+      _filterTokoIds
+        ..clear()
+        ..addAll(result);
+    });
+    await _load();
   }
 
   List<Map<String, dynamic>> _applyTokoFilter(List<Map<String, dynamic>> rows) {
@@ -452,7 +336,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(okMsg),
-          backgroundColor: const Color(0xFF0F766E),
+          backgroundColor: OptikAdminTokens.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -463,7 +347,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         SnackBar(
           content: Text(
               'Gagal: $e\nPastikan migration request_order_pipeline sudah dijalankan.'),
-          backgroundColor: const Color(0xFFB91C1C),
+          backgroundColor: OptikAdminTokens.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -477,19 +361,19 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         backgroundColor: _panel,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Tolak request?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.w700)),
         content: Text(
           '${req['nama_produk']} • ${req['qty_request']} pcs\n'
-          'Cabang: ${req['toko_id']}\n\n'
+          'Cabang: ${RequestOrderService.tokoLabel(req['toko_id']?.toString())}\n\n'
           'Akan masuk Histori sebagai ditolak.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: const TextStyle(color: OptikAdminTokens.textSecondary, height: 1.4),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Batal')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            style: FilledButton.styleFrom(backgroundColor: OptikAdminTokens.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Tolak'),
           ),
@@ -507,16 +391,24 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: _panel,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Kirim (Shipping)?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        title: const Text(
+          'Kirim ke cabang?',
+          style: TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         content: R.constrainedDialog(
           context: context,
           preferWidth: 400,
           child: Text(
             'Stok Pusat dipotong ${req['qty_request']} pcs.\n'
-            'Mutasi TRANSIT ke ${req['toko_id']}.\n'
-            'Reservasi dilepas. Cabang terima via Stock Move Report.',
-            style: const TextStyle(color: Colors.white70, height: 1.4),
+            'Surat jalan TRANSIT ke ${RequestOrderService.tokoLabel(req['toko_id']?.toString())}.\n'
+            'Reservasi RO dilepas. Cabang terima di Verifikasi Terima.',
+            style: const TextStyle(
+              color: OptikAdminTokens.textSecondary,
+              height: 1.4,
+            ),
           ),
         ),
         actions: [
@@ -524,7 +416,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Batal')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F766E)),
+            style: FilledButton.styleFrom(backgroundColor: OptikAdminTokens.navy),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Kirim sekarang'),
           ),
@@ -553,8 +445,8 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Shipping sukses • Resi $resi'),
-          backgroundColor: const Color(0xFF0F766E),
+          content: Text('Berhasil dikirim · Resi $resi'),
+          backgroundColor: OptikAdminTokens.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -563,8 +455,8 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal shipping: $e'),
-          backgroundColor: const Color(0xFFB91C1C),
+          content: Text('Gagal kirim: $e'),
+          backgroundColor: OptikAdminTokens.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -592,18 +484,18 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     switch (s) {
       case 'APPROVED':
       case 'PREPARING':
-        return const Color(0xFFFBBF24);
+        return OptikAdminTokens.warning;
       case 'SHIPPING':
-        return const Color(0xFF60A5FA);
+        return OptikAdminTokens.ice;
       case 'SUCCESS':
-        return const Color(0xFF34D399);
+        return OptikAdminTokens.success;
       case 'REJECTED':
-        return const Color(0xFFF87171);
+        return OptikAdminTokens.danger;
       case 'SENT_TO_HQ':
       case 'PENDING':
-        return const Color(0xFF38BDF8);
+        return OptikAdminTokens.ice;
       default:
-        return const Color(0xFF94A3B8);
+        return OptikAdminTokens.textMuted;
     }
   }
 
@@ -624,7 +516,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             Expanded(
               child: _loading
                   ? const Center(
-                      child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
+                      child: CircularProgressIndicator(color: OptikAdminTokens.ice))
                   : _error != null
                       ? _errorState()
                       : TabBarView(
@@ -648,7 +540,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         children: [
           IconButton(
             onPressed: () => Navigator.maybePop(context),
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            icon: const Icon(Icons.arrow_back_rounded, color: OptikAdminTokens.navy),
           ),
           const Expanded(
             child: Column(
@@ -657,7 +549,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 Text(
                   'Request Order',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.2,
@@ -665,7 +557,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 ),
                 Text(
                   'Gudang Pusat • pipeline logistik',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -677,7 +569,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
               backgroundColor: _panel,
               side: const BorderSide(color: _line),
             ),
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 20),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.textSecondary, size: 20),
           ),
           const SizedBox(width: 8),
         ],
@@ -727,12 +619,14 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                                 size: 18,
                                 color: active
                                     ? _tabColors[i]
-                                    : const Color(0xFF94A3B8)),
+                                    : OptikAdminTokens.textMuted),
                             const SizedBox(height: 6),
                             Text(
                               '$count',
                               style: TextStyle(
-                                color: active ? Colors.white : Colors.white70,
+                                color: active
+                                    ? OptikAdminTokens.navy
+                                    : OptikAdminTokens.textSecondary,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -744,7 +638,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                               style: TextStyle(
                                 color: active
                                     ? _tabColors[i]
-                                    : const Color(0xFF94A3B8),
+                                    : OptikAdminTokens.textMuted,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -785,7 +679,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 Text(
                   _tabLabels[idx],
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                   ),
@@ -803,7 +697,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                       : _filterTokoIds.isEmpty
                           ? _tabHints[idx]
                           : '${_tabHints[idx]} • ${_filterTokoIds.length} toko',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -884,7 +778,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           const SizedBox(height: 4),
           const Text(
             'Kosong = semua toko. Pilih hingga 5 toko untuk mempersempit antrian.',
-            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
+            style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11, height: 1.35),
           ),
           const SizedBox(height: 10),
           _tokoPickerChip(),
@@ -912,7 +806,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           const Text(
             'Tanggal saja = semua toko. Toko saja = semua tanggal. '
             'Keduanya = order toko terpilih di rentang tanggal. Maks. 5 toko.',
-            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
+            style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11, height: 1.35),
           ),
           const SizedBox(height: OptikAdminTokens.spaceSm),
           PremiumDateRangeTrigger(
@@ -920,32 +814,40 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             onTap: _openHistRangePicker,
           ),
           const SizedBox(height: OptikAdminTokens.spaceMd),
-          PremiumChipWrap(
-            children: [
-              FilterChip(
+          AdminPickerField(
+            label: 'Rentang tanggal',
+            valueText:
+                _histUseDate ? 'Pakai tanggal' : 'Semua tanggal',
+            icon: Icons.date_range_rounded,
+            onTap: () async {
+              final sel = await showAdminPicker<bool>(
+                context: context,
+                title: 'Filter tanggal histori',
+                searchable: false,
                 selected: _histUseDate,
-                label: Text(_histUseDate ? 'Pakai tanggal' : 'Semua tanggal'),
-                onSelected: (v) async {
-                  setState(() => _histUseDate = v);
-                  await _load();
-                },
-                selectedColor: const Color(0xFF3B82F6).withOpacity(0.25),
-                backgroundColor: _panelSoft,
-                checkmarkColor: const Color(0xFF60A5FA),
-                labelStyle: TextStyle(
-                  color: _histUseDate
-                      ? const Color(0xFF93C5FD)
-                      : const Color(0xFFCBD5E1),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-                side: BorderSide(
-                  color: _histUseDate ? const Color(0xFF3B82F6) : _line,
-                ),
-              ),
-              _tokoPickerChip(),
-            ],
+                headerIcon: Icons.date_range_rounded,
+                options: const [
+                  AdminPickerOption(
+                    value: true,
+                    label: 'Pakai tanggal',
+                    subtitle: 'Filter order menurut rentang tanggal',
+                    icon: Icons.event_available_rounded,
+                  ),
+                  AdminPickerOption(
+                    value: false,
+                    label: 'Semua tanggal',
+                    subtitle: 'Tampilkan semua tanggal',
+                    icon: Icons.event_busy_rounded,
+                  ),
+                ],
+              );
+              if (sel == null || sel.isClear) return;
+              setState(() => _histUseDate = sel.value!);
+              await _load();
+            },
           ),
+          const SizedBox(height: OptikAdminTokens.spaceMd),
+          _tokoPickerChip(),
           if (_filterTokoIds.isNotEmpty) ...[
             const SizedBox(height: 10),
             _selectedTokoChips(),
@@ -953,7 +855,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           const SizedBox(height: 8),
           Text(
             _histSummaryCount,
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
         ],
       ),
@@ -961,37 +863,61 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _tokoPickerChip() {
-    return ActionChip(
-      avatar: const Icon(Icons.storefront_rounded,
-          size: 16, color: Color(0xFF60A5FA)),
-      label: Text(
-        _filterTokoIds.isEmpty
-            ? 'Cari / pilih toko'
-            : '${_filterTokoIds.length} toko dipilih',
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-      ),
-      onPressed: _openTokoPicker,
-      backgroundColor: _panelSoft,
-      side: const BorderSide(color: _line),
+    return AdminPickerField(
+      label: 'Filter toko',
+      valueText: _filterTokoIds.isEmpty
+          ? 'Cari / pilih toko'
+          : '${_filterTokoIds.length} toko dipilih',
+      hint: 'Cari / pilih toko',
+      icon: Icons.storefront_rounded,
+      onTap: _openTokoPicker,
     );
   }
 
   Widget _selectedTokoChips() {
-    return PremiumChipWrap(
+    return Column(
       children: [
         for (final id in _filterTokoIds)
-          InputChip(
-            label: Text(
-              _tokoLabel(id),
-              style: const TextStyle(fontSize: 11, color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  setState(() => _filterTokoIds.remove(id));
+                  await _load();
+                },
+                child: Ink(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: OptikAdminTokens.snow,
+                    border: Border.all(color: OptikAdminTokens.ice),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.storefront_rounded,
+                          size: 18, color: OptikAdminTokens.navy),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _tokoLabel(id),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: OptikAdminTokens.navy,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.close_rounded,
+                          size: 18, color: OptikAdminTokens.slate),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            deleteIconColor: Colors.white54,
-            onDeleted: () async {
-              setState(() => _filterTokoIds.remove(id));
-              await _load();
-            },
-            backgroundColor: const Color(0xFF1E3A5F),
-            side: const BorderSide(color: Color(0xFF334155)),
           ),
       ],
     );
@@ -1020,20 +946,20 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF334155).withOpacity(0.55),
+              color: OptikAdminTokens.cardElevated.withOpacity(0.55),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.storefront_rounded,
-                color: Color(0xFFCBD5E1), size: 16),
+                color: OptikAdminTokens.textSecondary, size: 16),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              toko,
+              RequestOrderService.tokoLabel(toko),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.w800,
                 fontSize: 13,
                 letterSpacing: 0.2,
@@ -1042,7 +968,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           ),
           Text(
             '$count item',
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+            style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11),
           ),
         ],
       ),
@@ -1050,8 +976,8 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Widget _orderCard(Map<String, dynamic> req, {required int tabIndex}) {
-    final id = req['id'] as int;
-    final snap = _snap[id];
+    final id = RequestOrderService.requestIdOf(req);
+    final snap = id == null ? null : _snap[id];
     final status = (req['status'] ?? '').toString().toUpperCase();
     final color = _statusColor(status);
     final qty = req['qty_request'];
@@ -1067,7 +993,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       borderRadius: 16,
       margin: const EdgeInsets.only(bottom: 10),
       borderColor: availLow
-          ? const Color(0xFFF59E0B).withOpacity(0.45)
+          ? OptikAdminTokens.warning.withOpacity(0.45)
           : OptikAdminTokens.lineStrong,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1099,7 +1025,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 ),
                 Text(
                   '#$id',
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                  style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
                 ),
               ],
             ),
@@ -1112,7 +1038,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 Text(
                   req['nama_produk']?.toString() ?? '-',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                     height: 1.25,
@@ -1141,9 +1067,9 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                 if (tabIndex == 2) ...[
                   const SizedBox(height: 10),
                   const Text(
-                    'Menunggu cabang konfirmasi terima di Stock Move Report.',
+                    'Menunggu cabang konfirmasi terima di Verifikasi Terima.',
                     style: TextStyle(
-                        color: Color(0xFF94A3B8), fontSize: 12, height: 1.35),
+                        color: OptikAdminTokens.textMuted, fontSize: 12, height: 1.35),
                   ),
                 ],
                 if (canApprove || canShip || showReject) ...[
@@ -1177,7 +1103,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: const Color(0xFF94A3B8)),
+          Icon(icon, size: 13, color: OptikAdminTokens.textMuted),
           const SizedBox(width: 5),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 160),
@@ -1186,7 +1112,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFFE2E8F0),
+                color: OptikAdminTokens.navy,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -1208,28 +1134,29 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: highlightLow
-              ? const Color(0xFFF59E0B).withOpacity(0.4)
+              ? OptikAdminTokens.warning.withOpacity(0.4)
               : _line.withOpacity(0.7),
         ),
       ),
       child: Row(
         children: [
           Expanded(
-            child: _stockCell('Stok fisik', '${snap.stock}', const Color(0xFFE2E8F0)),
+            child: _stockCell(
+                'Stok fisik', '${snap.stock}', OptikAdminTokens.navy),
           ),
           _vDivider(),
           Expanded(
             child: _stockCell(
-                'Reservasi', '${snap.reserved}', const Color(0xFFFBBF24)),
+                'Booking', '${snap.reserved}', OptikAdminTokens.warning),
           ),
           _vDivider(),
           Expanded(
             child: _stockCell(
-              'Available',
+              'Tersedia',
               '${snap.available}',
               highlightLow
-                  ? const Color(0xFFF87171)
-                  : const Color(0xFF34D399),
+                  ? OptikAdminTokens.danger
+                  : OptikAdminTokens.success,
             ),
           ),
         ],
@@ -1247,7 +1174,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     return Column(
       children: [
         Text(label,
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+            style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10)),
         const SizedBox(height: 2),
         Text(
           value,
@@ -1266,20 +1193,20 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF0EA5E9).withOpacity(0.08),
+        color: OptikAdminTokens.accentSoft.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF0EA5E9).withOpacity(0.25)),
+        border: Border.all(color: OptikAdminTokens.accentSoft.withOpacity(0.25)),
       ),
       child: Row(
         children: [
           const Icon(Icons.local_shipping_outlined,
-              size: 15, color: Color(0xFF38BDF8)),
+              size: 15, color: OptikAdminTokens.navy),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Resi $resi',
               style: const TextStyle(
-                color: Color(0xFF7DD3FC),
+                color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -1301,17 +1228,18 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     final buttons = <Widget>[
       if (canApprove)
         _primaryAction(
-          label: 'Approve → Preparing',
+          label: 'Setujui → Disiapkan',
           icon: Icons.check_circle_outline,
-          color: const Color(0xFF0D9488),
+          color: OptikAdminTokens.slate,
           onTap: () {
             final q = (req['qty_request'] as num?)?.toInt() ?? 0;
             final avail = snap?.available ?? 0;
             if (avail < q) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Available $avail < minta $q. Tidak bisa approve.'),
-                  backgroundColor: const Color(0xFFB45309),
+                  content: Text(
+                      'Stok tersedia $avail < minta $q. Tidak bisa setujui.'),
+                  backgroundColor: OptikAdminTokens.training,
                   behavior: SnackBarBehavior.floating,
                 ),
               );
@@ -1319,15 +1247,15 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             }
             _run(
               () => _svc.approve(req),
-              'Disetujui → Preparing (reservasi aktif).',
+              'Disetujui → Disiapkan (reservasi aktif).',
             );
           },
         ),
       if (canShip)
         _primaryAction(
-          label: 'Shipping',
+          label: 'Kirim (perjalanan)',
           icon: Icons.local_shipping_rounded,
-          color: const Color(0xFF2563EB),
+          color: OptikAdminTokens.accentDeep,
           onTap: () => _confirmShip(req),
         ),
       if (showReject)
@@ -1370,7 +1298,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       onPressed: onTap,
       style: FilledButton.styleFrom(
         backgroundColor: color,
-        foregroundColor: Colors.white,
+        foregroundColor: OptikAdminTokens.snow,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
       ),
@@ -1390,8 +1318,8 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     return OutlinedButton.icon(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFFF87171),
-        side: const BorderSide(color: Color(0xFF7F1D1D)),
+        foregroundColor: OptikAdminTokens.danger,
+        side: const BorderSide(color: OptikAdminTokens.danger),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
       ),
@@ -1451,7 +1379,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
                     style: const TextStyle(
-                        color: Color(0xFF94A3B8),
+                        color: OptikAdminTokens.textMuted,
                         fontSize: 11,
                         fontWeight: FontWeight.w600),
                   ),
@@ -1462,7 +1390,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             Text(
               req['nama_produk']?.toString() ?? '-',
               style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.w800,
                   fontSize: 14),
             ),
@@ -1471,7 +1399,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
               '${req['qty_request']} pcs'
               '${req['sku'] != null ? ' • ${req['sku']}' : ''}'
               ' • Invoice ${req['no_invoice'] ?? '-'}',
-              style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+              style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1483,7 +1411,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
             Text(
               'Dibuat ${_fmtWhen(req['created_at'])}'
               '${req['reviewed_at'] != null ? '  ·  Diproses ${_fmtWhen(req['reviewed_at'])}' : ''}',
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+              style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 10),
             ),
           ],
         ),

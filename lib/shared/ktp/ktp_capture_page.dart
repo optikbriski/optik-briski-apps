@@ -10,6 +10,8 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 
 import '../widgets/app_loading_overlay.dart';
 import 'ktp_ocr_service.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 
 /// Halaman capture KTP: grid + auto jepret saat semua field OCR jelas terbaca.
 class KtpCapturePage extends StatefulWidget {
@@ -29,7 +31,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
   String? _error;
   String _status =
       'Sejajarkan KTP di grid — tunggu semua data terbaca jelas';
-  Color _statusColor = Colors.white70;
+  Color _statusColor = OptikAdminTokens.slate;
   int _clearHits = 0;
   DateTime _lastScan = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -96,7 +98,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
           _status = _clearHits >= 2
               ? 'Semua data jelas — auto jepret…'
               : 'Semua data terbaca — tahan diam…';
-          _statusColor = Colors.greenAccent;
+          _statusColor = OptikAdminTokens.success;
         });
         if (_clearHits >= 2) {
           await _autoCapture();
@@ -108,11 +110,11 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
             ? 'Sejajarkan KTP di grid'
             : 'Belum jelas: ${miss.take(3).join(', ')}'
                 '${miss.length > 3 ? '…' : ''}';
-        if (_status != hint || _statusColor != Colors.amber) {
+        if (_status != hint || _statusColor != OptikAdminTokens.warning) {
           setState(() {
             _status = hint;
             _statusColor =
-                result.hasNik ? Colors.amber : Colors.white70;
+                result.hasNik ? OptikAdminTokens.warning : OptikAdminTokens.slate;
           });
         }
       }
@@ -224,7 +226,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
       if (mounted) {
         setState(() {
           _status = 'Gagal ambil foto — coba lagi';
-          _statusColor = Colors.redAccent;
+          _statusColor = OptikAdminTokens.danger;
         });
         try {
           await _camera?.startImageStream(_onFrame);
@@ -237,7 +239,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
     if (_capturing || _camera == null || !_camera!.value.isInitialized) return;
     setState(() {
       _status = 'Mengambil foto…';
-      _statusColor = Colors.greenAccent;
+      _statusColor = OptikAdminTokens.success;
     });
     await _autoCapture();
   }
@@ -270,8 +272,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
   @override
   Widget build(BuildContext context) {
     final cam = _camera;
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return PremiumScaffold(
       body: SafeArea(
         child: _error != null
             ? Center(
@@ -282,7 +283,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                     children: [
                       Text(_error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white)),
+                          style: const TextStyle(color: OptikAdminTokens.snow)),
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed: () => Navigator.pop(context),
@@ -297,7 +298,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                     visible: true,
                     message: 'Menyiapkan kamera…',
                     subtitle: 'Izinkan akses kamera jika diminta',
-                    barrierColor: Colors.black,
+                    barrierColor: OptikAdminTokens.navy,
                   )
                 : Stack(
                     fit: StackFit.expand,
@@ -330,8 +331,8 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                           children: [
                             IconButton(
                               onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close_rounded,
-                                  color: Colors.white),
+                              icon: Icon(Icons.close_rounded,
+                                  color: OptikAdminTokens.snow),
                             ),
                             const Spacer(),
                             IconButton(
@@ -341,8 +342,8 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                                     ? Icons.flash_on_rounded
                                     : Icons.flash_off_rounded,
                                 color: _torchOn
-                                    ? Colors.amber
-                                    : Colors.white,
+                                    ? OptikAdminTokens.warning
+                                    : OptikAdminTokens.snow,
                               ),
                             ),
                           ],
@@ -359,7 +360,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.55),
+                                color: OptikAdminTokens.navy.withOpacity(0.55),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -379,7 +380,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                               'dan status kawin terbaca jelas.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: OptikAdminTokens.slate,
                                 fontSize: 11.5,
                                 height: 1.3,
                               ),
@@ -396,21 +397,21 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                          color: Colors.white, width: 4),
+                                          color: OptikAdminTokens.snow, width: 4),
                                       color: _capturing
-                                          ? Colors.green.withOpacity(0.4)
-                                          : Colors.white24,
+                                          ? OptikAdminTokens.success.withOpacity(0.4)
+                                          : OptikAdminTokens.lineStrong,
                                     ),
                                     child: _capturing
                                         ? const Padding(
                                             padding: EdgeInsets.all(20),
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              color: Colors.white,
+                                              color: OptikAdminTokens.snow,
                                             ),
                                           )
-                                        : const Icon(Icons.camera_alt_rounded,
-                                            color: Colors.white, size: 30),
+                                        : Icon(Icons.camera_alt_rounded,
+                                            color: OptikAdminTokens.snow, size: 30),
                                   ),
                                 ),
                               ],
@@ -419,7 +420,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                             const Text(
                               'Atau tekan untuk ambil manual',
                               style: TextStyle(
-                                  color: Colors.white38, fontSize: 11),
+                                  color: OptikAdminTokens.slate, fontSize: 11),
                             ),
                           ],
                         ),
@@ -428,7 +429,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                         visible: _capturing,
                         message: 'Mengambil foto…',
                         subtitle: 'KTP terdeteksi jelas — menyimpan gambar',
-                        barrierColor: Colors.black.withOpacity(0.55),
+                        barrierColor: OptikAdminTokens.navy.withOpacity(0.55),
                       ),
                     ],
                   ),
@@ -459,7 +460,7 @@ class _KtpOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final dim = Paint()..color = Colors.black.withOpacity(0.58);
+    final dim = Paint()..color = OptikAdminTokens.navy.withOpacity(0.58);
     final path = Path()
       ..addRect(Offset.zero & size)
       ..addRRect(RRect.fromRectAndRadius(frame, const Radius.circular(12)))
@@ -467,7 +468,7 @@ class _KtpOverlayPainter extends CustomPainter {
     canvas.drawPath(path, dim);
 
     final border = Paint()
-      ..color = locked ? Colors.greenAccent : Colors.white
+      ..color = locked ? OptikAdminTokens.success : OptikAdminTokens.snow
       ..style = PaintingStyle.stroke
       ..strokeWidth = locked ? 3 : 2;
     canvas.drawRRect(
@@ -477,7 +478,7 @@ class _KtpOverlayPainter extends CustomPainter {
 
     // Grid 3x2 seperti area field KTP
     final grid = Paint()
-      ..color = (locked ? Colors.greenAccent : Colors.white).withOpacity(0.35)
+      ..color = (locked ? OptikAdminTokens.success : OptikAdminTokens.snow).withOpacity(0.35)
       ..strokeWidth = 1;
     for (var i = 1; i < 3; i++) {
       final x = frame.left + frame.width * i / 3;
@@ -490,7 +491,7 @@ class _KtpOverlayPainter extends CustomPainter {
 
     // Corner brackets
     final corner = Paint()
-      ..color = locked ? Colors.greenAccent : const Color(0xFFF5C518)
+      ..color = locked ? OptikAdminTokens.success : OptikAdminTokens.warning
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
@@ -529,7 +530,7 @@ class _KtpOverlayPainter extends CustomPainter {
       frame.height * 0.52,
     );
     final photoPaint = Paint()
-      ..color = Colors.white.withOpacity(0.18)
+      ..color = OptikAdminTokens.snow.withOpacity(0.18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawRRect(
@@ -541,7 +542,7 @@ class _KtpOverlayPainter extends CustomPainter {
       text: TextSpan(
         text: 'KTP',
         style: TextStyle(
-          color: Colors.white.withOpacity(0.55),
+          color: OptikAdminTokens.snow.withOpacity(0.55),
           fontSize: 12,
           fontWeight: FontWeight.w700,
           letterSpacing: 2,

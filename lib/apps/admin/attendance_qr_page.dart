@@ -143,13 +143,13 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
           IconButton(
             tooltip: 'attendance_qr_refresh'.tr(),
             onPressed: _loading ? null : _rotate,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading && _issue == null
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent),
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice),
             )
           : Padding(
               padding: const EdgeInsets.all(20),
@@ -164,7 +164,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                         children: [
                           PremiumIconBadge(
                             icon: Icons.qr_code_scanner_rounded,
-                            color: OptikAdminTokens.accentSoft,
+                            color: OptikAdminTokens.navy,
                             size: 52,
                           ),
                           const SizedBox(height: 16),
@@ -172,7 +172,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                             'dash_absen_flow_hint'.tr(),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                              color: Colors.white70,
+                              color: OptikAdminTokens.slate,
                               height: 1.45,
                               fontSize: 13,
                             ),
@@ -185,7 +185,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                             }),
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                              color: Colors.white54,
+                              color: OptikAdminTokens.slate,
                               height: 1.4,
                               fontSize: 12,
                             ),
@@ -196,7 +196,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                               'training_attendance_stub_note'.tr(),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                color: Color(0xFFFBBF24),
+                                color: OptikAdminTokens.warning,
                                 fontSize: 12,
                                 height: 1.35,
                               ),
@@ -210,7 +210,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                 _error!,
                                 textAlign: TextAlign.center,
                                 style:
-                                    const TextStyle(color: Colors.redAccent),
+                                    const TextStyle(color: OptikAdminTokens.danger),
                               ),
                             ),
                           Expanded(
@@ -219,7 +219,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                   ? Text(
                                       'attendance_qr_waiting'.tr(),
                                       style: const TextStyle(
-                                          color: Colors.white54),
+                                          color: OptikAdminTokens.slate),
                                     )
                                   : Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -227,7 +227,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                         Text(
                                           _tokoId ?? '-',
                                           style: const TextStyle(
-                                            color: Colors.white,
+                                            color: OptikAdminTokens.navy,
                                             fontSize: 22,
                                             fontWeight: FontWeight.bold,
                                             letterSpacing: 0.5,
@@ -237,7 +237,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                         Container(
                                           padding: const EdgeInsets.all(18),
                                           decoration: BoxDecoration(
-                                            color: Colors.white,
+                                            color: OptikAdminTokens.navy,
                                             borderRadius:
                                                 BorderRadius.circular(20),
                                           ),
@@ -245,7 +245,6 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                             data: _issue!.payload,
                                             version: QrVersions.auto,
                                             size: 260,
-                                            backgroundColor: Colors.white,
                                           ),
                                         ),
                                         const SizedBox(height: 18),
@@ -257,8 +256,8 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                           ),
                                           style: TextStyle(
                                             color: _secondsLeft <= 8
-                                                ? Colors.orangeAccent
-                                                : Colors.tealAccent,
+                                                ? OptikAdminTokens.warning
+                                                : OptikAdminTokens.navy,
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
                                           ),

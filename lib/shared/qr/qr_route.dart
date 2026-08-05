@@ -24,6 +24,7 @@ class QrRouteResult {
     this.invoicePaymentStatus,
     this.invoiceCustomerLifecycle = false,
     this.invoiceViewOnly = false,
+    this.invoiceChannel = ObrSaleChannel.offline,
     this.attendanceTokoId,
     this.attendanceToken,
     this.receiveResi,
@@ -46,6 +47,8 @@ class QrRouteResult {
   final bool invoiceCustomerLifecycle;
   /// QR toko `OBRTXN` / buka nomor saja — hanya lihat detail.
   final bool invoiceViewOnly;
+  /// Dari field QR: `online` (APK Member) | `offline` (toko). Default offline.
+  final String invoiceChannel;
   final String? attendanceTokoId;
   final String? attendanceToken;
   final String? receiveResi;
@@ -139,17 +142,18 @@ class QrRouter {
     }
 
     // QR toko: lihat detail saja
-    final txn = ObrTxn.parse(s);
+    final txn = ObrTxn.parseData(s);
     if (txn != null) {
       return QrRouteResult(
         type: QrPayloadType.invoice,
         raw: s,
-        invoiceNo: txn,
+        invoiceNo: txn.noInvoice,
         invoiceViewOnly: true,
+        invoiceChannel: txn.channel,
       );
     }
 
-    // QR pelanggan: DP / LUNAS lifecycle
+    // QR pelanggan: DP / LUNAS lifecycle (+ channel ONLINE/OFFLINE)
     final obrInv = ObrInvoice.parse(s);
     if (obrInv != null) {
       return QrRouteResult(
@@ -159,6 +163,7 @@ class QrRouter {
         invoicePaymentStatus: obrInv.paymentStatus,
         invoiceCustomerLifecycle: obrInv.customerLifecycle,
         invoiceViewOnly: !obrInv.customerLifecycle,
+        invoiceChannel: obrInv.channel,
       );
     }
 

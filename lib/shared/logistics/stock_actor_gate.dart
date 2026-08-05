@@ -93,7 +93,7 @@ abstract final class StockActorGate {
     if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Terverifikasi: $viaNama — lanjut $actionLabel'),
-      backgroundColor: Colors.green,
+      backgroundColor: OptikAdminTokens.success,
     ));
     return true;
   }
@@ -178,7 +178,7 @@ abstract final class StockActorGate {
               title: const Text(
                 'Scan barcode karyawan',
                 style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
+                    color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
                 width: 360,
@@ -192,8 +192,8 @@ abstract final class StockActorGate {
                       'Harus cocok dengan via login:\n'
                       '• $viaNama'
                       '${viaNik != null && viaNik.isNotEmpty ? '\n• NIK $viaNik' : ''}',
-                      style: const TextStyle(
-                          color: Colors.white70, height: 1.4, fontSize: 13),
+                      style: TextStyle(
+                          color: OptikAdminTokens.slate, height: 1.4, fontSize: 13),
                     ),
                     const SizedBox(height: 14),
                     TextField(
@@ -201,14 +201,14 @@ abstract final class StockActorGate {
                       focusNode: focus,
                       enabled: !busy,
                       autofocus: true,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: OptikAdminTokens.navy),
                       decoration: InputDecoration(
                         labelText: 'Barcode NIK / tempel QR',
-                        labelStyle: const TextStyle(color: Colors.white54),
+                        labelStyle: const TextStyle(color: OptikAdminTokens.slate),
                         hintText: 'Arahkan scanner toko ke sini…',
-                        hintStyle: const TextStyle(color: Colors.white24),
+                        hintStyle: const TextStyle(color: OptikAdminTokens.slate),
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.06),
+                        fillColor: OptikAdminTokens.bgMid,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -219,7 +219,7 @@ abstract final class StockActorGate {
                       const SizedBox(height: 10),
                       Text(error!,
                           style: const TextStyle(
-                              color: Colors.redAccent, fontSize: 12)),
+                              color: OptikAdminTokens.danger, fontSize: 12)),
                     ],
                     if (busy) ...[
                       const SizedBox(height: 12),
@@ -369,9 +369,9 @@ abstract final class StockActorGate {
         backgroundColor: OptikAdminTokens.card,
         title: Text(title,
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
+                color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: Text(message,
-            style: const TextStyle(color: Colors.white70, height: 1.4)),
+            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),

@@ -11,9 +11,16 @@ export 'member_profile_page.dart';
 
 /// Semua cabang Optik B. Riski (fitur 7 + 12) + rekomendasi GPS terdekat.
 class MemberStoresPage extends StatefulWidget {
-  const MemberStoresPage({super.key, this.embedded = false});
+  const MemberStoresPage({
+    super.key,
+    this.embedded = false,
+    this.pickMode = false,
+  });
 
   final bool embedded;
+
+  /// true = tap cabang mengembalikan `toko_id` via Navigator.pop.
+  final bool pickMode;
 
   @override
   State<MemberStoresPage> createState() => _MemberStoresPageState();
@@ -377,51 +384,64 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
                     fontSize: 13)),
           ],
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (addr.isNotEmpty || hasGeo)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 40)),
-                  onPressed: () => _openMaps(s),
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: const Text('Peta'),
-                ),
-              if (phone.isNotEmpty)
-                FilledButton.icon(
-                  style:
-                      FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-                  onPressed: () => _openWa(phone),
-                  icon: const Icon(Icons.chat_rounded, size: 18),
-                  label: const Text('WhatsApp'),
-                ),
-              if (phone.isNotEmpty)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 40)),
-                  onPressed: () => _openWa(
-                    phone,
-                    message:
-                        'Halo Optik B. Riski ($id), saya ingin bertanya.',
+          if (widget.pickMode)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: id.isEmpty
+                    ? null
+                    : () => Navigator.of(context).pop(id),
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                label: const Text('Pilih cabang ini'),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (addr.isNotEmpty || hasGeo)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40)),
+                    onPressed: () => _openMaps(s),
+                    icon: const Icon(Icons.map_outlined, size: 18),
+                    label: const Text('Peta'),
                   ),
-                  icon: const Icon(Icons.support_agent_outlined, size: 18),
-                  label: const Text('Tanya'),
-                ),
-              if (review.isNotEmpty)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 40)),
-                  onPressed: () => launchUrl(
-                    Uri.parse(review),
-                    mode: LaunchMode.externalApplication,
+                if (phone.isNotEmpty)
+                  FilledButton.icon(
+                    style:
+                        FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                    onPressed: () => _openWa(phone),
+                    icon: const Icon(Icons.chat_rounded, size: 18),
+                    label: const Text('WhatsApp'),
                   ),
-                  icon: const Icon(Icons.reviews_outlined, size: 18),
-                  label: const Text('Google'),
-                ),
-            ],
-          ),
+                if (phone.isNotEmpty)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40)),
+                    onPressed: () => _openWa(
+                      phone,
+                      message:
+                          'Halo Optik B. Riski ($id), saya ingin bertanya.',
+                    ),
+                    icon: const Icon(Icons.support_agent_outlined, size: 18),
+                    label: const Text('Tanya'),
+                  ),
+                if (review.isNotEmpty)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40)),
+                    onPressed: () => launchUrl(
+                      Uri.parse(review),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.reviews_outlined, size: 18),
+                    label: const Text('Google'),
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -589,8 +609,10 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
       return ColoredBox(color: OptikMemberTokens.canvas, child: body);
     }
     return MemberPremiumScaffold(
-      title: 'Semua cabang',
-      subtitle: 'GPS · cabang terdekat',
+      title: widget.pickMode ? 'Pilih cabang' : 'Semua cabang',
+      subtitle: widget.pickMode
+          ? 'Cabang untuk beranda & janji kontrol'
+          : 'GPS · cabang terdekat',
       body: body,
     );
   }

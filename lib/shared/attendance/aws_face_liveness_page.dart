@@ -12,6 +12,8 @@ import 'aws_face_liveness_service.dart';
 import 'aws_face_liveness_web_embed.dart';
 import 'face_from_image.dart';
 import 'liveness_result.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 
 /// AWS Rekognition Face Liveness via Amplify UI.
 ///
@@ -73,7 +75,7 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
 
       final controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(const Color(0xFF0F172A))
+        ..setBackgroundColor(OptikAdminTokens.navy)
         ..addJavaScriptChannel(
           'LivenessBridge',
           onMessageReceived: _onBridgeMessage,
@@ -229,11 +231,9 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: Text('aws_liveness_title'.tr()),
-        backgroundColor: const Color(0xFF0F172A),
+    return PremiumScaffold(
+      appBar: PremiumAppBar(
+        title: 'aws_liveness_title'.tr(),
       ),
       body: Stack(
         children: [
@@ -246,11 +246,11 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(color: Colors.blueAccent),
+                  const CircularProgressIndicator(color: OptikAdminTokens.navy),
                   const SizedBox(height: 16),
                   Text(
                     'aws_liveness_preparing'.tr(),
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: OptikAdminTokens.slate),
                   ),
                 ],
               ),
@@ -259,16 +259,16 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
             const SizedBox.expand(),
           if (_finishing)
             Container(
-              color: Colors.black54,
+              color: OptikAdminTokens.navy.withOpacity(0.54),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const CircularProgressIndicator(color: Colors.tealAccent),
+                    const CircularProgressIndicator(color: OptikAdminTokens.ice),
                     const SizedBox(height: 16),
                     Text(
                       'aws_liveness_verifying'.tr(),
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: OptikAdminTokens.snow),
                     ),
                   ],
                 ),
@@ -276,22 +276,29 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
             ),
           if (_error != null)
             Container(
-              color: const Color(0xFF0F172A),
+              color: OptikAdminTokens.navy,
               padding: const EdgeInsets.all(24),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.error_outline,
-                        color: Colors.redAccent, size: 48),
+                        color: OptikAdminTokens.danger, size: 48),
                     const SizedBox(height: 16),
                     Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, height: 1.4),
+                      style: const TextStyle(
+                        color: OptikAdminTokens.snow,
+                        height: 1.4,
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton(
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: OptikAdminTokens.ice,
+                        foregroundColor: OptikAdminTokens.navy,
+                      ),
                       onPressed: () {
                         _webEmbed?.dispose();
                         setState(() {
@@ -309,6 +316,8 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                          foregroundColor: OptikAdminTokens.snow),
                       child: Text('aws_liveness_cancel'.tr()),
                     ),
                   ],

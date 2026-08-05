@@ -94,14 +94,14 @@ class _LogisticsOsmMapState extends State<LogisticsOsmMap> {
       final isKe = ke?.id.toUpperCase() == t.id.toUpperCase();
       final color = isDari
           ? OptikAdminTokens.warning
-          : (isKe ? OptikAdminTokens.success : OptikAdminTokens.accentSoft);
+          : (isKe ? OptikAdminTokens.success : OptikAdminTokens.ice);
       markers.add(
         Marker(
           point: LatLng(t.latitude!, t.longitude!),
           width: 44,
           height: 44,
           child: Tooltip(
-            message: t.id,
+            message: LogisticsTrackingService.tokoLabel(t.id),
             child: Icon(
               isDari
                   ? Icons.flight_takeoff_rounded
@@ -111,7 +111,7 @@ class _LogisticsOsmMapState extends State<LogisticsOsmMap> {
               color: color,
               size: isDari || isKe ? 34 : 26,
               shadows: const [
-                Shadow(color: Colors.black54, blurRadius: 6),
+                Shadow(color: OptikAdminTokens.slate, blurRadius: 6),
               ],
             ),
           ),
@@ -147,7 +147,7 @@ class _LogisticsOsmMapState extends State<LogisticsOsmMap> {
                         points: routePoints,
                         color: OptikAdminTokens.accent,
                         strokeWidth: 4,
-                        borderColor: Colors.white54,
+                        borderColor: OptikAdminTokens.snow.withOpacity(0.54),
                         borderStrokeWidth: 1,
                       ),
                     ],
@@ -162,15 +162,16 @@ class _LogisticsOsmMapState extends State<LogisticsOsmMap> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.55),
+                  color: OptikAdminTokens.navy.withOpacity(0.55),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   routePoints.length == 2
-                      ? '${dari!.id} → ${ke!.id} (garis lurus)'
-                      : 'OpenStreetMap · tanpa live GPS',
-                  style: const TextStyle(
-                    color: Colors.white70,
+                      ? '${LogisticsTrackingService.tokoLabel(dari!.id)} → '
+                          '${LogisticsTrackingService.tokoLabel(ke!.id)} · garis lurus'
+                      : 'OpenStreetMap · bukan GPS kurir live',
+                  style: TextStyle(
+                    color: OptikAdminTokens.snow.withOpacity(0.7),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),

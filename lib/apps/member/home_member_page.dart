@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../shared/invoice/invoice_hub_service.dart';
 import '../../shared/member/member_cart.dart';
-import '../../shared/member/member_repository.dart';
+import '../../shared/member/member_home_controller.dart';
+import '../../shared/member/member_home_models.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import 'member_rating_page.dart';
 import 'pages/member_booking_page.dart';
 import 'pages/member_care_page.dart';
-import 'pages/member_cart_page.dart';
-import 'pages/member_catalog_page.dart';
 import 'pages/member_face_shape_page.dart';
 import 'pages/member_feature_pages.dart';
 import 'pages/member_invoice_hub_page.dart';
+import 'pages/member_online_order_page.dart';
 import 'pages/member_orders_list_page.dart';
 import 'pages/member_points_page.dart';
 import 'pages/member_reorder_page.dart';
+import 'pages/member_shop_shell.dart';
 import 'pages/member_warranty_list_page.dart';
 
-/// Beranda Member — pola Janji Jiwa + GoPay:
-/// highlight info penting, pengingat actionable, aksi cepat (putih–biru).
+/// Beranda Member — CMS + data live lewat [MemberHomeController].
 class HomeMemberPage extends StatefulWidget {
   const HomeMemberPage({super.key, this.embedded = false});
 
@@ -31,286 +31,178 @@ class HomeMemberPage extends StatefulWidget {
 }
 
 class _HomeMemberPageState extends State<HomeMemberPage> {
-  final _repo = MemberRepository();
-  bool _loading = true;
-  int _points = 0;
-  int _activeOrders = 0;
-  int _garansiCount = 0;
-  List<_HomeReminder> _reminders = const [];
-  String? _highlightToko;
-  Map<String, dynamic>? _homeContent;
+  final _home = MemberHomeController.instance;
 
   @override
   void initState() {
     super.initState();
-    MemberSession.instance.addListener(_onSession);
+    _home.addListener(_onHome);
     MemberCart.instance.addListener(_onCart);
     MemberCart.instance.ensureLoaded();
-    _load();
+    _home.ensureLoaded();
   }
 
   @override
   void dispose() {
-    MemberSession.instance.removeListener(_onSession);
+    _home.removeListener(_onHome);
     MemberCart.instance.removeListener(_onCart);
     super.dispose();
+  }
+
+  void _onHome() {
+    if (mounted) setState(() {});
   }
 
   void _onCart() {
     if (mounted) setState(() {});
   }
 
-  void _onSession() {
-    if (!mounted) return;
-    _load();
-  }
-
-  Future<void> _load() async {
-    final session = MemberSession.instance;
-    final content = await _repo.homeContent();
-    if (!mounted) return;
-
-    if (!session.isLoggedIn) {
-      setState(() {
-        _loading = false;
-        _points = 0;
-        _activeOrders = 0;
-        _garansiCount = 0;
-        _reminders = const [];
-        _highlightToko = null;
-        _homeContent = content;
-      });
-      return;
-    }
-
-    setState(() => _loading = true);
-    try {
-      final phone = session.phoneForQuery;
-      final sales = await _repo.listSales(phone);
-      if (!mounted) return;
-      final garansi = await _repo.listGaransi(phone);
-      if (!mounted) return;
-      final bookings = await _repo.listBookings(phone);
-      if (!mounted) return;
-      final pts = (session.memberId == null || session.memberId!.isEmpty)
-          ? 0
-          : await _repo.pointsBalance(session.memberId!);
-      if (!mounted) return;
-
-      final active = <Map<String, dynamic>>[];
-      final reminders = <_HomeReminder>[];
-
-      for (final s in sales) {
-        final diambil = s['diambil_at'] != null ||
-            (s['tracking_status']?.toString().toUpperCase() == 'DIAMBIL');
-        if (!diambil) active.add(s);
-
-        final label = InvoiceHubService.statusLabel({
-          'tracking_status': s['tracking_status'],
-          'diambil_at': s['diambil_at'],
-        });
-        final inv = s['no_invoice']?.toString() ?? '';
-        final st = (s['tracking_status'] ?? '').toString().toUpperCase();
-        final sisa = int.tryParse('${s['sisa_tagihan'] ?? 0}') ?? 0;
-
-        if (st == 'SIAP_DIAMBIL' || st == 'CLEAR') {
-          reminders.add(_HomeReminder(
-            title: 'Siap diambil',
-            body: '$inv · $label',
-            accent: OptikMemberTokens.success,
-            cta: 'Lihat nota',
-            onTap: () => _open(MemberInvoiceHubPage(noInvoice: inv)),
-          ));
-        } else if (!diambil && sisa > 0) {
-          reminders.add(_HomeReminder(
-            title: 'Masih DP',
-            body: '$inv · lunasi dulu sebelum ambil',
-            accent: OptikMemberTokens.warning,
-            cta: 'Detail',
-            onTap: () => _open(MemberInvoiceHubPage(noInvoice: inv)),
-          ));
-        } else if (!diambil) {
-          reminders.add(_HomeReminder(
-            title: 'Dalam proses',
-            body: '$inv · $label',
-            accent: OptikMemberTokens.blue,
-            cta: 'Lacak',
-            onTap: () => _open(MemberInvoiceHubPage(noInvoice: inv)),
-          ));
-        }
-      }
-
-      final now = DateTime.now();
-      for (final b in bookings) {
-        if ((b['status'] ?? '') != 'booked') continue;
-        final at = DateTime.tryParse('${b['scheduled_at']}');
-        if (at == null) continue;
-        final local = at.toLocal();
-        if (local.isBefore(now.subtract(const Duration(hours: 2)))) continue;
-        reminders.insert(
-          0,
-          _HomeReminder(
-            title: 'Janji kontrol',
-            body: '${b['toko_id']} · ${_fmtWhen(local)}',
-            accent: OptikMemberTokens.blueDeep,
-            cta: 'Jadwal',
-            onTap: () => _open(const MemberBookingPage()),
-          ),
-        );
-      }
-
-      // Prioritas: siap diambil dulu, max 4
-      reminders.sort((a, b) {
-        int rank(_HomeReminder r) {
-          if (r.title.contains('Siap')) return 0;
-          if (r.title.contains('Janji')) return 1;
-          if (r.title.contains('DP')) return 2;
-          return 3;
-        }
-
-        return rank(a).compareTo(rank(b));
-      });
-
-      String? toko;
-      if (active.isNotEmpty) {
-        toko = active.first['toko_id']?.toString();
-      } else if (sales.isNotEmpty) {
-        toko = sales.first['toko_id']?.toString();
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _points = pts;
-        _activeOrders = active.length;
-        _garansiCount = garansi.length;
-        _reminders = reminders.take(4).toList();
-        _highlightToko = toko;
-        _homeContent = content;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _homeContent = content;
-        _loading = false;
-      });
-    }
-  }
-
-  List<Map<String, String>> get _heroSlides {
-    final raw = _homeContent?['slides'];
-    final out = <Map<String, String>>[];
-    if (raw is List) {
-      for (final e in raw) {
-        if (e is! Map) continue;
-        final title = (e['title'] ?? '').toString().trim();
-        if (title.isEmpty) continue;
-        out.add({
-          'title': title,
-          'subtitle': (e['subtitle'] ?? '').toString(),
-          'image_url': (e['image_url'] ?? '').toString(),
-        });
-      }
-    }
-    if (out.isEmpty) {
-      return const [
-        {
-          'title': 'Kacamata siap?\nLangsung tahu di sini',
-          'subtitle': 'Pantau status pesanan & ambil tanpa ribet',
-          'image_url': '',
-        },
-        {
-          'title': 'Garansi digital\nOptik B. Riski',
-          'subtitle': 'Data asli sistem · klaim wajib cek di toko',
-          'image_url': '',
-        },
-      ];
-    }
-    return out;
-  }
-
-  List<Map<String, dynamic>> get _orderedSections {
-    const fallback = [
-      {'key': 'hero', 'visible': true, 'order': 0},
-      {'key': 'greeting', 'visible': true, 'order': 1},
-      {'key': 'promo', 'visible': true, 'order': 2},
-      {'key': 'reminders', 'visible': true, 'order': 3},
-      {'key': 'store', 'visible': true, 'order': 4},
-      {'key': 'services_main', 'visible': true, 'order': 5},
-      {'key': 'services_other', 'visible': true, 'order': 6},
-    ];
-    final raw = _homeContent?['sections'];
-    final list = <Map<String, dynamic>>[];
-    if (raw is List) {
-      for (final e in raw) {
-        if (e is Map) list.add(Map<String, dynamic>.from(e));
-      }
-    }
-    final src = list.isEmpty ? fallback : list;
-    final sorted = [...src]..sort((a, b) =>
-        ((a['order'] as num?)?.toInt() ?? 0)
-            .compareTo((b['order'] as num?)?.toInt() ?? 0));
-    return sorted.where((s) => s['visible'] != false).toList();
-  }
-
-  bool _flag(String key) {
-    final f = _homeContent?['feature_flags'];
-    if (f is Map && f.containsKey(key)) return f[key] != false;
-    return true;
-  }
-
-  String _fmtWhen(DateTime d) {
-    final dd = d.day.toString().padLeft(2, '0');
-    final mm = d.month.toString().padLeft(2, '0');
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mi = d.minute.toString().padLeft(2, '0');
-    return '$dd/$mm $hh:$mi';
-  }
-
   void _open(Widget page) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _openShop({int tab = 0}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => MemberShopShell(initialTab: tab)),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _pickStore() async {
+    final picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const MemberStoresPage(pickMode: true),
+      ),
+    );
+    if (picked == null || picked.isEmpty) return;
+    await MemberSession.instance.setPreferredToko(picked);
+  }
+
+  void _openReminder(MemberHomeReminder r) {
+    if (r.kind == MemberHomeReminderKind.booking) {
+      _open(const MemberBookingPage());
+      return;
+    }
+    final oid = (r.onlineOrderId ?? '').trim();
+    if (oid.isNotEmpty) {
+      _open(MemberOnlineOrderPage(onlineOrderId: oid));
+      return;
+    }
+    final inv = r.noInvoice;
+    if (inv != null && inv.isNotEmpty) {
+      _open(MemberInvoiceHubPage(noInvoice: inv));
+    }
+  }
+
+  Future<void> _copyPromoCode(Map<String, dynamic> promo) async {
+    if (!mounted) return;
+    final code = (promo['voucher_code'] ?? '').toString().trim();
+    final messenger = ScaffoldMessenger.of(context);
+    if (code.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Tunjukkan promo ini ke kasir.')),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text('Kode $code disalin')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final session = MemberSession.instance;
+    final snap = _home.snapshot;
+    final loading = _home.loading && snap == null;
+    final refreshing = _home.loading && snap != null;
     final name = (session.nama ?? '').trim();
-    final guestHello = (_homeContent?['greeting_guest'] ?? 'Hi, Teman Optik!')
-        .toString();
-    final guestSub = (_homeContent?['greeting_subtitle_guest'] ??
-            'Login untuk lihat pesanan & garansi')
-        .toString();
+    final guestHello = snap?.greetingGuest() ?? 'Hi, Teman Optik!';
+    final guestSub = snap?.greetingSubtitleGuest() ??
+        'Login untuk lihat pesanan & garansi';
     final hello = name.isEmpty ? guestHello : 'Hi, $name!';
-    final slides = _heroSlides;
-    final brand =
-        (_homeContent?['brand_label'] ?? 'OPTIK B. RISKI').toString();
-    final promoTitle =
-        (_homeContent?['promo_title'] ?? 'Promo & poin').toString();
-    final promoSub = (_homeContent?['promo_subtitle'] ??
-            'Voucher dan saldo poin kamu')
-        .toString();
+    final slides = snap?.heroSlides() ??
+        const [
+          {
+            'title': 'Kacamata siap?\nLangsung tahu di sini',
+            'subtitle': 'Pantau status pesanan & ambil tanpa ribet',
+            'image_url': '',
+          },
+        ];
+    final brand = snap?.brandLabel() ?? 'OPTIK B. RISKI';
+    final promoTitle = snap?.promoTitle() ?? 'Promo & poin';
+    final promoSub = snap?.promoSubtitle() ?? 'Voucher dan saldo poin kamu';
+    final sections = snap?.orderedSections() ??
+        const [
+          {'key': 'hero', 'visible': true, 'order': 0},
+          {'key': 'greeting', 'visible': true, 'order': 1},
+          {'key': 'promo', 'visible': true, 'order': 2},
+          {'key': 'reminders', 'visible': true, 'order': 3},
+          {'key': 'store', 'visible': true, 'order': 4},
+          {'key': 'services_main', 'visible': true, 'order': 5},
+          {'key': 'services_other', 'visible': true, 'order': 6},
+        ];
     final top = MediaQuery.paddingOf(context).top;
     const overlap = 32.0;
-    final sections = _orderedSections;
     final showHero = sections.any((s) => s['key'] == 'hero');
-    final showGreeting = sections.any((s) => s['key'] == 'greeting');
-    final bodySections = sections.where((s) => s['key'] != 'hero').toList();
+    final error = snap?.error ?? _home.lastError;
+    final highlightToko = snap?.highlightToko;
+    final promos = snap?.promos ?? const [];
+    final reminders = snap?.reminders ?? const [];
+    final totalReminders = snap?.totalReminders ?? 0;
+    final points = snap?.points ?? 0;
+    final activeOrders = snap?.activeOrders ?? 0;
+    final garansiCount = snap?.garansiCount ?? 0;
+
+    bool flag(String key) => snap?.flag(key) ?? true;
 
     Widget sectionGap() => const SizedBox(height: 14);
 
-    final bodyChildren = <Widget>[];
-    for (final section in bodySections) {
-      final key = (section['key'] ?? '').toString();
+    final columnChildren = <Widget>[];
+
+    if (error != null && error.isNotEmpty) {
+      columnChildren.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: _ErrorBanner(
+          message: error,
+          onRetry: () => _home.refresh(force: true),
+        ),
+      ));
+      columnChildren.add(sectionGap());
+    }
+
+    for (var i = 0; i < sections.length; i++) {
+      final key = (sections[i]['key'] ?? '').toString();
+      final prevKey =
+          i > 0 ? (sections[i - 1]['key'] ?? '').toString() : '';
+      final heroThenGreeting = key == 'greeting' && prevKey == 'hero';
+      final heroAtTop = key == 'hero' && i == 0 && error == null;
+
+      if (key == 'hero') {
+        columnChildren.add(SizedBox(
+          height: (heroAtTop ? 168 + top : 140),
+          width: double.infinity,
+          child: _HeroBanner(
+            topInset: heroAtTop ? top : 12,
+            brandLabel: brand,
+            slides: slides,
+          ),
+        ));
+        continue;
+      }
+
+      Widget? block;
       if (key == 'greeting') {
-        bodyChildren.add(_GreetingCard(
+        block = _GreetingCard(
           hello: hello,
           loggedIn: session.isLoggedIn,
           phone: session.phoneRaw ?? session.phoneE164,
           guestSubtitle: guestSub,
-          loading: _loading,
-          points: _points,
-          activeOrders: _activeOrders,
-          garansiCount: _garansiCount,
+          loading: loading || refreshing,
+          points: points,
+          activeOrders: activeOrders,
+          garansiCount: garansiCount,
           onLogin: () => Navigator.of(context).pushNamed('/login'),
           onPoints: () => _open(const MemberPointsPage()),
           onOrders: () => _open(
@@ -320,58 +212,56 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             ),
           ),
           onGaransi: () => _open(const MemberWarrantyListPage()),
-        ));
-        bodyChildren.add(
-          (showHero && showGreeting)
-              ? const SizedBox(height: overlap)
-              : sectionGap(),
         );
       } else if (key == 'promo') {
-        bodyChildren.add(_MiniActionCard(
-          icon: Icons.local_offer_outlined,
+        block = _PromoSection(
           title: promoTitle,
           subtitle: promoSub,
-          onTap: () => _open(const MemberPointsPage()),
-        ));
-        bodyChildren.add(sectionGap());
+          points: points,
+          promos: promos,
+          loggedIn: session.isLoggedIn,
+          onOpenPoints: () => _open(const MemberPointsPage()),
+          onPromoTap: _copyPromoCode,
+          onLogin: () => Navigator.of(context).pushNamed('/login'),
+        );
       } else if (key == 'reminders') {
-        bodyChildren.add(_RemindersBlock(
-          reminders: _reminders,
+        block = _RemindersBlock(
+          reminders: reminders,
+          totalCount: totalReminders,
           loggedIn: session.isLoggedIn,
           onSeeAll: () =>
               _open(const MemberOrdersListPage(title: 'Pesanan saya')),
           onLogin: () => Navigator.of(context).pushNamed('/login'),
-        ));
-        bodyChildren.add(sectionGap());
+          onReminder: _openReminder,
+        );
       } else if (key == 'store') {
-        if (_highlightToko != null && _highlightToko!.isNotEmpty) {
-          bodyChildren.add(const Text(
-            'Cabang terkait',
-            style: TextStyle(
-              color: OptikMemberTokens.ink,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
+        block = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Cabang saya',
+              style: TextStyle(
+                color: OptikMemberTokens.ink,
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
             ),
-          ));
-          bodyChildren.add(const SizedBox(height: 8));
-          bodyChildren.add(_StoreChip(
-            tokoId: _highlightToko!,
-            onChange: () => _open(const MemberStoresPage()),
-          ));
-          bodyChildren.add(sectionGap());
-        }
+            const SizedBox(height: 8),
+            _StoreChip(tokoId: highlightToko, onChange: _pickStore),
+          ],
+        );
       } else if (key == 'services_main') {
         final mainItems = <Widget>[];
-        if (_flag('katalog')) {
+        if (flag('katalog')) {
           mainItems.add(Expanded(
             child: _BigServiceButton(
-              icon: Icons.visibility_outlined,
-              label: 'Katalog\nproduk',
-              onTap: () => _open(const MemberCatalogPage()),
+              icon: Icons.storefront_rounded,
+              label: 'Belanja\nOnline',
+              onTap: () => _openShop(),
             ),
           ));
         }
-        if (_flag('janji_kontrol')) {
+        if (flag('janji_kontrol')) {
           if (mainItems.isNotEmpty) {
             mainItems.add(const SizedBox(width: 10));
           }
@@ -384,83 +274,101 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
           ));
         }
         if (mainItems.isNotEmpty) {
-          bodyChildren.add(const Text(
-            'Layanan utama',
-            style: TextStyle(
-              color: OptikMemberTokens.ink,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
-          ));
-          bodyChildren.add(const SizedBox(height: 8));
-          bodyChildren.add(Row(children: mainItems));
-          bodyChildren.add(sectionGap());
+          block = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Layanan utama',
+                style: TextStyle(
+                  color: OptikMemberTokens.ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(children: mainItems),
+            ],
+          );
         }
       } else if (key == 'services_other') {
         final grid = <_GridItem>[
-          if (_flag('resep'))
+          if (flag('resep'))
             _GridItem(Icons.history_edu_outlined, 'Resep',
                 () => _open(const MemberReorderPage())),
-          if (_flag('rating'))
+          if (flag('rating'))
             _GridItem(Icons.star_rate_rounded, 'Rating',
                 () => _open(const MemberRatingPage())),
-          if (_flag('notif'))
+          if (flag('notif'))
             _GridItem(Icons.notifications_active_outlined, 'Notif',
                 () => _open(const MemberNotificationsPage())),
-          if (_flag('perawatan'))
+          if (flag('perawatan'))
             _GridItem(Icons.menu_book_outlined, 'Perawatan',
                 () => _open(const MemberCarePage())),
-          if (_flag('bentuk_wajah'))
+          if (flag('bentuk_wajah'))
             _GridItem(Icons.face_retouching_natural_rounded, 'Bentuk\nWajah',
                 () => _open(const MemberFaceShapePage())),
         ];
         if (grid.isNotEmpty) {
-          bodyChildren.add(const Text(
-            'Lainnya',
-            style: TextStyle(
-              color: OptikMemberTokens.ink,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
-          ));
-          bodyChildren.add(const SizedBox(height: 10));
-          bodyChildren.add(_ServiceGrid(items: grid));
+          block = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Lainnya',
+                style: TextStyle(
+                  color: OptikMemberTokens.ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _ServiceGrid(items: grid),
+            ],
+          );
         }
       }
+
+      if (block == null) continue;
+
+      columnChildren.add(
+        Transform.translate(
+          offset: heroThenGreeting ? const Offset(0, -overlap) : Offset.zero,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              heroThenGreeting ? 0 : (i == 0 ? 12 : 0),
+              16,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                block,
+                heroThenGreeting
+                    ? const SizedBox(height: overlap)
+                    : sectionGap(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (loading && columnChildren.isEmpty) {
+      columnChildren.add(const Padding(
+        padding: EdgeInsets.only(top: 80),
+        child: Center(child: CircularProgressIndicator()),
+      ));
     }
 
     final body = RefreshIndicator(
       color: OptikMemberTokens.blue,
-      onRefresh: _load,
+      onRefresh: () => _home.refresh(force: true),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 96),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showHero)
-              SizedBox(
-                height: 168 + top,
-                width: double.infinity,
-                child: _HeroBanner(
-                  topInset: top,
-                  brandLabel: brand,
-                  slides: slides,
-                ),
-              ),
-            Transform.translate(
-              offset: (showHero && showGreeting)
-                  ? const Offset(0, -overlap)
-                  : Offset.zero,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: bodyChildren,
-                ),
-              ),
-            ),
-          ],
+          children: columnChildren,
         ),
       ),
     );
@@ -474,7 +382,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
         elevation: 2,
         child: IconButton(
           tooltip: 'Keranjang',
-          onPressed: () => _open(const MemberCartPage()),
+          onPressed: () => _openShop(tab: 2),
           icon: Badge(
             isLabelVisible: MemberCart.instance.totalQty > 0,
             label: Text('${MemberCart.instance.totalQty}'),
@@ -488,30 +396,51 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     if (widget.embedded) {
       return ColoredBox(
         color: OptikMemberTokens.canvas,
-        child: Stack(children: [body, cartBtn]),
+        child: Stack(children: [body, if (showHero) cartBtn]),
       );
     }
     return Scaffold(
       backgroundColor: OptikMemberTokens.canvas,
-      body: Stack(children: [body, cartBtn]),
+      body: Stack(children: [body, if (showHero) cartBtn]),
     );
   }
 }
 
-class _HomeReminder {
-  const _HomeReminder({
-    required this.title,
-    required this.body,
-    required this.accent,
-    required this.cta,
-    required this.onTap,
-  });
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, required this.onRetry});
 
-  final String title;
-  final String body;
-  final Color accent;
-  final String cta;
-  final VoidCallback onTap;
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2),
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
+        border: Border.all(color: OptikMemberTokens.danger.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded,
+              color: OptikMemberTokens.danger, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: OptikMemberTokens.danger,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Coba lagi')),
+        ],
+      ),
+    );
+  }
 }
 
 class _HeroBanner extends StatefulWidget {
@@ -648,24 +577,56 @@ class _HeroBannerState extends State<_HeroBanner> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const OptikBrandLogo.white(height: 28),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  height: 1.15,
-                ),
+              Row(
+                children: [
+                  const OptikBrandLogo.white(height: 26),
+                  if (widget.brandLabel.trim().isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.brandLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.92),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.88),
-                  fontSize: 12.5,
-                  height: 1.35,
+              const SizedBox(height: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.88),
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -733,9 +694,7 @@ class _GreetingCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      loggedIn
-                          ? (phone ?? 'Akun terhubung')
-                          : guestSubtitle,
+                      loggedIn ? (phone ?? 'Akun terhubung') : guestSubtitle,
                       style: const TextStyle(
                         color: OptikMemberTokens.inkMuted,
                         fontSize: 12.5,
@@ -863,64 +822,154 @@ class _RoundStat extends StatelessWidget {
   }
 }
 
-class _MiniActionCard extends StatelessWidget {
-  const _MiniActionCard({
-    required this.icon,
+class _PromoSection extends StatelessWidget {
+  const _PromoSection({
     required this.title,
     required this.subtitle,
-    required this.onTap,
+    required this.points,
+    required this.promos,
+    required this.loggedIn,
+    required this.onOpenPoints,
+    required this.onPromoTap,
+    required this.onLogin,
   });
 
-  final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final int points;
+  final List<Map<String, dynamic>> promos;
+  final bool loggedIn;
+  final VoidCallback onOpenPoints;
+  final ValueChanged<Map<String, dynamic>> onPromoTap;
+  final VoidCallback onLogin;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: OptikMemberTokens.white,
-      borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: OptikMemberTokens.white,
+          borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
+          child: InkWell(
+            onTap: loggedIn ? onOpenPoints : onLogin,
             borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
-            border: Border.all(color: OptikMemberTokens.lineSoft),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: OptikMemberTokens.blueDeep,
-                            fontSize: 13.5)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: const TextStyle(
-                            color: OptikMemberTokens.inkMuted, fontSize: 11.5)),
-                  ],
-                ),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
+                border: Border.all(color: OptikMemberTokens.lineSoft),
               ),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: OptikMemberTokens.blueSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: OptikMemberTokens.blue, size: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: OptikMemberTokens.blueDeep,
+                                fontSize: 13.5)),
+                        const SizedBox(height: 2),
+                        Text(
+                          loggedIn
+                              ? '$subtitle · $points poin'
+                              : 'Login untuk lihat voucher & tukar poin',
+                          style: const TextStyle(
+                              color: OptikMemberTokens.inkMuted,
+                              fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: OptikMemberTokens.blueSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.local_offer_outlined,
+                        color: OptikMemberTokens.blue, size: 20),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        if (promos.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 118,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: promos.length.clamp(0, 12),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final p = promos[i];
+                final label = MemberHomeSnapshot.promoDiscountLabel(p);
+                final name = (p['title'] ?? 'Promo').toString();
+                final code = (p['voucher_code'] ?? '').toString().trim();
+                return Material(
+                  color: OptikMemberTokens.white,
+                  borderRadius:
+                      BorderRadius.circular(OptikMemberTokens.radiusMd),
+                  child: InkWell(
+                    onTap: () => onPromoTap(p),
+                    borderRadius:
+                        BorderRadius.circular(OptikMemberTokens.radiusMd),
+                    child: Container(
+                      width: 168,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(OptikMemberTokens.radiusMd),
+                        border: Border.all(color: OptikMemberTokens.lineSoft),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: OptikMemberTokens.blueDeep,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: OptikMemberTokens.inkMuted,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            code.isEmpty ? 'Info kasir' : code,
+                            style: TextStyle(
+                              color: OptikMemberTokens.blue,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                              letterSpacing: code.isEmpty ? 0 : 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -928,18 +977,26 @@ class _MiniActionCard extends StatelessWidget {
 class _RemindersBlock extends StatelessWidget {
   const _RemindersBlock({
     required this.reminders,
+    required this.totalCount,
     required this.loggedIn,
     required this.onSeeAll,
     required this.onLogin,
+    required this.onReminder,
   });
 
-  final List<_HomeReminder> reminders;
+  final List<MemberHomeReminder> reminders;
+  final int totalCount;
   final bool loggedIn;
   final VoidCallback onSeeAll;
   final VoidCallback onLogin;
+  final ValueChanged<MemberHomeReminder> onReminder;
 
   @override
   Widget build(BuildContext context) {
+    final extra = totalCount > reminders.length
+        ? totalCount - reminders.length
+        : 0;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -988,7 +1045,7 @@ class _RemindersBlock extends StatelessWidget {
                 style: TextStyle(color: OptikMemberTokens.inkMuted),
               ),
             )
-          else
+          else ...[
             ...reminders.map(
               (r) => Container(
                 margin: const EdgeInsets.only(top: 8),
@@ -1041,13 +1098,25 @@ class _RemindersBlock extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         backgroundColor: r.accent,
                       ),
-                      onPressed: r.onTap,
+                      onPressed: () => onReminder(r),
                       child: Text(r.cta, style: const TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
               ),
             ),
+            if (extra > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: onSeeAll,
+                    child: Text('+$extra pengingat lain · lihat semua'),
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -1057,14 +1126,17 @@ class _RemindersBlock extends StatelessWidget {
 class _StoreChip extends StatelessWidget {
   const _StoreChip({required this.tokoId, required this.onChange});
 
-  final String tokoId;
+  final String? tokoId;
   final VoidCallback onChange;
 
   @override
   Widget build(BuildContext context) {
-    final label = tokoId.toUpperCase() == 'PUSAT'
-        ? 'Pusat'
-        : tokoId.replaceFirst(RegExp(r'^CABANG-', caseSensitive: false), '');
+    final raw = (tokoId ?? '').trim();
+    final label = raw.isEmpty
+        ? 'Belum dipilih'
+        : raw.toUpperCase() == 'PUSAT'
+            ? 'Pusat'
+            : raw.replaceFirst(RegExp(r'^CABANG-', caseSensitive: false), '');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -1078,15 +1150,33 @@ class _StoreChip extends StatelessWidget {
               color: OptikMemberTokens.blue),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                color: OptikMemberTokens.blueDeep,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: raw.isEmpty
+                        ? OptikMemberTokens.inkMuted
+                        : OptikMemberTokens.blueDeep,
+                  ),
+                ),
+                if (raw.isEmpty)
+                  const Text(
+                    'Pilih cabang untuk janji & pengingat',
+                    style: TextStyle(
+                      color: OptikMemberTokens.inkMuted,
+                      fontSize: 11.5,
+                    ),
+                  ),
+              ],
             ),
           ),
-          TextButton(onPressed: onChange, child: const Text('Ubah')),
+          TextButton(
+            onPressed: onChange,
+            child: Text(raw.isEmpty ? 'Pilih' : 'Ubah'),
+          ),
         ],
       ),
     );
@@ -1158,7 +1248,6 @@ class _ServiceGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Row manual — hindari GridView yang meregang di IndexedStack.
     final rows = <Widget>[];
     for (var i = 0; i < items.length; i += 4) {
       final chunk = items.skip(i).take(4).toList();

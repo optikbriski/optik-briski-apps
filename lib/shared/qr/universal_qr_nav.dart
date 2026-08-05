@@ -8,6 +8,7 @@ import '../invoice/invoice_qr_opener.dart';
 import '../scanner_penerimaan_page.dart';
 import 'qr_route.dart';
 import 'universal_qr_scan_page.dart';
+import '../theme.dart';
 
 /// Peran pemanggil — mempengaruhi routing setelah scan.
 enum UniversalQrCallerRole { admin, karyawan, member }
@@ -31,15 +32,23 @@ class UniversalQrNav {
       allowedTypes: allowedTypes,
     );
     if (result == null || !context.mounted) return;
+    final toko = (cabangKaryawan ?? profile?['toko_id'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final nik = (karyawanId ?? profile?['nik'] ?? profile?['id'] ?? '')
+        .toString()
+        .trim();
+    final nama = (karyawanNama ?? profile?['nama'] ?? 'Admin').toString().trim();
     // Kamera HP / Scan QR — bukan scanner HID web admin → lifecycle view-only.
     await dispatch(
       context,
       result,
       profile: profile,
       callerRole: callerRole,
-      cabangKaryawan: cabangKaryawan,
-      karyawanId: karyawanId,
-      karyawanNama: karyawanNama,
+      cabangKaryawan: toko.isEmpty ? cabangKaryawan : toko,
+      karyawanId: nik.isEmpty ? karyawanId : nik,
+      karyawanNama: nama.isEmpty ? karyawanNama : nama,
       fromAdminHidScanner: false,
     );
   }
@@ -56,7 +65,10 @@ class UniversalQrNav {
       case QrPayloadType.attendance:
         return callerRole == UniversalQrCallerRole.karyawan;
       case QrPayloadType.receiveStock:
-        if (callerRole != UniversalQrCallerRole.karyawan) return false;
+        if (callerRole != UniversalQrCallerRole.karyawan &&
+            callerRole != UniversalQrCallerRole.admin) {
+          return false;
+        }
         return (cabangKaryawan ?? '').trim().isNotEmpty;
       case QrPayloadType.product:
       case QrPayloadType.customer:
@@ -87,7 +99,7 @@ class UniversalQrNav {
       case QrPayloadType.invoice:
         final inv = result.invoiceNo;
         if (inv == null || inv.isEmpty) {
-          snack('universal_qr_unknown'.tr(), color: Colors.orange);
+          snack('universal_qr_unknown'.tr(), color: OptikAdminTokens.warning);
           return;
         }
         if (callerRole == UniversalQrCallerRole.member) {
@@ -103,7 +115,7 @@ class UniversalQrNav {
         // OBRINV bertoken lolos validasi (lihat InvoiceHubPage._load).
         final openInvoice = InvoiceQrOpener.open;
         if (openInvoice == null) {
-          snack('universal_qr_unknown'.tr(), color: Colors.orange);
+          snack('universal_qr_unknown'.tr(), color: OptikAdminTokens.warning);
           return;
         }
         final isStaff = callerRole == UniversalQrCallerRole.admin ||
@@ -123,11 +135,11 @@ class UniversalQrNav {
 
       case QrPayloadType.attendance:
         if (callerRole == UniversalQrCallerRole.member) {
-          snack('universal_qr_attendance_member'.tr(), color: Colors.blueAccent);
+          snack('universal_qr_attendance_member'.tr(), color: OptikAdminTokens.navy);
           return;
         }
         if (callerRole == UniversalQrCallerRole.admin) {
-          snack('universal_qr_attendance_admin'.tr(), color: Colors.blueAccent);
+          snack('universal_qr_attendance_admin'.tr(), color: OptikAdminTokens.navy);
           return;
         }
         await Navigator.push(
@@ -140,16 +152,18 @@ class UniversalQrNav {
 
       case QrPayloadType.receiveStock:
         if (callerRole == UniversalQrCallerRole.member) {
-          snack('universal_qr_receive_not_member'.tr(), color: Colors.orange);
+          snack('universal_qr_receive_not_member'.tr(), color: OptikAdminTokens.warning);
           return;
         }
-        if (callerRole != UniversalQrCallerRole.karyawan) {
-          snack('universal_qr_receive_staff_only'.tr(), color: Colors.orange);
+        // Karyawan + admin (dengan cabang) boleh scan DO/RO.
+        if (callerRole != UniversalQrCallerRole.karyawan &&
+            callerRole != UniversalQrCallerRole.admin) {
+          snack('universal_qr_receive_staff_only'.tr(), color: OptikAdminTokens.warning);
           return;
         }
         final cabang = (cabangKaryawan ?? '').trim();
         if (cabang.isEmpty) {
-          snack('universal_qr_receive_no_cabang'.tr(), color: Colors.orange);
+          snack('universal_qr_receive_no_cabang'.tr(), color: OptikAdminTokens.warning);
           return;
         }
         await Navigator.push(
@@ -166,23 +180,23 @@ class UniversalQrNav {
         return;
 
       case QrPayloadType.product:
-        snack('Scan produk di POS / cek stok inventori.', color: Colors.blueAccent);
+        snack('Scan produk di POS / cek stok inventori.', color: OptikAdminTokens.navy);
         return;
 
       case QrPayloadType.customer:
         snack('Scan QR pelanggan di layar POS untuk mengisi data.',
-            color: Colors.blueAccent);
+            color: OptikAdminTokens.navy);
         return;
 
       case QrPayloadType.karyawan:
         snack(
           'QR karyawan untuk otorisasi revisi stok (Inventory).',
-          color: Colors.blueAccent,
+          color: OptikAdminTokens.navy,
         );
         return;
 
       case QrPayloadType.unknown:
-        snack('universal_qr_unknown'.tr(), color: Colors.orange);
+        snack('universal_qr_unknown'.tr(), color: OptikAdminTokens.warning);
     }
   }
 }

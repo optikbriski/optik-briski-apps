@@ -111,13 +111,13 @@ class _JadwalPengajuanApprovalPageState
   Color _tipeColor(String? t) {
     switch ((t ?? '').toUpperCase()) {
       case 'IJIN':
-        return Colors.orangeAccent;
+        return OptikAdminTokens.warning;
       case 'CUTI':
-        return Colors.purpleAccent;
+        return OptikAdminTokens.slate;
       case 'TUKAR':
-        return Colors.tealAccent;
+        return OptikAdminTokens.navy;
       default:
-        return Colors.white54;
+        return OptikAdminTokens.slate;
     }
   }
 
@@ -162,9 +162,16 @@ class _JadwalPengajuanApprovalPageState
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        ),
         title: Text(
           approve ? 'Setujui pengajuan?' : 'Tolak pengajuan?',
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         content: R.constrainedDialog(
           context: context,
@@ -177,22 +184,44 @@ class _JadwalPengajuanApprovalPageState
                 approve
                     ? 'Jadwal akan langsung diubah sesuai pengajuan.'
                     : 'Pengajuan akan ditolak tanpa mengubah jadwal.',
-                style: const TextStyle(color: Colors.white54, fontSize: 13),
+                style: const TextStyle(
+                  color: OptikAdminTokens.slate,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: noteCtrl,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: InputDecoration(
                   labelText: 'Catatan admin (opsional)',
-                  labelStyle: const TextStyle(color: Colors.white54),
+                  labelStyle: const TextStyle(color: OptikAdminTokens.slate),
                   filled: true,
                   fillColor: OptikAdminTokens.bgMid,
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 14),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius:
+                        BorderRadius.circular(OptikAdminTokens.radiusSm),
+                    borderSide:
+                        const BorderSide(color: OptikAdminTokens.lineStrong),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(OptikAdminTokens.radiusSm),
+                    borderSide:
+                        const BorderSide(color: OptikAdminTokens.lineStrong),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(OptikAdminTokens.radiusSm),
+                    borderSide: const BorderSide(
+                      color: OptikAdminTokens.navy,
+                      width: 1.4,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -200,11 +229,15 @@ class _JadwalPengajuanApprovalPageState
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: approve ? Colors.teal : Colors.redAccent,
+            onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor:
+                  approve ? OptikAdminTokens.navy : OptikAdminTokens.danger,
+              foregroundColor: OptikAdminTokens.snow,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(approve ? 'Setujui' : 'Tolak'),
@@ -223,9 +256,15 @@ class _JadwalPengajuanApprovalPageState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(approve ? 'Pengajuan disetujui.' : 'Pengajuan ditolak.'),
-          backgroundColor: approve ? Colors.green : Colors.orange,
+          backgroundColor:
+              approve ? OptikAdminTokens.success : OptikAdminTokens.warning,
+          content: Text(
+            approve ? 'Pengajuan disetujui.' : 'Pengajuan ditolak.',
+            style: const TextStyle(
+              color: OptikAdminTokens.snow,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       );
       await _load();
@@ -233,9 +272,14 @@ class _JadwalPengajuanApprovalPageState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: OptikAdminTokens.danger,
           content: Text(
-              'Gagal: $e\nPastikan migration jadwal_pengajuan sudah dijalankan.'),
-          backgroundColor: Colors.red,
+            'Gagal: $e\nPastikan migration jadwal_pengajuan sudah dijalankan.',
+            style: const TextStyle(
+              color: OptikAdminTokens.snow,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       );
     }
@@ -284,7 +328,7 @@ class _JadwalPengajuanApprovalPageState
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: OptikAdminTokens.lineStrong,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -312,7 +356,7 @@ class _JadwalPengajuanApprovalPageState
                         child: Text(
                           item['toko_id']?.toString() ?? '-',
                           style: const TextStyle(
-                              color: Colors.white38, fontSize: 12),
+                              color: OptikAdminTokens.slate, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -321,13 +365,13 @@ class _JadwalPengajuanApprovalPageState
                   const SizedBox(height: 12),
                   Text(nama,
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontSize: 18,
                           fontWeight: FontWeight.bold)),
                   if (jabatan != null && jabatan.isNotEmpty)
                     Text(jabatan,
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 13)),
+                            color: OptikAdminTokens.slate, fontSize: 13)),
                   const SizedBox(height: 14),
                   _detailRow('Tanggal', _fmtDate(item['tanggal'])),
                   if ((tipe ?? '').toUpperCase() == 'TUKAR') ...[
@@ -339,14 +383,14 @@ class _JadwalPengajuanApprovalPageState
                   const SizedBox(height: 8),
                   const Text('Alasan',
                       style: TextStyle(
-                          color: Colors.white38,
+                          color: OptikAdminTokens.slate,
                           fontSize: 11,
                           fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
                     item['alasan']?.toString() ?? '-',
                     style: const TextStyle(
-                        color: Colors.white70, fontSize: 14, height: 1.4),
+                        color: OptikAdminTokens.slate, fontSize: 14, height: 1.4),
                   ),
                   if (bentrok) ...[
                     const SizedBox(height: 14),
@@ -354,17 +398,17 @@ class _JadwalPengajuanApprovalPageState
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.12),
+                        color: OptikAdminTokens.warning.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                            color: Colors.orangeAccent.withOpacity(0.4)),
+                            color: OptikAdminTokens.warning.withOpacity(0.4)),
                       ),
                       child: Text(
                         'Peringatan: ada $sameDayCount pengajuan ijin/cuti '
                         'di cabang ini untuk hari yang sama. '
                         'Pertimbangkan agar tidak terlalu banyak yang kosong barengan.',
                         style: const TextStyle(
-                            color: Colors.orangeAccent,
+                            color: OptikAdminTokens.warning,
                             fontSize: 12,
                             height: 1.35),
                       ),
@@ -380,8 +424,8 @@ class _JadwalPengajuanApprovalPageState
                             _decide(item, false);
                           },
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
+                            foregroundColor: OptikAdminTokens.danger,
+                            side: const BorderSide(color: OptikAdminTokens.danger),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           child: const Text('Tolak'),
@@ -389,13 +433,14 @@ class _JadwalPengajuanApprovalPageState
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: ElevatedButton(
+                        child: FilledButton(
                           onPressed: () {
                             Navigator.pop(ctx);
                             _decide(item, true);
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: OptikAdminTokens.navy,
+                            foregroundColor: OptikAdminTokens.snow,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           child: const Text('Setujui'),
@@ -421,12 +466,12 @@ class _JadwalPengajuanApprovalPageState
           SizedBox(
             width: 110,
             child: Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
           ),
           Expanded(
             child: Text(value,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 13, height: 1.3)),
+                    color: OptikAdminTokens.navy, fontSize: 13, height: 1.3)),
           ),
         ],
       ),
@@ -443,30 +488,40 @@ class _JadwalPengajuanApprovalPageState
         .length;
 
     return PremiumScaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
-        title: Text(
-          widget.initialTokoId == null || widget.initialTokoId!.isEmpty
-              ? 'Approval Jadwal'
-              : 'Approval — ${widget.initialTokoId}',
-          style: const TextStyle(fontSize: 16),
-        ),
+      appBar: PremiumAppBar(
+        title: widget.initialTokoId == null || widget.initialTokoId!.isEmpty
+            ? 'Approval Jadwal'
+            : 'Approval — ${widget.initialTokoId}',
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+          ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(_error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.redAccent)),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: OptikAdminTokens.danger),
+                        ),
+                        const SizedBox(height: 12),
+                        PremiumPrimaryButton(
+                          label: 'Coba lagi',
+                          onPressed: _load,
+                          expand: false,
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : tokoKeys.isEmpty
@@ -478,7 +533,7 @@ class _JadwalPengajuanApprovalPageState
                           'Toko hanya muncul di sini jika ada anak toko yang mengajukan dari APK Karyawan.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: Colors.white54, height: 1.4),
+                              color: OptikAdminTokens.slate, height: 1.4),
                         ),
                       ),
                     )
@@ -493,19 +548,19 @@ class _JadwalPengajuanApprovalPageState
                               PremiumStatItem(
                                 label: 'Pengajuan',
                                 value: '$totalPending',
-                                color: Colors.purpleAccent,
+                                color: OptikAdminTokens.slate,
                               ),
                               PremiumStatItem(
                                 label: 'Cabang',
                                 value: '${tokoKeys.length}',
-                                color: Colors.blueAccent,
+                                color: OptikAdminTokens.navy,
                               ),
                               PremiumStatItem(
                                 label: 'Bentrok hari',
                                 value: '$clashTokoCount',
                                 color: clashTokoCount > 0
-                                    ? Colors.orangeAccent
-                                    : Colors.tealAccent,
+                                    ? OptikAdminTokens.warning
+                                    : OptikAdminTokens.slate,
                               ),
                             ],
                           );
@@ -517,7 +572,7 @@ class _JadwalPengajuanApprovalPageState
                               'Dikelompok per cabang yang ada pengajuan. '
                               'Cek dulu kalau beberapa orang ijin di hari yang sama.',
                               style: TextStyle(
-                                  color: Colors.white38,
+                                  color: OptikAdminTokens.slate,
                                   fontSize: 12,
                                   height: 1.35),
                             ),
@@ -537,17 +592,13 @@ class _JadwalPengajuanApprovalPageState
     List<Map<String, dynamic>> rows,
     List<String> clashDays,
   ) {
-    return Container(
+    return PremiumPanel(
       margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: OptikAdminTokens.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: clashDays.isNotEmpty
-              ? Colors.orangeAccent.withOpacity(0.45)
-              : Colors.white10,
-        ),
-      ),
+      padding: EdgeInsets.zero,
+      borderRadius: 14,
+      borderColor: clashDays.isNotEmpty
+          ? OptikAdminTokens.warning.withOpacity(0.45)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -557,9 +608,9 @@ class _JadwalPengajuanApprovalPageState
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: Colors.purpleAccent.withOpacity(0.18),
+                  backgroundColor: OptikAdminTokens.navy.withOpacity(0.1),
                   child: const Icon(Icons.storefront_rounded,
-                      color: Colors.purpleAccent, size: 18),
+                      color: OptikAdminTokens.navy, size: 18),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -571,15 +622,15 @@ class _JadwalPengajuanApprovalPageState
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                          color: OptikAdminTokens.navy,
+                          fontWeight: FontWeight.w800,
                           fontSize: 14,
                         ),
                       ),
                       Text(
                         '${rows.length} pengajuan menunggu',
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                            color: OptikAdminTokens.slate, fontSize: 11),
                       ),
                     ],
                   ),
@@ -590,14 +641,30 @@ class _JadwalPengajuanApprovalPageState
           if (clashDays.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Text(
-                '⚠ ${clashDays.length} hari punya ≥2 ijin/cuti barengan — '
-                'cek sebelum setujui semua.',
-                style: const TextStyle(
-                    color: Colors.orangeAccent, fontSize: 11, height: 1.3),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: OptikAdminTokens.warning.withOpacity(0.12),
+                  borderRadius:
+                      BorderRadius.circular(OptikAdminTokens.radiusSm),
+                  border: Border.all(
+                    color: OptikAdminTokens.warning.withOpacity(0.4),
+                  ),
+                ),
+                child: Text(
+                  '${clashDays.length} hari punya ≥2 ijin/cuti barengan — '
+                  'cek sebelum setujui semua.',
+                  style: const TextStyle(
+                    color: OptikAdminTokens.warning,
+                    fontSize: 11,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
-          const Divider(height: 1, color: Colors.white10),
+          const Divider(height: 1, color: OptikAdminTokens.line),
           ...rows.map((item) {
             final tipe = item['tipe']?.toString();
             final color = _tipeColor(tipe);
@@ -614,7 +681,7 @@ class _JadwalPengajuanApprovalPageState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600),
+                    color: OptikAdminTokens.navy, fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 '${_tipeLabel(tipe)} • ${_fmtDate(item['tanggal'])}'
@@ -622,7 +689,7 @@ class _JadwalPengajuanApprovalPageState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: bentrok ? Colors.orangeAccent : Colors.white38,
+                  color: bentrok ? OptikAdminTokens.warning : OptikAdminTokens.slate,
                   fontSize: 11,
                 ),
               ),
@@ -637,7 +704,7 @@ class _JadwalPengajuanApprovalPageState
               trailing: TextButton(
                 onPressed: () => _showDetail(item, siblings: rows),
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.blueAccent,
+                  foregroundColor: OptikAdminTokens.navy,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 child: const Text('Detail',

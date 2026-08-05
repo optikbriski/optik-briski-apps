@@ -480,3 +480,96 @@ class MemberBaseFeaturePage extends StatelessWidget {
     );
   }
 }
+
+/// Countdown batas bayar 15 menit (stok di-hold sampai lunas / habis waktu).
+class MemberPaymentCountdownBanner extends StatelessWidget {
+  const MemberPaymentCountdownBanner({
+    super.key,
+    required this.remaining,
+    this.compact = false,
+  });
+
+  final Duration remaining;
+  final bool compact;
+
+  static DateTime? expiresAtFromOrder(Map<String, dynamic>? order) {
+    if (order == null) return null;
+    final raw = order['expires_at'];
+    final parsed = raw == null ? null : DateTime.tryParse(raw.toString());
+    if (parsed != null) return parsed.toLocal();
+    final created = DateTime.tryParse('${order['created_at'] ?? ''}');
+    if (created == null) return null;
+    return created.toLocal().add(const Duration(minutes: 15));
+  }
+
+  static String formatMmSs(Duration d) {
+    final total = d.isNegative ? 0 : d.inSeconds;
+    final m = total ~/ 60;
+    final s = total % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expired = remaining <= Duration.zero;
+    final tone = expired
+        ? OptikMemberTokens.danger
+        : remaining.inMinutes < 3
+            ? const Color(0xFFB45309)
+            : OptikMemberTokens.blueDeep;
+    final bg = expired
+        ? OptikMemberTokens.danger.withOpacity(0.08)
+        : tone.withOpacity(0.08);
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 14,
+        vertical: compact ? 10 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
+        border: Border.all(color: tone.withOpacity(0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            expired ? Icons.timer_off_outlined : Icons.timer_outlined,
+            color: tone,
+            size: compact ? 20 : 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  expired
+                      ? 'Waktu bayar habis'
+                      : 'Selesaikan bayar dalam ${formatMmSs(remaining)}',
+                  style: TextStyle(
+                    color: tone,
+                    fontWeight: FontWeight.w800,
+                    fontSize: compact ? 13.5 : 14.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  expired
+                      ? 'Pesanan dibatalkan, stok dikembalikan. Buat pesanan baru.'
+                      : 'Stok produk di-hold 15 menit sampai pembayaran selesai.',
+                  style: TextStyle(
+                    color: OptikMemberTokens.inkSecondary,
+                    fontSize: compact ? 11.5 : 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

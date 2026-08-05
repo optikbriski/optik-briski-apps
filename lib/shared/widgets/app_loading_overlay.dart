@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme.dart';
 
 /// Overlay loading animasi — logo brand berdenyut (breathe) saat proses lama.
 class AppLoadingOverlay extends StatefulWidget {
@@ -43,8 +42,6 @@ class AppLoadingOverlay extends StatefulWidget {
 class _AppLoadingOverlayState extends State<AppLoadingOverlay>
     with SingleTickerProviderStateMixin {
   static const _logoAsset = 'assets/images/logo-web-white.png';
-  static const _accent = Color(0xFFC4A35A);
-
   late final AnimationController _breathe;
   late final Animation<double> _scale;
   late final Animation<double> _fade;
@@ -89,6 +86,10 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = scheme.secondary;
+    final surface = scheme.surface;
+    final onSurface = scheme.onSurface;
     return IgnorePointer(
       ignoring: !widget.visible,
       child: AnimatedOpacity(
@@ -97,7 +98,7 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
         child: widget.visible
             ? Material(
                 color: widget.barrierColor ??
-                    const Color(0xFF0B1220).withOpacity(0.72),
+                    scheme.scrim.withOpacity(0.72),
                 child: Center(
                   child: AnimatedBuilder(
                     animation: _breathe,
@@ -106,10 +107,10 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
                         width: 260,
                         padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
                         decoration: BoxDecoration(
-                          color: OptikAdminTokens.card,
+                          color: surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: _accent.withOpacity(0.35),
+                            color: accent.withOpacity(0.35),
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -131,13 +132,13 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
                                     borderRadius: BorderRadius.circular(12),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: _accent
+                                        color: accent
                                             .withOpacity(_glow.value * 0.55),
                                         blurRadius: 22 + (_glow.value * 18),
                                         spreadRadius: 1,
                                       ),
                                       BoxShadow(
-                                        color: Colors.white
+                                        color: onSurface
                                             .withOpacity(_glow.value * 0.12),
                                         blurRadius: 14,
                                         spreadRadius: 0,
@@ -161,8 +162,8 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
                             Text(
                               widget.message,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: onSurface,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
                                 height: 1.25,
@@ -174,7 +175,7 @@ class _AppLoadingOverlayState extends State<AppLoadingOverlay>
                                   'Mohon tunggu, jangan tutup aplikasi',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.55),
+                                color: onSurface.withOpacity(0.55),
                                 fontSize: 11.5,
                                 height: 1.3,
                               ),

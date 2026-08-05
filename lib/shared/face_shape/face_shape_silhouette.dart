@@ -1,3 +1,4 @@
+import '../theme.dart';
 import 'package:flutter/material.dart';
 
 import 'face_shape_type.dart';
@@ -8,7 +9,7 @@ class FaceShapeSilhouette extends StatelessWidget {
     super.key,
     required this.shape,
     this.size = 88,
-    this.color = const Color(0xFF1D4ED8),
+    this.color = OptikAdminTokens.navy,
     this.fillOpacity = 0.12,
   });
 

@@ -28,7 +28,8 @@ class ProductIdentity {
     required String tokoId,
     String? sku,
     String? barcode,
-    String select = 'id, sku, barcode, nama, stock, toko_id, harga, harga_jual, harga_modal, kategori, warna',
+    String select =
+        'id, sku, barcode, nama, stock, reserved_qty, toko_id, harga, harga_jual, harga_modal, kategori, warna',
   }) async {
     final client = Supabase.instance.client;
     final toko = tokoId.trim().toUpperCase();
@@ -43,6 +44,20 @@ class ProductIdentity {
           .eq('sku', s)
           .maybeSingle();
       if (bySku != null) return Map<String, dynamic>.from(bySku);
+
+      // Fallback case-insensitive (samakan dengan RPC apply_stock_delta).
+      final loose = await client
+          .from('products')
+          .select(select)
+          .eq('toko_id', toko)
+          .ilike('sku', s)
+          .limit(5);
+      final looseRows = List<Map<String, dynamic>>.from(loose);
+      if (looseRows.length == 1) return looseRows.first;
+      final exactFold = looseRows.where(
+        (r) => (r['sku'] ?? '').toString().trim().toUpperCase() == s.toUpperCase(),
+      );
+      if (exactFold.length == 1) return exactFold.first;
     }
     if (b != null) {
       final byBarcode = await client
@@ -52,6 +67,15 @@ class ProductIdentity {
           .eq('barcode', b)
           .maybeSingle();
       if (byBarcode != null) return Map<String, dynamic>.from(byBarcode);
+
+      final looseB = await client
+          .from('products')
+          .select(select)
+          .eq('toko_id', toko)
+          .ilike('barcode', b)
+          .limit(5);
+      final looseRows = List<Map<String, dynamic>>.from(looseB);
+      if (looseRows.length == 1) return looseRows.first;
     }
     return null;
   }

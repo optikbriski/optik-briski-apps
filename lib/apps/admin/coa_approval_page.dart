@@ -1,9 +1,11 @@
 // ignore_for_file: use_build_context_synchronously, prefer_const_constructors
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/finance/gl_posting_service.dart';
 
 class CoaApprovalPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -58,7 +60,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
         isLoading = false;
       });
     } catch (e) {
-      _showSnackBar("❌ Gagal memuat data karantina: $e", Colors.red);
+      _showSnackBar("Gagal memuat data karantina: $e", OptikAdminTokens.danger);
     }
   }
 
@@ -69,24 +71,53 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
           .from('finance_transactions')
           .update({'status_konfirmasi': 'APPROVED'}).eq('id', item['id']);
 
+      final approved = Map<String, dynamic>.from(item);
+      approved['status_konfirmasi'] = 'APPROVED';
+      try {
+        await GlPostingService().postManualFinance(
+          ft: approved,
+          createdBy: widget.profile['nama']?.toString(),
+        );
+      } catch (e) {
+        debugPrint('GL posting approve gagal: $e');
+      }
+
       _showSnackBar(
-          "🎯 Transaksi ${item['kategori']} BERHASIL DI-APPROVE!", Colors.teal);
+          "Transaksi ${item['kategori']} disetujui.", OptikAdminTokens.ice);
       _fetchPendingManualCOA();
     } catch (e) {
-      _showSnackBar("❌ Gagal menyetujui transaksi: $e", Colors.red);
+      _showSnackBar("Gagal menyetujui transaksi: $e", OptikAdminTokens.danger);
     }
   }
 
   Future<void> _rejectTransaksi(Map<String, dynamic> item) async {
     setState(() => isLoading = true);
     try {
+      // Void jurnal GL terkait (jika sempat ter-post) sebelum hapus FT.
+      try {
+        final ref = 'FT-${item['id']}';
+        final je = await supabase
+            .from('journal_entries')
+            .select('id')
+            .eq('sumber', 'MANUAL')
+            .eq('referensi_id', ref)
+            .eq('status', 'POSTED')
+            .maybeSingle();
+        if (je != null && je['id'] != null) {
+          await GlPostingService().voidEntry(
+            je['id'].toString(),
+            createdBy: widget.profile['nama']?.toString(),
+          );
+        }
+      } catch (_) {}
+
       await supabase.from('finance_transactions').delete().eq('id', item['id']);
 
-      _showSnackBar("🗑️ Transaksi ${item['kategori']} BERHASIL DI-REJECT!",
-          Colors.orangeAccent);
+      _showSnackBar("Transaksi ${item['kategori']} ditolak & dihapus.",
+          OptikAdminTokens.warning);
       _fetchPendingManualCOA();
     } catch (e) {
-      _showSnackBar("❌ Gagal menolak transaksi: $e", Colors.red);
+      _showSnackBar("Gagal menolak transaksi: $e", OptikAdminTokens.danger);
     }
   }
 
@@ -133,16 +164,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                     Expanded(
                       child: Text("Detail Transaksi",
                           style: TextStyle(
-                              color: Colors.white,
+                              color: OptikAdminTokens.navy,
                               fontSize: 18,
                               fontWeight: FontWeight.bold)),
                     ),
                     IconButton(
-                        icon: Icon(Icons.close, color: Colors.white38),
+                        icon: Icon(Icons.close, color: OptikAdminTokens.textMuted),
                         onPressed: () => Navigator.pop(ctx))
                   ],
                 ),
-                Divider(color: Colors.white10),
+                Divider(color: OptikAdminTokens.line),
                 SizedBox(height: 10),
                 _buildDetailRow("Kategori", item['kategori']),
                 _buildDetailRow("Nominal", _formatRupiah(item['nominal'])),
@@ -150,9 +181,9 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                 _buildDetailRow("Metode", item['metode_pembayaran']),
                 _buildDetailRow("Operator", item['nama_kasir'] ?? '-'),
                 SizedBox(height: 16),
-                Text("MEMO",
+                Text("Catatan",
                     style: TextStyle(
-                        color: Colors.blueAccent,
+                        color: OptikAdminTokens.navy,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1)),
@@ -161,16 +192,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                   width: double.infinity,
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: OptikAdminTokens.navy.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(8)),
                   child: Text(memo,
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13)),
                 ),
                 SizedBox(height: 16),
                 if (urlFoto.isNotEmpty && urlFoto.startsWith("http")) ...[
-                  Text("BUKTI FOTO",
+                  Text("Bukti foto",
                       style: TextStyle(
-                          color: Colors.blueAccent,
+                          color: OptikAdminTokens.navy,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1)),
@@ -187,16 +218,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
-                              color: Colors.redAccent.withOpacity(0.5)),
+                              color: OptikAdminTokens.danger.withOpacity(0.5)),
                           padding: EdgeInsets.symmetric(vertical: 16),
                         ),
                         onPressed: () {
                           Navigator.pop(ctx);
                           _rejectTransaksi(item);
                         },
-                        child: Text("REJECT",
+                        child: Text("Tolak",
                             style: TextStyle(
-                                color: Colors.redAccent,
+                                color: OptikAdminTokens.danger,
                                 fontWeight: FontWeight.bold)),
                       ),
                     ),
@@ -204,7 +235,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                     Expanded(
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
+                          backgroundColor: OptikAdminTokens.navy,
                           elevation: 0,
                           padding: EdgeInsets.symmetric(vertical: 16),
                         ),
@@ -212,9 +243,9 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                           Navigator.pop(ctx);
                           _approveTransaksi(item);
                         },
-                        child: Text("APPROVE",
+                        child: Text("Setujui",
                             style: TextStyle(
-                                color: Colors.white,
+                                color: OptikAdminTokens.snow,
                                 fontWeight: FontWeight.bold)),
                       ),
                     ),
@@ -236,7 +267,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text("$label:",
-              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+              style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11)),
           const SizedBox(width: 12),
           Flexible(
             child: Text(value,
@@ -244,7 +275,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 11,
                     fontWeight: FontWeight.bold)),
           ),
@@ -267,11 +298,11 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
 
     return PremiumScaffold(
       appBar: const PremiumAppBar(
-        title: '🏛️ COA MANUAL APPROVAL VAULT',
+        title: 'Persetujuan COA Manual',
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -281,22 +312,22 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                     PremiumStatItem(
                       label: 'Antrean',
                       value: '$pendingCount',
-                      color: Colors.orangeAccent,
+                      color: OptikAdminTokens.warning,
                     ),
                     PremiumStatItem(
                       label: 'Total Nominal',
                       value: _formatRupiah(totalNominal),
-                      color: Colors.blueAccent,
+                      color: OptikAdminTokens.navy,
                     ),
                     PremiumStatItem(
                       label: 'Pemasukan',
                       value: '$pemasukanCount',
-                      color: Colors.tealAccent,
+                      color: OptikAdminTokens.navy,
                     ),
                     PremiumStatItem(
                       label: 'Pengeluaran',
                       value: '${pendingCount - pemasukanCount}',
-                      color: Colors.redAccent,
+                      color: OptikAdminTokens.danger,
                     ),
                   ],
                 ),
@@ -304,7 +335,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                   child: pendingItems.isEmpty
                       ? PremiumEmptyState(
                           message:
-                              "Brankas bersih! Tidak ada antrean approval manual COA.",
+                              "Tidak ada antrean persetujuan COA manual.",
                           icon: Icons.account_balance_wallet_outlined,
                         )
                       : ListView.builder(
@@ -323,8 +354,8 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                                 borderRadius: 16,
                                 margin: const EdgeInsets.only(bottom: 12),
                                 borderColor: isPemasukan
-                                    ? Colors.tealAccent.withOpacity(0.28)
-                                    : Colors.redAccent.withOpacity(0.28),
+                                    ? OptikAdminTokens.accentSoft.withOpacity(0.28)
+                                    : OptikAdminTokens.danger.withOpacity(0.28),
                                 onTap: () => _showDetailDialog(item),
                                 child: Row(
                                   children: [
@@ -333,8 +364,8 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                                           ? Icons.arrow_downward_rounded
                                           : Icons.arrow_upward_rounded,
                                       color: isPemasukan
-                                          ? Colors.tealAccent
-                                          : Colors.redAccent,
+                                          ? OptikAdminTokens.navy
+                                          : OptikAdminTokens.danger,
                                       size: 44,
                                     ),
                                     const SizedBox(width: 12),
@@ -344,16 +375,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                              "${item['toko_id']} • ${item['kategori'].toString().toUpperCase()}",
+                                              "${item['toko_id']} · ${item['kategori']}",
                                               style: const TextStyle(
-                                                  color: Colors.blueAccent,
+                                                  color: OptikAdminTokens.navy,
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold)),
                                           const SizedBox(height: 4),
                                           Text(
                                               "${isPemasukan ? '+' : '-'} ${_formatRupiah(item['nominal'])} • Oleh: ${item['nama_kasir'] ?? 'Staff'}",
                                               style: const TextStyle(
-                                                  color: Colors.white70,
+                                                  color: OptikAdminTokens.textSecondary,
                                                   fontSize: 12)),
                                         ],
                                       ),
@@ -363,15 +394,16 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
                                       child: ElevatedButton(
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor:
-                                              Colors.blueGrey.withOpacity(0.2),
+                                              OptikAdminTokens.slate
+                                                  .withOpacity(0.2),
                                           padding: EdgeInsets.zero,
                                         ),
                                         onPressed: () =>
                                             _showDetailDialog(item),
-                                        child: const Text("DETAIL",
+                                        child: const Text("Detail",
                                             style: TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.white)),
+                                                color: OptikAdminTokens.navy)),
                                       ),
                                     ),
                                   ],
@@ -392,20 +424,20 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
         title: const Text("Tindakan Cepat",
-            style: TextStyle(color: Colors.white, fontSize: 14)),
+            style: TextStyle(color: OptikAdminTokens.navy, fontSize: 14)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-                leading: Icon(Icons.check, color: Colors.teal),
-                title: Text("Approve", style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.check, color: OptikAdminTokens.navy),
+                title: Text("Setujui", style: TextStyle(color: OptikAdminTokens.navy)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _approveTransaksi(item);
                 }),
             ListTile(
-                leading: Icon(Icons.close, color: Colors.red),
-                title: Text("Reject", style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.close, color: OptikAdminTokens.danger),
+                title: Text("Tolak", style: TextStyle(color: OptikAdminTokens.navy)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _rejectTransaksi(item);

@@ -2,9 +2,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../formatters.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 import 'invoice_hub_service.dart';
 
-/// Karyawan-only invoice summary (no POS detail / PDF / print / garansi module).
+/// Invoice summary peek (Karyawan / Admin scan) — Frozen Lake light.
 class InvoicePeekPage extends StatefulWidget {
   const InvoicePeekPage({
     super.key,
@@ -64,14 +66,14 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A1628),
+    return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF12233A),
         title: Text('invoice_hub_title'.tr()),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: OptikAdminTokens.navy),
+            )
           : _error != null
               ? Center(
                   child: Padding(
@@ -79,7 +81,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
                     child: Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70),
+                      style: const TextStyle(color: OptikAdminTokens.slate),
                     ),
                   ),
                 )
@@ -97,33 +99,43 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          h['no_invoice']?.toString() ?? widget.noInvoice,
-          style: const TextStyle(
-            color: Color(0xFFE8C872),
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
+        PremiumPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                h['no_invoice']?.toString() ?? widget.noInvoice,
+                style: const TextStyle(
+                  color: OptikAdminTokens.navy,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                h['nama_pelanggan']?.toString() ?? '-',
+                style: const TextStyle(
+                  color: OptikAdminTokens.navy,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${h['status_pembayaran'] ?? '-'} · ${h['tracking_status'] ?? '-'}',
+                style: const TextStyle(color: OptikAdminTokens.slate),
+              ),
+              const SizedBox(height: 16),
+              _row('Total', formatRupiah(total)),
+              _row('Dibayar', formatRupiah(bayar)),
+              _row('Sisa', formatRupiah(sisa)),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          h['nama_pelanggan']?.toString() ?? '-',
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${h['status_pembayaran'] ?? '-'} · ${h['tracking_status'] ?? '-'}',
-          style: TextStyle(color: Colors.white.withOpacity(0.7)),
-        ),
         const SizedBox(height: 16),
-        _row('Total', formatRupiah(total)),
-        _row('Dibayar', formatRupiah(bayar)),
-        _row('Sisa', formatRupiah(sisa)),
-        const SizedBox(height: 20),
-        Text(
+        const Text(
           'Items',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.9),
+            color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -138,12 +150,15 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
                 Expanded(
                   child: Text(
                     m['nama_produk']?.toString() ?? '-',
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: OptikAdminTokens.slate),
                   ),
                 ),
                 Text(
                   formatRupiah(sub),
-                  style: const TextStyle(color: Colors.white60),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.navy,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -153,8 +168,8 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
           const SizedBox(height: 20),
           Text(
             'invoice_hub_garansi'.tr(),
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -166,7 +181,10 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
               child: Text(
                 '${g['jenis_garansi'] ?? '-'} · ${g['status'] ?? '-'}'
                 '${g['tanggal_akhir'] != null ? ' · s/d ${g['tanggal_akhir']}' : ''}',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: const TextStyle(
+                  color: OptikAdminTokens.slate,
+                  fontSize: 13,
+                ),
               ),
             );
           }),
@@ -176,7 +194,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
           'Mode lihat saja di app Karyawan.\n'
           'Cetak / PDF / klaim garansi tersedia di Admin.',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.55),
+            color: OptikAdminTokens.slate.withOpacity(0.9),
             fontSize: 12.5,
             height: 1.4,
           ),
@@ -191,12 +209,15 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: const TextStyle(color: Colors.white54)),
+            child: Text(
+              label,
+              style: const TextStyle(color: OptikAdminTokens.slate),
+            ),
           ),
           Text(
             value,
             style: const TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w600,
             ),
           ),

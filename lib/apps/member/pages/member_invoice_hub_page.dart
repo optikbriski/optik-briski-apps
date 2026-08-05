@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'dart:async';
 
+import '../../../shared/invoice/invoice_document_builder.dart';
 import '../../../shared/invoice/invoice_hub_service.dart';
 import '../../../shared/invoice/invoice_link.dart';
 import '../../../shared/member/member_repository.dart';
@@ -19,6 +19,7 @@ import '../member_widgets.dart';
 import 'member_survey_page.dart';
 
 /// Detail nota + status + QR fase + foto + review + garansi (fitur 1,2,11,16,17).
+/// Layout nota = kit yang sama dengan Adjust Invoice / POS / PDF.
 class MemberInvoiceHubPage extends StatefulWidget {
   const MemberInvoiceHubPage({super.key, required this.noInvoice});
 
@@ -32,6 +33,7 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
   final _hubSvc = InvoiceHubService();
   final _repo = MemberRepository();
   Map<String, dynamic>? _hub;
+  InvoiceDocumentModel? _doc;
   bool _loading = true;
   String? _error;
   StreamSubscription<void>? _watchSub;
@@ -66,12 +68,20 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
         setState(() {
           _loading = false;
           _error = 'Nota tidak ditemukan';
+          _doc = null;
         });
         return;
       }
-      hub['role_view'] = 'customer';
+      hub['role_view'] = 'member';
+      final items = (hub['items'] as List?) ?? const [];
+      final doc = await InvoiceDocumentBuilder.fromSale(
+        sale: Map<String, dynamic>.from(hub),
+        items: items,
+      );
+      if (!mounted) return;
       setState(() {
         _hub = hub;
+        _doc = doc;
         _loading = false;
       });
     } catch (e) {
@@ -83,12 +93,6 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     }
   }
 
-  String _money(dynamic v) {
-    final n = int.tryParse('$v') ?? 0;
-    return NumberFormat.currency(
-            locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0)
-        .format(n);
-  }
 
   Future<void> _openReview() async {
     final url = (_hub?['google_review_url'] ?? '').toString().trim();
@@ -138,15 +142,19 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
                   onAction: _load,
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                   children: [
-                    _statusCard(h!),
-                    const SizedBox(height: 12),
-                    _moneyCard(h),
-                    const SizedBox(height: 12),
-                    _phaseCard(h),
-                    const SizedBox(height: 12),
-                    _itemsCard(h),
+                    if (_doc != null) ...[
+                      Center(
+                        child: InvoiceDocumentBuilder.buildUi(
+                          _doc!,
+                          width: 420,
+                          qrOverride: _memberQrPayload(h!),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _phaseCard(h!),
                     if ((h['foto_hasil_url'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 12),
                       _fotoCard(h),
@@ -160,71 +168,12 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     );
   }
 
-  Widget _statusCard(Map<String, dynamic> h) {
-    final label = InvoiceHubService.statusLabel(h);
-    final pay = InvoiceHubService.isDpOpen(h) ? 'DP' : 'LUNAS';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [OptikMemberTokens.blueDeep, OptikMemberTokens.blue],
-        ),
-        borderRadius: BorderRadius.circular(OptikMemberTokens.radiusLg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            h['no_invoice']?.toString() ?? '-',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${h['nama_pelanggan'] ?? '-'} · ${h['toko_id'] ?? '-'}',
-            style: TextStyle(color: Colors.white.withOpacity(0.85)),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _chip(label, Colors.white, OptikMemberTokens.blueDeep),
-              _chip(pay, OptikMemberTokens.blueDeep, Colors.white),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(String text, Color bg, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 11),
-      ),
-    );
-  }
-
-  Widget _moneyCard(Map<String, dynamic> h) {
-    return _card(
-      child: Column(
-        children: [
-          _row('Total belanja', _money(h['total_harga'])),
-          _row('Dibayar / DP', _money(h['dibayarkan'])),
-          _row('Sisa', _money(h['sisa_tagihan']), bold: true),
-        ],
-      ),
-    );
+  /// QR di nota: lifecycle bila aktif, else link hub.
+  String? _memberQrPayload(Map<String, dynamic> h) {
+    final raw = (h['qr_payload'] ?? '').toString().trim();
+    if (InvoiceLink.isCustomerLifecycleQr(raw)) return raw;
+    final inv = h['no_invoice']?.toString() ?? widget.noInvoice;
+    return InvoiceLink.encodeHttps(inv);
   }
 
   Widget _phaseCard(Map<String, dynamic> h) {
@@ -414,48 +363,6 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     );
   }
 
-  Widget _itemsCard(Map<String, dynamic> h) {
-    final items = (h['items'] as List?) ?? const [];
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const MemberSectionLabel('Item & resep'),
-          if (items.isEmpty)
-            const Text('Tidak ada item',
-                style: TextStyle(color: OptikMemberTokens.inkMuted))
-          else
-            ...items.map((raw) {
-              final it = Map<String, dynamic>.from(raw as Map);
-              final resep = (it['detail_resep'] ?? '').toString();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${it['nama_produk'] ?? '-'} × ${it['qty'] ?? 1}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    if (resep.isNotEmpty)
-                      Text(resep,
-                          style: const TextStyle(
-                              color: OptikMemberTokens.inkSecondary,
-                              fontSize: 12.5,
-                              height: 1.35)),
-                    Text(_money(it['subtotal']),
-                        style: const TextStyle(
-                            color: OptikMemberTokens.blueDeep,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
   Widget _fotoCard(Map<String, dynamic> h) {
     final url = h['foto_hasil_url'].toString();
     return _card(
@@ -567,20 +474,5 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     );
   }
 
-  Widget _row(String k, String v, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-              child: Text(k,
-                  style: const TextStyle(color: OptikMemberTokens.inkMuted))),
-          Text(v,
-              style: TextStyle(
-                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                  color: OptikMemberTokens.blueDeep)),
-        ],
-      ),
-    );
-  }
+
 }

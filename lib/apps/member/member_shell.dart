@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/member/member_home_controller.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -24,6 +25,13 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   int _index = 0;
   final _update = MemberUpdateCoordinator();
 
+  late final List<Widget> _pages = const [
+    HomeMemberPage(embedded: true),
+    _OrdersTab(),
+    MemberStoresPage(embedded: true),
+    MemberProfilePage(embedded: true),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +46,37 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     });
   }
 
+  void _selectTab(int i) {
+    final prev = _index;
+    setState(() => _index = i);
+    // Kembali ke Beranda → refresh CMS bila cache stale.
+    if (i == 0 && prev != 0) {
+      MemberHomeController.instance.ensureLoaded();
+    }
+  }
+
+  /// Jaga state tiap tab tanpa IndexedStack (tinggi tab lain tidak merenggangkan Beranda).
+  Widget _tabBody() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (var i = 0; i < _pages.length; i++)
+          Positioned.fill(
+            child: Visibility(
+              visible: _index == i,
+              maintainState: true,
+              maintainAnimation: false,
+              maintainSize: false,
+              child: TickerMode(
+                enabled: _index == i,
+                child: _pages[i],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -49,6 +88,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       _update.onAppResumed(context);
+      // Setelah admin Update CMS, buka ulang app → beranda ikut segar.
+      MemberHomeController.instance.ensureLoaded(force: true);
     }
   }
 
@@ -56,6 +97,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     if (mounted) setState(() {});
     if (MemberSession.instance.isLoggedIn) {
       MemberStatusWatch.instance.start();
+    } else {
+      MemberStatusWatch.instance.stop();
     }
   }
 
@@ -63,12 +106,6 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final scale = MemberSession.instance.fontScale.clamp(0.9, 1.35);
     final m = MemberLayout.of(context);
-    final pages = <Widget>[
-      const HomeMemberPage(embedded: true),
-      const _OrdersTab(),
-      const MemberStoresPage(embedded: true),
-      const MemberProfilePage(embedded: true),
-    ];
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
@@ -76,13 +113,12 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
       ),
       child: Scaffold(
         backgroundColor: OptikMemberTokens.canvas,
-        // Jangan IndexedStack: tinggi tab lain (Cabang/Akun) merenggangkan Beranda.
         body: m.useNavigationRail
             ? Row(
                 children: [
                   NavigationRail(
                     selectedIndex: _index,
-                    onDestinationSelected: (i) => setState(() => _index = i),
+                    onDestinationSelected: _selectTab,
                     backgroundColor: OptikMemberTokens.white,
                     indicatorColor: OptikMemberTokens.blueSoft,
                     selectedIconTheme: const IconThemeData(
@@ -135,10 +171,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                     ],
                   ),
                   const VerticalDivider(width: 1),
-                  Expanded(child: pages[_index]),
+                  Expanded(child: _tabBody()),
                 ],
               )
-            : pages[_index],
+            : _tabBody(),
         floatingActionButton: FloatingActionButton(
           onPressed: () => UniversalQrNav.open(
             context,
@@ -188,7 +224,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     final selected = _index == i;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _index = i),
+        onTap: () => _selectTab(i),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

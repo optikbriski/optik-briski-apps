@@ -19,6 +19,8 @@ class MemberSession extends ChangeNotifier {
   String? email;
   String? alamat;
   DateTime? tanggalLahir;
+  /// Cabang pilihan Member (Beranda / booking).
+  String? preferredTokoId;
   double fontScale = 1.0;
   String locale = 'id';
   bool loaded = false;
@@ -43,6 +45,7 @@ class MemberSession extends ChangeNotifier {
         email = m['email']?.toString();
         alamat = m['alamat']?.toString();
         tanggalLahir = _parseDate(m['tanggal_lahir']);
+        preferredTokoId = m['preferred_toko_id']?.toString();
         fontScale = double.tryParse('${m['font_scale'] ?? 1}') ?? 1.0;
         locale = m['locale']?.toString() ?? 'id';
       } catch (_) {}
@@ -72,6 +75,7 @@ class MemberSession extends ChangeNotifier {
     String? alamat,
     String? phoneRaw,
     DateTime? tanggalLahir,
+    String? preferredTokoId,
     double? fontScale,
     String? locale,
   }) async {
@@ -80,8 +84,17 @@ class MemberSession extends ChangeNotifier {
     if (alamat != null) this.alamat = alamat;
     if (phoneRaw != null) this.phoneRaw = phoneRaw;
     if (tanggalLahir != null) this.tanggalLahir = tanggalLahir;
+    if (preferredTokoId != null) this.preferredTokoId = preferredTokoId;
     if (fontScale != null) this.fontScale = fontScale;
     if (locale != null) this.locale = locale;
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> setPreferredToko(String? tokoId) async {
+    preferredTokoId = (tokoId == null || tokoId.trim().isEmpty)
+        ? null
+        : tokoId.trim().toUpperCase();
     await _persist();
     notifyListeners();
   }
@@ -94,6 +107,7 @@ class MemberSession extends ChangeNotifier {
     email = null;
     alamat = null;
     tanggalLahir = null;
+    preferredTokoId = null;
     fontScale = 1.0;
     locale = 'id';
     final prefs = await SharedPreferences.getInstance();
@@ -120,6 +134,7 @@ class MemberSession extends ChangeNotifier {
         'email': email,
         'alamat': alamat,
         'tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
+        'preferred_toko_id': preferredTokoId,
         'font_scale': fontScale,
         'locale': locale,
       }),

@@ -234,6 +234,24 @@ class DoPipelineService {
     required Uint8List photoBytes,
     required String kurirId,
     required String kurirNama,
+  }) {
+    return markTransitConsumingStock(
+      resi: resi,
+      kurirId: kurirId,
+      kurirNama: kurirNama,
+      photoBytes: photoBytes,
+      requirePackingPhoto: true,
+    );
+  }
+
+  /// PREPARING → TRANSIT + potong stok Real (DO).
+  /// Dipakai driver scan (dengan/ tanpa foto) dan [ReceiveScanService].
+  Future<DoPipelineResult> markTransitConsumingStock({
+    required String resi,
+    required String kurirId,
+    required String kurirNama,
+    Uint8List? photoBytes,
+    bool requirePackingPhoto = false,
   }) async {
     final row = await findByResi(resi);
     if (row == null) {
@@ -244,6 +262,16 @@ class DoPipelineService {
       );
     }
     final status = (row['status'] ?? '').toString().toUpperCase();
+    if (status == 'TRANSIT') {
+      return DoPipelineResult(
+        ok: true,
+        moveId: row['id'].toString(),
+        resi: resi,
+        status: status,
+        becameTransit: false,
+        message: 'Resi $resi sudah TRANSIT.',
+      );
+    }
     if (!preparingStatuses.contains(status)) {
       return DoPipelineResult(
         ok: false,
@@ -253,7 +281,7 @@ class DoPipelineService {
       );
     }
     final packing = (row['bukti_foto_pengirim'] ?? '').toString().trim();
-    if (packing.isEmpty || packing == '-') {
+    if (requirePackingPhoto && (packing.isEmpty || packing == '-')) {
       return DoPipelineResult(
         ok: false,
         resi: resi,
@@ -261,19 +289,24 @@ class DoPipelineService {
       );
     }
 
-    final path =
-        'pengiriman/kurir_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    await _client.storage.from('attendance_photos').uploadBinary(
-          path,
-          photoBytes,
-          fileOptions: const FileOptions(upsert: true),
-        );
-    final url = _client.storage.from('attendance_photos').getPublicUrl(path);
+    String? kurirPhotoUrl;
+    if (photoBytes != null && photoBytes.isNotEmpty) {
+      final path =
+          'pengiriman/kurir_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await _client.storage.from('attendance_photos').uploadBinary(
+            path,
+            photoBytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+      kurirPhotoUrl =
+          _client.storage.from('attendance_photos').getPublicUrl(path);
+    }
+
     final moveId = row['id'].toString();
     final dari =
         (row['dari_lokasi'] ?? 'PUSAT').toString().trim().toUpperCase();
 
-    // PENDING → potong Real (TRANSFER_OUT) saat masuk TRANSIT
+    // Potong Real (TRANSFER_OUT) saat masuk TRANSIT — wajib untuk DO.
     final mut = StockMutationService(client: _client);
     final consumed = await mut.consumeReservationAndShipOut(
       kind: StockReserveKind.doPreparing,
@@ -286,7 +319,7 @@ class DoPipelineService {
     );
     final items = (consumed['items'] as List?) ?? const [];
     if (items.isEmpty) {
-      // Legacy PREPARING tanpa reservation: potong Real dari keterangan
+      // Legacy PREPARING tanpa reservation: potong Real dari keterangan.
       await _shipOutFromKeterangan(
         mut: mut,
         fromToko: dari.isEmpty ? 'PUSAT' : dari,
@@ -298,7 +331,7 @@ class DoPipelineService {
 
     final patch = <String, dynamic>{
       'status': 'TRANSIT',
-      'bukti_foto_kurir': url,
+      if (kurirPhotoUrl != null) 'bukti_foto_kurir': kurirPhotoUrl,
     };
     if ((row['kurir_karyawan_id'] ?? '').toString().trim().isEmpty &&
         kurirId.trim().isNotEmpty) {

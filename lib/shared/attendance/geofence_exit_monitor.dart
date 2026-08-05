@@ -12,6 +12,7 @@ import 'android_battery_optimization.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
+import '../theme.dart';
 
 /// Pantau lokasi karyawan saat shift OPEN; notifikasi lokal jika keluar area
 /// atau GPS/izin lokasi dimatikan.
@@ -152,17 +153,17 @@ class GeofenceExitMonitor {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Izinkan lokasi selama shift',
           style: TextStyle(
-            color: Colors.white,
+            color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
             fontSize: 16,
           ),
         ),
-        content: const Text(
+        content: Text(
           'Agar pantauan area toko tetap jalan saat aplikasi di belakang '
           '(HP terkunci / app lain), pilih “Izinkan sepanjang waktu” / '
           '“Allow all the time” pada langkah berikutnya.\n\n'
@@ -172,7 +173,7 @@ class GeofenceExitMonitor {
           'setelah absen pulang.\n\n'
           'Batasan: force-stop app, cabut izin lokasi, atau optimasi baterai '
           'agresif tetap bisa menghentikan pantauan.',
-          style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 13.5),
+          style: TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
         ),
         actions: [
           TextButton(
@@ -182,8 +183,8 @@ class GeofenceExitMonitor {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
+              backgroundColor: OptikAdminTokens.navy,
+              foregroundColor: OptikAdminTokens.snow,
             ),
             child: const Text('Lanjut izinkan'),
           ),
@@ -235,13 +236,13 @@ class GeofenceExitMonitor {
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
             'Optimasi baterai',
             style: TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
               fontSize: 16,
             ),
@@ -252,7 +253,7 @@ class GeofenceExitMonitor {
             '/ “Tidak ada batasan”).\n\n'
             'Ini tidak membuat app kebal force-stop — hanya mengurangi '
             'pematian otomatis oleh sistem.',
-            style: TextStyle(color: Colors.white70, height: 1.45, fontSize: 13.5),
+            style: TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
           ),
           actions: [
             TextButton(
@@ -266,8 +267,8 @@ class GeofenceExitMonitor {
             FilledButton(
               onPressed: () => Navigator.pop(ctx, 'allow'),
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
+                backgroundColor: OptikAdminTokens.navy,
+                foregroundColor: OptikAdminTokens.snow,
               ),
               child: const Text('Buka pengaturan'),
             ),
@@ -817,14 +818,14 @@ class GeofenceExitMonitor {
 
     final isOutside = kind == _GeoInAppKind.outside;
     final accent =
-        isOutside ? const Color(0xFFF87171) : const Color(0xFF34D399);
+        isOutside ? OptikAdminTokens.danger : OptikAdminTokens.success;
 
     try {
       await showDialog<void>(
         context: ctx,
         barrierDismissible: true,
         builder: (dialogCtx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: Row(
@@ -856,8 +857,8 @@ class GeofenceExitMonitor {
                 : 'Lokasi Anda kembali di dalam geofence toko. '
                     'Tetap di area selama shift OPEN.\n\n'
                     '${detail ?? ''}',
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: OptikAdminTokens.slate,
               height: 1.4,
               fontSize: 13.5,
             ),
@@ -867,7 +868,7 @@ class GeofenceExitMonitor {
               onPressed: () => Navigator.pop(dialogCtx),
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
-                foregroundColor: Colors.black,
+                foregroundColor: OptikAdminTokens.navy,
               ),
               child: const Text(
                 'MENGERTI',

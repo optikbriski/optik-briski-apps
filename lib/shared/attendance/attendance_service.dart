@@ -742,8 +742,9 @@ class AttendanceService {
     }
   }
 
-  /// Liveness + foto wajib. Face match dilewati untuk web & Absensi Toko
-  /// ([storeKiosk]) — tanpa reject "wajah tidak cocok".
+  /// Liveness + foto wajib.
+  /// Web / Absensi Toko ([storeKiosk]): skip face-match otomatis —
+  /// gate akhir = Monitor Absensi (Valid / Mencurigakan).
   Future<double?> _matchOrThrow(
     Map<String, dynamic> karyawan,
     LivenessCaptureResult liveness, {
@@ -751,7 +752,7 @@ class AttendanceService {
   }) async {
     _requireLivenessPassed(liveness);
 
-    // Admin Absensi (browser / kiosk toko): tanpa face match.
+    // Kiosk/web: jangan reject di pintu absensi; ops review di Monitor.
     if (kIsWeb || storeKiosk) {
       return null;
     }

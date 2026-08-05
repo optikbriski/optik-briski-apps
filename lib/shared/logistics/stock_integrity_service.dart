@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'logistics_tracking_service.dart';
+
 class StockIntegrityIssue {
   StockIntegrityIssue({
     required this.sku,
@@ -17,8 +19,8 @@ class StockIntegrityIssue {
   final int stock;
   final int ledgerSum;
 
-  /// stock - ledgerSum. Positif = stok lebih dari jejak (ada yang masuk tanpa ledger).
-  /// Negatif = stok kurang dari jejak (ada yang keluar tanpa ledger / stok dipotong liar).
+  /// stock - ledgerSum. Positif = stok lebih dari jejak (masuk tanpa ledger).
+  /// Negatif = stok kurang dari jejak (keluar tanpa ledger).
   final int delta;
   final String? productId;
   final String? nama;
@@ -28,11 +30,11 @@ class StockIntegrityIssue {
 
   String get diagnosis {
     if (delta > 0) {
-      return 'Stok di sistem +$delta lebih banyak dari jejak ledger '
+      return 'Stok sistem +$delta lebih banyak dari jejak ledger '
           '(ada penambahan tanpa alasan tercatat).';
     }
     if (delta < 0) {
-      return 'Stok di sistem $delta lebih sedikit dari jejak ledger '
+      return 'Stok sistem $delta lebih sedikit dari jejak ledger '
           '(ada pengurangan tanpa alasan tercatat).';
     }
     return 'Sinkron.';
@@ -41,7 +43,7 @@ class StockIntegrityIssue {
   /// Label ringkas breakdown jejak, mis. "SALE −12 · TRANSFER_IN +20".
   String get ledgerTrailLabel {
     if (ledgerByReason.isEmpty) return 'Belum ada jejak ledger';
-    final order = [
+    const order = [
       'OPENING',
       'TRANSFER_IN',
       'TRANSFER_OUT',
@@ -63,7 +65,7 @@ class StockIntegrityIssue {
   }
 }
 
-/// Satu paket/DO yang masih terbuka (preparing / transit).
+/// Satu paket/DO/RO yang masih terbuka (disiapkan / transit).
 class StockOpenTransitItem {
   const StockOpenTransitItem({
     required this.id,
@@ -73,6 +75,7 @@ class StockOpenTransitItem {
     required this.status,
     required this.qty,
     this.createdAt,
+    this.tipe = '',
   });
 
   final String id;
@@ -82,6 +85,18 @@ class StockOpenTransitItem {
   final String status;
   final int qty;
   final String? createdAt;
+  final String tipe;
+
+  String get statusLabel => LogisticsTrackingService.statusLabel(status);
+
+  String get kindLabel {
+    final t = tipe.toUpperCase();
+    final r = resi.toUpperCase();
+    if (t == 'REQUEST' || r.startsWith('RO-')) return 'RO';
+    if (t == 'RETUR' || r.startsWith('RET-')) return 'Retur';
+    if (t == 'DELIVERY' || r.startsWith('DO-')) return 'DO';
+    return t.isEmpty ? 'Mutasi' : t;
+  }
 }
 
 /// Baris SKU untuk drill-down stok / penjualan.
@@ -118,32 +133,17 @@ class StockLeakReport {
   final List<StockIntegrityIssue> mismatches;
   final int missingSkuCount;
 
-  /// Qty masih di perjalanan (TRANSFER_OUT sudah, belum TRANSFER_IN) — ini normal, bukan bocor.
+  /// Qty masih di perjalanan (Real sudah keluar / booking aktif) — normal, bukan bocor.
   final int openTransitQty;
   final DateTime generatedAt;
 
-  /// Total stok fisik (`products.stock`) per toko_id.
   final Map<String, int> stockByToko;
-
-  /// Top SKU berstok per toko (untuk drill-down).
   final Map<String, List<StockSkuQtyLine>> stockLinesByToko;
-
-  /// Qty transit terbuka per status (PREPARING / TRANSIT / …).
   final Map<String, int> transitByStatus;
-
-  /// Qty transit terbuka per cabang tujuan.
   final Map<String, int> transitByTujuan;
-
-  /// Daftar paket transit terbuka (detail saat kategori diketuk).
   final List<StockOpenTransitItem> openTransitItems;
-
-  /// Abs qty SALE ledger 30 hari terakhir per toko.
   final Map<String, int> soldByToko30d;
-
-  /// Top SKU terjual per toko (30 hari).
   final Map<String, List<StockSkuQtyLine>> soldLinesByToko30d;
-
-  /// Agregat qty_delta global per reason (dari scan mismatch trail + ringkas).
   final Map<String, int> ledgerByReason;
 
   bool get isClean => mismatches.isEmpty && missingSkuCount == 0;
@@ -159,7 +159,7 @@ class StockLeakReport {
 
   String get verdict {
     if (isClean) {
-      return 'AMAN — tidak ditemukan kebocoran stok pada pengecekan ini.';
+      return 'Aman — tidak ditemukan kebocoran stok pada pengecekan ini.';
     }
     final parts = <String>[];
     if (mismatches.isNotEmpty) {
@@ -168,7 +168,7 @@ class StockLeakReport {
     if (missingSkuCount > 0) {
       parts.add('$missingSkuCount produk SKU lemah/NOSKU');
     }
-    return 'ADA INDIKASI BOCOR — ${parts.join(', ')}.';
+    return 'Ada indikasi bocor — ${parts.join(', ')}.';
   }
 }
 
@@ -206,7 +206,10 @@ class StockIntegrityService {
 
   final SupabaseClient _client;
 
-  /// Full scan dengan callback progress (persen nyata per baris produk).
+  static String _key(String sku, String toko) =>
+      '${sku.trim().toUpperCase()}|${toko.trim().toUpperCase()}';
+
+  /// Full scan dengan callback progress (persen nyata).
   Future<StockLeakReport> runLeakCheck({
     int pageSize = 500,
     StockLeakProgressCallback? onProgress,
@@ -230,7 +233,7 @@ class StockIntegrityService {
       if (rows.isEmpty) break;
       allRows.addAll(rows);
       emit(StockLeakProgress(
-        percent: 0.04 + (0.06 * (allRows.length / (allRows.length + pageSize))),
+        percent: 0.03 + (0.07 * (allRows.length / (allRows.length + pageSize))),
         phase: 'Memuat katalog produk…',
         checked: allRows.length,
         total: allRows.length,
@@ -242,8 +245,31 @@ class StockIntegrityService {
 
     final total = allRows.length;
     emit(StockLeakProgress(
-      percent: 0.10,
-      phase: total == 0 ? 'Tidak ada produk' : 'Memindai $total baris produk…',
+      percent: 0.12,
+      phase: total == 0
+          ? 'Tidak ada produk'
+          : 'Memuat jejak ledger (batch)…',
+      checked: 0,
+      total: total,
+    ));
+
+    // Batch ledger — hindari N+1 query per SKU (sangat lambat di dataset besar).
+    final ledgerIndex = await _loadLedgerIndex(
+      onProgress: (loaded, approx) {
+        final pct = 0.12 + (0.48 * (approx.clamp(0.0, 1.0)));
+        emit(StockLeakProgress(
+          percent: pct,
+          phase: 'Memuat jejak ledger…',
+          checked: loaded,
+          total: total > 0 ? total : loaded,
+          currentLabel: '$loaded baris ledger',
+        ));
+      },
+    );
+
+    emit(StockLeakProgress(
+      percent: 0.62,
+      phase: 'Membandingkan stok vs ledger…',
       checked: 0,
       total: total,
     ));
@@ -256,48 +282,71 @@ class StockIntegrityService {
 
     for (final p in allRows) {
       checked++;
-      final sku = (p['sku'] ?? '').toString().trim();
-      final toko = (p['toko_id'] ?? '').toString().toUpperCase();
-      final nama = (p['nama'] ?? sku).toString();
+      final skuRaw = (p['sku'] ?? '').toString().trim();
+      final toko = (p['toko_id'] ?? '').toString().trim().toUpperCase();
+      final nama = (p['nama'] ?? skuRaw).toString();
       final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
 
-      if (toko.isNotEmpty) {
+      if (toko.isNotEmpty && toko != 'NULL') {
         stockByToko[toko] = (stockByToko[toko] ?? 0) + stock;
-        if (stock > 0 && sku.isNotEmpty) {
+        if (stock > 0 && skuRaw.isNotEmpty && !skuRaw.startsWith('NOSKU-')) {
           stockLinesRaw.putIfAbsent(toko, () => []).add(StockSkuQtyLine(
-                sku: sku,
+                sku: skuRaw,
                 nama: nama,
                 qty: stock,
               ));
         }
       }
 
-      if (sku.isEmpty || sku.startsWith('NOSKU-')) {
+      if (skuRaw.isEmpty || skuRaw.startsWith('NOSKU-')) {
         missingSku++;
+        final scanPct =
+            total == 0 ? 0.88 : 0.62 + (0.26 * (checked / total));
+        emit(StockLeakProgress(
+          percent: scanPct,
+          phase: 'Membandingkan stok vs ledger…',
+          checked: checked,
+          total: total,
+          currentLabel: '$nama · $toko',
+          foundLeaks: mismatches.length,
+        ));
+        continue;
       }
 
-      if (sku.isNotEmpty) {
-        final ledger = await _ledgerForSkuToko(sku: sku, tokoId: toko);
-        final ledgerSum = ledger.sum;
-        if (ledgerSum != stock) {
-          mismatches.add(StockIntegrityIssue(
-            sku: sku,
-            tokoId: toko,
-            stock: stock,
-            ledgerSum: ledgerSum,
-            delta: stock - ledgerSum,
-            productId: p['id']?.toString(),
-            nama: p['nama']?.toString(),
-            ledgerByReason: ledger.byReason,
-          ));
-        }
+      if (toko.isEmpty || toko == 'NULL') {
+        // Tanpa lokasi, rumus integrity tidak valid.
+        final scanPct =
+            total == 0 ? 0.88 : 0.62 + (0.26 * (checked / total));
+        emit(StockLeakProgress(
+          percent: scanPct,
+          phase: 'Membandingkan stok vs ledger…',
+          checked: checked,
+          total: total,
+          currentLabel: '$nama · (tanpa toko)',
+          foundLeaks: mismatches.length,
+        ));
+        continue;
       }
 
-      // 10% → 88% untuk pemindaian baris
-      final scanPct = total == 0 ? 0.88 : 0.10 + (0.78 * (checked / total));
+      final agg = ledgerIndex[_key(skuRaw, toko)] ??
+          const _LedgerAgg(sum: 0, byReason: {});
+      if (agg.sum != stock) {
+        mismatches.add(StockIntegrityIssue(
+          sku: skuRaw,
+          tokoId: toko,
+          stock: stock,
+          ledgerSum: agg.sum,
+          delta: stock - agg.sum,
+          productId: p['id']?.toString(),
+          nama: p['nama']?.toString(),
+          ledgerByReason: agg.byReason,
+        ));
+      }
+
+      final scanPct = total == 0 ? 0.88 : 0.62 + (0.26 * (checked / total));
       emit(StockLeakProgress(
         percent: scanPct,
-        phase: 'Memverifikasi jejak ledger…',
+        phase: 'Membandingkan stok vs ledger…',
         checked: checked,
         total: total,
         currentLabel: '$nama · $toko',
@@ -321,7 +370,7 @@ class StockIntegrityService {
 
     emit(StockLeakProgress(
       percent: 0.93,
-      phase: 'Merinci paket transit…',
+      phase: 'Merinci paket perjalanan…',
       checked: checked,
       total: total,
       foundLeaks: mismatches.length,
@@ -359,6 +408,9 @@ class StockIntegrityService {
       foundLeaks: mismatches.length,
     ));
 
+    // Urutkan selisih terbesar dulu.
+    mismatches.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+
     return StockLeakReport(
       checkedProducts: checked,
       mismatches: mismatches,
@@ -376,31 +428,64 @@ class StockIntegrityService {
     );
   }
 
-  Future<_LedgerAgg> _ledgerForSkuToko({
-    required String sku,
-    required String tokoId,
+  /// Muat seluruh ledger sekali, agregat di memori per SKU|toko.
+  Future<Map<String, _LedgerAgg>> _loadLedgerIndex({
+    required void Function(int loadedRows, double approx) onProgress,
+    int pageSize = 1000,
   }) async {
-    final ledger = await _client
-        .from('product_stock_ledger')
-        .select('qty_delta, reason')
-        .eq('sku', sku)
-        .eq('toko_id', tokoId);
-    var sum = 0;
-    final byReason = <String, int>{};
-    for (final l in List<Map<String, dynamic>>.from(ledger)) {
-      final d = int.tryParse(l['qty_delta']?.toString() ?? '0') ?? 0;
-      final reason = (l['reason'] ?? 'UNKNOWN').toString().toUpperCase();
-      sum += d;
-      byReason[reason] = (byReason[reason] ?? 0) + d;
+    final sums = <String, int>{};
+    final byReason = <String, Map<String, int>>{};
+    var offset = 0;
+    var loaded = 0;
+
+    while (true) {
+      final page = await _client
+          .from('product_stock_ledger')
+          .select('sku, toko_id, qty_delta, reason')
+          .range(offset, offset + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(page);
+      if (rows.isEmpty) break;
+
+      for (final r in rows) {
+        final sku = (r['sku'] ?? '').toString().trim();
+        final toko = (r['toko_id'] ?? '').toString().trim().toUpperCase();
+        if (sku.isEmpty || toko.isEmpty || toko == 'NULL') continue;
+        final key = _key(sku, toko);
+        final d = int.tryParse(r['qty_delta']?.toString() ?? '0') ?? 0;
+        final reason = (r['reason'] ?? 'UNKNOWN').toString().toUpperCase();
+        sums[key] = (sums[key] ?? 0) + d;
+        final reasonMap = byReason.putIfAbsent(key, () => {});
+        reasonMap[reason] = (reasonMap[reason] ?? 0) + d;
+      }
+
+      loaded += rows.length;
+      // Estimasi kasar: makin banyak page, makin dekat 1.0 (cap di 0.95 sampai break).
+      final approx = (1 - (1 / (1 + loaded / 5000))).clamp(0.0, 0.95);
+      onProgress(loaded, approx);
+
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+      if (offset > 120000) break;
     }
-    return _LedgerAgg(sum: sum, byReason: byReason);
+
+    onProgress(loaded, 1.0);
+
+    final out = <String, _LedgerAgg>{};
+    for (final e in sums.entries) {
+      out[e.key] = _LedgerAgg(
+        sum: e.value,
+        byReason: Map<String, int>.from(byReason[e.key] ?? const {}),
+      );
+    }
+    return out;
   }
 
   Future<_TransitAgg> _openTransitBreakdown() async {
     final rows = await _client
         .from('stock_move_history')
         .select(
-            'id, product_name, dari_lokasi, ke_lokasi, jumlah, status, created_at')
+          'id, product_name, dari_lokasi, ke_lokasi, jumlah, status, created_at, tipe',
+        )
         .inFilter('status', ['PREPARING', 'TRANSIT', 'PENDING', 'WAITING'])
         .order('created_at', ascending: false)
         .limit(200);
@@ -424,6 +509,7 @@ class StockIntegrityService {
         status: status,
         qty: qty,
         createdAt: r['created_at']?.toString(),
+        tipe: (r['tipe'] ?? '').toString(),
       ));
     }
     return _TransitAgg(

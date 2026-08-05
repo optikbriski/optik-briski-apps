@@ -296,18 +296,32 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(body, style: const TextStyle(color: Colors.white70)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        ),
+        title: Text(title,
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
+              fontWeight: FontWeight.w800,
+            )),
+        content: Text(body,
+            style: const TextStyle(
+              color: OptikAdminTokens.slate,
+              height: 1.4,
+            )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
             child: const Text('Batal'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor:
+            style: FilledButton.styleFrom(
+              backgroundColor:
                   danger ? OptikAdminTokens.danger : OptikAdminTokens.success,
+              foregroundColor: OptikAdminTokens.snow,
             ),
             child: Text(confirmLabel),
           ),
@@ -320,7 +334,16 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   void _snack(String msg, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
+      SnackBar(
+        backgroundColor: color,
+        content: Text(
+          msg,
+          style: const TextStyle(
+            color: OptikAdminTokens.snow,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 
@@ -350,10 +373,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     }
   }
 
+  /// Warna aksen status (wash chip / border).
   Color _statusColor(String? status) {
     switch (status) {
       case AttendanceVerificationStatus.pendingReview:
-        return OptikAdminTokens.accentSoft;
+        return OptikAdminTokens.ice;
       case AttendanceVerificationStatus.aman:
         return OptikAdminTokens.success;
       case AttendanceVerificationStatus.mencurigakan:
@@ -361,8 +385,16 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       case AttendanceVerificationStatus.curang:
         return OptikAdminTokens.danger;
       default:
-        return Colors.white54;
+        return OptikAdminTokens.slate;
     }
+  }
+
+  /// Teks status di permukaan terang — ice terlalu muda, pakai navy.
+  Color _statusFg(String? status) {
+    if (status == AttendanceVerificationStatus.pendingReview) {
+      return OptikAdminTokens.navy;
+    }
+    return _statusColor(status);
   }
 
   @override
@@ -371,14 +403,15 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       appBar: PremiumAppBar(
         title: _title,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_rounded, color: OptikAdminTokens.navy),
           onPressed: _back,
         ),
         actions: [
           IconButton(
             tooltip: 'Pilih tanggal',
             onPressed: _pickDay,
-            icon: const Icon(Icons.calendar_today_rounded),
+            icon: const Icon(Icons.calendar_today_rounded,
+                color: OptikAdminTokens.navy),
           ),
           IconButton(
             tooltip: 'dash_menu_tinjauan_mencurigakan'.tr(),
@@ -395,9 +428,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               }
               return _loadTokoCounts();
             }),
-            icon: const Icon(Icons.warning_amber_rounded),
+            icon: const Icon(Icons.warning_amber_rounded,
+                color: OptikAdminTokens.warning),
           ),
           IconButton(
+            tooltip: 'Refresh',
             onPressed: () {
               if (_level == _MonitorLevel.karyawanList &&
                   _selectedToko != null) {
@@ -409,7 +444,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                 _loadTokoCounts();
               }
             },
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
@@ -426,7 +461,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     ? 'Hari ${_dayFmt.format(_day)} · Owner: semua toko termasuk Pusat'
                     : 'Hari ${_dayFmt.format(_day)} · Cabang saja (tanpa absensi Pusat)',
                 style: const TextStyle(
-                  color: OptikAdminTokens.textSecondary,
+                  color: OptikAdminTokens.slate,
                   fontSize: 13,
                   height: 1.35,
                 ),
@@ -437,11 +472,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(_error!,
-                  style: const TextStyle(color: Colors.redAccent)),
+                  style: const TextStyle(color: OptikAdminTokens.danger)),
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
                 : switch (_level) {
                     _MonitorLevel.tokoList => _buildTokoList(),
                     _MonitorLevel.karyawanList => _buildKaryawanList(),
@@ -461,6 +496,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       );
     }
     return RefreshIndicator(
+      color: OptikAdminTokens.ice,
       onRefresh: _loadTokoCounts,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -478,7 +514,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               children: [
                 Icon(
                   isPusat ? Icons.apartment_rounded : Icons.storefront_rounded,
-                  color: OptikAdminTokens.accentSoft,
+                  color: OptikAdminTokens.navy,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -488,7 +524,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                       Text(
                         toko,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -497,7 +533,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                             ? 'Belum ada absen masuk hari ini'
                             : '$count karyawan sudah absen masuk',
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
                       ),
@@ -509,20 +545,20 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: OptikAdminTokens.accent.withOpacity(0.2),
+                      color: OptikAdminTokens.ice.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '$count',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
                     ),
                   ),
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: Colors.white38),
+                const Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
               ],
             ),
           );
@@ -540,6 +576,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       );
     }
     return RefreshIndicator(
+      color: OptikAdminTokens.ice,
       onRefresh: () => _loadKaryawanForToko(_selectedToko!),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -570,7 +607,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                       Text(
                         _svc.namaOf(r),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -579,14 +616,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                             ? _svc.jabatanOf(r)
                             : 'Karyawan',
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
                       ),
                       Text(
                         'Masuk ${at != null ? _timeFmt.format(at.toLocal()) : '-'}',
                         style: const TextStyle(
-                          color: Colors.white38,
+                          color: OptikAdminTokens.slate,
                           fontSize: 11,
                         ),
                       ),
@@ -603,14 +640,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   child: Text(
                     _statusLabel(status),
                     style: TextStyle(
-                      color: _statusColor(status),
+                      color: _statusFg(status),
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: Colors.white38),
+                const Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
               ],
             ),
           );
@@ -641,7 +678,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         Text(
           _svc.namaOf(r),
           style: const TextStyle(
-            color: Colors.white,
+            color: OptikAdminTokens.navy,
             fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
@@ -650,19 +687,19 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         Text(
           '${r['toko_id'] ?? '-'}'
           '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}',
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
         const SizedBox(height: 4),
         Text(
           'Jam detect/masuk: ${at != null ? _dateTimeFmt.format(at.toLocal()) : '-'}',
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         const SizedBox(height: 4),
         Text(
           'Status: ${_statusLabel(status)}'
           ' · Skor match: ${score ?? '-'}'
           ' · Liveness: ${r['liveness_ok'] == true ? 'OK' : '-'}',
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         const SizedBox(height: 16),
         LayoutBuilder(
@@ -672,7 +709,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               label: 'Capture absen (hari ini)',
               subtitle: 'Foto liveness saat masuk (tinjauan Admin)',
               url: capture,
-              accent: OptikAdminTokens.accentSoft,
+              accent: OptikAdminTokens.navy,
             );
             final right = _photoPane(
               label: 'Foto terdaftar',
@@ -705,7 +742,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   loading: _acting,
                   onPressed: _acting ? null : _markValid,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF34D399), Color(0xFF059669)],
+                    colors: [OptikAdminTokens.success, OptikAdminTokens.success],
                   ),
                 ),
               ),
@@ -717,7 +754,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   loading: _acting,
                   onPressed: _acting ? null : _markMencurigakan,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+                    colors: [OptikAdminTokens.warning, OptikAdminTokens.warning],
                   ),
                 ),
               ),
@@ -739,7 +776,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               }
             }),
             gradient: const LinearGradient(
-              colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+              colors: [OptikAdminTokens.warning, OptikAdminTokens.warning],
             ),
           )
         else
@@ -750,7 +787,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             child: Text(
               'Sudah dinilai: ${_statusLabel(status)}',
               style: TextStyle(
-                color: _statusColor(status),
+                color: _statusFg(status),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -783,7 +820,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
           const SizedBox(height: 10),
           ZoomableNetworkImagePane(url: url),
@@ -798,7 +835,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.person, color: Colors.white24, size: 22),
+        child: const Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
       );
     }
     return Image.network(
@@ -810,7 +847,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.broken_image, color: Colors.white24, size: 18),
+        child: const Icon(Icons.broken_image, color: OptikAdminTokens.slate, size: 18),
       ),
     );
   }

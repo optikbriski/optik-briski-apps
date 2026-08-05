@@ -72,7 +72,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       appBar: PremiumAppBar(title: "analytics_title".tr()),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: OptikAdminTokens.accentSoft))
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -83,13 +83,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                       PremiumStatItem(
                         label: "analytics_omzet".tr(),
                         value: _formatRupiah(_totalOmzet),
-                        color: Colors.greenAccent,
+                        color: OptikAdminTokens.success,
                       ),
                       PremiumStatItem(
                         label: "analytics_stok_kritis".tr(),
                         value: "analytics_produk"
                             .tr(args: [_stokKritis.toString()]),
-                        color: Colors.orangeAccent,
+                        color: OptikAdminTokens.warning,
                       ),
                     ],
                   ),
@@ -108,21 +108,21 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                             x: 0,
                             barRods: [
                               BarChartRodData(
-                                  toY: 8, color: Colors.blueAccent, width: 12)
+                                  toY: 8, color: OptikAdminTokens.navy, width: 12)
                             ],
                           ),
                           BarChartGroupData(
                             x: 1,
                             barRods: [
                               BarChartRodData(
-                                  toY: 18, color: Colors.blueAccent, width: 12)
+                                  toY: 18, color: OptikAdminTokens.navy, width: 12)
                             ],
                           ),
                           BarChartGroupData(
                             x: 2,
                             barRods: [
                               BarChartRodData(
-                                  toY: 12, color: Colors.blueAccent, width: 12)
+                                  toY: 12, color: OptikAdminTokens.navy, width: 12)
                             ],
                           )
                         ],

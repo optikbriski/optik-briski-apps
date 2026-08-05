@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
-/// Glass panel — same language as Training Mode dialog surface.
+/// Elevated snow surface — hairline ice edge + soft depth.
 class PremiumPanel extends StatelessWidget {
   const PremiumPanel({
     super.key,
@@ -11,6 +11,7 @@ class PremiumPanel extends StatelessWidget {
     this.borderRadius,
     this.borderColor,
     this.onTap,
+    this.showAccentBar = false,
   });
 
   final Widget child;
@@ -19,36 +20,54 @@ class PremiumPanel extends StatelessWidget {
   final double? borderRadius;
   final Color? borderColor;
   final VoidCallback? onTap;
+  final bool showAccentBar;
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? 22.0;
-    final border = borderColor ?? OptikAdminTokens.lineStrong;
+    final radius = borderRadius ?? 20.0;
     final decoration = BoxDecoration(
       borderRadius: BorderRadius.circular(radius),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          OptikAdminTokens.card.withOpacity(0.97),
-          OptikAdminTokens.panel.withOpacity(0.99),
-        ],
+      gradient: OptikAdminTokens.cardSheen,
+      border: Border.all(
+        color: borderColor ?? OptikAdminTokens.ice.withOpacity(0.4),
+        width: 1,
       ),
-      border: Border.all(color: border, width: 1.1),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.4),
-          blurRadius: 24,
-          offset: const Offset(0, 12),
-        ),
-      ],
+      boxShadow: OptikAdminTokens.cardShadow,
     );
+
+    Widget content = child;
+    if (showAccentBar) {
+      content = IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 3,
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    OptikAdminTokens.navy,
+                    OptikAdminTokens.ice,
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: child),
+          ],
+        ),
+      );
+    }
 
     final Widget panel = onTap == null
         ? Container(
             padding: padding,
             decoration: decoration,
-            child: child,
+            child: content,
           )
         : Material(
             color: Colors.transparent,
@@ -60,7 +79,7 @@ class PremiumPanel extends StatelessWidget {
               child: Ink(
                 padding: padding,
                 decoration: decoration,
-                child: child,
+                child: content,
               ),
             ),
           );
@@ -70,7 +89,6 @@ class PremiumPanel extends StatelessWidget {
   }
 }
 
-/// KPI card — glass surface + accent badge (not a solid blue slab).
 class PremiumStatCard extends StatelessWidget {
   const PremiumStatCard({
     super.key,
@@ -79,7 +97,7 @@ class PremiumStatCard extends StatelessWidget {
     this.icon = Icons.trending_up_rounded,
     this.loading = false,
     this.trailing,
-    this.accent = OptikAdminTokens.accent,
+    this.accent = OptikAdminTokens.ice,
   });
 
   final String label;
@@ -92,37 +110,24 @@ class PremiumStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PremiumPanel(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-      borderRadius: 22,
-      borderColor: accent.withOpacity(0.4),
+      padding: const EdgeInsets.fromLTRB(18, 18, 20, 18),
+      borderRadius: 20,
+      showAccentBar: true,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  OptikAdminTokens.accentSoft,
-                  accent,
-                  OptikAdminTokens.accentDeep,
-                ],
+              color: OptikAdminTokens.ice.withOpacity(0.35),
+              border: Border.all(
+                color: OptikAdminTokens.ice,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withOpacity(0.35),
-                  blurRadius: 14,
-                  offset: const Offset(0, 5),
-                ),
-              ],
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
+            child: Icon(icon, color: OptikAdminTokens.navy, size: 24),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,30 +135,30 @@ class PremiumStatCard extends StatelessWidget {
                 Text(
                   label.toUpperCase(),
                   style: TextStyle(
-                    color: OptikAdminTokens.accentSoft.withOpacity(0.95),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.3,
+                    color: OptikAdminTokens.slate.withOpacity(0.9),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.8,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 loading
                     ? const SizedBox(
-                        height: 26,
-                        width: 26,
+                        height: 28,
+                        width: 28,
                         child: CircularProgressIndicator(
-                          color: OptikAdminTokens.accentSoft,
-                          strokeWidth: 2,
+                          color: OptikAdminTokens.navy,
+                          strokeWidth: 2.2,
                         ),
                       )
                     : Text(
                         value,
                         style: const TextStyle(
-                          color: OptikAdminTokens.textPrimary,
-                          fontSize: 26,
+                          color: OptikAdminTokens.navy,
+                          fontSize: 30,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
-                          height: 1.1,
+                          letterSpacing: -0.8,
+                          height: 1.0,
                         ),
                       ),
               ],

@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/invoice/invoice_delivery_result.dart';
 import '../../shared/invoice/invoice_delivery_service.dart';
 import '../../shared/invoice/invoice_detail_page.dart';
 import '../../shared/invoice/invoice_lifecycle_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
-/// Board admin: DP · PENDING · CLEAR (tanpa scan QR).
-/// - DP: sisa tagihan / down payment → aksi Lunasi
-/// - PENDING: lunas, barang belum ready → aksi Barang Ready
-/// - CLEAR: clear payment + history (siap / diambil)
+/// Board admin: DP · PENDING · READY · CLEAR (tanpa scan QR).
+/// - DP: sisa tagihan / down payment → aksi Lunasi / Barang Ready
+/// - PENDING: lunas, barang belum siap → aksi Barang Ready
+/// - READY: barang siap, menunggu pengambilan (DB: SIAP_DIAMBIL)
+/// - CLEAR: sudah serah terima (DB: DIAMBIL) · Garansi aktif / mati
 class RiwayatTransaksiPage extends StatefulWidget {
   final Map<String, dynamic> profile;
   const RiwayatTransaksiPage({super.key, required this.profile});
@@ -21,7 +23,7 @@ class RiwayatTransaksiPage extends StatefulWidget {
   State<RiwayatTransaksiPage> createState() => _RiwayatTransaksiPageState();
 }
 
-enum _PayBucket { dp, pending, clear }
+enum _PayBucket { dp, pending, ready, clear }
 
 class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   final SupabaseClient supabase = Supabase.instance.client;
@@ -31,17 +33,36 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   bool isLoading = true;
   bool _busy = false;
   String? selectedTokoId;
-  _PayBucket _bucket = _PayBucket.dp;
-  String _search = '';
+  /// Kategori aktif di 1 page board (chip → list di bawah).
+  _PayBucket _selectedBucket = _PayBucket.dp;
+  final _searchCtrl = TextEditingController();
 
   List<Map<String, dynamic>> allSalesRaw = [];
   List<String> listCabangUnik = [];
   List<Map<String, dynamic>> branchSales = [];
+  /// sale_id → true = Garansi aktif, false = Garansi mati (hanya CLEAR).
+  Map<String, bool> _garansiAktifBySaleId = {};
+
+  String get _search => _searchCtrl.text;
 
   @override
   void initState() {
     super.initState();
+    _searchCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
     _inisialisasiHakAksesAplikasi();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    if (_searchCtrl.text.isEmpty) return;
+    _searchCtrl.clear();
   }
 
   String formatRupiah(int nominal) {
@@ -92,33 +113,97 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     }
   }
 
-  Future<void> _fetchDataTransaksiPerCabang(String tokoId) async {
-    if (!mounted) return;
-    setState(() => isLoading = true);
+  /// [silent] = refresh tanpa full-page loader (tetap di page kategori).
+  Future<bool> _fetchDataTransaksiPerCabang(
+    String tokoId, {
+    bool silent = false,
+  }) async {
+    if (!mounted) return false;
+    if (!silent) setState(() => isLoading = true);
     try {
       final res = await supabase
           .from('sales')
           .select()
           .eq('toko_id', tokoId)
           .order('created_at', ascending: false);
+      final data = List<Map<String, dynamic>>.from(res);
+      final garansiMap = await _loadGaransiAktifMap(data);
+      if (!mounted) return false;
       setState(() {
-        branchSales = List<Map<String, dynamic>>.from(res);
+        branchSales = data;
+        _garansiAktifBySaleId = garansiMap;
         isLoading = false;
       });
+      return true;
     } catch (e) {
       _fail('Gagal muat transaksi cabang: $e');
+      return false;
     }
+  }
+
+  /// CLEAR saja: true = masih ada kartu klaimable, false = mati.
+  Future<Map<String, bool>> _loadGaransiAktifMap(
+    List<Map<String, dynamic>> sales,
+  ) async {
+    final clearIds = sales
+        .where(isClear)
+        .map((s) => s['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList();
+    final out = <String, bool>{for (final id in clearIds) id: false};
+    if (clearIds.isEmpty) return out;
+
+    for (final s in sales.where(isClear)) {
+      final id = s['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      if (s['qr_claim_used_at'] != null) out[id] = false;
+    }
+
+    try {
+      final rows = await supabase
+          .from('garansi_kartu')
+          .select('sale_id, status, klaim_digunakan, tanggal_akhir')
+          .inFilter('sale_id', clearIds);
+      final today = DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+        DateTime.now().day,
+      );
+      for (final raw in rows as List) {
+        final g = Map<String, dynamic>.from(raw as Map);
+        final sid = g['sale_id']?.toString() ?? '';
+        if (sid.isEmpty || !out.containsKey(sid)) continue;
+        // CLAIM QR sudah dipakai → mati.
+        final sale = sales.firstWhere(
+          (s) => s['id']?.toString() == sid,
+          orElse: () => <String, dynamic>{},
+        );
+        if (sale['qr_claim_used_at'] != null) {
+          out[sid] = false;
+          continue;
+        }
+        if (g['status']?.toString() != 'aktif') continue;
+        if (g['klaim_digunakan'] == true) continue;
+        final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
+        if (akhir == null) continue;
+        final end = DateTime(akhir.year, akhir.month, akhir.day);
+        if (!end.isBefore(today)) out[sid] = true;
+      }
+    } catch (_) {
+      // Chip default mati jika query gagal — list tetap tampil.
+    }
+    return out;
   }
 
   void _fail(String msg) {
     if (!mounted) return;
     setState(() => isLoading = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+      SnackBar(content: Text(msg), backgroundColor: OptikAdminTokens.danger),
     );
   }
 
-  // --- Klasifikasi bucket (sederajat: DP / PENDING / CLEAR) ---
+  // --- Klasifikasi: DP / PENDING / READY / CLEAR ---
 
   static bool isDp(Map<String, dynamic> sale) {
     final pay = (sale['status_pembayaran'] ?? '').toString().toUpperCase();
@@ -126,18 +211,30 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     return pay == 'DP' || sisa > 0;
   }
 
-  static bool isPending(Map<String, dynamic> sale) {
-    if (isDp(sale)) return false;
+  static bool isClear(Map<String, dynamic> sale) {
     final tracking =
         (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
-    if (sale['diambil_at'] != null || tracking == 'DIAMBIL') return false;
-    return tracking != 'SIAP_DIAMBIL' && tracking != 'CLEAR';
+    return sale['diambil_at'] != null || tracking == 'DIAMBIL';
+  }
+
+  static bool isReady(Map<String, dynamic> sale) {
+    if (isDp(sale) || isClear(sale)) return false;
+    final tracking =
+        (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
+    return tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
+  }
+
+  static bool isPending(Map<String, dynamic> sale) {
+    if (isDp(sale) || isClear(sale) || isReady(sale)) return false;
+    return true;
   }
 
   static _PayBucket bucketOf(Map<String, dynamic> sale) {
     if (isDp(sale)) return _PayBucket.dp;
+    if (isClear(sale)) return _PayBucket.clear;
+    if (isReady(sale)) return _PayBucket.ready;
     if (isPending(sale)) return _PayBucket.pending;
-    return _PayBucket.clear;
+    return _PayBucket.pending;
   }
 
   List<Map<String, dynamic>> _salesForToko(String tokoId) {
@@ -147,25 +244,29 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         .toList();
   }
 
-  ({int dp, int pending, int clear}) _counts(List<Map<String, dynamic>> list) {
-    var dp = 0, pending = 0, clear = 0;
+  ({int dp, int pending, int ready, int clear}) _counts(
+    List<Map<String, dynamic>> list,
+  ) {
+    var dp = 0, pending = 0, ready = 0, clear = 0;
     for (final s in list) {
       switch (bucketOf(s)) {
         case _PayBucket.dp:
           dp++;
         case _PayBucket.pending:
           pending++;
+        case _PayBucket.ready:
+          ready++;
         case _PayBucket.clear:
           clear++;
       }
     }
-    return (dp: dp, pending: pending, clear: clear);
+    return (dp: dp, pending: pending, ready: ready, clear: clear);
   }
 
-  List<Map<String, dynamic>> get _filteredBucketList {
+  List<Map<String, dynamic>> _listForBucket(_PayBucket b) {
     final q = _search.trim().toLowerCase();
     return branchSales.where((s) {
-      if (bucketOf(s) != _bucket) return false;
+      if (bucketOf(s) != b) return false;
       if (q.isEmpty) return true;
       final inv = (s['no_invoice'] ?? '').toString().toLowerCase();
       final nama = (s['nama_pelanggan'] ?? '').toString().toLowerCase();
@@ -173,6 +274,52 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       return inv.contains(q) || nama.contains(q) || wa.contains(q);
     }).toList();
   }
+
+  void _selectBucket(_PayBucket b) {
+    // Jangan hapus filter kalau chip yang sama di-tap ulang / resend READY.
+    if (_selectedBucket == b) return;
+    _clearSearch();
+    setState(() => _selectedBucket = b);
+  }
+
+  String _bucketTitle(_PayBucket b) => switch (b) {
+        _PayBucket.dp => 'DP',
+        _PayBucket.pending => 'PENDING',
+        _PayBucket.ready => 'READY',
+        _PayBucket.clear => 'CLEAR',
+      };
+
+  String _bucketHint(_PayBucket b) => switch (b) {
+        _PayBucket.dp =>
+          'Belum lunas. Barang Ready → QR pelunasan · Lunasi dari sini.',
+        _PayBucket.pending =>
+          'Sudah lunas, menunggu Barang Ready → READY + QR pengambilan.',
+        _PayBucket.ready =>
+          'Barang siap · menunggu pengambilan (scan QR LUNAS).',
+        _PayBucket.clear =>
+          'Serah terima selesai · status Garansi aktif / Garansi mati.',
+      };
+
+  String _bucketEmpty(_PayBucket b) => switch (b) {
+        _PayBucket.dp => 'Tidak ada nota DP.',
+        _PayBucket.pending => 'Tidak ada nota PENDING.',
+        _PayBucket.ready => 'Tidak ada nota READY.',
+        _PayBucket.clear => 'Belum ada CLEAR (serah terima).',
+      };
+
+  Color _bucketColor(_PayBucket b) => switch (b) {
+        _PayBucket.dp => OptikAdminTokens.warning,
+        _PayBucket.pending => OptikAdminTokens.trainingSoft,
+        _PayBucket.ready => OptikAdminTokens.navy,
+        _PayBucket.clear => OptikAdminTokens.success,
+      };
+
+  IconData _bucketIcon(_PayBucket b) => switch (b) {
+        _PayBucket.dp => Icons.payments_outlined,
+        _PayBucket.pending => Icons.hourglass_top_rounded,
+        _PayBucket.ready => Icons.inventory_2_outlined,
+        _PayBucket.clear => Icons.verified_outlined,
+      };
 
   String get _staffNik {
     final nik = (widget.profile['nik'] ?? widget.profile['id'] ?? 'ADMIN')
@@ -186,7 +333,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     return n.isEmpty ? 'Admin' : n;
   }
 
-  Future<String?> _pickMetode(int sisa) async {
+  Future<String?> _pickMetode(int sisa, {bool alreadyReady = false}) async {
     var metode = 'Tunai';
     return showDialog<String>(
       context: context,
@@ -198,45 +345,63 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               backgroundColor: OptikAdminTokens.card,
               title: const Text(
                 'Pelunasan DP',
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Bayar sisa: ${formatRupiah(sisa)}\n'
-                    'Setelah lunas → langsung CLEAR (LUNAS ready).',
+                    alreadyReady
+                        ? 'Bayar sisa: ${formatRupiah(sisa)}\n'
+                            'Barang sudah ready → setelah lunas langsung READY '
+                            '(QR pengambilan dikirim).'
+                        : 'Bayar sisa: ${formatRupiah(sisa)}\n'
+                            'Barang belum ready → setelah lunas masuk PENDING. '
+                            'QR pengambilan muncul setelah admin Barang Ready.',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
+                      color: OptikAdminTokens.navy.withOpacity(0.75),
                       height: 1.4,
                       fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    value: metode,
-                    dropdownColor: OptikAdminTokens.card,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Metode bayar',
-                      labelStyle:
-                          TextStyle(color: Colors.white.withOpacity(0.55)),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'Tunai', child: Text('Tunai')),
-                      DropdownMenuItem(value: 'Debit', child: Text('Debit')),
-                      DropdownMenuItem(
-                          value: 'Transfer', child: Text('Transfer')),
-                      DropdownMenuItem(value: 'QRIS', child: Text('QRIS')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setLocal(() => metode = v);
+                  AdminPickerField(
+                    label: 'Metode bayar',
+                    valueText: metode,
+                    icon: Icons.payments_outlined,
+                    onTap: () async {
+                      const options = [
+                        AdminPickerOption(
+                          value: 'Tunai',
+                          label: 'Tunai',
+                          icon: Icons.payments_outlined,
+                        ),
+                        AdminPickerOption(
+                          value: 'Debit',
+                          label: 'Debit',
+                          icon: Icons.credit_card_outlined,
+                        ),
+                        AdminPickerOption(
+                          value: 'Transfer',
+                          label: 'Transfer',
+                          icon: Icons.account_balance_outlined,
+                        ),
+                        AdminPickerOption(
+                          value: 'QRIS',
+                          label: 'QRIS',
+                          icon: Icons.qr_code_rounded,
+                        ),
+                      ];
+                      final sel = await showAdminPicker<String>(
+                        context: ctx,
+                        title: 'Metode bayar',
+                        selected: metode,
+                        searchable: false,
+                        options: options,
+                      );
+                      if (sel == null || sel.isClear) return;
+                      setLocal(() => metode = sel.value!);
                     },
                   ),
                 ],
@@ -244,13 +409,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+                  child: const Text('Batal', style: TextStyle(color: OptikAdminTokens.textMuted)),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, metode),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8C872),
-                    foregroundColor: const Color(0xFF0F172A),
+                    backgroundColor: OptikAdminTokens.trainingSoft,
+                    foregroundColor: OptikAdminTokens.bgMid,
                   ),
                   child: const Text('Lunasi'),
                 ),
@@ -264,8 +429,8 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
   bool _dpQrIssued(Map<String, dynamic> trx) {
     final t = (trx['tracking_status'] ?? '').toString().toUpperCase();
-    final token = (trx['qr_dp_token'] ?? '').toString().trim();
-    return t == 'SIAP_PELUNASAN' || token.length >= 8;
+    // Selaras lifecycle: QR DP hanya valid di SIAP_PELUNASAN.
+    return t == 'SIAP_PELUNASAN';
   }
 
   Future<void> _lunasiDp(Map<String, dynamic> trx) async {
@@ -273,47 +438,65 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     final saleId = trx['id']?.toString();
     if (saleId == null) return;
     final sisa = int.tryParse(trx['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    final metode = await _pickMetode(sisa);
+    final wasReady = _dpQrIssued(trx);
+    final metode = await _pickMetode(sisa, alreadyReady: wasReady);
     if (metode == null || !mounted) return;
+
+    final toko = selectedTokoId;
+    if (toko == null) {
+      _fail('Cabang belum dipilih — buka ulang dari daftar cabang.');
+      return;
+    }
 
     setState(() => _busy = true);
     try {
-      final wasReady = _dpQrIssued(trx);
       final updated = await _lifecycle.settleDpByAdmin(
         saleId: saleId,
         metodePembayaran: metode,
         staffNik: _staffNik,
         staffNama: _staffNama,
       );
-      final delivered = await _delivery.deliver(
-        sale: updated,
-        mode: wasReady
-            ? InvoiceDeliveryMode.withQr
-            : InvoiceDeliveryMode.paymentConfirm,
-      );
+      InvoiceDeliveryResult? delivered;
+      try {
+        delivered = await _delivery.deliver(
+          sale: updated,
+          mode: wasReady
+              ? InvoiceDeliveryMode.withQr
+              : InvoiceDeliveryMode.paymentConfirm,
+        );
+      } catch (_) {
+        delivered = null;
+      }
       if (!mounted) return;
       final tracking =
           (updated['tracking_status'] ?? '').toString().toUpperCase();
-      final toClear = tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
+      final toReady = tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
+      final next = toReady ? _PayBucket.ready : _PayBucket.pending;
+      final okRefresh = await _fetchDataTransaksiPerCabang(toko, silent: true);
+      if (!mounted) return;
+      if (okRefresh) _selectBucket(next);
+      final refreshNote = okRefresh
+          ? ''
+          : ' List belum ter-refresh — tarik Refresh.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${toClear ? 'Pelunasan OK · CLEAR' : 'Pelunasan OK · PENDING'}. '
-            '${delivered.summary}',
+            '${toReady ? 'Pelunasan OK · READY' : 'Pelunasan OK · PENDING'}. '
+            '${delivered?.summary ?? 'Email/WA gagal — status DB sudah di-update.'}'
+            '$refreshNote',
           ),
-          backgroundColor: delivered.anyOk || delivered.allRequestedOk
-              ? const Color(0xFF0F766E)
-              : Colors.orange.shade800,
+          backgroundColor: delivered == null
+              ? OptikAdminTokens.warning
+              : (delivered.anyOk || delivered.allRequestedOk
+                  ? OptikAdminTokens.slate
+                  : OptikAdminTokens.warning),
           duration: const Duration(seconds: 5),
         ),
       );
-      await _fetchDataTransaksiPerCabang(selectedTokoId!);
-      setState(
-          () => _bucket = toClear ? _PayBucket.clear : _PayBucket.pending);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -324,41 +507,54 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     if (_busy) return;
     final saleId = trx['id']?.toString();
     if (saleId == null) return;
+    final toko = selectedTokoId;
+    if (toko == null) {
+      _fail('Cabang belum dipilih — buka ulang dari daftar cabang.');
+      return;
+    }
     final dpRow = isDp(trx);
+    final resendReady = bucketOf(trx) == _PayBucket.ready;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
-          'Pesanan sudah siap diambil',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+        title: Text(
+          resendReady
+              ? 'Kirim ulang QR pengambilan'
+              : 'Pesanan sudah siap diambil',
+          style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
         ),
         content: Text(
-          dpRow
+          resendReady
               ? 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
-                  'Kirim pesan pelunasan + pengambilan + nota + QR pelunasan '
-                  'ke email, WA, dan APK Member?'
-              : 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
-                  'Kirim pesan “sudah bisa diambil” + nota + QR pengambilan '
-                  '(aktifkan garansi saat serah terima) ke email, WA, Member?',
+                  'Kirim ulang QR pengambilan (READY) ke email, WA, Member?\n'
+                  'Email/WA boleh gagal — QR tetap valid di sistem.'
+              : dpRow
+                  ? 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
+                      'Kirim pesan pelunasan + pengambilan + nota + QR pelunasan '
+                      'ke email, WA, dan APK Member?'
+                  : 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
+                      'Kirim pesan “sudah bisa diambil” + nota + QR pengambilan '
+                      '(aktifkan garansi saat serah terima) ke email, WA, Member?',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.78),
+            color: OptikAdminTokens.navy.withOpacity(0.78),
             height: 1.4,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+            child: const Text('Batal',
+                style: TextStyle(color: OptikAdminTokens.textMuted)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE8C872),
-              foregroundColor: const Color(0xFF0F172A),
+              backgroundColor: OptikAdminTokens.trainingSoft,
+              foregroundColor: OptikAdminTokens.bgMid,
             ),
-            child: const Text('Ya, barang ready — kirim'),
+            child: Text(resendReady ? 'Ya, kirim ulang' : 'Ya, barang ready — kirim'),
           ),
         ],
       ),
@@ -367,33 +563,60 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
     setState(() => _busy = true);
     try {
+      final invNo = trx['no_invoice']?.toString() ?? saleId;
       final updated = await _lifecycle.markGoodsReadyAndIssueCustomerQr(
         saleId: saleId,
         staffNik: _staffNik,
         staffNama: _staffNama,
       );
-      final delivered = await _delivery.deliver(
-        sale: updated,
-        mode: InvoiceDeliveryMode.goodsReady,
-      );
+      InvoiceDeliveryResult? delivered;
+      try {
+        delivered = await _delivery.deliver(
+          sale: updated,
+          mode: InvoiceDeliveryMode.goodsReady,
+        );
+      } catch (_) {
+        delivered = null;
+      }
       if (!mounted) return;
+      // Hanya 1 nota — pindah chip ke kategori tujuan setelah refresh sukses.
+      final nextBucket = bucketOf(Map<String, dynamic>.from(updated));
+      final okRefresh = await _fetchDataTransaksiPerCabang(toko, silent: true);
+      if (!mounted) return;
+      final c = _counts(branchSales);
+      final othersHint = nextBucket == _PayBucket.ready && c.ready > 1
+          ? '\n$invNo masuk READY. Total READY: ${c.ready} '
+              '(nota lain sudah READY sebelumnya, bukan ikut di-update).'
+          : '';
+      if (okRefresh) _selectBucket(nextBucket);
+      final refreshNote = okRefresh
+          ? ''
+          : '\nList belum ter-refresh — tarik Refresh.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Barang ready · ${updated['no_invoice']}. ${delivered.summary}',
+            resendReady
+                ? 'QR pengambilan di-refresh untuk $invNo.\n'
+                    '${delivered?.summary ?? 'Email/WA gagal — QR tetap valid.'}'
+                    '$refreshNote'
+                : 'Hanya nota $invNo yang di-update'
+                    '${dpRow ? ' → siap pelunasan (DP)' : ' → READY'}.\n'
+                    '${delivered?.summary ?? 'Email/WA gagal — status DB sudah di-update.'}'
+                    '$othersHint'
+                    '$refreshNote',
           ),
-          backgroundColor: delivered.anyOk || delivered.allRequestedOk
-              ? const Color(0xFF0F766E)
-              : Colors.orange.shade800,
-          duration: const Duration(seconds: 5),
+          backgroundColor: delivered == null
+              ? OptikAdminTokens.warning
+              : (delivered.anyOk || delivered.allRequestedOk
+                  ? OptikAdminTokens.slate
+                  : OptikAdminTokens.warning),
+          duration: const Duration(seconds: 7),
         ),
       );
-      await _fetchDataTransaksiPerCabang(selectedTokoId!);
-      if (!dpRow) setState(() => _bucket = _PayBucket.clear);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -418,7 +641,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       return const Center(
         child: Text(
           'Belum ada transaksi di cabang mana pun.',
-          style: TextStyle(color: Colors.white54, fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
         ),
       );
     }
@@ -432,14 +655,15 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           title: tokoId == 'PUSAT'
               ? 'OPTIK B. RISKI - PUSAT'
               : 'OPTIK B. RISKI - $tokoId',
-          subtitle: 'DP ${c.dp} · PENDING ${c.pending} · CLEAR ${c.clear}',
+          subtitle:
+              'DP ${c.dp} · PENDING ${c.pending} · READY ${c.ready} · CLEAR ${c.clear}',
           icon: Icons.store_rounded,
-          iconColor: Colors.blueAccent,
+          iconColor: OptikAdminTokens.navy,
           onTap: () {
+            _clearSearch();
             setState(() {
               selectedTokoId = tokoId;
-              _bucket = _PayBucket.dp;
-              _search = '';
+              _selectedBucket = _PayBucket.dp;
             });
             _fetchDataTransaksiPerCabang(tokoId);
           },
@@ -449,12 +673,19 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   }
 
   // ==========================================================================
-  // STAGE 2 — board DP / PENDING / CLEAR
+  // STAGE 2 — 1 page: chip kategori + list kategori yang dipilih
   // ==========================================================================
 
   Widget _buildBoard() {
     final c = _counts(branchSales);
-    final list = _filteredBucketList;
+    final bucket = _selectedBucket;
+    final items = _listForBucket(bucket);
+    final counts = {
+      _PayBucket.dp: c.dp,
+      _PayBucket.pending: c.pending,
+      _PayBucket.ready: c.ready,
+      _PayBucket.clear: c.clear,
+    };
 
     return Column(
       children: [
@@ -463,69 +694,53 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<_PayBucket>(
-                segments: [
-                  ButtonSegment(
-                    value: _PayBucket.dp,
-                    label: Text('DP (${c.dp})'),
-                    icon: const Icon(Icons.payments_outlined, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: _PayBucket.pending,
-                    label: Text('PENDING (${c.pending})'),
-                    icon: const Icon(Icons.hourglass_top_rounded, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: _PayBucket.clear,
-                    label: Text('CLEAR (${c.clear})'),
-                    icon: const Icon(Icons.verified_outlined, size: 16),
-                  ),
+              Row(
+                children: [
+                  for (final b in _PayBucket.values) ...[
+                    if (b != _PayBucket.dp) const SizedBox(width: 6),
+                    Expanded(
+                      child: _categoryChip(
+                        bucket: b,
+                        count: counts[b]!,
+                        selected: bucket == b,
+                        onTap: () => _selectBucket(b),
+                      ),
+                    ),
+                  ],
                 ],
-                selected: {_bucket},
-                onSelectionChanged: (s) {
-                  setState(() {
-                    _bucket = s.first;
-                    _search = '';
-                  });
-                },
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return const Color(0xFFE8C872).withOpacity(0.22);
-                    }
-                    return Colors.white.withOpacity(0.04);
-                  }),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return const Color(0xFFE8C872);
-                    }
-                    return Colors.white70;
-                  }),
-                  side: WidgetStateProperty.all(
-                    BorderSide(color: Colors.white.withOpacity(0.12)),
-                  ),
-                ),
               ),
               const SizedBox(height: 10),
               Text(
-                _bucketHint,
+                _bucketHint(bucket),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.55),
+                  color: OptikAdminTokens.navy.withOpacity(0.5),
                   fontSize: 12,
                   height: 1.35,
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
-                onChanged: (v) => setState(() => _search = v),
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                controller: _searchCtrl,
+                style:
+                    const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: 'Cari invoice / nama / WA…',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
+                  hintStyle: TextStyle(
+                      color: OptikAdminTokens.navy.withOpacity(0.35)),
                   prefixIcon: Icon(Icons.search,
-                      color: Colors.white.withOpacity(0.45), size: 20),
+                      color: OptikAdminTokens.navy.withOpacity(0.45),
+                      size: 20),
+                  suffixIcon: _search.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Hapus',
+                          onPressed: _clearSearch,
+                          icon: Icon(Icons.close_rounded,
+                              size: 18,
+                              color: OptikAdminTokens.navy.withOpacity(0.45)),
+                        ),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
+                  fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -538,49 +753,79 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           ),
         ),
         Expanded(
-          child: list.isEmpty
+          child: items.isEmpty
               ? Center(
                   child: Text(
-                    _emptyHint,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                    _bucketEmpty(bucket),
+                    style: const TextStyle(
+                      color: OptikAdminTokens.textMuted,
+                      fontSize: 13,
+                    ),
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) => _saleCard(list[i]),
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _saleCard(items[i]),
                 ),
         ),
       ],
     );
   }
 
-  String get _bucketHint {
-    switch (_bucket) {
-      case _PayBucket.dp:
-        return 'DP — setelah bayar hanya konfirmasi + nota (tanpa QR). '
-            'Barang Ready → kirim QR pelunasan. Lunasi bisa dari sini.';
-      case _PayBucket.pending:
-        return 'PENDING — sudah lunas, barang belum ready (tanpa QR). '
-            'Barang Ready → kirim QR pengambilan.';
-      case _PayBucket.clear:
-        return 'CLEAR — clear payment & history (siap diambil / selesai).';
-    }
-  }
-
-  String get _emptyHint {
-    switch (_bucket) {
-      case _PayBucket.dp:
-        return 'Tidak ada nota DP.';
-      case _PayBucket.pending:
-        return 'Tidak ada nota PENDING.';
-      case _PayBucket.clear:
-        return 'Belum ada CLEAR / history.';
-    }
+  Widget _categoryChip({
+    required _PayBucket bucket,
+    required int count,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final color = _bucketColor(bucket);
+    return Material(
+      color: selected ? color.withOpacity(0.22) : color.withOpacity(0.10),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : color.withOpacity(0.25),
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(_bucketIcon(bucket), size: 18, color: color),
+              const SizedBox(height: 4),
+              Text(
+                _bucketTitle(bucket),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              Text(
+                '$count',
+                style: TextStyle(
+                  color: OptikAdminTokens.navy.withOpacity(0.85),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _saleCard(Map<String, dynamic> trx) {
+    final bucket = bucketOf(trx);
     final total = int.tryParse(trx['total_harga']?.toString() ?? '0') ?? 0;
     final sisa = int.tryParse(trx['sisa_tagihan']?.toString() ?? '0') ?? 0;
     final dibayar = int.tryParse(trx['dibayarkan']?.toString() ?? '0') ??
@@ -589,6 +834,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         (trx['tracking_status'] ?? '-').toString().toUpperCase();
     final created = (trx['created_at'] ?? '').toString();
     final tgl = created.length >= 10 ? created.substring(0, 10) : created;
+    final isOnline =
+        (trx['channel'] ?? '').toString().toLowerCase() == 'member_online' ||
+            (trx['no_invoice'] ?? '').toString().toUpperCase().startsWith('ON-');
 
     return PremiumPanel(
       padding: const EdgeInsets.all(14),
@@ -603,33 +851,63 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 child: Text(
                   trx['no_invoice']?.toString() ?? '-',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 13.5,
                   ),
                 ),
               ),
-              _bucketBadge(_bucket),
+              if (isOnline) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: OptikAdminTokens.ice.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: OptikAdminTokens.navy.withOpacity(0.25),
+                    ),
+                  ),
+                  child: const Text(
+                    'ONLINE',
+                    style: TextStyle(
+                      color: OptikAdminTokens.navy,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              _bucketBadge(bucket),
+              if (bucket == _PayBucket.clear) ...[
+                const SizedBox(width: 6),
+                _garansiChip(trx),
+              ],
             ],
           ),
           const SizedBox(height: 6),
           Text(
             trx['nama_pelanggan']?.toString() ?? 'Tanpa nama',
-            style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+            style: const TextStyle(
+                color: OptikAdminTokens.textSecondary, fontSize: 12.5),
           ),
           const SizedBox(height: 4),
           Text(
             'Total ${formatRupiah(total)} · Dibayar ${formatRupiah(dibayar)}'
             '${sisa > 0 ? ' · Sisa ${formatRupiah(sisa)}' : ''}',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.55),
+              color: OptikAdminTokens.navy.withOpacity(0.55),
               fontSize: 11.5,
             ),
           ),
           Text(
-            '$tgl · Tracking $tracking · Kasir ${trx['nama_kasir'] ?? '-'}',
+            '$tgl · Tracking $tracking · '
+            '${isOnline ? 'Member App' : 'Kasir ${trx['nama_kasir'] ?? '-'}'}'
+            '${isOnline && (trx['fulfillment'] ?? '').toString().isNotEmpty ? ' · ${trx['fulfillment']}' : ''}',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
+              color: OptikAdminTokens.navy.withOpacity(0.4),
               fontSize: 11,
             ),
           ),
@@ -643,40 +921,76 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 icon: const Icon(Icons.receipt_long, size: 16),
                 label: const Text('Nota'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.blueAccent,
-                  side: BorderSide(color: Colors.blueAccent.withOpacity(0.45)),
+                  foregroundColor: OptikAdminTokens.navy,
+                  side: BorderSide(
+                      color: OptikAdminTokens.accentSoft.withOpacity(0.45)),
                 ),
               ),
-              if (_bucket == _PayBucket.dp || _bucket == _PayBucket.pending)
+              if (bucket == _PayBucket.dp || bucket == _PayBucket.pending)
                 FilledButton.icon(
-                  onPressed: _busy ||
-                          (_bucket == _PayBucket.dp && _dpQrIssued(trx))
-                      ? null
-                      : () => _konfirmasiBarangReady(trx),
+                  onPressed:
+                      _busy ? null : () => _konfirmasiBarangReady(trx),
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: Text(
-                    _bucket == _PayBucket.dp && _dpQrIssued(trx)
-                        ? 'QR pelunasan terkirim'
-                        : 'Barang Ready',
+                    bucket == _PayBucket.dp && _dpQrIssued(trx)
+                        ? 'Kirim ulang QR pelunasan'
+                        : bucket == _PayBucket.pending
+                            ? 'Barang Ready · READY'
+                            : 'Barang Ready',
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8C872),
-                    foregroundColor: const Color(0xFF0F172A),
+                    backgroundColor: OptikAdminTokens.trainingSoft,
+                    foregroundColor: OptikAdminTokens.bgMid,
                   ),
                 ),
-              if (_bucket == _PayBucket.dp)
+              if (bucket == _PayBucket.ready)
+                FilledButton.icon(
+                  onPressed:
+                      _busy ? null : () => _konfirmasiBarangReady(trx),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+                  label: const Text('Kirim ulang QR pengambilan'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OptikAdminTokens.navy,
+                    foregroundColor: OptikAdminTokens.snow,
+                  ),
+                ),
+              if (bucket == _PayBucket.dp)
                 FilledButton.icon(
                   onPressed: _busy ? null : () => _lunasiDp(trx),
                   icon: const Icon(Icons.paid_outlined, size: 16),
                   label: const Text('Lunasi'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.tealAccent.withOpacity(0.85),
-                    foregroundColor: const Color(0xFF0F172A),
+                    backgroundColor:
+                        OptikAdminTokens.accentSoft.withOpacity(0.85),
+                    foregroundColor: OptikAdminTokens.bgMid,
                   ),
                 ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _garansiChip(Map<String, dynamic> trx) {
+    final id = trx['id']?.toString() ?? '';
+    final aktif = _garansiAktifBySaleId[id] == true;
+    final color =
+        aktif ? OptikAdminTokens.success : OptikAdminTokens.textMuted;
+    final label = aktif ? 'Garansi aktif' : 'Garansi mati';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -687,13 +1001,16 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     switch (b) {
       case _PayBucket.dp:
         label = 'DP';
-        color = Colors.orangeAccent;
+        color = OptikAdminTokens.warning;
       case _PayBucket.pending:
         label = 'PENDING';
-        color = const Color(0xFFE8C872);
+        color = OptikAdminTokens.trainingSoft;
+      case _PayBucket.ready:
+        label = 'READY';
+        color = OptikAdminTokens.navy;
       case _PayBucket.clear:
         label = 'CLEAR';
-        color = Colors.greenAccent;
+        color = OptikAdminTokens.success;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -712,60 +1029,76 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     );
   }
 
+  bool _handleBack() {
+    if (selectedTokoId != null && _isOwnerOrPusat) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      _clearSearch();
+      setState(() {
+        selectedTokoId = null;
+        _selectedBucket = _PayBucket.dp;
+      });
+      _fetchSeluruhDataTransaksiOwner();
+      return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = selectedTokoId == null
-        ? 'DP · PENDING · CLEAR'
-        : '${selectedTokoId!} · DP · PENDING · CLEAR';
+        ? 'DP · PENDING · READY · CLEAR'
+        : '${selectedTokoId!} · ${_bucketTitle(_selectedBucket)}';
 
-    return PremiumScaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-          onPressed: () {
-            if (selectedTokoId != null && _isOwnerOrPusat) {
-              setState(() {
-                selectedTokoId = null;
-                _search = '';
-              });
-              _fetchSeluruhDataTransaksiOwner();
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.6,
+    return PopScope(
+      canPop: selectedTokoId == null || !_isOwnerOrPusat,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack();
+      },
+      child: PremiumScaffold(
+        appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back,
+                color: OptikAdminTokens.navy, size: 20),
+            onPressed: () {
+              if (!_handleBack()) Navigator.pop(context);
+            },
           ),
-        ),
-        actions: [
-          if (selectedTokoId != null)
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: isLoading || _busy
-                  ? null
-                  : () => _fetchDataTransaksiPerCabang(selectedTokoId!),
-              icon: const Icon(Icons.refresh_rounded, size: 20),
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
             ),
-        ],
+          ),
+          actions: [
+            if (selectedTokoId != null)
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: isLoading || _busy
+                    ? null
+                    : () => _fetchDataTransaksiPerCabang(
+                          selectedTokoId!,
+                          silent: true,
+                        ),
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+          ],
+        ),
+        body: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: OptikAdminTokens.ice),
+              )
+            : selectedTokoId == null
+                ? _buildStage1LayarCabang()
+                : _buildBoard(),
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent),
-            )
-          : selectedTokoId == null
-              ? _buildStage1LayarCabang()
-              : _buildBoard(),
     );
   }
 }

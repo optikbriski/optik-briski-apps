@@ -113,10 +113,10 @@ class _DashboardPageState extends State<DashboardPage> {
       try {
         await TrainingMode.instance.exit();
         if (!mounted) return;
-        _snack('training_msg_exited'.tr(), Colors.blueGrey);
+        _snack('training_msg_exited'.tr(), OptikAdminTokens.slate);
         setState(() {});
       } catch (e) {
-        _snack('training_msg_error'.tr().replaceAll('{}', '$e'), Colors.red);
+        _snack('training_msg_error'.tr().replaceAll('{}', '$e'), OptikAdminTokens.danger);
       } finally {
         if (mounted) setState(() => _trainingBusy = false);
       }
@@ -141,10 +141,10 @@ class _DashboardPageState extends State<DashboardPage> {
         () => TrainingMode.instance.enter(profile),
       );
       if (!mounted) return;
-      _snack('training_msg_entered'.tr(), const Color(0xFFB45309));
+      _snack('training_msg_entered'.tr(), OptikAdminTokens.training);
       setState(() {});
     } catch (e) {
-      _snack('training_msg_error'.tr().replaceAll('{}', '$e'), Colors.red);
+      _snack('training_msg_error'.tr().replaceAll('{}', '$e'), OptikAdminTokens.danger);
     } finally {
       if (mounted) setState(() => _trainingBusy = false);
     }
@@ -186,70 +186,61 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const OptikBrandLogo.white(height: 32),
+        scrolledUnderElevation: 0,
+        title: const OptikBrandLogo.color(height: 34),
         actions: [
           ListenableBuilder(
             listenable: TrainingMode.instance,
             builder: (context, _) {
               final active = TrainingMode.instance.isActive;
-              return IconButton(
-                tooltip: active
-                    ? 'training_menu_exit'.tr()
-                    : 'training_menu_enter'.tr(),
-                onPressed: _trainingBusy ? null : _toggleTrainingMode,
-                icon: Icon(
-                  Icons.school_rounded,
-                  color: active
-                      ? OptikAdminTokens.training
-                      : OptikAdminTokens.textSecondary,
-                  size: 22,
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: _HeaderIconButton(
+                  tooltip: active
+                      ? 'training_menu_exit'.tr()
+                      : 'training_menu_enter'.tr(),
+                  onPressed: _trainingBusy ? null : _toggleTrainingMode,
+                  icon: Icons.school_rounded,
+                  emphasized: active,
                 ),
               );
             },
           ),
-          IconButton(
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              // AdminAuthWrapper akan otomatis kembali ke LoginPage
-            },
-            icon: const Icon(Icons.logout_rounded,
-                color: OptikAdminTokens.danger, size: 22),
-          )
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: _HeaderIconButton(
+              tooltip: 'Logout',
+              onPressed: () async {
+                await Supabase.instance.client.auth.signOut();
+              },
+              icon: Icons.logout_rounded,
+            ),
+          ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _fetchTodayStats,
-        color: OptikAdminTokens.accentSoft,
-        backgroundColor: OptikAdminTokens.card,
+        color: OptikAdminTokens.navy,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 40),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header — same structure as Training Mode dialog
               PremiumPanel(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                padding: const EdgeInsets.fromLTRB(16, 16, 18, 16),
                 borderRadius: 20,
-                borderColor: OptikAdminTokens.accent.withOpacity(0.28),
+                showAccentBar: true,
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
-                        gradient: OptikAdminTokens.accentGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: OptikAdminTokens.accent.withOpacity(0.35),
-                            blurRadius: 14,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
+                        color: OptikAdminTokens.ice.withOpacity(0.35),
+                        border: Border.all(color: OptikAdminTokens.ice),
                         image: _fotoProfileUrl != null
                             ? DecorationImage(
                                 image: NetworkImage(_fotoProfileUrl!),
@@ -259,7 +250,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                       child: _fotoProfileUrl == null
                           ? const Icon(Icons.person_rounded,
-                              color: Colors.white, size: 24)
+                              color: OptikAdminTokens.navy, size: 24)
                           : null,
                     ),
                     const SizedBox(width: 14),
@@ -270,14 +261,13 @@ class _DashboardPageState extends State<DashboardPage> {
                           Text(
                             "dash_selamat_bekerja".tr().toUpperCase(),
                             style: TextStyle(
-                              color: OptikAdminTokens.accentSoft
-                                  .withOpacity(0.95),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.3,
+                              color: OptikAdminTokens.slate.withOpacity(0.9),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.9,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
                             () {
                               final role = (widget.profile['role'] ??
@@ -293,16 +283,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                       '')
                                   .toString()
                                   .trim();
-                              if (via.isEmpty) return '$role - $toko';
-                              return '$role - $toko · via $via';
+                              if (via.isEmpty) return '$role · $toko';
+                              return '$role · $toko · via $via';
                             }(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                              fontSize: 17.5,
                               height: 1.2,
-                              color: OptikAdminTokens.textPrimary,
+                              letterSpacing: -0.3,
+                              color: OptikAdminTokens.navy,
                             ),
                           ),
                         ],
@@ -311,14 +302,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               _buildOmzetCard(),
-              const SizedBox(height: 22),
+              const SizedBox(height: 28),
 
               PremiumSectionHeader(label: "dash_navigasi_menu".tr()),
 
-              // Module chips grid — densitas seperti dialog Training Mode
               ListenableBuilder(
                 listenable: TrainingMode.instance,
                 builder: (context, _) {
@@ -327,14 +317,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     builder: (context, constraints) {
                       final w = constraints.maxWidth;
                       final cols = w < 420 ? 2 : (w < 900 ? 3 : 4);
-                      // Horizontal chip tiles → wider aspect
-                      final ratio = w < 420 ? 2.85 : (w < 900 ? 3.0 : 3.2);
+                      final ratio = w < 420 ? 2.55 : (w < 900 ? 2.75 : 2.95);
                       return GridView.count(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisCount: cols,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 11,
+                        mainAxisSpacing: 11,
                         childAspectRatio: ratio,
                         children: [
                           // Manajemen Karyawan: pusat / owner / admin_pusat (standalone).
@@ -347,7 +336,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "dash_menu_management".tr(),
                               icon: Icons.verified_user_rounded,
-                              color: OptikAdminTokens.accentSoft,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -371,7 +360,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'dash_menu_monitor_absensi'.tr(),
                               icon: Icons.fact_check_rounded,
-                              color: Colors.deepPurpleAccent,
+                              color: OptikAdminTokens.slate,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -394,7 +383,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                   ? 'dash_menu_absensi_pusat_kiosk'.tr()
                                   : 'dash_menu_absensi_kiosk'.tr(),
                               icon: Icons.face_retouching_natural_rounded,
-                              color: Colors.purpleAccent,
+                              color: OptikAdminTokens.slate,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -430,7 +419,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'Geofence Toko',
                               icon: Icons.radar_rounded,
-                              color: OptikAdminTokens.warning,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -451,7 +440,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'Jadwal Kerja',
                               icon: Icons.calendar_month_rounded,
-                              color: Colors.indigoAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -466,7 +455,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "POS Cashier",
                               icon: Icons.point_of_sale_rounded,
-                              color: OptikAdminTokens.success,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -480,9 +469,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           if (TrainingCurriculum.allows('history_dp'))
                             PremiumMenuTile(
-                              title: "DP · PENDING · CLEAR",
+                              title: "DP · PENDING · READY · CLEAR",
                               icon: Icons.history_edu,
-                              color: Colors.orangeAccent,
+                              color: OptikAdminTokens.slate,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -497,7 +486,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "dash_menu_logistik".tr(),
                               icon: Icons.local_shipping_rounded,
-                              color: OptikAdminTokens.warning,
+                              color: OptikAdminTokens.slate,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -519,7 +508,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "dash_menu_master".tr(),
                               icon: Icons.dataset_rounded,
-                              color: Colors.indigoAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -536,7 +525,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "dash_menu_keuangan".tr(),
                               icon: Icons.account_balance_wallet_rounded,
-                              color: Colors.tealAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -553,7 +542,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: "Adjust Invoice",
                               icon: Icons.note_alt_rounded,
-                              color: Colors.pinkAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -573,7 +562,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'Konten Home Member',
                               icon: Icons.phone_android_rounded,
-                              color: const Color(0xFF3B82F6),
+                              color: OptikAdminTokens.ice,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -590,7 +579,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'Pesanan Online',
                               icon: Icons.shopping_bag_outlined,
-                              color: const Color(0xFF22D3EE),
+                              color: OptikAdminTokens.ice,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -613,7 +602,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'dash_menu_export'.tr(),
                               icon: Icons.picture_as_pdf_rounded,
-                              color: Colors.cyanAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -628,7 +617,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'dash_menu_garansi'.tr(),
                               icon: Icons.verified_rounded,
-                              color: Colors.lightGreenAccent,
+                              color: OptikAdminTokens.ice,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -642,7 +631,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             PremiumMenuTile(
                               title: 'scan_qr'.tr(),
                               icon: Icons.qr_code_scanner_rounded,
-                              color: Colors.deepOrangeAccent,
+                              color: OptikAdminTokens.slate,
                               onTap: () => UniversalQrNav.open(
                                 context,
                                 profile: widget.profile,
@@ -669,11 +658,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       borderRadius: BorderRadius.circular(22),
                       child: PremiumPanel(
                         padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-                        borderRadius: 22,
-                        borderColor: (active
-                                ? OptikAdminTokens.training
-                                : OptikAdminTokens.trainingSoft)
-                            .withOpacity(0.45),
+                        borderRadius: 20,
                         child: Row(
                           children: [
                             Container(
@@ -681,26 +666,15 @@ class _DashboardPageState extends State<DashboardPage> {
                               height: 48,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    OptikAdminTokens.trainingSoft,
-                                    OptikAdminTokens.training,
-                                  ],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: OptikAdminTokens.training
-                                        .withOpacity(0.35),
-                                    blurRadius: 14,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
+                                color: active
+                                    ? OptikAdminTokens.navy
+                                    : OptikAdminTokens.ice,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.school_rounded,
-                                color: Colors.white,
+                                color: active
+                                    ? OptikAdminTokens.snow
+                                    : OptikAdminTokens.navy,
                                 size: 26,
                               ),
                             ),
@@ -711,9 +685,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                 children: [
                                   Text(
                                     'training_enter_eyebrow'.tr(),
-                                    style: TextStyle(
-                                      color: OptikAdminTokens.trainingSoft
-                                          .withOpacity(0.95),
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.slate,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 1.3,
@@ -724,10 +697,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                     active
                                         ? 'training_menu_exit'.tr()
                                         : 'training_menu_enter'.tr(),
-                                    style: TextStyle(
-                                      color: active
-                                          ? OptikAdminTokens.warning
-                                          : OptikAdminTokens.textPrimary,
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 15,
                                       height: 1.2,
@@ -738,8 +709,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                     active
                                         ? 'training_menu_exit_desc'.tr()
                                         : 'training_menu_enter_desc'.tr(),
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.slate,
                                       fontSize: 12,
                                       height: 1.35,
                                     ),
@@ -753,7 +724,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 height: 22,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: OptikAdminTokens.trainingSoft,
+                                  color: OptikAdminTokens.navy,
                                 ),
                               )
                             else
@@ -784,5 +755,55 @@ class _DashboardPageState extends State<DashboardPage> {
       value: _formatRupiah(_omzetHariIni),
       loading: isStatsLoading,
     );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.emphasized = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String? tooltip;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: emphasized
+                ? OptikAdminTokens.ice.withOpacity(0.35)
+                : OptikAdminTokens.card,
+            border: Border.all(
+              color: emphasized
+                  ? OptikAdminTokens.navy
+                  : OptikAdminTokens.ice.withOpacity(0.4),
+            ),
+            boxShadow: OptikAdminTokens.cardShadow,
+          ),
+          child: Icon(
+            icon,
+            size: 19,
+            color: emphasized
+                ? OptikAdminTokens.navy
+                : OptikAdminTokens.slate,
+          ),
+        ),
+      ),
+    );
+    if (tooltip == null) return child;
+    return Tooltip(message: tooltip!, child: child);
   }
 }

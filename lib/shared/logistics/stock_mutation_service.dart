@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'product_identity.dart';
+import 'stock_realtime.dart';
 
 /// Reasons allowed by SQL `product_stock_ledger`.
 abstract final class StockReason {
@@ -21,6 +23,8 @@ abstract final class StockReserveKind {
   static const doPreparing = 'DO_PREPARING';
   static const ro = 'RO';
   static const posHold = 'POS_HOLD';
+  /// Hold Member online checkout (15 menit) — sinkron reserved_qty.
+  static const onlineHold = 'ONLINE_HOLD';
 }
 
 /// Real / Pending / Available helpers.
@@ -71,8 +75,9 @@ class StockMutationService {
     }
     if (qtyDelta == 0) throw 'qty_delta tidak boleh 0.';
 
+    final toko = tokoId.trim().toUpperCase();
     final res = await _client.rpc('apply_stock_delta', params: {
-      'p_toko': tokoId.trim().toUpperCase(),
+      'p_toko': toko,
       'p_sku': normalized,
       'p_qty_delta': qtyDelta,
       'p_reason': reason,
@@ -84,7 +89,41 @@ class StockMutationService {
       'p_meta': meta ?? {},
       'p_allow_create': allowCreate,
     });
-    return Map<String, dynamic>.from(res as Map);
+    final map = Map<String, dynamic>.from(res as Map);
+    final stockAfter = int.tryParse(
+      '${map['stock_after'] ?? map['real_stock'] ?? map['stock'] ?? ''}',
+    );
+    final pending = int.tryParse(
+      '${map['pending_stock'] ?? map['reserved_qty'] ?? ''}',
+    );
+    final avail = int.tryParse('${map['available_qty'] ?? ''}') ??
+        (stockAfter != null && pending != null
+            ? StockQty.available(stockAfter, pending)
+            : null);
+    _pingRealtime(
+      tokoId: toko,
+      sku: normalized,
+      stock: stockAfter,
+      reservedQty: pending,
+      availableQty: avail,
+    );
+    return map;
+  }
+
+  void _pingRealtime({
+    required String tokoId,
+    String? sku,
+    int? stock,
+    int? reservedQty,
+    int? availableQty,
+  }) {
+    unawaited(StockRealtime.broadcastToko(
+      tokoId: tokoId,
+      sku: sku,
+      stock: stock,
+      reservedQty: reservedQty,
+      availableQty: availableQty,
+    ));
   }
 
   /// Balanced move: from −qty and to +qty in one DB transaction.
@@ -105,9 +144,11 @@ class StockMutationService {
     if (normalized == null) throw 'SKU wajib untuk transfer stok.';
     if (qty <= 0) throw 'Qty transfer harus > 0.';
 
+    final from = fromToko.trim().toUpperCase();
+    final to = toToko.trim().toUpperCase();
     final res = await _client.rpc('apply_stock_transfer', params: {
-      'p_from_toko': fromToko.trim().toUpperCase(),
-      'p_to_toko': toToko.trim().toUpperCase(),
+      'p_from_toko': from,
+      'p_to_toko': to,
       'p_sku': normalized,
       'p_qty': qty,
       'p_reason_out': reasonOut,
@@ -119,7 +160,10 @@ class StockMutationService {
       'p_actor_nama': actorNama ?? _actorEmail,
       'p_meta': meta ?? {},
     });
-    return Map<String, dynamic>.from(res as Map);
+    final map = Map<String, dynamic>.from(res as Map);
+    _pingRealtime(tokoId: from, sku: normalized);
+    _pingRealtime(tokoId: to, sku: normalized);
+    return map;
   }
 
   /// Book PENDING stock (does not change Real `stock`).
@@ -136,8 +180,9 @@ class StockMutationService {
     if (normalized == null) throw 'SKU wajib untuk reservasi stok.';
     if (qty <= 0) throw 'Qty reservasi harus > 0.';
 
+    final toko = tokoId.trim().toUpperCase();
     final res = await _client.rpc('reserve_stock', params: {
-      'p_toko': tokoId.trim().toUpperCase(),
+      'p_toko': toko,
       'p_sku': normalized,
       'p_qty': qty,
       'p_kind': kind,
@@ -145,7 +190,15 @@ class StockMutationService {
       'p_ref_id': refId,
       'p_meta': meta ?? {},
     });
-    return Map<String, dynamic>.from(res as Map);
+    final map = Map<String, dynamic>.from(res as Map);
+    _pingRealtime(
+      tokoId: toko,
+      sku: normalized,
+      stock: int.tryParse('${map['real_stock'] ?? ''}'),
+      reservedQty: int.tryParse('${map['pending_stock'] ?? ''}'),
+      availableQty: int.tryParse('${map['available_qty'] ?? ''}'),
+    );
+    return map;
   }
 
   Future<Map<String, dynamic>> releaseReservation({
@@ -162,7 +215,93 @@ class StockMutationService {
       'p_sku': sku,
       'p_toko': tokoId?.trim().toUpperCase(),
     });
-    return Map<String, dynamic>.from(res as Map);
+    final map = Map<String, dynamic>.from(res as Map);
+    if (tokoId != null && tokoId.trim().isNotEmpty) {
+      _pingRealtime(tokoId: tokoId, sku: sku);
+    }
+    return map;
+  }
+
+  /// Hold stok ready keranjang POS (15 menit). Menurunkan available di semua saluran.
+  Future<Map<String, dynamic>> holdPosCartStock({
+    required String tokoId,
+    required String refId,
+    required List<Map<String, dynamic>> items,
+    int holdMinutes = 15,
+  }) async {
+    final toko = tokoId.trim().toUpperCase();
+    final res = await _client.rpc('hold_pos_cart_stock', params: {
+      'p_toko': toko,
+      'p_ref_id': refId.trim(),
+      'p_items': items,
+      'p_hold_minutes': holdMinutes,
+    });
+    if (res is! Map) {
+      return {'ok': false, 'error': 'Respons hold POS tidak valid'};
+    }
+    final map = Map<String, dynamic>.from(res);
+    if (map['ok'] == true) {
+      _pingRealtime(tokoId: toko);
+      for (final it in items) {
+        final sku = (it['sku'] ?? '').toString();
+        if (sku.isNotEmpty) _pingRealtime(tokoId: toko, sku: sku);
+      }
+    }
+    return map;
+  }
+
+  Future<Map<String, dynamic>> releasePosCartStock(
+    String refId, {
+    String? tokoId,
+  }) async {
+    final res = await _client.rpc('release_pos_cart_stock', params: {
+      'p_ref_id': refId.trim(),
+    });
+    if (res is! Map) {
+      return {'ok': false, 'error': 'Respons release POS tidak valid'};
+    }
+    final map = Map<String, dynamic>.from(res);
+    if (tokoId != null && tokoId.trim().isNotEmpty) {
+      _pingRealtime(tokoId: tokoId);
+    }
+    return map;
+  }
+
+  /// Consume POS_HOLD → SALE atomik (tanpa window available antar saluran).
+  Future<Map<String, dynamic>> consumePosCartIntoSale({
+    required String tokoId,
+    required String refId,
+    required List<Map<String, dynamic>> items,
+    required String invoiceNo,
+    String? actorNama,
+  }) async {
+    final toko = tokoId.trim().toUpperCase();
+    final res = await _client.rpc('consume_pos_cart_into_sale', params: {
+      'p_toko': toko,
+      'p_ref_id': refId.trim(),
+      'p_items': items,
+      'p_invoice': invoiceNo.trim(),
+      'p_actor_id': _actorId,
+      'p_actor_nama': actorNama ?? _actorEmail,
+    });
+    if (res is! Map) {
+      return {'ok': false, 'error': 'Respons consume POS tidak valid'};
+    }
+    final map = Map<String, dynamic>.from(res);
+    if (map['ok'] == true) {
+      _pingRealtime(tokoId: toko);
+      for (final it in items) {
+        final sku = (it['sku'] ?? '').toString();
+        if (sku.isNotEmpty) _pingRealtime(tokoId: toko, sku: sku);
+      }
+    }
+    return map;
+  }
+
+  Future<int> expireStalePosHolds() async {
+    final res = await _client.rpc('expire_stale_pos_holds');
+    if (res is int) return res;
+    return int.tryParse('$res') ?? 0;
   }
 
   /// PREPARING/draft → TRANSIT: clear PENDING then cut Real via TRANSFER_OUT.
@@ -268,25 +407,67 @@ class StockMutationService {
     );
   }
 
+  /// Kurangi stok rusak: potong Real (tidak menembus booking/pending) + ledger WRITE_OFF.
   Future<Map<String, dynamic>> writeOff({
     required String tokoId,
     required String sku,
     required int qty,
     required String alasan,
     String? actorNama,
+    String? refId,
     Map<String, dynamic>? meta,
-  }) {
-    if (qty <= 0) throw 'Qty rusak harus > 0.';
-    if (alasan.trim().isEmpty) throw 'Alasan rusak wajib diisi.';
-    return applyDelta(
-      tokoId: tokoId,
+  }) async {
+    if (qty <= 0) throw 'Qty rusak harus lebih dari 0.';
+    final alasanClean = alasan.trim();
+    if (alasanClean.isEmpty) throw 'Alasan rusak wajib diisi.';
+    if (alasanClean.length < 3) throw 'Alasan terlalu singkat (min. 3 karakter).';
+
+    final toko = tokoId.trim().toUpperCase();
+    final row = await ProductIdentity.findAtToko(
+      tokoId: toko,
       sku: sku,
+      barcode: sku,
+      select: 'id, sku, barcode, nama, stock, reserved_qty, toko_id',
+    );
+    if (row == null) {
+      throw 'Produk / SKU tidak ditemukan di $toko.';
+    }
+
+    final canonicalSku =
+        ProductIdentity.normalizeSku(row['sku']) ?? sku.trim();
+    final real = StockQty.realOf(row);
+    final pending = StockQty.pendingOf(row);
+    final available = StockQty.availableOf(row);
+    if (available <= 0) {
+      throw 'Tidak ada stok tersedia di $toko '
+          '(real $real · booking $pending). '
+          'Selesaikan paket Disiapkan / perjalanan dulu jika stok ter-booking.';
+    }
+    if (qty > available) {
+      throw 'Qty melebihi stok tersedia di $toko '
+          '(real $real · booking $pending · tersedia $available · minta $qty).';
+    }
+
+    final woRef = (refId ?? '').trim().isNotEmpty
+        ? refId!.trim()
+        : 'WO-${DateTime.now().millisecondsSinceEpoch}';
+
+    return applyDelta(
+      tokoId: toko,
+      sku: canonicalSku,
       qtyDelta: -qty,
       reason: StockReason.writeOff,
-      alasanText: alasan.trim(),
+      alasanText: alasanClean,
       refType: 'write_off',
+      refId: woRef,
       actorNama: actorNama,
-      meta: meta,
+      meta: {
+        ...?meta,
+        'nama': row['nama'],
+        'stock_before': real,
+        'pending_before': pending,
+        'available_before': available,
+      },
       allowCreate: false,
     );
   }
@@ -356,44 +537,37 @@ class StockMutationService {
   Future<List<Map<String, dynamic>>> fetchLedger({
     String? sku,
     String? tokoId,
+    String? reason,
     int limit = 100,
   }) async {
     final filterSku = sku?.trim();
     final filterToko = tokoId?.trim().toUpperCase();
-    late final List rows;
-    if (filterSku != null &&
-        filterSku.isNotEmpty &&
-        filterToko != null &&
-        filterToko.isNotEmpty) {
-      rows = await _client
-          .from('product_stock_ledger')
-          .select()
-          .eq('sku', filterSku)
-          .eq('toko_id', filterToko)
-          .order('created_at', ascending: false)
-          .limit(limit);
-    } else if (filterSku != null && filterSku.isNotEmpty) {
-      rows = await _client
-          .from('product_stock_ledger')
-          .select()
-          .eq('sku', filterSku)
-          .order('created_at', ascending: false)
-          .limit(limit);
-    } else if (filterToko != null && filterToko.isNotEmpty) {
-      rows = await _client
-          .from('product_stock_ledger')
-          .select()
-          .eq('toko_id', filterToko)
-          .order('created_at', ascending: false)
-          .limit(limit);
-    } else {
-      rows = await _client
-          .from('product_stock_ledger')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(limit);
+    final filterReason = reason?.trim().toUpperCase();
+
+    var q = _client.from('product_stock_ledger').select();
+    if (filterSku != null && filterSku.isNotEmpty) {
+      q = q.eq('sku', filterSku);
     }
+    if (filterToko != null && filterToko.isNotEmpty) {
+      q = q.eq('toko_id', filterToko);
+    }
+    if (filterReason != null && filterReason.isNotEmpty) {
+      q = q.eq('reason', filterReason);
+    }
+    final rows = await q.order('created_at', ascending: false).limit(limit);
     return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// Riwayat write-off terbaru di toko (untuk UI Stok Rusak).
+  Future<List<Map<String, dynamic>>> fetchWriteOffs({
+    required String tokoId,
+    int limit = 12,
+  }) {
+    return fetchLedger(
+      tokoId: tokoId,
+      reason: StockReason.writeOff,
+      limit: limit,
+    );
   }
 
   /// Inject stock lines from stock_move `keterangan` JSON (SKU-first).

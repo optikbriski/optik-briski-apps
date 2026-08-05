@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../invoice/sale_fulfillment_service.dart';
+
 /// Garansi frame + lensa:
 /// - Kartu dibuat saat jual (status menunggu_ambil)
 /// - Aktif 7 hari sejak kasir scan barcode invoice + foto hasil (customer ambil)
@@ -205,8 +207,7 @@ class GaransiService {
     return st == 'lunas' && sisa <= 0;
   }
 
-  /// Scan QR LUNAS ke-1: konfirmasi serah terima + aktifkan garansi 7 hari.
-  /// [fotoHasilUrl] opsional (boleh kosong jika konfirmasi hanya lewat scan QR).
+  /// Legacy / dan halaman Garansi: serah terima item READY + sync line DIAMBIL.
   Future<Map<String, dynamic>> konfirmasiAmbil({
     required String noInvoice,
     String? fotoHasilUrl,
@@ -220,65 +221,236 @@ class GaransiService {
     );
     if (sale == null) throw 'Invoice tidak ditemukan.';
 
-    if (!isSaleLunas(sale)) {
-      throw 'Transaksi belum Lunas. Selesaikan pembayaran dulu.';
-    }
-    if (sale['diambil_at'] != null) {
-      throw 'Barang sudah dikonfirmasi diambil sebelumnya.';
-    }
+    // Sinkron partial fulfillment: tandai line READY → DIAMBIL dulu.
+    final fulfill = SaleFulfillmentService(client: _db);
+    final lines = await fulfill.listItems(sale['id'].toString());
+    final c = SaleFulfillmentService.counts(lines);
 
-    final foto = (fotoHasilUrl ?? '').trim();
-
-    // Pastikan ada kartu frame/lensa
-    var n = await _db
-        .from('garansi_kartu')
-        .select('id')
-        .eq('sale_id', sale['id']);
-    if ((n as List).isEmpty) {
-      await createKartuFromSale(sale['id'].toString());
+    if (c.ready == 0 && c.pendingRo > 0) {
+      throw 'Masih ada item RO pending. '
+          'Ambil item READY lewat scan QR LUNAS, atau tunggu RO selesai.';
     }
 
+    List<String> ids = const [];
+    if (c.ready > 0) {
+      final taken = await fulfill.markReadyLinesDiambil(
+        saleId: sale['id'].toString(),
+      );
+      ids = taken.map((e) => e['id'].toString()).toList();
+    }
+
+    if (ids.isEmpty) {
+      // Nota lama tanpa kolom fulfillment — aktifkan semua kartu menunggu.
+      return konfirmasiAmbilItems(
+        noInvoice: noInvoice,
+        saleItemIds: const [],
+        fotoHasilUrl: fotoHasilUrl,
+        tokoId: tokoId,
+        isPusat: isPusat,
+        activateAllWaiting: true,
+      );
+    }
+    return konfirmasiAmbilItems(
+      noInvoice: noInvoice,
+      saleItemIds: ids,
+      fotoHasilUrl: fotoHasilUrl,
+      tokoId: tokoId,
+      isPusat: isPusat,
+    );
+  }
+
+  Map<String, dynamic> _aktifPatch({String? fotoHasilUrl}) {
     final now = DateTime.now();
     final mulai = dateOnly(now);
     final akhir = mulai.add(const Duration(days: garansiHari));
-    final uid = _db.auth.currentUser?.id;
-
-    final salePatch = <String, dynamic>{
-      'diambil_at': now.toUtc().toIso8601String(),
-      'diambil_oleh': uid,
-      'tracking_status': 'DIAMBIL',
-    };
-    if (foto.isNotEmpty) salePatch['foto_hasil_url'] = foto;
-
-    await _db.from('sales').update(salePatch).eq('id', sale['id']);
-
-    final kartuPatch = <String, dynamic>{
+    final patch = <String, dynamic>{
       'status': 'aktif',
       'tanggal_mulai': formatDate(mulai),
       'tanggal_akhir': formatDate(akhir),
       'diambil_at': now.toUtc().toIso8601String(),
     };
-    if (foto.isNotEmpty) kartuPatch['foto_hasil_url'] = foto;
+    final foto = (fotoHasilUrl ?? '').trim();
+    if (foto.isNotEmpty) patch['foto_hasil_url'] = foto;
+    return patch;
+  }
 
-    await _db
-        .from('garansi_kartu')
-        .update(kartuPatch)
-        .eq('sale_id', sale['id'])
-        .eq('status', 'menunggu_ambil');
+  /// Aktifkan kartu menunggu untuk [saleItemIds]. Return id kartu yang aktif.
+  Future<List<String>> _activateWaitingKartu({
+    required String saleId,
+    required List<String> saleItemIds,
+    String? fotoHasilUrl,
+    bool activateAllWaiting = false,
+  }) async {
+    final patch = _aktifPatch(fotoHasilUrl: fotoHasilUrl);
+    if (activateAllWaiting || saleItemIds.isEmpty) {
+      final rows = await _db
+          .from('garansi_kartu')
+          .update(patch)
+          .eq('sale_id', saleId)
+          .eq('status', 'menunggu_ambil')
+          .select('id');
+      return (rows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map)['id'].toString())
+          .toList();
+    }
 
-    // Juga aktifkan yang mungkin masih null tanggal
-    await _db
-        .from('garansi_kartu')
-        .update(kartuPatch)
-        .eq('sale_id', sale['id'])
-        .isFilter('tanggal_mulai', null);
+    final activated = <String>[];
+    for (final itemId in saleItemIds) {
+      if (itemId.trim().isEmpty) continue;
+      final rows = await _db
+          .from('garansi_kartu')
+          .update(patch)
+          .eq('sale_id', saleId)
+          .eq('sale_item_id', itemId)
+          .eq('status', 'menunggu_ambil')
+          .select('id');
+      for (final raw in rows as List) {
+        activated.add(Map<String, dynamic>.from(raw as Map)['id'].toString());
+      }
+    }
+    return activated;
+  }
+
+  /// Pulihkan kartu yang macet: line sudah DIAMBIL tapi status masih menunggu_ambil.
+  Future<int> syncAktifDariLineDiambil(String saleId) async {
+    final items = await _db
+        .from('sales_items')
+        .select('id, nama_produk, fulfillment_status, diambil_at')
+        .eq('sale_id', saleId);
+    final diambil = (items as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where((i) {
+          final st = (i['fulfillment_status'] ?? '').toString().toUpperCase();
+          return st == 'DIAMBIL' || i['diambil_at'] != null;
+        })
+        .toList();
+    if (diambil.isEmpty) return 0;
+
+    var n = await _db.from('garansi_kartu').select('id').eq('sale_id', saleId);
+    if ((n as List).isEmpty) {
+      await createKartuFromSale(saleId);
+    }
+
+    final diambilIds = diambil
+        .map((i) => i['id'].toString())
+        .where((id) => id.isNotEmpty)
+        .toList();
+    var activated = await _activateWaitingKartu(
+      saleId: saleId,
+      saleItemIds: diambilIds,
+    );
+
+    // Fallback: match nama produk jika sale_item_id di kartu tidak cocok.
+    if (activated.isEmpty) {
+      final names = diambil
+          .map((i) => (i['nama_produk'] ?? '').toString().trim().toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toSet();
+      final waiting = await _db
+          .from('garansi_kartu')
+          .select('id, nama_produk, sale_item_id')
+          .eq('sale_id', saleId)
+          .eq('status', 'menunggu_ambil');
+      final patch = _aktifPatch();
+      for (final raw in waiting as List) {
+        final k = Map<String, dynamic>.from(raw as Map);
+        final nama = (k['nama_produk'] ?? '').toString().trim().toLowerCase();
+        if (!names.contains(nama)) continue;
+        final rows = await _db
+            .from('garansi_kartu')
+            .update(patch)
+            .eq('id', k['id'])
+            .eq('status', 'menunggu_ambil')
+            .select('id');
+        for (final r in rows as List) {
+          activated.add(Map<String, dynamic>.from(r as Map)['id'].toString());
+        }
+      }
+    }
+    return activated.length;
+  }
+
+  /// Partial: aktifkan garansi hanya untuk [saleItemIds] yang diserahkan.
+  Future<Map<String, dynamic>> konfirmasiAmbilItems({
+    required String noInvoice,
+    required List<String> saleItemIds,
+    String? fotoHasilUrl,
+    String? tokoId,
+    bool isPusat = false,
+    bool activateAllWaiting = false,
+  }) async {
+    final sale = await findSaleByInvoice(
+      noInvoice,
+      tokoId: tokoId,
+      isPusat: isPusat,
+    );
+    if (sale == null) throw 'Invoice tidak ditemukan.';
+
+    if (!isSaleLunas(sale)) {
+      throw 'Transaksi belum Lunas. Selesaikan pembayaran dulu.';
+    }
+
+    final foto = (fotoHasilUrl ?? '').trim();
+    final saleId = sale['id'].toString();
+
+    var n = await _db.from('garansi_kartu').select('id').eq('sale_id', saleId);
+    if ((n as List).isEmpty) {
+      await createKartuFromSale(saleId);
+    }
+
+    var activated = await _activateWaitingKartu(
+      saleId: saleId,
+      saleItemIds: saleItemIds,
+      fotoHasilUrl: foto.isEmpty ? null : foto,
+      activateAllWaiting: activateAllWaiting,
+    );
+
+    // Fallback: line sudah DIAMBIL / id kartu tidak cocok.
+    if (activated.isEmpty && saleItemIds.isNotEmpty && !activateAllWaiting) {
+      final n = await syncAktifDariLineDiambil(saleId);
+      if (n > 0) {
+        final rows = await _db
+            .from('garansi_kartu')
+            .select('id')
+            .eq('sale_id', saleId)
+            .eq('status', 'aktif')
+            .inFilter('sale_item_id', saleItemIds);
+        activated = (rows as List)
+            .map((e) => Map<String, dynamic>.from(e as Map)['id'].toString())
+            .toList();
+      }
+    }
+
+    // Wajib aktifkan kartu frame/lensa untuk item terpilih (bila kartu ada).
+    if (!activateAllWaiting && saleItemIds.isNotEmpty) {
+      final waiting = await _db
+          .from('garansi_kartu')
+          .select('id, sale_item_id, nama_produk')
+          .eq('sale_id', saleId)
+          .eq('status', 'menunggu_ambil')
+          .inFilter('sale_item_id', saleItemIds);
+      if ((waiting as List).isNotEmpty) {
+        throw 'Gagal aktifkan garansi untuk: '
+            '${waiting.map((e) => (e as Map)['nama_produk'] ?? '?').join(', ')}. '
+            'Coba lagi / cek kartu garansi.';
+      }
+    }
+
+    final patch = _aktifPatch(fotoHasilUrl: foto.isEmpty ? null : foto);
+    if (foto.isNotEmpty) {
+      await _db.from('sales').update({
+        'foto_hasil_url': foto,
+      }).eq('id', saleId);
+    }
 
     return {
-      'sale_id': sale['id'],
+      'sale_id': saleId,
       'no_invoice': sale['no_invoice'],
-      'tanggal_mulai': formatDate(mulai),
-      'tanggal_akhir': formatDate(akhir),
+      'tanggal_mulai': patch['tanggal_mulai'],
+      'tanggal_akhir': patch['tanggal_akhir'],
       'garansi_hari': garansiHari,
+      'activated_item_ids': saleItemIds,
+      'activated_kartu_ids': activated,
     };
   }
 

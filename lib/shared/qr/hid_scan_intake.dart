@@ -31,7 +31,8 @@ class HidScanIntake extends StatefulWidget {
 
   /// When dirty + [onSaveBeforeLeave] set, leave-to-run-QR offers save option.
   final bool Function()? isDirty;
-  final Future<void> Function()? onSaveBeforeLeave;
+  /// Boleh return `false` jika simpan gagal.
+  final Future<dynamic> Function()? onSaveBeforeLeave;
 
   /// Topmost active intake (current route's scope).
   static HidScanIntakeState? get current =>
@@ -59,9 +60,17 @@ class HidScanIntakeState extends State<HidScanIntake> {
     return dirty && widget.onSaveBeforeLeave != null;
   }
 
-  Future<void> saveBeforeLeave() async {
+  /// `true` jika tidak perlu simpan, atau simpan berhasil.
+  Future<bool> saveBeforeLeave() async {
     final save = widget.onSaveBeforeLeave;
-    if (save != null) await save();
+    if (save == null) return true;
+    try {
+      final result = await save();
+      if (result is bool && result == false) return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

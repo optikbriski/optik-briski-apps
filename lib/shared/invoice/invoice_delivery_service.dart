@@ -32,24 +32,34 @@ class InvoiceDeliveryService {
     bool sendEmail = true,
     bool sendWa = true,
     InvoiceDeliveryMode mode = InvoiceDeliveryMode.withQr,
+    /// Paksa payload QR (mis. CLAIM setelah partial, meski LUNAS masih aktif).
+    String? qrPayloadOverride,
   }) async {
     var row = Map<String, dynamic>.from(sale);
     final saleId = row['id']?.toString();
     final includeQr = mode != InvoiceDeliveryMode.paymentConfirm;
+    final override = (qrPayloadOverride ?? '').trim();
 
-    if (includeQr && saleId != null && saleId.isNotEmpty) {
+    if (includeQr &&
+        override.isEmpty &&
+        saleId != null &&
+        saleId.isNotEmpty) {
       try {
         row = await InvoiceLifecycleService(client: _db).ensureTokens(saleId);
       } catch (_) {}
     }
 
-    final payload = includeQr
-        ? (InvoiceLifecycleService.customerQrPayload(row) ??
-            InvoiceLink.encodeFromSale(row))
-        : '';
+    final payload = !includeQr
+        ? ''
+        : (override.isNotEmpty
+            ? override
+            : (InvoiceLifecycleService.customerQrPayload(row) ??
+                InvoiceLink.encodeFromSale(row)));
     final lifecyclePayload =
         includeQr && InvoiceLink.isCustomerLifecycleQr(payload) ? payload : '';
-    final phase = includeQr ? _phaseLabel(row) : _paymentConfirmPhase(row);
+    final phase = !includeQr
+        ? _paymentConfirmPhase(row)
+        : (ObrInvoice.parse(lifecyclePayload)?.phase ?? _phaseLabel(row));
     final invoice = (row['no_invoice'] ?? '').toString();
     final name = (row['nama_pelanggan'] ?? 'Pelanggan').toString();
     final email = (row['email_pelanggan'] ?? '').toString().trim();

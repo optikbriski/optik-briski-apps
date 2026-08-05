@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -210,18 +211,36 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(body, style: const TextStyle(color: Colors.white70)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          body,
+          style: const TextStyle(
+            color: OptikAdminTokens.slate,
+            height: 1.4,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
+            style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
             child: const Text('Batal'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor:
+            style: FilledButton.styleFrom(
+              backgroundColor:
                   danger ? OptikAdminTokens.danger : OptikAdminTokens.success,
+              foregroundColor: OptikAdminTokens.snow,
             ),
             child: Text(confirmLabel),
           ),
@@ -234,19 +253,119 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
   void _snack(String msg, Color color) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
+      SnackBar(
+        backgroundColor: color,
+        content: Text(
+          msg,
+          style: const TextStyle(
+            color: OptikAdminTokens.snow,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _tokoFilterLabel =>
+      _tokoFilter == null || _tokoFilter!.isEmpty ? 'Semua toko' : _tokoFilter!;
+
+  Future<void> _pickTokoFilter() async {
+    if (!_canMonitor) return;
+
+    final sel = await showAdminPicker<String>(
+      context: context,
+      title: 'Filter toko',
+      subtitle: 'Pilih cabang untuk antrean tinjauan',
+      headerIcon: Icons.storefront_rounded,
+      searchHint: 'Cari kode toko…',
+      clearLabel: 'Semua toko',
+      clearSubtitle: 'Tampilkan seluruh antrean',
+      clearIcon: Icons.apps_rounded,
+      selected: _tokoFilter,
+      options: [
+        for (final t in _tokoOptions)
+          AdminPickerOption(
+            value: t,
+            label: t,
+            subtitle: AttendanceAdminScope.isPusatTokoId(t) ? 'Pusat' : 'Cabang',
+            icon: AttendanceAdminScope.isPusatTokoId(t)
+                ? Icons.apartment_rounded
+                : Icons.storefront_rounded,
+          ),
+      ],
+    );
+    if (!mounted || sel == null) return;
+    final next = sel.isClear ? null : sel.value;
+    if (next == _tokoFilter) return;
+    setState(() {
+      _tokoFilter = next;
+      _selected = null;
+    });
+    await _load();
+  }
+
+  Widget _statusChip({bool compact = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 4 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: OptikAdminTokens.warning.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: OptikAdminTokens.warning.withOpacity(0.45)),
+      ),
+      child: Text(
+        compact ? 'FLAG' : 'Mencurigakan',
+        style: TextStyle(
+          color: OptikAdminTokens.warning,
+          fontSize: compact ? 10 : 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: compact ? 0.4 : 0.2,
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
+    final queueCount = _rows.length;
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Tinjauan Mencurigakan',
+        title: 'dash_menu_tinjauan_mencurigakan'.tr(),
+        subtitle: queueCount > 0
+            ? '$queueCount menunggu tinjauan'
+            : 'Antrean kosong',
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          if (queueCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: OptikAdminTokens.warning,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$queueCount',
+                    style: const TextStyle(
+                      color: OptikAdminTokens.snow,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+          ),
         ],
       ),
       body: Column(
@@ -254,84 +373,117 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: PremiumPanel(
+            // Callout semantik warning — bukan PremiumPanel (sheen ice).
+            child: Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(14),
-              borderRadius: 16,
-              borderColor: OptikAdminTokens.warning.withOpacity(0.45),
-              child: Text(
-                'Antrean hasil yang di-flag mencurigakan. '
-                'Aman = +${AttendanceVerificationConfig.validDayPoints} poin. '
-                'Terbukti curang = ${AttendanceVerificationConfig.cheatingPenaltyPoints} poin '
-                '+ SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
-                'Bukan untuk keterlambatan.',
-                style: const TextStyle(
-                  color: OptikAdminTokens.textSecondary,
-                  fontSize: 13,
-                  height: 1.35,
+              decoration: BoxDecoration(
+                color: OptikAdminTokens.warning.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: OptikAdminTokens.warning.withOpacity(0.7),
+                  width: 1.2,
                 ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const PremiumIconBadge(
+                    icon: Icons.warning_amber_rounded,
+                    color: OptikAdminTokens.warning,
+                    size: 40,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Antrean hasil yang di-flag mencurigakan. '
+                      'Aman = +${AttendanceVerificationConfig.validDayPoints} poin. '
+                      'Terbukti curang = ${AttendanceVerificationConfig.cheatingPenaltyPoints} poin '
+                      '+ SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
+                      'Bukan untuk keterlambatan.',
+                      style: const TextStyle(
+                        color: OptikAdminTokens.slate,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           if (_canMonitor)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: DropdownButtonFormField<String?>(
-                isExpanded: true,
-                value: _tokoFilter,
-                dropdownColor: OptikAdminTokens.card,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: OptikAdminTokens.card,
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                hint: const Text('Semua toko',
-                    style: TextStyle(color: Colors.white54)),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Semua toko',
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                  ..._tokoOptions.map(
-                    (t) => DropdownMenuItem<String?>(
-                      value: t,
-                      child:
-                          Text(t, style: const TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  setState(() {
-                    _tokoFilter = v;
-                    _selected = null;
-                  });
-                  _load();
-                },
+              child: AdminPickerField(
+                label: 'Filter toko',
+                valueText: _tokoFilterLabel,
+                icon: Icons.storefront_rounded,
+                onTap: _pickTokoFilter,
               ),
             ),
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(_error!,
-                  style: const TextStyle(color: Colors.redAccent)),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: OptikAdminTokens.danger.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: OptikAdminTokens.danger.withOpacity(0.7),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        color: OptikAdminTokens.danger, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: OptikAdminTokens.danger,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(color: OptikAdminTokens.ice),
+                  )
                 : _rows.isEmpty
-                    ? const PremiumEmptyState(
-                        message: 'Tidak ada kasus mencurigakan menunggu tinjauan.',
+                    ? PremiumEmptyState(
+                        message:
+                            'Tidak ada kasus mencurigakan menunggu tinjauan.',
                         icon: Icons.fact_check_outlined,
+                        accent: OptikAdminTokens.ice,
+                        action: TextButton.icon(
+                          onPressed: _load,
+                          style: TextButton.styleFrom(
+                            foregroundColor: OptikAdminTokens.navy,
+                          ),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Muat ulang'),
+                        ),
                       )
                     : wide
                         ? Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              SizedBox(width: 320, child: _buildList()),
-                              const VerticalDivider(width: 1),
+                              SizedBox(width: 340, child: _buildList()),
+                              const VerticalDivider(
+                                width: 1,
+                                color: OptikAdminTokens.line,
+                              ),
                               Expanded(child: _buildDetail()),
                             ],
                           )
@@ -344,7 +496,11 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                                     child: TextButton.icon(
                                       onPressed: () =>
                                           setState(() => _selected = null),
-                                      icon: const Icon(Icons.arrow_back),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: OptikAdminTokens.navy,
+                                      ),
+                                      icon: const Icon(
+                                          Icons.arrow_back_rounded),
                                       label: const Text('Daftar'),
                                     ),
                                   ),
@@ -359,6 +515,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
 
   Widget _buildList() {
     return RefreshIndicator(
+      color: OptikAdminTokens.ice,
       onRefresh: _load,
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
@@ -371,8 +528,9 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             borderRadius: 14,
-            borderColor:
-                selected ? OptikAdminTokens.warning.withOpacity(0.55) : null,
+            borderColor: selected
+                ? OptikAdminTokens.warning.withOpacity(0.65)
+                : OptikAdminTokens.lineStrong,
             onTap: () => setState(() => _selected = r),
             child: Row(
               children: [
@@ -388,43 +546,36 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                       Text(
                         _svc.namaOf(r),
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         '${r['toko_id'] ?? '-'}'
                         '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}',
                         style: const TextStyle(
-                          color: Colors.white54,
+                          color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
                       ),
                       Text(
                         at != null ? _dayFmt.format(at.toLocal()) : '-',
                         style: const TextStyle(
-                          color: Colors.white38,
+                          color: OptikAdminTokens.slate,
                           fontSize: 11,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: OptikAdminTokens.warning.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'FLAG',
-                    style: TextStyle(
-                      color: OptikAdminTokens.warning,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                _statusChip(compact: true),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: selected
+                      ? OptikAdminTokens.warning
+                      : OptikAdminTokens.slate,
                 ),
               ],
             ),
@@ -451,33 +602,64 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          _svc.namaOf(r),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                _svc.namaOf(r),
+                style: const TextStyle(
+                  color: OptikAdminTokens.navy,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _statusChip(),
+          ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           '${r['toko_id'] ?? '-'}'
           '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}'
           '${at != null ? ' · ${_dayFmt.format(at.toLocal())}' : ''}',
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
         const SizedBox(height: 6),
         Text(
           'Skor match: ${score ?? '-'}'
           ' · Liveness: ${r['liveness_ok'] == true ? 'OK' : '-'}'
           '${r['liveness_provider'] != null ? ' (${r['liveness_provider']})' : ''}',
-          style: const TextStyle(color: Colors.white54, fontSize: 12),
+          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         if (notes.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Catatan: $notes',
-            style: const TextStyle(color: OptikAdminTokens.warning, fontSize: 12),
+          const SizedBox(height: 12),
+          PremiumPanel(
+            padding: const EdgeInsets.all(12),
+            borderRadius: 12,
+            borderColor: OptikAdminTokens.warning.withOpacity(0.45),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.sticky_note_2_outlined,
+                  color: OptikAdminTokens.warning,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    notes,
+                    style: const TextStyle(
+                      color: OptikAdminTokens.slate,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
         const SizedBox(height: 16),
@@ -488,7 +670,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
               label: 'Capture absen (hari itu)',
               subtitle: 'Hasil liveness / face match saat masuk',
               url: capture,
-              accent: OptikAdminTokens.accentSoft,
+              accent: OptikAdminTokens.navy,
             );
             final right = _photoPane(
               label: 'Foto terdaftar',
@@ -497,7 +679,9 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
               accent: OptikAdminTokens.success,
             );
             if (stacked) {
-              return Column(children: [left, const SizedBox(height: 12), right]);
+              return Column(
+                children: [left, const SizedBox(height: 12), right],
+              );
             }
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,7 +703,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                 loading: _acting,
                 onPressed: _acting ? null : _markAman,
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF34D399), Color(0xFF059669)],
+                  colors: [OptikAdminTokens.success, OptikAdminTokens.success],
                 ),
               ),
             ),
@@ -531,7 +715,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                 loading: _acting,
                 onPressed: _acting ? null : _markCurang,
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFF87171), Color(0xFFDC2626)],
+                  colors: [OptikAdminTokens.danger, OptikAdminTokens.danger],
                 ),
               ),
             ),
@@ -565,7 +749,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
           const SizedBox(height: 10),
           ZoomableNetworkImagePane(url: url),
@@ -580,7 +764,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.person, color: Colors.white24, size: 22),
+        child: const Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
       );
     }
     return Image.network(
@@ -592,7 +776,11 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.broken_image, color: Colors.white24, size: 18),
+        child: const Icon(
+          Icons.broken_image,
+          color: OptikAdminTokens.slate,
+          size: 18,
+        ),
       ),
     );
   }

@@ -42,12 +42,7 @@ class _LoginPageState extends State<LoginPage> {
     if (banner != null && banner.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(banner),
-            backgroundColor: OptikAdminTokens.danger,
-          ),
-        );
+        _snack(banner, OptikAdminTokens.danger);
       });
     }
   }
@@ -58,6 +53,22 @@ class _LoginPageState extends State<LoginPage> {
     _passwordController.dispose();
     _codeController.dispose();
     super.dispose();
+  }
+
+  void _snack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          msg,
+          style: const TextStyle(
+            color: OptikAdminTokens.snow,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _finishWithCurrentUser({AdminCodeLoginActor? actor}) async {
@@ -127,11 +138,8 @@ class _LoginPageState extends State<LoginPage> {
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', user.id);
 
-    final finalProfile = await client
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .single();
+    final finalProfile =
+        await client.from('profiles').select().eq('id', user.id).single();
 
     final merged = Map<String, dynamic>.from(finalProfile);
     if (actor != null && actor.isPresent) {
@@ -144,12 +152,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
     if (actor != null && actor.isPresent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login via kode APK: ${actor.label}'),
-          backgroundColor: OptikAdminTokens.accent,
-        ),
-      );
+      _snack('Login via kode APK: ${actor.label}', OptikAdminTokens.success);
     }
     widget.onLoggedIn?.call(merged);
   }
@@ -164,8 +167,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handlePasswordLogin() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("admin_login_err_kosong".tr())));
+      _snack("admin_login_err_kosong".tr(), OptikAdminTokens.warning);
       return;
     }
 
@@ -180,12 +182,7 @@ class _LoginPageState extends State<LoginPage> {
       await _finishWithCurrentUser();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("${'admin_login_err_gagal'.tr()}$e"),
-            backgroundColor: OptikAdminTokens.danger,
-          ),
-        );
+        _snack("${'admin_login_err_gagal'.tr()}$e", OptikAdminTokens.danger);
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -196,10 +193,9 @@ class _LoginPageState extends State<LoginPage> {
     final email = _emailController.text.trim();
     final code = _codeController.text.replaceAll(RegExp(r'\D'), '');
     if (email.isEmpty || code.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Isi email admin dan kode 6 angka dari APK.'),
-        ),
+      _snack(
+        'Isi email admin dan kode 6 angka dari APK.',
+        OptikAdminTokens.warning,
       );
       return;
     }
@@ -213,12 +209,7 @@ class _LoginPageState extends State<LoginPage> {
       await _finishWithCurrentUser(actor: actor);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("${'admin_login_err_gagal'.tr()}$e"),
-            backgroundColor: OptikAdminTokens.danger,
-          ),
-        );
+        _snack("${'admin_login_err_gagal'.tr()}$e", OptikAdminTokens.danger);
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -232,248 +223,340 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  InputDecoration _fieldDecoration({
+    required String label,
+    required IconData icon,
+    Widget? suffixIcon,
+    String? hint,
+    String? counterText,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      counterText: counterText,
+      prefixIcon: Icon(icon, color: OptikAdminTokens.slate, size: 20),
+      suffixIcon: suffixIcon,
+      labelStyle: const TextStyle(
+        color: OptikAdminTokens.slate,
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+      ),
+      hintStyle: TextStyle(
+        color: OptikAdminTokens.slate.withOpacity(0.55),
+        fontWeight: FontWeight.w500,
+        letterSpacing: 4,
+      ),
+      filled: true,
+      fillColor: OptikAdminTokens.bgMid,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
+        borderSide: const BorderSide(color: OptikAdminTokens.navy, width: 1.4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PremiumScaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const OptikBrandLogo.white(height: 56),
-                const SizedBox(height: 8),
-                Text(
-                  "admin_login_subtitle".tr().toUpperCase(),
-                  style: TextStyle(
-                    color: OptikAdminTokens.accentSoft.withOpacity(0.9),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.2,
-                  ),
+      body: Stack(
+        children: [
+          // Atmosphere — soft ice wash, bukan flat putih kosong.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    OptikAdminTokens.ice.withOpacity(0.22),
+                    OptikAdminTokens.bg,
+                    OptikAdminTokens.bgMid,
+                  ],
+                  stops: const [0, 0.42, 1],
                 ),
-                const SizedBox(height: 22),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            OptikAdminTokens.card.withOpacity(0.97),
-                            OptikAdminTokens.panel.withOpacity(0.99),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: OptikAdminTokens.accent.withOpacity(0.45),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: OptikAdminTokens.accent.withOpacity(0.18),
-                            blurRadius: 40,
-                            offset: const Offset(0, 18),
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 28,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: -80,
+            right: -60,
+            child: IgnorePointer(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikAdminTokens.ice.withOpacity(0.28),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -100,
+            left: -70,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikAdminTokens.navy.withOpacity(0.04),
+                ),
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const OptikBrandLogo.color(height: 58),
+                    const SizedBox(height: 10),
+                    Text(
+                      "admin_login_subtitle".tr().toUpperCase(),
+                      style: TextStyle(
+                        color: OptikAdminTokens.slate.withOpacity(0.95),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.4,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    const SizedBox(height: 24),
+                    ClipRRect(
+                      borderRadius:
+                          BorderRadius.circular(OptikAdminTokens.radiusXl),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                                OptikAdminTokens.radiusXl),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                OptikAdminTokens.card.withOpacity(0.98),
+                                OptikAdminTokens.bgMid.withOpacity(0.96),
+                              ],
+                            ),
+                            border: Border.all(
+                              color: OptikAdminTokens.ice.withOpacity(0.55),
+                              width: 1.1,
+                            ),
+                            boxShadow: OptikAdminTokens.cardShadow,
+                          ),
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                const PremiumIconBadge(
-                                  icon: Icons.lock_person_rounded,
-                                  color: OptikAdminTokens.accentSoft,
-                                  size: 48,
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const PremiumIconBadge(
+                                      icon: Icons.lock_person_rounded,
+                                      color: OptikAdminTokens.ice,
+                                      size: 48,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'ADMIN ACCESS',
+                                            style: TextStyle(
+                                              color: OptikAdminTokens.slate
+                                                  .withOpacity(0.95),
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 1.6,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Login Admin',
+                                            style: TextStyle(
+                                              color: OptikAdminTokens.navy,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 21,
+                                              height: 1.15,
+                                              letterSpacing: -0.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 5),
+                                          Text(
+                                            _mode == _LoginMode.code
+                                                ? 'PUSAT: Admin/Owner. Cabang: Kepala Toko / Kepala Area.'
+                                                : 'Pusat / Cabang — kelola operasional toko.',
+                                            style: TextStyle(
+                                              color: OptikAdminTokens.slate
+                                                  .withOpacity(0.95),
+                                              fontSize: 12.5,
+                                              height: 1.35,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
+                                const SizedBox(height: 18),
+                                _modeToggle(),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _emailController,
+                                  style: const TextStyle(
+                                    color: OptikAdminTokens.navy,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: _fieldDecoration(
+                                    label: "admin_login_email".tr(),
+                                    icon: Icons.person_outline_rounded,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                if (_mode == _LoginMode.password)
+                                  TextField(
+                                    controller: _passwordController,
+                                    obscureText: !_isPasswordVisible,
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.navy,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textInputAction: TextInputAction.done,
+                                    onSubmitted: (_) => handleLogin(),
+                                    decoration: _fieldDecoration(
+                                      label: "admin_login_password".tr(),
+                                      icon: Icons.lock_outline_rounded,
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _isPasswordVisible
+                                              ? Icons.visibility_rounded
+                                              : Icons.visibility_off_rounded,
+                                          color: OptikAdminTokens.slate,
+                                        ),
+                                        onPressed: () => setState(() =>
+                                            _isPasswordVisible =
+                                                !_isPasswordVisible),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  TextField(
+                                    controller: _codeController,
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.navy,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 8,
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    textInputAction: TextInputAction.done,
+                                    maxLength: 6,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(6),
+                                    ],
+                                    onChanged: _onCodeChanged,
+                                    onSubmitted: (_) => handleLogin(),
+                                    decoration: _fieldDecoration(
+                                      label: 'Kode 6 angka (APK)',
+                                      icon: Icons.pin_rounded,
+                                      hint: '••••••',
+                                      counterText: '',
+                                    ),
+                                  ),
+                                const SizedBox(height: 14),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    color: OptikAdminTokens.ice.withOpacity(0.18),
+                                    border: Border.all(
+                                      color: OptikAdminTokens.ice
+                                          .withOpacity(0.65),
+                                    ),
+                                  ),
+                                  child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'ADMIN ACCESS',
-                                        style: TextStyle(
-                                          color: OptikAdminTokens.accentSoft
-                                              .withOpacity(0.95),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 1.4,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Login Admin',
-                                        style: TextStyle(
-                                          color: OptikAdminTokens.textPrimary,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 20,
-                                          height: 1.2,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
+                                      Icon(
                                         _mode == _LoginMode.code
-                                            ? 'PUSAT: Admin/Owner. Cabang: Kepala Toko / Kepala Area.'
-                                            : 'Pusat / Cabang — kelola operasional toko.',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.7),
-                                          fontSize: 13,
-                                          height: 1.35,
+                                            ? Icons.phonelink_lock_rounded
+                                            : Icons.shield_rounded,
+                                        color: OptikAdminTokens.navy,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _mode == _LoginMode.code
+                                              ? 'Kode 6 angka dari APK: digit 1=posisi (1 Owner, 2 Admin, 3 Kepala Area, 4 Kepala Toko). Sisanya unik per orang.'
+                                              : 'Akses terbatas akun Admin. Karyawan pakai APK Karyawan.',
+                                          style: TextStyle(
+                                            color: OptikAdminTokens.slate
+                                                .withOpacity(0.95),
+                                            fontSize: 12,
+                                            height: 1.4,
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(height: 20),
+                                PremiumPrimaryButton(
+                                  label: _mode == _LoginMode.code
+                                      ? 'Masuk dengan kode'
+                                      : "admin_login_btn".tr(),
+                                  loading: isLoading,
+                                  icon: Icons.login_rounded,
+                                  onPressed: handleLogin,
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            _modeToggle(),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _emailController,
-                              style: const TextStyle(
-                                  color: OptikAdminTokens.textPrimary),
-                              keyboardType: TextInputType.emailAddress,
-                              textInputAction: TextInputAction.next,
-                              decoration: InputDecoration(
-                                labelText: "admin_login_email".tr(),
-                                prefixIcon:
-                                    const Icon(Icons.person_outline_rounded),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (_mode == _LoginMode.password)
-                              TextField(
-                                controller: _passwordController,
-                                obscureText: !_isPasswordVisible,
-                                style: const TextStyle(
-                                    color: OptikAdminTokens.textPrimary),
-                                textInputAction: TextInputAction.done,
-                                onSubmitted: (_) => handleLogin(),
-                                decoration: InputDecoration(
-                                  labelText: "admin_login_password".tr(),
-                                  prefixIcon:
-                                      const Icon(Icons.lock_outline_rounded),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _isPasswordVisible
-                                          ? Icons.visibility_rounded
-                                          : Icons.visibility_off_rounded,
-                                    ),
-                                    onPressed: () => setState(() =>
-                                        _isPasswordVisible =
-                                            !_isPasswordVisible),
-                                  ),
-                                ),
-                              )
-                            else
-                              TextField(
-                                controller: _codeController,
-                                style: const TextStyle(
-                                  color: OptikAdminTokens.textPrimary,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 8,
-                                ),
-                                keyboardType: TextInputType.number,
-                                textInputAction: TextInputAction.done,
-                                maxLength: 6,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(6),
-                                ],
-                                onChanged: _onCodeChanged,
-                                onSubmitted: (_) => handleLogin(),
-                                decoration: const InputDecoration(
-                                  labelText: 'Kode 6 angka (APK)',
-                                  counterText: '',
-                                  prefixIcon: Icon(Icons.pin_rounded),
-                                  hintText: '••••••',
-                                ),
-                              ),
-                            const SizedBox(height: 14),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                color: OptikAdminTokens.bg.withOpacity(0.45),
-                                border: Border.all(
-                                  color:
-                                      OptikAdminTokens.accent.withOpacity(0.28),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _mode == _LoginMode.code
-                                        ? Icons.phonelink_lock_rounded
-                                        : Icons.shield_rounded,
-                                    color: OptikAdminTokens.accentSoft
-                                        .withOpacity(0.95),
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _mode == _LoginMode.code
-                                          ? 'Kode 6 angka dari APK: digit 1=posisi (1 Owner, 2 Admin, 3 Kepala Area, 4 Kepala Toko). Sisanya unik per orang.'
-                                          : 'Akses terbatas akun Admin. Karyawan pakai APK Karyawan.',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.72),
-                                        fontSize: 12,
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            PremiumPrimaryButton(
-                              label: _mode == _LoginMode.code
-                                  ? 'Masuk dengan kode'
-                                  : "admin_login_btn".tr(),
-                              loading: isLoading,
-                              icon: Icons.login_rounded,
-                              onPressed: handleLogin,
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              "admin_login_footer".tr(),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                height: 1.35,
-                                color: Colors.white.withOpacity(0.45),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 18),
+                    Text(
+                      "admin_login_footer".tr(),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.35,
+                        color: OptikAdminTokens.slate.withOpacity(0.85),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -482,9 +565,9 @@ class _LoginPageState extends State<LoginPage> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: OptikAdminTokens.bg.withOpacity(0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: OptikAdminTokens.accent.withOpacity(0.25)),
+        color: OptikAdminTokens.bgMid,
+        borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
+        border: Border.all(color: OptikAdminTokens.lineStrong),
       ),
       child: Row(
         children: [
@@ -513,23 +596,19 @@ class _LoginPageState extends State<LoginPage> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: selected
-          ? OptikAdminTokens.accent.withOpacity(0.35)
-          : Colors.transparent,
+      color: selected ? OptikAdminTokens.navy : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: isLoading ? null : onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 11),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: selected
-                  ? OptikAdminTokens.textPrimary
-                  : Colors.white.withOpacity(0.55),
-              fontWeight: FontWeight.w700,
+              color: selected ? OptikAdminTokens.snow : OptikAdminTokens.slate,
+              fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
           ),

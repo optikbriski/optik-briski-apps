@@ -57,6 +57,7 @@ class TrainingOpsSync {
         'status_pembayaran': paymentStatus == 'Lunas' ? 'LUNAS' : 'DP',
         'metode_pembayaran': paymentMethod,
         'status_konfirmasi': 'APPROVED',
+        'referensi_id': noInvoice,
         'updated_at': DateTime.now().toIso8601String(),
       });
       report.financeRepaired = true;
@@ -209,6 +210,7 @@ class TrainingOpsSync {
       'status_pembayaran': 'LUNAS',
       'metode_pembayaran': paymentMethod,
       'status_konfirmasi': 'APPROVED',
+      'referensi_id': inv,
     });
 
     // Bonus accessories cut (same as POS Frame path)

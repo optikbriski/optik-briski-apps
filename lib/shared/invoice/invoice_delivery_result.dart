@@ -26,6 +26,23 @@ class InvoiceDeliveryResult {
   bool get allRequestedOk =>
       (emailSkipped || emailOk) && (waSkipped || waOk);
 
+  /// Ringkas error teknis (jangan dump URI/exception ke UI).
+  static String _softError(String? raw) {
+    final e = (raw ?? '').toLowerCase();
+    if (e.isEmpty) return '';
+    if (e.contains('failed to fetch') ||
+        e.contains('clientexception') ||
+        e.contains('xmlhttprequest') ||
+        e.contains('network')) {
+      return 'jaringan / edge function';
+    }
+    if (e.contains('http 4') || e.contains('http 5')) {
+      return raw!.replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+    final clipped = raw!.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return clipped.length > 48 ? '${clipped.substring(0, 48)}…' : clipped;
+  }
+
   /// Ringkas untuk SnackBar admin.
   String get summary {
     final inv = (invoice ?? '').trim();
@@ -37,7 +54,8 @@ class InvoiceDeliveryResult {
     } else if (emailOk) {
       parts.add('email: OK');
     } else {
-      parts.add('email: GAGAL${emailError != null ? ' ($emailError)' : ''}');
+      final soft = _softError(emailError);
+      parts.add(soft.isEmpty ? 'email: GAGAL' : 'email: GAGAL ($soft)');
     }
 
     if (waSkipped) {
@@ -45,7 +63,8 @@ class InvoiceDeliveryResult {
     } else if (waOk) {
       parts.add('WA: OK');
     } else {
-      parts.add('WA: GAGAL${waError != null ? ' ($waError)' : ''}');
+      final soft = _softError(waError);
+      parts.add(soft.isEmpty ? 'WA: GAGAL' : 'WA: GAGAL ($soft)');
     }
 
     parts.add('Member: update otomatis (notif/poll)');

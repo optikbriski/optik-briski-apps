@@ -139,7 +139,7 @@ class _GaransiPageState extends State<GaransiPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('garansi_generate_ok'.tr(args: ['$n'])),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikAdminTokens.success,
         ),
       );
       _invoiceCtrl.clear();
@@ -147,7 +147,7 @@ class _GaransiPageState extends State<GaransiPage>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -169,8 +169,7 @@ class _GaransiPageState extends State<GaransiPage>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: OptikAdminTokens.bgMid,
-      shape: const RoundedRectangleBorder(
+            shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => _KartuDetailSheet(
@@ -191,14 +190,13 @@ class _GaransiPageState extends State<GaransiPage>
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         title: Text('garansi_page_title'.tr()),
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: const Color(0xFFE8C872),
+          indicatorColor: OptikAdminTokens.trainingSoft,
           tabs: [
             Tab(text: 'garansi_tab_kartu'.tr()),
             Tab(text: 'garansi_tab_klaim'.tr()),
@@ -219,7 +217,6 @@ class _GaransiPageState extends State<GaransiPage>
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAmbilFlow(),
-        backgroundColor: const Color(0xFFE8C872),
         foregroundColor: OptikAdminTokens.bgMid,
         icon: const Icon(Icons.qr_code_scanner_rounded),
         label: Text('garansi_ambil_fab'.tr()),
@@ -242,12 +239,12 @@ class _GaransiPageState extends State<GaransiPage>
       children: [
         if (_error != null)
           MaterialBanner(
-            content: Text(_error!, style: const TextStyle(color: Colors.white)),
-            backgroundColor: Colors.red.shade800,
+            content: Text(_error!, style: const TextStyle(color: OptikAdminTokens.navy)),
+            backgroundColor: OptikAdminTokens.danger,
             actions: [
               TextButton(
                 onPressed: _reload,
-                child: const Text('Retry', style: TextStyle(color: Colors.white)),
+                child: const Text('Retry', style: TextStyle(color: OptikAdminTokens.navy)),
               ),
             ],
           ),
@@ -256,7 +253,7 @@ class _GaransiPageState extends State<GaransiPage>
           child: Text(
             'garansi_rules_short'.tr(),
             style: TextStyle(
-              color: const Color(0xFFE8C872).withOpacity(0.9),
+              color: OptikAdminTokens.trainingSoft.withOpacity(0.9),
               fontSize: 12,
               height: 1.35,
             ),
@@ -266,20 +263,20 @@ class _GaransiPageState extends State<GaransiPage>
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: TextField(
             controller: _searchCtrl,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: OptikAdminTokens.navy),
             decoration: InputDecoration(
               hintText: 'garansi_search_hint'.tr(),
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-              prefixIcon: const Icon(Icons.search, color: Color(0xFFE8C872)),
+              hintStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.4)),
+              prefixIcon: const Icon(Icons.search, color: OptikAdminTokens.trainingSoft),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.06),
+              fillColor: OptikAdminTokens.snow.withOpacity(0.06),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.arrow_forward_rounded,
-                    color: Colors.white70),
+                    color: OptikAdminTokens.textSecondary),
                 onPressed: _reload,
               ),
             ),
@@ -293,12 +290,12 @@ class _GaransiPageState extends State<GaransiPage>
               Expanded(
                 child: TextField(
                   controller: _invoiceCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'garansi_generate_hint'.tr(),
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                    hintStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.4)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.06),
+                    fillColor: OptikAdminTokens.snow.withOpacity(0.06),
                     isDense: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -311,7 +308,7 @@ class _GaransiPageState extends State<GaransiPage>
               FilledButton(
                 onPressed: _generateFromInvoice,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E3C72),
+                  backgroundColor: OptikAdminTokens.accent,
                 ),
                 child: Text('garansi_generate_btn'.tr()),
               ),
@@ -323,7 +320,7 @@ class _GaransiPageState extends State<GaransiPage>
               ? Center(
                   child: Text(
                     'garansi_empty_kartu'.tr(),
-                    style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    style: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.5)),
                   ),
                 )
               : ListView.separated(
@@ -335,26 +332,26 @@ class _GaransiPageState extends State<GaransiPage>
                     final jenis = k['jenis_garansi']?.toString() ?? '-';
                     return ListTile(
                       onTap: () => _openKartu(k),
-                      tileColor: Colors.white.withOpacity(0.05),
+                      tileColor: OptikAdminTokens.snow.withOpacity(0.05),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                       leading: CircleAvatar(
                         backgroundColor: jenis == 'lensa'
-                            ? Colors.teal.withOpacity(0.3)
-                            : const Color(0xFFE8C872).withOpacity(0.25),
+                            ? OptikAdminTokens.accentSoft.withOpacity(0.3)
+                            : OptikAdminTokens.trainingSoft.withOpacity(0.25),
                         child: Icon(
                           jenis == 'lensa'
                               ? Icons.visibility_rounded
                               : Icons.crop_landscape_rounded,
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           size: 20,
                         ),
                       ),
                       title: Text(
                         k['nama_produk']?.toString() ?? '-',
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
@@ -365,14 +362,14 @@ class _GaransiPageState extends State<GaransiPage>
                         '${k['klaim_digunakan'] == true ? ' · Klaim sudah dipakai' : ''}'
                         '${_isPusat ? ' · ${k['toko_id']}' : ''}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
+                          color: OptikAdminTokens.navy.withOpacity(0.55),
                           fontSize: 11.5,
                           height: 1.35,
                         ),
                       ),
                       isThreeLine: true,
                       trailing: const Icon(Icons.chevron_right,
-                          color: Colors.white38),
+                          color: OptikAdminTokens.textMuted),
                     );
                   },
                 ),
@@ -386,7 +383,7 @@ class _GaransiPageState extends State<GaransiPage>
       return Center(
         child: Text(
           'garansi_empty_klaim'.tr(),
-          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+          style: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.5)),
         ),
       );
     }
@@ -403,7 +400,7 @@ class _GaransiPageState extends State<GaransiPage>
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: OptikAdminTokens.navy.withOpacity(0.05),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
@@ -412,7 +409,7 @@ class _GaransiPageState extends State<GaransiPage>
               Text(
                 kMap['nama_produk']?.toString() ?? 'garansi_klaim_label'.tr(),
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -421,14 +418,14 @@ class _GaransiPageState extends State<GaransiPage>
                 '${row['keputusan']} · ${row['kategori_masalah'] ?? '-'} · '
                 '${kMap['no_invoice'] ?? '-'}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.55),
+                  color: OptikAdminTokens.navy.withOpacity(0.55),
                   fontSize: 12,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 row['alasan']?.toString() ?? '-',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
               ),
             ],
           ),
@@ -443,7 +440,7 @@ class _GaransiPageState extends State<GaransiPage>
       children: [
         Text(
           'garansi_ringkasan_desc'.tr(),
-          style: TextStyle(color: Colors.white.withOpacity(0.6)),
+          style: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.6)),
         ),
         const SizedBox(height: 16),
         PremiumStatGrid(
@@ -451,7 +448,7 @@ class _GaransiPageState extends State<GaransiPage>
             PremiumStatItem(
               label: 'Menunggu ambil',
               value: '${_stats['menunggu_ambil'] ?? 0}',
-              color: const Color(0xFFE8C872),
+              color: OptikAdminTokens.trainingSoft,
             ),
             PremiumStatItem(
               label: 'garansi_stat_aktif'.tr(),
@@ -461,7 +458,7 @@ class _GaransiPageState extends State<GaransiPage>
             PremiumStatItem(
               label: 'garansi_stat_klaim_bulan'.tr(),
               value: '${_stats['klaim_bulan_ini'] ?? 0}',
-              color: OptikAdminTokens.accentSoft,
+              color: OptikAdminTokens.navy,
             ),
           ],
         ),
@@ -469,7 +466,7 @@ class _GaransiPageState extends State<GaransiPage>
         Text(
           'garansi_pusat_note'.tr(),
           style: TextStyle(
-            color: const Color(0xFFE8C872).withOpacity(0.85),
+            color: OptikAdminTokens.trainingSoft.withOpacity(0.85),
             fontSize: 12.5,
             height: 1.4,
           ),
@@ -594,14 +591,14 @@ class _GaransiKonfirmasiAmbilPageState
               res['tanggal_akhir']?.toString() ?? '',
             ]),
           ),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikAdminTokens.success,
         ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -618,26 +615,26 @@ class _GaransiKonfirmasiAmbilPageState
           Text(
             'garansi_ambil_desc'.tr(),
             style: TextStyle(
-              color: Colors.white.withOpacity(0.65),
+              color: OptikAdminTokens.navy.withOpacity(0.65),
               height: 1.4,
             ),
           ),
           const SizedBox(height: 20),
           TextField(
             controller: _invoiceCtrl,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: OptikAdminTokens.navy),
             decoration: InputDecoration(
               labelText: 'No. Invoice',
-              labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+              labelStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.5)),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.06),
+              fillColor: OptikAdminTokens.snow.withOpacity(0.06),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               suffixIcon: IconButton(
                 onPressed: _scanning ? null : _scan,
-                icon: const Icon(Icons.qr_code_scanner, color: Color(0xFFE8C872)),
+                icon: const Icon(Icons.qr_code_scanner, color: OptikAdminTokens.trainingSoft),
               ),
             ),
           ),
@@ -645,7 +642,7 @@ class _GaransiKonfirmasiAmbilPageState
           Text(
             'garansi_foto_hasil'.tr(),
             style: const TextStyle(
-              color: Color(0xFFE8C872),
+              color: OptikAdminTokens.trainingSoft,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -655,9 +652,9 @@ class _GaransiKonfirmasiAmbilPageState
             child: Container(
               height: 200,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: OptikAdminTokens.navy.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white24),
+                border: Border.all(color: OptikAdminTokens.lineStrong),
               ),
               clipBehavior: Clip.antiAlias,
               child: _foto == null
@@ -665,11 +662,11 @@ class _GaransiKonfirmasiAmbilPageState
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.camera_alt_rounded,
-                            color: Colors.white54, size: 40),
+                            color: OptikAdminTokens.textMuted, size: 40),
                         const SizedBox(height: 8),
                         Text(
                           'garansi_foto_tap'.tr(),
-                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                          style: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.5)),
                         ),
                       ],
                     )
@@ -682,7 +679,6 @@ class _GaransiKonfirmasiAmbilPageState
             child: FilledButton(
               onPressed: _saving ? null : _submit,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE8C872),
                 foregroundColor: OptikAdminTokens.bgMid,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -716,11 +712,9 @@ class _InvoiceScannerPageState extends State<_InvoiceScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text('garansi_scan_invoice'.tr()),
+    return PremiumScaffold(
+            appBar: AppBar(
+                title: Text('garansi_scan_invoice'.tr()),
       ),
       body: MobileScanner(
         onDetect: (capture) {
@@ -801,6 +795,102 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
     if (mounted) setState(() => _riwayat = rows);
   }
 
+  static const _kategoriOptions = [
+    AdminPickerOption(
+      value: 'fitur_tidak_berfungsi',
+      label: 'Fitur gagal (anti-baret/bluechromic/elastis)',
+      icon: Icons.build_circle_outlined,
+    ),
+    AdminPickerOption(
+      value: 'ukuran_lensa',
+      label: 'Ukuran / kenyamanan lensa',
+      icon: Icons.straighten_outlined,
+    ),
+    AdminPickerOption(
+      value: 'cacat_pabrik',
+      label: 'Cacat pabrik',
+      icon: Icons.report_problem_outlined,
+    ),
+    AdminPickerOption(
+      value: 'kelalaian_customer',
+      label: 'Kelalaian customer (bukan fitur)',
+      icon: Icons.person_off_outlined,
+    ),
+    AdminPickerOption(
+      value: 'lainnya',
+      label: 'Lainnya',
+      icon: Icons.more_horiz_rounded,
+    ),
+  ];
+
+  static const _keputusanOptions = [
+    AdminPickerOption(
+      value: 'selesai_perbaikan',
+      label: 'Selesai perbaikan',
+      icon: Icons.handyman_outlined,
+    ),
+    AdminPickerOption(
+      value: 'selesai_ganti',
+      label: 'Selesai ganti',
+      icon: Icons.swap_horiz_rounded,
+    ),
+    AdminPickerOption(
+      value: 'diterima',
+      label: 'Diterima (proses)',
+      icon: Icons.hourglass_top_rounded,
+    ),
+    AdminPickerOption(
+      value: 'ditolak',
+      label: 'Ditolak',
+      icon: Icons.block_rounded,
+    ),
+  ];
+
+  String _kategoriLabel(String value) =>
+      _kategoriOptions
+          .firstWhere((o) => o.value == value, orElse: () => _kategoriOptions.last)
+          .label;
+
+  String _keputusanLabel(String value) =>
+      _keputusanOptions
+          .firstWhere((o) => o.value == value, orElse: () => _keputusanOptions.first)
+          .label;
+
+  Future<void> _pickKategori() async {
+    final sel = await showAdminPicker<String>(
+      context: context,
+      title: 'Kategori masalah',
+      selected: _kategori,
+      searchable: false,
+      options: _kategoriOptions,
+    );
+    if (sel == null || sel.isClear || !mounted) return;
+    setState(() {
+      _kategori = sel.value!;
+      if (_kategori == 'kelalaian_customer') {
+        _keputusan = 'ditolak';
+      } else if (_kategori == 'fitur_tidak_berfungsi') {
+        _keputusan = 'selesai_ganti';
+      }
+    });
+  }
+
+  Future<void> _pickKeputusan() async {
+    if (_kategori == 'kelalaian_customer' ||
+        _kategori == 'fitur_tidak_berfungsi') {
+      return;
+    }
+    final sel = await showAdminPicker<String>(
+      context: context,
+      title: 'garansi_keputusan'.tr(),
+      selected: _keputusan,
+      searchable: false,
+      options: _keputusanOptions,
+    );
+    if (sel == null || sel.isClear || !mounted) return;
+    setState(() => _keputusan = sel.value!);
+  }
+
   Future<void> _submit() async {
     setState(() => _saving = true);
     try {
@@ -822,7 +912,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('garansi_klaim_ok'.tr()),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikAdminTokens.success,
         ),
       );
       await widget.onChanged();
@@ -830,7 +920,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -858,7 +948,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: OptikAdminTokens.lineStrong,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -866,7 +956,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
             Text(
               k['nama_produk']?.toString() ?? '-',
               style: const TextStyle(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
               ),
@@ -878,7 +968,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               'Periode: ${k['tanggal_mulai'] ?? '-'} → ${k['tanggal_akhir'] ?? '-'}'
               '${k['klaim_digunakan'] == true ? '\nKlaim: sudah dipakai (1x/transaksi)' : ''}',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.55),
+                color: OptikAdminTokens.navy.withOpacity(0.55),
                 height: 1.4,
                 fontSize: 12.5,
               ),
@@ -888,7 +978,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               Text(
                 'Spek dibeli: ${k['spesifikasi_produk']}',
                 style: TextStyle(
-                  color: const Color(0xFFE8C872).withOpacity(0.85),
+                  color: OptikAdminTokens.trainingSoft.withOpacity(0.85),
                   fontSize: 11.5,
                   height: 1.35,
                 ),
@@ -899,7 +989,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               Text(
                 'Resep awal: ${k['resep_awal']}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
+                  color: OptikAdminTokens.navy.withOpacity(0.45),
                   fontSize: 11.5,
                 ),
               ),
@@ -913,8 +1003,8 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   icon: const Icon(Icons.qr_code_scanner),
                   label: Text('garansi_ambil_fab'.tr()),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFE8C872),
-                    side: const BorderSide(color: Color(0xFFE8C872)),
+                    foregroundColor: OptikAdminTokens.trainingSoft,
+                    side: const BorderSide(color: OptikAdminTokens.trainingSoft),
                   ),
                 ),
               ),
@@ -923,7 +1013,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
             Text(
               'garansi_riwayat'.tr(),
               style: const TextStyle(
-                color: Color(0xFFE8C872),
+                color: OptikAdminTokens.trainingSoft,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -931,7 +1021,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
             if (_riwayat.isEmpty)
               Text(
                 'garansi_riwayat_kosong'.tr(),
-                style: TextStyle(color: Colors.white.withOpacity(0.4)),
+                style: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.4)),
               )
             else
               ..._riwayat.map(
@@ -940,7 +1030,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   child: Text(
                     '• ${r['keputusan']} / ${r['kategori_masalah']} — ${r['alasan']}',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: OptikAdminTokens.navy.withOpacity(0.7),
                       fontSize: 12.5,
                     ),
                   ),
@@ -951,59 +1041,23 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               Text(
                 'garansi_form_title'.tr(),
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _kategori,
-                dropdownColor: const Color(0xFF1A2744),
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: _fieldDeco('Kategori masalah'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'fitur_tidak_berfungsi',
-                    child: Text(
-                      'Fitur gagal (anti-baret/bluechromic/elastis)',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'ukuran_lensa',
-                    child: Text('Ukuran / kenyamanan lensa'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'cacat_pabrik',
-                    child: Text('Cacat pabrik'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'kelalaian_customer',
-                    child: Text('Kelalaian customer (bukan fitur)'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'lainnya',
-                    child: Text('Lainnya'),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _kategori = v;
-                    if (v == 'kelalaian_customer') {
-                      _keputusan = 'ditolak';
-                    } else if (v == 'fitur_tidak_berfungsi') {
-                      _keputusan = 'selesai_ganti';
-                    }
-                  });
-                },
+              AdminPickerField(
+                label: 'Kategori masalah',
+                valueText: _kategoriLabel(_kategori),
+                icon: Icons.category_outlined,
+                onTap: _pickKategori,
               ),
               if (_kategori == 'fitur_tidak_berfungsi') ...[
                 const SizedBox(height: 8),
                 Text(
                   'Contoh valid: anti-baret tapi baret · bluechromic tidak berubah warna / tidak anti radiasi · frame elastis patah. Customer dapat barang baru spek sama.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
+                    color: OptikAdminTokens.navy.withOpacity(0.45),
                     fontSize: 11.5,
                     height: 1.35,
                   ),
@@ -1011,7 +1065,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _spekGantiCtrl,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: OptikAdminTokens.navy),
                   maxLines: 2,
                   decoration: _fieldDeco('Spek barang pengganti (sama yang dibeli)'),
                 ),
@@ -1023,17 +1077,17 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   title: Text(
                     'Ukuran lensa sesuai yang dibeli',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                      color: OptikAdminTokens.navy.withOpacity(0.85),
                       fontSize: 13,
                     ),
                   ),
                   value: _ukuranSesuai,
-                  activeColor: const Color(0xFFE8C872),
+                  activeColor: OptikAdminTokens.trainingSoft,
                   onChanged: (v) => setState(() => _ukuranSesuai = v),
                 ),
                 TextField(
                   controller: _resepRecheckCtrl,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: OptikAdminTokens.navy),
                   maxLines: 2,
                   decoration: _fieldDeco('Hasil cek mata ulang (resep baru)'),
                 ),
@@ -1042,66 +1096,44 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   title: Text(
                     'Hasil cek mata BERBEDA dari resep awal',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                      color: OptikAdminTokens.navy.withOpacity(0.85),
                       fontSize: 13,
                     ),
                   ),
                   subtitle: Text(
                     'Jika sama (mis. tetap -2.00), klaim tidak valid',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: OptikAdminTokens.navy.withOpacity(0.4),
                       fontSize: 11,
                     ),
                   ),
                   value: _resepBerbeda,
-                  activeColor: const Color(0xFFE8C872),
+                  activeColor: OptikAdminTokens.trainingSoft,
                   onChanged: (v) => setState(() => _resepBerbeda = v),
                 ),
               ],
               const SizedBox(height: 8),
               TextField(
                 controller: _alasanCtrl,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: _fieldDeco('garansi_alasan'.tr()),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _catatanCtrl,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: _fieldDeco('garansi_catatan'.tr()),
               ),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _keputusan,
-                dropdownColor: const Color(0xFF1A2744),
-                style: const TextStyle(color: Colors.white),
-                decoration: _fieldDeco('garansi_keputusan'.tr()),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'selesai_perbaikan',
-                    child: Text('Selesai perbaikan'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'selesai_ganti',
-                    child: Text('Selesai ganti'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'diterima',
-                    child: Text('Diterima (proses)'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'ditolak',
-                    child: Text('Ditolak'),
-                  ),
-                ],
-                onChanged: (_kategori == 'kelalaian_customer' ||
-                        _kategori == 'fitur_tidak_berfungsi')
-                    ? null
-                    : (v) {
-                        if (v != null) setState(() => _keputusan = v);
-                      },
+              AdminPickerField(
+                label: 'garansi_keputusan'.tr(),
+                valueText: _keputusanLabel(_keputusan),
+                icon: Icons.gavel_outlined,
+                enabled: _kategori != 'kelalaian_customer' &&
+                    _kategori != 'fitur_tidak_berfungsi',
+                onTap: _pickKeputusan,
               ),
               if (_kategori == 'fitur_tidak_berfungsi')
                 Padding(
@@ -1109,7 +1141,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                   child: Text(
                     'Keputusan otomatis: Selesai ganti (barang baru sesuai spek).',
                     style: TextStyle(
-                      color: const Color(0xFFE8C872).withOpacity(0.8),
+                      color: OptikAdminTokens.trainingSoft.withOpacity(0.8),
                       fontSize: 11.5,
                     ),
                   ),
@@ -1120,7 +1152,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                 child: FilledButton(
                   onPressed: _saving ? null : _submit,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8C872),
+                    backgroundColor: OptikAdminTokens.trainingSoft,
                     foregroundColor: OptikAdminTokens.bgMid,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -1141,7 +1173,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               Text(
                 'garansi_pusat_readonly'.tr(),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
+                  color: OptikAdminTokens.navy.withOpacity(0.5),
                   fontSize: 12.5,
                 ),
               ),
@@ -1155,9 +1187,9 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
   InputDecoration _fieldDeco(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.white.withOpacity(0.55)),
+      labelStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.55)),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.06),
+      fillColor: OptikAdminTokens.snow.withOpacity(0.06),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,

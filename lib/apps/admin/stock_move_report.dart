@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/obr_codes.dart';
@@ -17,9 +18,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/zoomable_network_image.dart';
 import 'do_preparing_page.dart';
 
-// ============================================================================
-// MODUL 18: HIGH-LEVEL CORPORATE INTERCOMPANY MUTATION & ASSET IN-TRANSIT LEDGER
-// ============================================================================
+/// Laporan riwayat mutasi stok (DO / RO / Retur) + aksi terima.
 class StockMoveReport extends StatefulWidget {
   final Map<String, dynamic> profile;
   const StockMoveReport({super.key, required this.profile});
@@ -33,27 +32,38 @@ class _StockMoveReportState extends State<StockMoveReport> {
   List<dynamic> allHistory = [];
   List<dynamic> filteredHistory = [];
   bool isLoading = true;
-  String errorLog = "";
+  bool _receiving = false;
+  String errorLog = '';
   final searchController = TextEditingController();
   final ImagePicker picker = ImagePicker();
 
-  // Filter jenis mutasi: all | restock (DO) | request (RO) | retur
+  /// Filter jenis: all | do | ro | retur | other
   String selectedKind = 'all';
 
-  // Filter Kategori Status Logistik Multi-Combine
+  /// Filter status DB (PREPARING, WAITING, …). Chip "Disiapkan" = keduanya.
   Set<String> selectedStatuses = {};
 
-  // --- CORPORATE IN-TRANSIT ACCOUNTING CORE MATRIX LEDGER ---
-  int totalTransitValue =
-      0; // Akun [1106] - Kapitalisasi Nilai Finansial Aset dalam Perjalanan
-  int totalSuccessValue =
-      0; // Akun [1102] - Mutasi Nilai Aset Sukses Tersalurkan ke Cabang
-  int totalBatalValue =
-      0; // Akun [5401] - Nilai Kerugian Penyusutan / Selisih Aset Batal
-  int totalTransitVolume =
-      0; // Total Kuantitas Fisik Barang dalam Masa Transit (PCS)
+  // KPI volume (pcs) — jujur; nilai Rp hanya jika harga modal ada.
+  int kpiDisiapkan = 0;
+  int kpiJalan = 0;
+  int kpiDiterima = 0;
+  int kpiBatal = 0;
 
-  /// Klasifikasi: restock (DO), request (RO), retur — termasuk data legacy OUTGOING.
+  String get _myToko {
+    final t = widget.profile['toko_id']?.toString().trim().toUpperCase() ?? '';
+    return t == 'NULL' ? '' : t;
+  }
+
+  String get _myRole =>
+      widget.profile['role']?.toString().toLowerCase().trim() ?? '';
+
+  bool get _isPusatView =>
+      _myToko == 'PUSAT' ||
+      _myRole == 'super_admin' ||
+      _myRole == 'owner' ||
+      _myRole == 'admin_pusat';
+
+  /// Klasifikasi: do | ro | retur | other
   String _moveKind(dynamic item) {
     final tipe = (item['tipe'] ?? '').toString().toUpperCase();
     final resi = (item['product_name'] ?? '').toString().toUpperCase();
@@ -63,41 +73,50 @@ class _StockMoveReportState extends State<StockMoveReport> {
     if (tipe == 'REQUEST' ||
         resi.startsWith('RO-') ||
         ket.contains('RequestOrder#')) {
-      return 'request';
+      return 'ro';
     }
-    if (tipe == 'DELIVERY' || resi.startsWith('DO-')) return 'restock';
-    return 'restock';
+    if (tipe == 'DELIVERY' || resi.startsWith('DO-')) return 'do';
+    return 'other';
   }
 
   String _kindLabel(String kind) {
     switch (kind) {
-      case 'request':
-        return 'Request';
+      case 'ro':
+        return 'RO';
       case 'retur':
         return 'Retur';
-      case 'restock':
+      case 'do':
+        return 'DO';
+      case 'other':
+        return 'Lainnya';
       default:
-        return 'Restock';
+        return 'Semua';
     }
   }
 
   Color _kindColor(String kind) {
     switch (kind) {
-      case 'request':
-        return Colors.cyanAccent;
+      case 'ro':
+        return OptikAdminTokens.ice;
       case 'retur':
-        return Colors.purpleAccent;
-      case 'restock':
+        return OptikAdminTokens.slate;
+      case 'do':
+        return OptikAdminTokens.warning;
+      case 'other':
+        return OptikAdminTokens.textMuted;
       default:
-        return Colors.amberAccent;
+        return OptikAdminTokens.textSecondary;
     }
   }
 
+  String _statusLabel(String? status) =>
+      LogisticsTrackingService.statusLabel(status);
+
   String _emptyMessageForKind() {
     switch (selectedKind) {
-      case 'restock':
+      case 'do':
         return 'smr_kosong_restock'.tr();
-      case 'request':
+      case 'ro':
         return 'smr_kosong_request'.tr();
       case 'retur':
         return 'smr_kosong_retur'.tr();
@@ -106,54 +125,79 @@ class _StockMoveReportState extends State<StockMoveReport> {
     }
   }
 
+  (int volume, int nilai) _itemTotals(dynamic item) {
+    final rawItems = (item['keterangan'] ?? '').toString();
+    var volume = 0;
+    var nilai = 0;
+    if (rawItems.contains('[{')) {
+      try {
+        final jsonPart = rawItems.substring(rawItems.indexOf('[{'));
+        final itemsObj = jsonDecode(jsonPart) as List;
+        for (final itm in itemsObj) {
+          final qty = int.tryParse(itm['qty'].toString()) ?? 0;
+          final harga = int.tryParse(itm['harga']?.toString() ?? '') ??
+              int.tryParse(itm['harga_modal']?.toString() ?? '0') ??
+              0;
+          volume += qty;
+          if (harga > 0) nilai += qty * harga;
+        }
+      } catch (_) {}
+    }
+    if (volume <= 0) {
+      volume = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
+    }
+    return (volume, nilai);
+  }
+
   void _recomputeKpis(List<dynamic> scope) {
-    int hitungTransitVal = 0;
-    int hitungSuccessVal = 0;
-    int hitungBatalVal = 0;
-    int hitungTransitVol = 0;
+    var disiapkan = 0;
+    var jalan = 0;
+    var diterima = 0;
+    var batal = 0;
 
-    for (var item in scope) {
-      String status = (item['status'] ?? 'PENDING').toString().toUpperCase();
-      String rawItems = item['keterangan'] ?? '';
-      int subtotalNotaMutasi = 0;
-      int subtotalVolumeItem = 0;
+    for (final item in scope) {
+      final status = (item['status'] ?? 'PENDING').toString().toUpperCase();
+      final vol = _itemTotals(item).$1;
 
-      if (rawItems.contains('[{')) {
-        try {
-          String jsonPart = rawItems.substring(rawItems.indexOf('[{'));
-          List itemsObj = jsonDecode(jsonPart);
-          for (var itm in itemsObj) {
-            int qty = int.tryParse(itm['qty'].toString()) ?? 0;
-            int hargaItem = int.tryParse(itm['harga']?.toString() ?? '') ??
-                int.tryParse(itm['harga_modal']?.toString() ?? '0') ??
-                0;
-            subtotalNotaMutasi += (qty * hargaItem);
-            subtotalVolumeItem += qty;
-          }
-        } catch (_) {}
-      } else {
-        int qtyFlat = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
-        subtotalNotaMutasi = qtyFlat * 150000;
-        subtotalVolumeItem = qtyFlat;
-      }
-
-      if (status == 'TRANSIT' ||
-          status == 'WAITING' ||
-          status == 'PREPARING' ||
-          status == 'PENDING') {
-        hitungTransitVal += subtotalNotaMutasi;
-        hitungTransitVol += subtotalVolumeItem;
+      if (status == 'PREPARING' || status == 'WAITING') {
+        disiapkan += vol;
+      } else if (status == 'TRANSIT' || status == 'PENDING') {
+        jalan += vol;
       } else if (status == 'SUCCESS') {
-        hitungSuccessVal += subtotalNotaMutasi;
+        diterima += vol;
       } else if (status == 'BATAL' || status == 'REJECTED') {
-        hitungBatalVal += subtotalNotaMutasi;
+        batal += vol;
       }
     }
 
-    totalTransitValue = hitungTransitVal;
-    totalSuccessValue = hitungSuccessVal;
-    totalBatalValue = hitungBatalVal;
-    totalTransitVolume = hitungTransitVol;
+    kpiDisiapkan = disiapkan;
+    kpiJalan = jalan;
+    kpiDiterima = diterima;
+    kpiBatal = batal;
+  }
+
+  String? _resolveFotoUrl(dynamic raw) {
+    final s = (raw ?? '').toString().trim();
+    if (s.isEmpty || s == '-') return null;
+    if (s.startsWith('http://') || s.startsWith('https://')) return s;
+    // Legacy typo column / storage key only.
+    try {
+      return supabase.storage.from('attendance_photos').getPublicUrl(s);
+    } catch (_) {
+      try {
+        return supabase.storage.from('verification-proofs').getPublicUrl(s);
+      } catch (_) {
+        return s;
+      }
+    }
+  }
+
+  String _formatWhen(dynamic iso) {
+    final raw = iso?.toString() ?? '';
+    if (raw.isEmpty) return '-';
+    final dt = DateTime.tryParse(raw)?.toLocal();
+    if (dt == null) return raw;
+    return DateFormat('dd/MM/yy HH:mm').format(dt);
   }
 
   @override
@@ -168,19 +212,20 @@ class _StockMoveReportState extends State<StockMoveReport> {
     super.dispose();
   }
 
-  // Formatter mandiri merubah angka nominal integer menjadi format Mata Uang Rupiah Indonesia
-  String _formatRupiah(int nominal) {
-    return NumberFormat.currency(
-            locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
-        .format(nominal);
-  }
-
-  // 1. ENGINE PEMBERSIH KETERANGAN (INTERPRETASI JSON STRUKTUR BARANG MENJADI TEKS RAW HUMAN READABLE)
   String _cleanKeterangan(String raw) {
     if (raw.trim().isEmpty) return '-';
     if (raw.trim().startsWith('[')) {
       try {
-        List items = jsonDecode(raw);
+        final items = jsonDecode(raw) as List;
+        return items.map((it) => "${it['nama']} (${it['qty']}x)").join(', ');
+      } catch (e) {
+        return raw;
+      }
+    }
+    if (raw.contains('[{')) {
+      try {
+        final jsonPart = raw.substring(raw.indexOf('[{'));
+        final items = jsonDecode(jsonPart) as List;
         return items.map((it) => "${it['nama']} (${it['qty']}x)").join(', ');
       } catch (e) {
         return raw;
@@ -188,9 +233,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
     }
     if (raw.contains('DATA: [')) {
       try {
-        String jsonPart = raw.substring(raw.indexOf('DATA: ') + 6);
-        String alasan = raw.substring(0, raw.indexOf(" DATA: "));
-        List items = jsonDecode(jsonPart);
+        final jsonPart = raw.substring(raw.indexOf('DATA: ') + 6);
+        final alasan = raw.substring(0, raw.indexOf(' DATA: '));
+        final items = jsonDecode(jsonPart) as List;
         return "$alasan\n${items.map((it) => "${it['nama']} (${it['qty']}x)").join(', ')}";
       } catch (e) {
         return raw;
@@ -199,39 +244,50 @@ class _StockMoveReportState extends State<StockMoveReport> {
     return raw;
   }
 
-  // 2. ENGINE DATABASE UTAMA: AGREGASI MONETER NILAI PERSYARATAN ASET LOGISTIK LINTAS WILAYAH
-  Future<void> _fetchMoveHistory() async {
+  Future<void> _fetchMoveHistory({bool resetFilters = false}) async {
     try {
       if (mounted) setState(() => isLoading = true);
 
-      final response = await supabase
-          .from('stock_move_history')
-          .select()
-          .order('created_at', ascending: false);
+      final since = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(days: 90))
+          .toIso8601String();
 
+      final List response;
+      if (!_isPusatView && _myToko.isNotEmpty) {
+        response = await supabase
+            .from('stock_move_history')
+            .select()
+            .gte('created_at', since)
+            .or('dari_lokasi.eq.$_myToko,ke_lokasi.eq.$_myToko')
+            .order('created_at', ascending: false)
+            .limit(400) as List;
+      } else {
+        response = await supabase
+            .from('stock_move_history')
+            .select()
+            .gte('created_at', since)
+            .order('created_at', ascending: false)
+            .limit(400) as List;
+      }
       if (!mounted) return;
 
-      final List<dynamic> rawList = response as List<dynamic>;
-      final String myToko = widget.profile['toko_id'].toString().toUpperCase();
-      final String myRole =
-          widget.profile['role']?.toString().toLowerCase() ?? '';
-
-      List<dynamic> targetScope = [];
-      if (myToko == 'PUSAT' || myRole == 'super_admin' || myRole == 'owner') {
-        targetScope = rawList;
-      } else {
-        targetScope = rawList.where((item) {
-          final ke = item['ke_lokasi'].toString().toUpperCase();
-          final dari = item['dari_lokasi'].toString().toUpperCase();
-          return ke == myToko || dari == myToko;
+      var targetScope = List<dynamic>.from(response);
+      if (!_isPusatView && _myToko.isNotEmpty) {
+        targetScope = targetScope.where((item) {
+          final ke = (item['ke_lokasi'] ?? '').toString().toUpperCase();
+          final dari = (item['dari_lokasi'] ?? '').toString().toUpperCase();
+          return ke == _myToko || dari == _myToko;
         }).toList();
       }
 
       setState(() {
         allHistory = targetScope;
-        selectedKind = 'all';
-        selectedStatuses.clear();
-        searchController.clear();
+        if (resetFilters) {
+          selectedKind = 'all';
+          selectedStatuses.clear();
+          searchController.clear();
+        }
         errorLog = '';
         isLoading = false;
       });
@@ -241,10 +297,10 @@ class _StockMoveReportState extends State<StockMoveReport> {
         setState(() {
           allHistory = [];
           filteredHistory = [];
-          totalTransitValue = 0;
-          totalSuccessValue = 0;
-          totalBatalValue = 0;
-          totalTransitVolume = 0;
+          kpiDisiapkan = 0;
+          kpiJalan = 0;
+          kpiDiterima = 0;
+          kpiBatal = 0;
           isLoading = false;
           errorLog = e.toString();
         });
@@ -252,23 +308,22 @@ class _StockMoveReportState extends State<StockMoveReport> {
     }
   }
 
-  // 3. FUNGSI FILTER: jenis (DO/RO/Retur) + status + pencarian
   void _filterHistory() {
-    String query = searchController.text.toLowerCase().trim();
+    final query = searchController.text.toLowerCase().trim();
     setState(() {
       filteredHistory = allHistory.where((item) {
         final kind = _moveKind(item);
-        final matchesKind =
-            selectedKind == 'all' || kind == selectedKind;
+        final matchesKind = selectedKind == 'all' || kind == selectedKind;
 
-        String searchString =
-            "${item['product_name']} ${item['dari_lokasi']} ${item['ke_lokasi']} ${item['keterangan']}"
+        final kurir = (item['kurir_nama'] ?? '').toString();
+        final searchString =
+            '${item['product_name']} ${item['dari_lokasi']} ${item['ke_lokasi']} ${item['keterangan']} $kurir'
                 .toLowerCase();
-        bool matchesSearch = query.isEmpty || searchString.contains(query);
+        final matchesSearch = query.isEmpty || searchString.contains(query);
 
-        String itemStatus =
+        final itemStatus =
             (item['status'] ?? 'PENDING').toString().toUpperCase();
-        bool matchesStatus =
+        final matchesStatus =
             selectedStatuses.isEmpty || selectedStatuses.contains(itemStatus);
 
         return matchesKind && matchesSearch && matchesStatus;
@@ -277,9 +332,19 @@ class _StockMoveReportState extends State<StockMoveReport> {
     });
   }
 
-  static const _panel = Color(0xFF121A2B);
-  static const _panelSoft = Color(0xFF1A2438);
-  static const _line = Color(0xFF2A3548);
+  void _toggleStatusGroup(List<String> codes) {
+    final allOn = codes.every(selectedStatuses.contains);
+    setState(() {
+      if (allOn) {
+        selectedStatuses.removeAll(codes);
+      } else {
+        selectedStatuses.addAll(codes);
+      }
+    });
+    _filterHistory();
+  }
+
+  static const _panelSoft = OptikAdminTokens.bgMid;
 
   int _countKind(String kind) {
     if (kind == 'all') return allHistory.length;
@@ -304,35 +369,70 @@ class _StockMoveReportState extends State<StockMoveReport> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("smr_konfirmasi_terima".tr(),
             style: const TextStyle(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 14)),
         content: Text(
           "smr_tanya_terima".tr(),
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text("BATAL", style: TextStyle(color: Colors.grey))),
+              child: const Text("BATAL", style: TextStyle(color: OptikAdminTokens.textMuted))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            style: ElevatedButton.styleFrom(backgroundColor: OptikAdminTokens.accent),
             onPressed: () {
               Navigator.pop(ctx);
               _prosesTerimaPaket(item);
             },
             child: Text("smr_btn_foto_terima".tr(),
-                style: const TextStyle(color: Colors.white, fontSize: 12)),
+                style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 12)),
           )
         ],
       ),
     );
   }
 
-  // FUNGSI 2: PROSES UPDATE DATABASE, BUKTI BIOMETRIK & REKONSILIASI STOK CABANG
   Future<void> _prosesTerimaPaket(dynamic task) async {
-    // FORCE REAR CAMERA: Kamera belakang diaktifkan untuk mencegah foto bukti terbalik/mirror
-    // Desktop/web: fall back ke galeri (image_picker butuh cameraDelegate).
+    if (_receiving || isLoading) return;
+    final moveId = task['id'].toString();
+
+    // Re-fetch: cegah double terima / status sudah berubah.
+    final fresh = await supabase
+        .from('stock_move_history')
+        .select()
+        .eq('id', moveId)
+        .maybeSingle();
+    if (fresh == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Surat jalan tidak ditemukan.'),
+        backgroundColor: OptikAdminTokens.danger,
+      ));
+      return;
+    }
+    final st = (fresh['status'] ?? '').toString().toUpperCase();
+    if (st == 'SUCCESS') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Paket sudah diterima sebelumnya.'),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      _fetchMoveHistory();
+      return;
+    }
+    if (st != 'TRANSIT' && st != 'PENDING') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            'Tidak bisa terima. Status saat ini: ${_statusLabel(st)}.'),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      _fetchMoveHistory();
+      return;
+    }
+
     final photo = await pickImageSafe(
       picker: picker,
       context: context,
@@ -341,44 +441,45 @@ class _StockMoveReportState extends State<StockMoveReport> {
     );
     if (photo == null) return;
 
-    setState(() => isLoading = true);
+    setState(() {
+      _receiving = true;
+      isLoading = true;
+    });
     try {
       final bytes = await photo.readAsBytes();
       final path =
-          'konfirmasi/${task['id']}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          'konfirmasi/${moveId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
       await supabase.storage
           .from('attendance_photos')
-          .uploadBinary(path, bytes);
+          .uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
 
       final imgUrl =
           supabase.storage.from('attendance_photos').getPublicUrl(path);
 
-      final myToko = widget.profile['toko_id'].toString().toUpperCase();
-      String rawItems = task['keterangan'] ?? '';
+      final myToko = _myToko.isNotEmpty ? _myToko : 'PUSAT';
+      final rawItems = (fresh['keterangan'] ?? '').toString();
 
-      // Eksekusi mutasi status data di tabel riwayat pusat
-      final verifierId =
-          widget.profile['id']?.toString() ??
-              widget.profile['user_id']?.toString() ??
-              supabase.auth.currentUser?.id ??
-              '';
+      final verifierId = widget.profile['id']?.toString() ??
+          widget.profile['user_id']?.toString() ??
+          supabase.auth.currentUser?.id ??
+          '';
       final verifierName = widget.profile['nama']?.toString() ??
           widget.profile['full_name']?.toString() ??
           'Admin';
 
-      final tipe = (task['tipe'] ?? '').toString().toUpperCase();
-      final resiName = (task['product_name'] ?? '').toString();
+      final tipe = (fresh['tipe'] ?? '').toString().toUpperCase();
+      final resiName = (fresh['product_name'] ?? '').toString();
       final isReturn =
           tipe == 'RETUR' || resiName.toUpperCase().startsWith('RET-');
-      // Stok dulu — baru SUCCESS (hindari paket sukses tanpa stok).
+
       await StockMutationService().receiveItemsFromMoveKeterangan(
         tokoId: myToko,
         keterangan: rawItems,
-        jumlahFlat: int.tryParse(task['jumlah']?.toString() ?? '0') ?? 0,
+        jumlahFlat: int.tryParse(fresh['jumlah']?.toString() ?? '0') ?? 0,
         reason: StockReason.transferIn,
         refType: 'stock_move',
-        refId: task['id'].toString(),
+        refId: moveId,
         actorNama: verifierName,
         isReturn: isReturn,
       );
@@ -389,26 +490,36 @@ class _StockMoveReportState extends State<StockMoveReport> {
         'verified_by': verifierId,
         'verified_by_name': verifierName,
         'verified_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', task['id']);
+      }).eq('id', moveId);
 
       try {
         await RequestOrderService().markSuccessFromMove(
-          stockMoveId: task['id'].toString(),
-          resi: task['product_name']?.toString(),
+          stockMoveId: moveId,
+          resi: resiName,
         );
-      } catch (_) {}
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Diterima, tapi sync Request Order gagal: $e'),
+            backgroundColor: OptikAdminTokens.warning,
+          ));
+        }
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("smr_sukses_terima".tr()),
-          backgroundColor: Colors.green));
-      _fetchMoveHistory();
+          backgroundColor: OptikAdminTokens.success));
+      await _fetchMoveHistory();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Gagal memproses serah terima aset: $e"),
-          backgroundColor: Colors.redAccent));
+          content: Text('Gagal terima paket: $e'),
+          backgroundColor: OptikAdminTokens.danger));
       setState(() => isLoading = false);
+    } finally {
+      if (mounted) setState(() => _receiving = false);
     }
   }
 
@@ -433,18 +544,26 @@ class _StockMoveReportState extends State<StockMoveReport> {
           : DateFormat('dd/MM/yyyy HH:mm').format(dt);
     }
 
+    final kurirNama = (item['kurir_nama'] ?? '').toString().trim();
+    final createdLabel = _formatWhen(item['created_at']);
+
     final qrData = () {
       final tujuan = item['ke_lokasi']?.toString();
       final resiCode = item['product_name']?.toString() ?? '';
-      if (kind == 'request') {
+      if (kind == 'ro') {
         return ObrRo.encode(resi: resiCode, tujuan: tujuan);
       }
+      if (kind == 'do') {
+        return ObrDo.encode(resi: resiCode, tujuan: tujuan);
+      }
+      // Retur / lainnya: QR by resi DO-compatible for scanners that match resi.
       return ObrDo.encode(resi: resiCode, tujuan: tujuan);
     }();
+    final showQrSafe = showQr && kind != 'other' && qrData.isNotEmpty;
 
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.72),
+      barrierColor: OptikAdminTokens.navy.withOpacity(0.72),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
@@ -458,7 +577,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
             decoration: BoxDecoration(
               color: OptikAdminTokens.card,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: OptikAdminTokens.navy.withOpacity(0.08)),
               boxShadow: [
                 BoxShadow(
                   color: kindColor.withOpacity(0.12),
@@ -493,7 +612,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             Text(
                               "smr_detail_transaksi".tr().toUpperCase(),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.45),
+                                color: OptikAdminTokens.navy.withOpacity(0.45),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.1,
@@ -503,7 +622,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             Text(
                               resi,
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: OptikAdminTokens.navy,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -516,7 +635,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         tooltip: 'Tutup',
                         onPressed: () => Navigator.pop(ctx),
                         icon: const Icon(Icons.close_rounded,
-                            color: Colors.white38, size: 20),
+                            color: OptikAdminTokens.textMuted, size: 20),
                       ),
                     ],
                   ),
@@ -532,12 +651,27 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           runSpacing: 8,
                           children: [
                             _detailBadge(_kindLabel(kind), kindColor),
-                            _detailBadge(status, _statusAccent(status)),
+                            _detailBadge(
+                                _statusLabel(status), _statusAccent(status)),
                           ],
                         ),
                         const SizedBox(height: 14),
                         _detailRouteCard(dari, ke),
                         const SizedBox(height: 12),
+                        _detailInfoCard(
+                          label: 'Dibuat',
+                          value: createdLabel,
+                          icon: Icons.schedule_rounded,
+                        ),
+                        if (kurirNama.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _detailInfoCard(
+                            label: 'Kurir',
+                            value: kurirNama,
+                            icon: Icons.delivery_dining_rounded,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
                         _detailInfoCard(
                           label: "smr_isi_paket".tr(),
                           value: paket.isEmpty ? '-' : paket,
@@ -550,20 +684,20 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           icon: Icons.tag_rounded,
                           mono: true,
                         ),
-                        if (showQr) ...[
+                        if (showQrSafe) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Colors.orangeAccent.withOpacity(0.12),
-                                  Colors.orangeAccent.withOpacity(0.04),
+                                  OptikAdminTokens.warning.withOpacity(0.12),
+                                  OptikAdminTokens.warning.withOpacity(0.04),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: Colors.orangeAccent.withOpacity(0.35),
+                                color: OptikAdminTokens.warning.withOpacity(0.35),
                               ),
                             ),
                             child: Column(
@@ -572,7 +706,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                                   "smr_scan_qr_update".tr(),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
-                                    color: Colors.orangeAccent,
+                                    color: OptikAdminTokens.warning,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -581,11 +715,11 @@ class _StockMoveReportState extends State<StockMoveReport> {
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: OptikAdminTokens.navy,
                                     borderRadius: BorderRadius.circular(16),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.orangeAccent
+                                        color: OptikAdminTokens.warning
                                             .withOpacity(0.18),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
@@ -596,7 +730,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                                     data: qrData,
                                     version: QrVersions.auto,
                                     size: 168,
-                                    backgroundColor: Colors.white,
+                                    backgroundColor: OptikAdminTokens.snow,
                                   ),
                                 ),
                               ],
@@ -604,26 +738,30 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           ),
                         ],
                         const SizedBox(height: 18),
-                        Text(
-                          'BUKTI FOTO',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.1,
-                          ),
+                        PremiumSectionHeader(
+                          label: 'Bukti foto',
+                          padding: const EdgeInsets.only(bottom: 10),
                         ),
-                        const SizedBox(height: 10),
                         _buildFotoSection(
                           title: "smr_bukti_pengirim".tr(),
-                          url: item['bukti_foto_pengirim'],
-                          accent: const Color(0xFF2DD4BF),
+                          url: _resolveFotoUrl(item['bukti_foto_pengirim']) ??
+                              item['bukti_foto_pengirim'],
+                          accent: OptikAdminTokens.navy,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
+                        _buildFotoSection(
+                          title: 'Bukti kurir',
+                          url: _resolveFotoUrl(item['bukti_foto_kurir']) ??
+                              item['bukti_foto_kurir'],
+                          accent: OptikAdminTokens.warning,
+                        ),
+                        const SizedBox(height: 12),
                         _buildFotoSection(
                           title: "smr_bukti_penerima".tr(),
-                          url: item['bukti_foto_penerima'],
-                          accent: Colors.lightBlueAccent,
+                          url: _resolveFotoUrl(item['bukti_foto_penerima']) ??
+                              _resolveFotoUrl(item['bukti_foto_penerim']) ??
+                              item['bukti_foto_penerima'],
+                          accent: OptikAdminTokens.navy,
                         ),
                         if (verifiedName.isNotEmpty ||
                             verifiedAtRaw != null) ...[
@@ -662,17 +800,18 @@ class _StockMoveReportState extends State<StockMoveReport> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.16)),
+                        foregroundColor: OptikAdminTokens.navy,
+                        side: BorderSide(
+                            color: OptikAdminTokens.navy.withOpacity(0.25)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: const Text(
-                        'TUTUP',
+                        'Tutup',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),
@@ -691,19 +830,19 @@ class _StockMoveReportState extends State<StockMoveReport> {
       case 'SUCCESS':
       case 'RECEIVED':
       case 'DONE':
-        return const Color(0xFF34D399);
+        return OptikAdminTokens.success;
       case 'TRANSIT':
       case 'SHIPPING':
-        return Colors.orangeAccent;
+        return OptikAdminTokens.warning;
       case 'PREPARING':
       case 'WAITING':
-        return const Color(0xFF2DD4BF);
+        return OptikAdminTokens.ice;
       case 'CANCEL':
       case 'BATAL':
       case 'FAILED':
-        return Colors.redAccent;
+        return OptikAdminTokens.danger;
       default:
-        return Colors.blueAccent;
+        return OptikAdminTokens.ice;
     }
   }
 
@@ -731,9 +870,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: OptikAdminTokens.navy.withOpacity(0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: OptikAdminTokens.navy.withOpacity(0.08)),
       ),
       child: Row(
         children: [
@@ -744,7 +883,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Text(
                   'Dari',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: OptikAdminTokens.navy.withOpacity(0.4),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -753,7 +892,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Text(
                   dari,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -765,13 +904,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.orangeAccent.withOpacity(0.12),
+              color: OptikAdminTokens.warning.withOpacity(0.12),
               shape: BoxShape.circle,
               border:
-                  Border.all(color: Colors.orangeAccent.withOpacity(0.35)),
+                  Border.all(color: OptikAdminTokens.warning.withOpacity(0.35)),
             ),
             child: const Icon(Icons.arrow_forward_rounded,
-                color: Colors.orangeAccent, size: 18),
+                color: OptikAdminTokens.warning, size: 18),
           ),
           Expanded(
             child: Column(
@@ -780,7 +919,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Text(
                   'Ke',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: OptikAdminTokens.navy.withOpacity(0.4),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -790,7 +929,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   ke,
                   textAlign: TextAlign.right,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -812,14 +951,14 @@ class _StockMoveReportState extends State<StockMoveReport> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: OptikAdminTokens.navy.withOpacity(0.03),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: OptikAdminTokens.navy.withOpacity(0.07)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: Colors.white38),
+          Icon(icon, size: 16, color: OptikAdminTokens.textMuted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -828,7 +967,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: OptikAdminTokens.navy.withOpacity(0.4),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -837,7 +976,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 SelectableText(
                   value,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: mono ? 11 : 12.5,
                     fontWeight: FontWeight.w700,
                     height: 1.35,
@@ -911,21 +1050,21 @@ class _StockMoveReportState extends State<StockMoveReport> {
               height: 160,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.black26,
+                color: OptikAdminTokens.lineStrong,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
+                border: Border.all(color: OptikAdminTokens.navy.withOpacity(0.06)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.image_not_supported_outlined,
-                      color: Colors.white.withOpacity(0.25), size: 28),
+                      color: OptikAdminTokens.navy.withOpacity(0.25), size: 28),
                   const SizedBox(height: 8),
                   Text(
                     "smr_belum_ada_foto".tr(),
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.35),
+                      color: OptikAdminTokens.navy.withOpacity(0.35),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -944,38 +1083,34 @@ class _StockMoveReportState extends State<StockMoveReport> {
     );
   }
 
-  Widget _buildStatusChip(String statusLabel, Color badgeColor) {
-    final isActive = selectedStatuses.contains(statusLabel);
+  Widget _buildStatusChip({
+    required String label,
+    required List<String> codes,
+    required Color badgeColor,
+  }) {
+    final isActive = codes.every(selectedStatuses.contains);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          setState(() {
-            if (isActive) {
-              selectedStatuses.remove(statusLabel);
-            } else {
-              selectedStatuses.add(statusLabel);
-            }
-          });
-          _filterHistory();
-        },
+        onTap: () => _toggleStatusGroup(codes),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
             color: isActive ? badgeColor.withOpacity(0.16) : _panelSoft,
             border: Border.all(
-                color: isActive ? badgeColor.withOpacity(0.7) : _line),
+                color: isActive
+                    ? badgeColor.withOpacity(0.7)
+                    : OptikAdminTokens.lineStrong),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            statusLabel,
+            label,
             style: TextStyle(
-              color: isActive ? badgeColor : const Color(0xFF94A3B8),
+              color: isActive ? badgeColor : OptikAdminTokens.textMuted,
               fontWeight: FontWeight.w700,
-              fontSize: 10,
-              letterSpacing: 0.2,
+              fontSize: 10.5,
             ),
           ),
         ),
@@ -1012,13 +1147,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 children: [
                   Icon(icon,
                       size: 16,
-                      color: active ? color : const Color(0xFF94A3B8)),
+                      color: active ? color : OptikAdminTokens.textMuted),
                   const SizedBox(height: 4),
                   Text(
                     '$count',
                     style: TextStyle(
-                      color: active ? Colors.white : Colors.white70,
-                      fontSize: 16,
+                      color: active ? color : OptikAdminTokens.textSecondary,
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
                       height: 1.1,
                     ),
@@ -1028,7 +1163,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: active ? color : const Color(0xFF94A3B8),
+                      color: active ? color : OptikAdminTokens.textMuted,
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1057,42 +1192,31 @@ class _StockMoveReportState extends State<StockMoveReport> {
   }
 
   Widget _moveCard(dynamic item) {
-    final myToko = widget.profile['toko_id'].toString().toUpperCase();
+    final myToko = _myToko;
     final status = (item['status'] ?? 'PENDING').toString().toUpperCase();
     final kind = _moveKind(item);
     final kindColor = _kindColor(kind);
     final amITheReceiver =
-        item['ke_lokasi'].toString().toUpperCase() == myToko;
+        (item['ke_lokasi'] ?? '').toString().toUpperCase() == myToko;
     final amITheSender =
-        item['dari_lokasi'].toString().toUpperCase() == myToko;
-
-    Color statusColor = Colors.blueAccent;
-    if (status == 'SUCCESS') {
-      statusColor = const Color(0xFF4ADE80);
-    } else if (status == 'PREPARING' || status == 'WAITING') {
-      statusColor = const Color(0xFF2DD4BF);
-    } else if (status == 'PENDING' || status == 'TRANSIT') {
-      statusColor = const Color(0xFFFBBF24);
-    } else if (status == 'BATAL' || status == 'REJECTED') {
-      statusColor = const Color(0xFFF87171);
-    }
+        (item['dari_lokasi'] ?? '').toString().toUpperCase() == myToko;
+    final kurir = (item['kurir_nama'] ?? '').toString().trim();
+    final when = _formatWhen(item['created_at']);
+    final statusColor = _statusAccent(status);
+    final canOpenPreparing = kind == 'do' &&
+        (status == 'PREPARING' || status == 'WAITING') &&
+        (amITheSender || _isPusatView);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: _panel,
+        color: OptikAdminTokens.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _line),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.35)),
+        boxShadow: OptikAdminTokens.cardShadow,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1102,59 +1226,66 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   child: Text(
                     '${item['product_name'] ?? '-'}',
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.5,
+                      color: OptikAdminTokens.navy,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 _miniBadge(_kindLabel(kind), kindColor),
-                const SizedBox(width: 6),
-                _miniBadge(status, statusColor),
+                const SizedBox(width: 5),
+                _miniBadge(_statusLabel(status), statusColor),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              '${item['jumlah'] ?? 0} PCS  ·  ${item['dari_lokasi'] ?? '-'} → ${item['ke_lokasi'] ?? '-'}',
+              '${item['jumlah'] ?? 0} pcs · ${item['dari_lokasi'] ?? '-'} → ${item['ke_lokasi'] ?? '-'}',
               style: TextStyle(
                 color: kindColor.withOpacity(0.95),
                 fontWeight: FontWeight.w700,
-                fontSize: 12,
+                fontSize: 11.5,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
+            Text(
+              kurir.isEmpty ? when : '$when · Kurir $kurir',
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: OptikAdminTokens.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
             Text(
               _cleanKeterangan(item['keterangan'] ?? ''),
               style: const TextStyle(
                 fontSize: 11,
-                color: Color(0xFF94A3B8),
-                height: 1.35,
+                color: OptikAdminTokens.textMuted,
+                height: 1.3,
               ),
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Row(
               children: [
-                if (amITheSender || amITheReceiver || myToko == 'PUSAT')
+                if (amITheSender || amITheReceiver || _isPusatView)
                   TextButton.icon(
                     onPressed: () => _showDetail(item),
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      foregroundColor: OptikAdminTokens.textSecondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.info_outline_rounded, size: 16),
                     label: const Text('Detail',
                         style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600)),
+                            fontSize: 12, fontWeight: FontWeight.w700)),
                   ),
                 const Spacer(),
-                if ((status == 'PREPARING' || status == 'WAITING') &&
-                    (amITheSender || myToko == 'PUSAT'))
+                if (canOpenPreparing)
                   FilledButton.icon(
                     onPressed: () {
                       Navigator.push(
@@ -1168,27 +1299,28 @@ class _StockMoveReportState extends State<StockMoveReport> {
                       ).then((_) => _fetchMoveHistory());
                     },
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F766E),
-                      foregroundColor: Colors.white,
+                      backgroundColor: OptikAdminTokens.navy,
+                      foregroundColor: OptikAdminTokens.snow,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                          horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     icon: const Icon(Icons.fact_check_rounded, size: 15),
-                    label: const Text('Preparing',
+                    label: const Text('Disiapkan',
                         style: TextStyle(
                             fontSize: 11.5, fontWeight: FontWeight.w800)),
                   ),
                 if ((status == 'TRANSIT' || status == 'PENDING') &&
-                    amITheReceiver)
+                    amITheReceiver) ...[
+                  if (canOpenPreparing) const SizedBox(width: 6),
                   FilledButton.icon(
-                    onPressed: () => _confirmTerima(item),
+                    onPressed: _receiving ? null : () => _confirmTerima(item),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                      foregroundColor: Colors.white,
+                      backgroundColor: OptikAdminTokens.success,
+                      foregroundColor: OptikAdminTokens.snow,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
+                          horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
@@ -1197,6 +1329,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         style: const TextStyle(
                             fontSize: 11.5, fontWeight: FontWeight.w800)),
                   ),
+                ],
               ],
             ),
           ],
@@ -1210,10 +1343,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
   // ==========================================================================
   @override
   Widget build(BuildContext context) {
-    final unitLabel = "smr_unit"
-        .tr()
-        .replaceFirst('{}', widget.profile['toko_id'].toString())
-        .replaceFirst('{}', filteredHistory.length.toString());
+    final unitLabel =
+        '${_myToko.isEmpty ? 'Unit' : _myToko} · ${filteredHistory.length} data · 90 hari';
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
@@ -1222,135 +1353,125 @@ class _StockMoveReportState extends State<StockMoveReport> {
         actions: [
           IconButton(
             tooltip: 'Muat ulang',
-            onPressed: _fetchMoveHistory,
-            style: IconButton.styleFrom(
-              backgroundColor: _panelSoft,
-              side: const BorderSide(color: _line),
-            ),
-            icon: const Icon(Icons.refresh_rounded, size: 18),
+            onPressed: () => _fetchMoveHistory(),
+            icon: const Icon(Icons.refresh_rounded,
+                size: 18, color: OptikAdminTokens.textSecondary),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
-          // Jenis mutasi — akses utama (dengan count)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: Container(
-              padding: const EdgeInsets.all(OptikAdminTokens.spaceSm),
-              decoration: BoxDecoration(
-                color: _panel,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _line),
-              ),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: PremiumPanel(
+              padding: const EdgeInsets.all(8),
+              borderRadius: 14,
               child: Row(
                 children: [
                   _kindTile(
                     kind: 'all',
                     label: 'Semua',
                     icon: Icons.layers_rounded,
-                    color: Colors.white70,
+                    color: OptikAdminTokens.textSecondary,
                   ),
                   _kindTile(
-                    kind: 'restock',
-                    label: 'Restock',
+                    kind: 'do',
+                    label: 'DO',
                     icon: Icons.local_shipping_rounded,
-                    color: const Color(0xFFFBBF24),
+                    color: OptikAdminTokens.warning,
                   ),
                   _kindTile(
-                    kind: 'request',
-                    label: 'Request',
+                    kind: 'ro',
+                    label: 'RO',
                     icon: Icons.playlist_add_check_rounded,
-                    color: const Color(0xFF22D3EE),
+                    color: OptikAdminTokens.navy,
                   ),
                   _kindTile(
                     kind: 'retur',
                     label: 'Retur',
                     icon: Icons.undo_rounded,
-                    color: const Color(0xFFC084FC),
+                    color: OptikAdminTokens.slate,
                   ),
                 ],
               ),
             ),
           ),
-
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, OptikAdminTokens.spaceMd, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: OptikAdminTokens.spaceMd),
-                  child: Text("smr_kpi_title".tr(),
-                      style: const TextStyle(
-                          color: Color(0xFFFBBF24),
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4)),
+                const PremiumSectionHeader(
+                  label: 'Ringkasan (pcs)',
+                  padding: EdgeInsets.only(bottom: 8, top: 2),
                 ),
                 PremiumStatGrid(
                   items: [
                     PremiumStatItem(
-                      label: 'Transit',
-                      value: _formatRupiah(totalTransitValue),
-                      color: const Color(0xFFFBBF24),
+                      label: 'Disiapkan',
+                      value: '$kpiDisiapkan',
+                      color: OptikAdminTokens.ice,
                     ),
                     PremiumStatItem(
-                      label: 'Tersalur',
-                      value: _formatRupiah(totalSuccessValue),
-                      color: const Color(0xFF4ADE80),
+                      label: 'Jalan',
+                      value: '$kpiJalan',
+                      color: OptikAdminTokens.warning,
+                    ),
+                    PremiumStatItem(
+                      label: 'Diterima',
+                      value: '$kpiDiterima',
+                      color: OptikAdminTokens.success,
                     ),
                     PremiumStatItem(
                       label: 'Batal',
-                      value: _formatRupiah(totalBatalValue),
-                      color: const Color(0xFFF87171),
-                    ),
-                    PremiumStatItem(
-                      label: 'Vol',
-                      value: '$totalTransitVolume PCS',
-                      color: Colors.white,
+                      value: '$kpiBatal',
+                      color: OptikAdminTokens.danger,
                     ),
                   ],
                 ),
               ],
             ),
           ),
-
-          // Search + status dalam satu panel
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, OptikAdminTokens.spaceMd, 12, 0),
-            child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: PremiumPanel(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-              decoration: BoxDecoration(
-                color: _panel,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _line),
-              ),
+              borderRadius: 14,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(
                     controller: searchController,
                     onChanged: _runSearch,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style: const TextStyle(
+                        color: OptikAdminTokens.textPrimary, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: "smr_cari".tr(),
+                      hintText: 'Cari resi, cabang, kurir…',
                       hintStyle: const TextStyle(
-                          color: Color(0xFF64748B), fontSize: 12.5),
+                          color: OptikAdminTokens.textMuted, fontSize: 12.5),
                       prefixIcon: const Icon(Icons.search_rounded,
-                          color: Color(0xFF94A3B8), size: 20),
+                          color: OptikAdminTokens.textMuted, size: 20),
                       filled: true,
-                      fillColor: _panelSoft,
+                      fillColor: OptikAdminTokens.bg.withOpacity(0.55),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: OptikAdminTokens.lineStrong),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: OptikAdminTokens.navy, width: 1.3),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -1358,7 +1479,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           unitLabel,
                           style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF60A5FA),
+                            color: OptikAdminTokens.textMuted,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1371,80 +1492,72 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           },
                           style: TextButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            foregroundColor: const Color(0xFF94A3B8),
+                            foregroundColor: OptikAdminTokens.textMuted,
                             padding: EdgeInsets.zero,
                           ),
-                          child: const Text('Reset status',
+                          child: const Text('Reset filter',
                               style: TextStyle(fontSize: 11)),
                         ),
                     ],
                   ),
-                  const SizedBox(height: OptikAdminTokens.spaceMd),
+                  const SizedBox(height: 8),
                   PremiumChipWrap(
                     children: [
-                      _buildStatusChip('PREPARING', const Color(0xFF2DD4BF)),
-                      _buildStatusChip('WAITING', const Color(0xFFFBBF24)),
-                      _buildStatusChip('TRANSIT', const Color(0xFF60A5FA)),
-                      _buildStatusChip('SUCCESS', const Color(0xFF4ADE80)),
-                      _buildStatusChip('BATAL', const Color(0xFFF87171)),
-                      _buildStatusChip('PENDING', const Color(0xFFF59E0B)),
+                      _buildStatusChip(
+                        label: 'Disiapkan',
+                        codes: const ['PREPARING', 'WAITING'],
+                        badgeColor: OptikAdminTokens.ice,
+                      ),
+                      _buildStatusChip(
+                        label: 'Dalam perjalanan',
+                        codes: const ['TRANSIT'],
+                        badgeColor: OptikAdminTokens.warning,
+                      ),
+                      _buildStatusChip(
+                        label: 'Menunggu',
+                        codes: const ['PENDING'],
+                        badgeColor: OptikAdminTokens.warning,
+                      ),
+                      _buildStatusChip(
+                        label: 'Diterima',
+                        codes: const ['SUCCESS'],
+                        badgeColor: OptikAdminTokens.success,
+                      ),
+                      _buildStatusChip(
+                        label: 'Dibatalkan',
+                        codes: const ['BATAL', 'REJECTED'],
+                        badgeColor: OptikAdminTokens.danger,
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
           ),
-
-          const SizedBox(height: 10),
-
+          const SizedBox(height: 8),
           Expanded(
             child: isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF60A5FA)))
+                    child: CircularProgressIndicator(
+                        color: OptikAdminTokens.ice))
                 : errorLog.isNotEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text("Error Database Sync: $errorLog",
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  color: Color(0xFFF87171), fontSize: 12)),
-                        ))
+                    ? PremiumEmptyState(
+                        message: 'Gagal memuat riwayat.\n$errorLog',
+                        icon: Icons.error_outline_rounded,
+                        accent: OptikAdminTokens.danger,
+                        action: FilledButton(
+                          onPressed: () => _fetchMoveHistory(),
+                          child: const Text('Coba lagi'),
+                        ),
+                      )
                     : filteredHistory.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(28),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: _panel,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: _line),
-                                    ),
-                                    child: const Icon(
-                                        Icons.inventory_2_outlined,
-                                        color: Color(0xFF64748B),
-                                        size: 28),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    _emptyMessageForKind(),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                        ? PremiumEmptyState(
+                            message: _emptyMessageForKind(),
+                            icon: Icons.inventory_2_outlined,
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                            padding:
+                                const EdgeInsets.fromLTRB(12, 0, 12, 20),
                             itemCount: filteredHistory.length,
                             itemBuilder: (context, index) =>
                                 _moveCard(filteredHistory[index]),

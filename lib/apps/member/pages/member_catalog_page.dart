@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/logistics/stock_realtime.dart';
 import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_repository.dart';
+import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
 import 'member_cart_page.dart';
@@ -10,9 +14,26 @@ import 'member_option_picker.dart';
 
 enum _CatalogSort { namaAsc, hargaAsc, hargaDesc }
 
-/// Katalog Member — grid belanja (2 kolom) ala e-commerce.
+/// Katalog Member — browse-only di beranda, atau mode belanja di Belanja Online.
 class MemberCatalogPage extends StatefulWidget {
-  const MemberCatalogPage({super.key});
+  const MemberCatalogPage({
+    super.key,
+    this.browseOnly = true,
+    this.embeddedInShop = false,
+    this.initialKategori,
+    this.onOpenCart,
+  });
+
+  /// true = lihat harga/detail saja (tanpa keranjang).
+  final bool browseOnly;
+
+  /// true = dipakai sebagai tab di MemberShopShell (tanpa tombol back).
+  final bool embeddedInShop;
+
+  final String? initialKategori;
+
+  /// Dipanggil saat user ingin buka keranjang (tab shell), bukan push route.
+  final VoidCallback? onOpenCart;
 
   @override
   State<MemberCatalogPage> createState() => _MemberCatalogPageState();
@@ -32,6 +53,8 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   int? _harga;
   _CatalogSort _sort = _CatalogSort.namaAsc;
   List<Map<String, dynamic>> _all = const [];
+  StockRealtimeSubscription? _stockRt;
+  Timer? _stockRtDebounce;
 
   static const _mainCats = ['Semua', 'Frame', 'Lensa', 'Lainnya'];
 
@@ -54,32 +77,98 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   @override
   void initState() {
     super.initState();
-    MemberCart.instance.ensureLoaded().then((_) {
-      if (mounted) setState(() {});
-    });
-    MemberCart.instance.addListener(_onCart);
+    final initKat = (widget.initialKategori ?? '').trim();
+    if (initKat.isNotEmpty && initKat.toLowerCase() != 'semua') {
+      _kategori = initKat;
+    }
+    if (!widget.browseOnly) {
+      MemberCart.instance.ensureLoaded().then((_) {
+        if (mounted) setState(() {});
+      });
+      MemberCart.instance.addListener(_onCart);
+      MemberSession.instance.addListener(_onPreferredToko);
+    }
     _load();
+    _startStockRealtime();
   }
 
   void _onCart() {
     if (mounted) setState(() {});
   }
 
+  void _onPreferredToko() {
+    _startStockRealtime();
+    unawaited(_load(silent: true));
+  }
+
+  String get _stockTokoId {
+    if (widget.browseOnly) return 'PUSAT';
+    final pref = (MemberSession.instance.preferredTokoId ?? '').trim().toUpperCase();
+    if (pref.isNotEmpty && pref != 'PUSAT') return pref;
+    return 'PUSAT';
+  }
+
+  void _startStockRealtime() {
+    // Belanja Online: stok cabang pilihan; browse: PUSAT (katalog).
+    unawaited(_stockRt?.dispose() ?? Future.value());
+    _stockRt = StockRealtime.subscribeToko(
+      tokoId: _stockTokoId,
+      onEvent: (ev) {
+        if (!mounted || ev.sku.isEmpty) return;
+        var patched = false;
+        final next = _all.map((p) {
+          final sku = (p['sku'] ?? '').toString().trim().toUpperCase();
+          if (sku != ev.sku) return p;
+          patched = true;
+          final m = Map<String, dynamic>.from(p);
+          if (ev.stock != null) m['stock'] = ev.stock;
+          if (ev.reservedQty != null) m['reserved_qty'] = ev.reservedQty;
+          if (ev.availableQty != null) {
+            m['available_qty'] = ev.availableQty;
+          } else if (ev.stock != null || ev.reservedQty != null) {
+            final st = int.tryParse('${m['stock'] ?? 0}') ?? 0;
+            final rs = int.tryParse('${m['reserved_qty'] ?? 0}') ?? 0;
+            m['available_qty'] = st > rs ? st - rs : 0;
+          }
+          return m;
+        }).toList();
+        if (!patched) {
+          _stockRtDebounce?.cancel();
+          _stockRtDebounce = Timer(const Duration(milliseconds: 350), () {
+            if (mounted) unawaited(_load(silent: true));
+          });
+          return;
+        }
+        setState(() => _all = next);
+      },
+    );
+  }
+
   @override
   void dispose() {
-    MemberCart.instance.removeListener(_onCart);
+    _stockRtDebounce?.cancel();
+    unawaited(_stockRt?.dispose() ?? Future.value());
+    if (!widget.browseOnly) {
+      MemberCart.instance.removeListener(_onCart);
+      MemberSession.instance.removeListener(_onPreferredToko);
+    }
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final list = await _repo.listCatalog(limit: 300);
+      final list = await _repo.listCatalog(
+        limit: 300,
+        tokoId: widget.browseOnly ? null : _stockTokoId,
+      );
       if (!mounted) return;
       setState(() {
         _all = list;
@@ -479,12 +568,30 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
     );
   }
 
+  String get _titleLabel {
+    if (_kategori != null && _kategori!.isNotEmpty) {
+      return _kategori!.toUpperCase();
+    }
+    return widget.browseOnly ? 'KATALOG' : 'BELANJA';
+  }
+
+  void _openCart(BuildContext context) {
+    if (widget.onOpenCart != null) {
+      widget.onOpenCart!();
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MemberCartPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _filtered;
     final cartQty = MemberCart.instance.totalQty;
     final layout = MemberLayout.of(context);
     final cols = layout.isTablet ? 3 : 2;
+    final browseOnly = widget.browseOnly;
 
     return Scaffold(
       backgroundColor: OptikMemberTokens.white,
@@ -493,13 +600,16 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          color: OptikMemberTokens.ink,
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
+        automaticallyImplyLeading: !widget.embeddedInShop,
+        leading: widget.embeddedInShop
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                color: OptikMemberTokens.ink,
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
         title: Text(
-          (_kategori ?? 'BELANJA').toUpperCase(),
+          _titleLabel,
           style: const TextStyle(
             color: OptikMemberTokens.ink,
             fontWeight: FontWeight.w800,
@@ -523,23 +633,20 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
               color: OptikMemberTokens.ink,
             ),
           ),
-          IconButton(
-            tooltip: 'Keranjang',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MemberCartPage()),
-              );
-            },
-            icon: Badge(
-              isLabelVisible: cartQty > 0,
-              backgroundColor: OptikMemberTokens.danger,
-              label: Text('$cartQty'),
-              child: const Icon(
-                Icons.shopping_bag_outlined,
-                color: OptikMemberTokens.ink,
+          if (!browseOnly && !widget.embeddedInShop)
+            IconButton(
+              tooltip: 'Keranjang',
+              onPressed: () => _openCart(context),
+              icon: Badge(
+                isLabelVisible: cartQty > 0,
+                backgroundColor: OptikMemberTokens.danger,
+                label: Text('$cartQty'),
+                child: const Icon(
+                  Icons.shopping_bag_outlined,
+                  color: OptikMemberTokens.ink,
+                ),
               ),
             ),
-          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -716,6 +823,8 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
             (context, i) => _ProductCard(
               product: items[i],
               money: _money,
+              browseOnly: widget.browseOnly,
+              onOpenCart: () => _openCart(context),
             ),
             childCount: items.length,
           ),
@@ -726,10 +835,17 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
 }
 
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product, required this.money});
+  const _ProductCard({
+    required this.product,
+    required this.money,
+    required this.browseOnly,
+    this.onOpenCart,
+  });
 
   final Map<String, dynamic> product;
   final String Function(dynamic) money;
+  final bool browseOnly;
+  final VoidCallback? onOpenCart;
 
   int get _harga => int.tryParse('${product['harga'] ?? 0}') ?? 0;
   int? get _hargaAsli {
@@ -744,6 +860,16 @@ class _ProductCard extends StatelessWidget {
     return (((asli - _harga) / asli) * 100).round();
   }
 
+  int? get _availableQty {
+    final v = int.tryParse('${product['available_qty'] ?? ''}');
+    return v;
+  }
+
+  bool get _outOfStock {
+    final a = _availableQty;
+    return a != null && a <= 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final nama = (product['nama'] ?? '-').toString();
@@ -751,6 +877,8 @@ class _ProductCard extends StatelessWidget {
     final blocked = MemberCart.isOnlineBlocked(product);
     final diskon = _diskonPersen;
     final asli = _hargaAsli;
+    // Pre-order diizinkan meski stok pusat/cabang 0 (RO saat checkout).
+    final canBuy = !browseOnly && !blocked;
 
     return InkWell(
       onTap: () => _showDetail(context),
@@ -802,40 +930,61 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                Positioned(
-                  right: 8,
-                  bottom: 8,
-                  child: Material(
-                    color: blocked
-                        ? OptikMemberTokens.inkMuted
-                        : OptikMemberTokens.ink,
-                    shape: const CircleBorder(),
-                    elevation: 2,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: blocked
-                          ? () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Lensa custom tidak dijual online.',
-                                  ),
-                                ),
-                              );
-                            }
-                          : () => _quickAdd(context),
-                      child: const SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Icon(
-                          Icons.shopping_bag_outlined,
+                if (!browseOnly && _outOfStock)
+                  Positioned(
+                    left: 8,
+                    bottom: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      color: Colors.black.withValues(alpha: 0.65),
+                      child: const Text(
+                        'Pre-order',
+                        style: TextStyle(
                           color: Colors.white,
-                          size: 18,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                   ),
-                ),
+                if (!browseOnly)
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Material(
+                      color: canBuy
+                          ? OptikMemberTokens.ink
+                          : OptikMemberTokens.inkMuted,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () {
+                          if (blocked) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Lensa custom tidak dijual online.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+                          _quickAdd(context);
+                        },
+                        child: const SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: Icon(
+                            Icons.shopping_bag_outlined,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -882,7 +1031,40 @@ class _ProductCard extends StatelessWidget {
     );
   }
 
+  /// Popup HANYA saat user memilih/tambah produk yang stoknya habis.
+  Future<bool> _confirmPreOrder(BuildContext context) async {
+    final nama = (product['nama'] ?? 'produk').toString();
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Stok habis'),
+        content: Text(
+          '“$nama” stoknya habis.\n\n'
+          'Tetap bisa dipesan sebagai pre-order.\n'
+          'Estimasi tiba 5–7 hari kerja setelah pembayaran lunas.\n\n'
+          'Lanjutkan pre-order, atau cari produk lain?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cari produk lain'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Lanjutkan pre-order'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _quickAdd(BuildContext context) async {
+    if (_outOfStock) {
+      final yes = await _confirmPreOrder(context);
+      if (!yes || !context.mounted) return;
+    }
     final err = await MemberCart.instance.addProduct(product);
     if (!context.mounted) return;
     if (err != null) {
@@ -891,13 +1073,19 @@ class _ProductCard extends StatelessWidget {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Ditambah ke keranjang'),
+        content: Text(
+          _outOfStock ? 'Ditambah (pre-order)' : 'Ditambah ke keranjang',
+        ),
         action: SnackBarAction(
           label: 'Lihat',
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const MemberCartPage()),
-            );
+            if (onOpenCart != null) {
+              onOpenCart!();
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MemberCartPage()),
+              );
+            }
           },
         ),
       ),
@@ -1005,68 +1193,102 @@ class _ProductCard extends StatelessWidget {
               _kv('SKU', sku),
               _kv('Barcode', barcode),
               const SizedBox(height: 8),
-              const Text(
-                'Harga referensi dari katalog pusat. Stok dicek di cabang saat checkout. '
-                'Lensa custom tidak dijual online.',
-                style: TextStyle(
+              if (_availableQty != null)
+                _kv(
+                  'Stok',
+                  _outOfStock
+                      ? 'Habis — bisa pre-order'
+                      : 'Tersedia ($_availableQty)',
+                ),
+              Text(
+                browseOnly
+                    ? 'Harga referensi dari katalog pusat (master data). '
+                        'Untuk membeli, buka Belanja Online.'
+                    : 'Harga & stok dari master data pusat. '
+                        'Stok cabang dicek ulang saat checkout. '
+                        'Lensa custom tidak dijual online.',
+                style: const TextStyle(
                   color: OptikMemberTokens.inkMuted,
                   fontSize: 12,
                   height: 1.35,
                 ),
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Tutup'),
-                    ),
+              if (browseOnly)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Tutup'),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      onPressed: MemberCart.isOnlineBlocked(product)
-                          ? null
-                          : () async {
-                              final err =
-                                  await MemberCart.instance.addProduct(product);
-                              if (!ctx.mounted) return;
-                              if (err != null) {
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                  SnackBar(content: Text(err)),
-                                );
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: const Text('Ditambah ke keranjang'),
-                                  action: SnackBarAction(
-                                    label: 'Lihat',
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const MemberCartPage(),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
-                      icon: const Icon(Icons.shopping_bag_outlined),
-                      label: Text(
-                        MemberCart.isOnlineBlocked(product)
-                            ? 'Tidak bisa online'
-                            : 'Ke keranjang',
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Tutup'),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: MemberCart.isOnlineBlocked(product)
+                            ? null
+                            : () async {
+                                if (_outOfStock) {
+                                  final yes = await _confirmPreOrder(ctx);
+                                  if (!yes || !ctx.mounted) return;
+                                }
+                                final err = await MemberCart.instance
+                                    .addProduct(product);
+                                if (!ctx.mounted) return;
+                                if (err != null) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(content: Text(err)),
+                                  );
+                                  return;
+                                }
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      _outOfStock
+                                          ? 'Ditambah (pre-order)'
+                                          : 'Ditambah ke keranjang',
+                                    ),
+                                    action: SnackBarAction(
+                                      label: 'Lihat',
+                                      onPressed: () {
+                                        if (onOpenCart != null) {
+                                          onOpenCart!();
+                                        } else {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const MemberCartPage(),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                        icon: const Icon(Icons.shopping_bag_outlined),
+                        label: Text(
+                          MemberCart.isOnlineBlocked(product)
+                              ? 'Tidak bisa online'
+                              : _outOfStock
+                                  ? 'Pre-order'
+                                  : 'Ke keranjang',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         );

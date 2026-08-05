@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'coa_approval_page.dart';
+import 'enterprise_gl_page.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/training/training_approval_simulator.dart';
@@ -14,6 +15,8 @@ import '../../shared/training/training_mode.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
+import '../../shared/export/daily_ledger_pdf_service.dart';
+import '../../shared/finance/gl_posting_service.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -29,6 +32,15 @@ class BukuBesarPage extends StatefulWidget {
 class _BukuBesarPageState extends State<BukuBesarPage> {
   final SupabaseClient supabase = Supabase.instance.client;
   bool isLoading = false;
+
+  /// GL hanya owner / superadmin / toko PUSAT. Cabang biasa: Keuangan & Kas saja.
+  bool get _canAccessGl {
+    final role = widget.profile['role']?.toString().toLowerCase() ?? '';
+    if (role == 'owner' || role == 'superadmin') return true;
+    final toko =
+        widget.profile['toko_id']?.toString().toUpperCase() ?? '';
+    return toko == 'PUSAT';
+  }
 
   // --- CONTROL OVERVIEW DRILL-DOWN NAVIGATION ---
   String? selectedTokoId; // Stage 1 -> Stage 2 (Kunci ID Cabang)
@@ -54,6 +66,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   Map<String, List<Map<String, dynamic>>> jurnalGroupedByDay = {};
   Map<String, int> dailyPosCashIn = {};
   Map<String, int> dailyPosDebt = {};
+  Map<String, int> dailyPosOmzet = {};
 
   // --- NEW EXTENSION SYSTEM: DRILL-DOWN DATA AUDIT HARIAN (STAGE 3 ACTIVE) ---
   List<Map<String, dynamic>> dailyItemsSold = [];
@@ -76,6 +89,131 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Auto-posting omzet POS/online (referensi = no_invoice / sale id).
+  /// CLOSE-* / SETTLE-* / FT-* bukan omzet POS — boleh masuk kas harian.
+  bool _isPosSaleRef(Map<String, dynamic> row) {
+    final ref = (row['referensi_id'] ?? '').toString().trim();
+    if (ref.isEmpty) return false;
+    final u = ref.toUpperCase();
+    if (u.startsWith('CLOSE-') ||
+        u.startsWith('SETTLE-') ||
+        u.startsWith('FT-') ||
+        u.startsWith('VOID-')) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _isClosingShift(Map<String, dynamic> row) {
+    final ref = (row['referensi_id'] ?? '').toString().toUpperCase();
+    if (ref.startsWith('CLOSE-')) return true;
+    final k = (row['kategori'] ?? '').toString().toUpperCase();
+    return k.contains('PENUTUPAN') || k.contains('CLOSING');
+  }
+
+  bool _isApprovedOrPos(Map<String, dynamic> row) {
+    final st = (row['status_konfirmasi'] ?? '').toString().toUpperCase();
+    if (st == 'APPROVED') return true;
+    if (_isPosSaleRef(row)) return true;
+    // Legacy tutup toko: sering tanpa status / PENDING — tetap masuk kas.
+    if (_isClosingShift(row)) return true;
+    return false;
+  }
+
+  /// Kas masuk jurnal (bukan omzet POS) untuk satu hari.
+  int _manualCashInForDay(List<Map<String, dynamic>> listTx) {
+    var sum = 0;
+    for (final e in listTx) {
+      if (!_isIncome(e) || !_isApprovedOrPos(e)) continue;
+      if (_isPosSaleRef(e)) continue;
+      if (_isModalNoise(e['kategori']?.toString())) continue;
+      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+    }
+    return sum;
+  }
+
+  /// Kas keluar jurnal untuk satu hari.
+  int _cashOutForDay(List<Map<String, dynamic>> listTx) {
+    var sum = 0;
+    for (final e in listTx) {
+      if (!_isExpense(e) || !_isApprovedOrPos(e)) continue;
+      if (_isModalNoise(e['kategori']?.toString())) continue;
+      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+    }
+    return sum;
+  }
+
+  /// Pemasukan non-produk untuk laba (exclude closing & POS).
+  int _manualIncomeForPl(List<Map<String, dynamic>> listTx) {
+    var sum = 0;
+    for (final e in listTx) {
+      if (!_isIncome(e) || !_isApprovedOrPos(e)) continue;
+      if (_isPosSaleRef(e) || _isClosingShift(e)) continue;
+      if (_isModalNoise(e['kategori']?.toString())) continue;
+      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+    }
+    return sum;
+  }
+
+  /// OPEX untuk laba (exclude closing selisih).
+  int _opexForPl(List<Map<String, dynamic>> listTx) {
+    var sum = 0;
+    for (final e in listTx) {
+      if (!_isExpense(e) || !_isApprovedOrPos(e)) continue;
+      if (_isClosingShift(e)) continue;
+      if (_isModalNoise(e['kategori']?.toString())) continue;
+      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+    }
+    return sum;
+  }
+
+  List<String> _datesInFilter(List<String> all) {
+    if (!_useDateFilter) return all;
+    final startBound = _dateOnly(_filterStart);
+    final endBound = _dateOnly(_filterEnd);
+    return all.where((tgl) {
+      try {
+        final itemDate = DateTime.parse(tgl);
+        final day = DateTime(itemDate.year, itemDate.month, itemDate.day);
+        return !day.isBefore(startBound) && !day.isAfter(endBound);
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+  }
+
+  /// Modal / noise noise — jangan masuk KPI kas masuk.
+  /// Hindari false positive "PENJUALAN KASIR" via contains('KAS').
+  bool _isModalNoise(String? kategori) {
+    final k = (kategori ?? '').toUpperCase();
+    if (k.contains('MODAL') ||
+        k.contains('KEMBALIAN') ||
+        k.contains('SALDO AWAL')) {
+      return true;
+    }
+    if (k.contains('PENUTUPAN') || k.contains('CLOSING')) return false;
+    if (k.contains('KASIR')) return false;
+    return RegExp(r'(^|[^A-Z])KAS([^A-Z]|$)').hasMatch(k);
+  }
+
+  bool _isIncome(Map<String, dynamic> row) {
+    final j = (row['jenis_transaksi'] ?? '').toString().toUpperCase();
+    return j == 'PEMASUKAN' || j == 'PIUTANG';
+  }
+
+  bool _isExpense(Map<String, dynamic> row) {
+    final j = (row['jenis_transaksi'] ?? '').toString().toUpperCase();
+    return j == 'PENGELUARAN' || j == 'HUTANG';
+  }
+
+  String _tokoLabel(String? id) {
+    final t = (id ?? '').trim().toUpperCase();
+    if (t.isEmpty) return '-';
+    if (t == 'PUSAT') return 'Pusat';
+    if (t.startsWith('CABANG-')) return t.replaceFirst('CABANG-', '');
+    return t;
+  }
 
   String get _filterTriggerLabel {
     if (!_useDateFilter) return 'Semua tanggal';
@@ -193,7 +331,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         isLoading = false;
       });
     } catch (e) {
-      _showSnackEror("❌ Gagal konsolidasi peta cabang korporat: $e");
+      _showSnackEror("Gagal memuat daftar cabang: $e");
     }
   }
 
@@ -201,7 +339,82 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     setState(() => isLoading = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        SnackBar(content: Text(msg), backgroundColor: OptikAdminTokens.danger),
+      );
+    }
+  }
+
+  /// Self-heal legacy tutup toko (PENDING / tanpa CLOSE-*) agar sinkron COA + ledger.
+  Future<void> _normalizeLegacyClosing(
+      List<Map<String, dynamic>> rows) async {
+    for (final item in rows) {
+      if (!_isClosingShift(item)) continue;
+      final id = item['id'];
+      if (id == null) continue;
+      final ref = (item['referensi_id'] ?? '').toString().trim();
+      final st = (item['status_konfirmasi'] ?? '').toString().toUpperCase();
+      final needsStatus = st != 'APPROVED';
+      final needsRef = ref.isEmpty || !ref.toUpperCase().startsWith('CLOSE-');
+      if (!needsStatus && !needsRef) continue;
+
+      final toko = (item['toko_id'] ?? 'PUSAT').toString();
+      final tgl = (item['tanggal_transaksi'] ??
+              item['created_at']?.toString().split('T').first ??
+              DateTime.now().toIso8601String().split('T').first)
+          .toString();
+      final patch = <String, dynamic>{
+        if (needsStatus) 'status_konfirmasi': 'APPROVED',
+        if (needsRef) 'referensi_id': 'CLOSE-$toko-$tgl-$id',
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      try {
+        await supabase
+            .from('finance_transactions')
+            .update(patch)
+            .eq('id', id);
+        item.addAll(patch);
+      } catch (_) {
+        // Biarkan fallback kategori di helper tetap bekerja jika update gagal.
+      }
+    }
+  }
+
+  Future<void> _exportDailyLedgerPdf() async {
+    final dateStr = selectedDateStr;
+    final tokoId = selectedTokoId;
+    if (dateStr == null || tokoId == null) return;
+
+    final txKasManual = jurnalGroupedByDay[dateStr] ?? [];
+    final pemasukanManual = _manualIncomeForPl(txKasManual);
+    final opex = _opexForPl(txKasManual);
+    final laba =
+        (dailyOmzetPemasukan - dailyTotalHppModal) + pemasukanManual - opex;
+
+    try {
+      await DailyLedgerPdfService.sharePdf(
+        DailyLedgerPdfData(
+          tokoLabel: _tokoLabel(tokoId),
+          tokoId: tokoId,
+          dateStr: dateStr,
+          omzet: dailyOmzetPemasukan,
+          hpp: dailyTotalHppModal,
+          dpp: dailyDppNetto,
+          ppn: dailyPpnKeluaran,
+          pemasukanManual: pemasukanManual,
+          opex: opex,
+          labaBersih: laba,
+          paymentBreakdown: Map<String, int>.from(dailyPaymentBreakdown),
+          itemsSold: List<Map<String, dynamic>>.from(dailyItemsSold),
+          mutasi: List<Map<String, dynamic>>.from(txKasManual),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengekspor PDF: $e'),
+          backgroundColor: OptikAdminTokens.danger,
+        ),
       );
     }
   }
@@ -236,6 +449,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
       final Map<String, int> tempDailyPosCash = {};
       final Map<String, int> tempDailyPosDebt = {};
+      final Map<String, int> tempDailyOmzet = {};
       final Map<String, List<Map<String, dynamic>>> temporaryGroup = {};
 
       for (var sale in dataSales) {
@@ -257,50 +471,35 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           tempDailyPosCash[dateKey] =
               (tempDailyPosCash[dateKey] ?? 0) + cashCollected;
           tempDailyPosDebt[dateKey] = (tempDailyPosDebt[dateKey] ?? 0) + sisa;
+          tempDailyOmzet[dateKey] = (tempDailyOmzet[dateKey] ?? 0) + total;
         }
       }
 
       for (var item in dataFinance) {
-        int nominal = int.tryParse(item['nominal'].toString()) ?? 0;
-        String kategori = item['kategori']?.toString().toUpperCase() ?? '';
+        final nominal = int.tryParse(item['nominal']?.toString() ?? '0') ?? 0;
+        final kategori = item['kategori']?.toString() ?? '';
 
-// 🚀 SEPARASI MUTLAK: Deteksi via referensi_id (Otomatis POS vs Isi Manual Kasir)
-        bool isApproved =
-            item['status_konfirmasi']?.toString().toUpperCase() == 'APPROVED';
-        bool isAutoPOS = item['referensi_id'] !=
-            null; // Transaksi POS/DP asli pasti punya referensi_id
-
-        // Lolos otomatis jika sudah APPROVED atau jika buatan sistem POS otomatis
-        bool isValidTransaksi = isApproved || isAutoPOS;
-
-        if (item['jenis_transaksi'] == 'PEMASUKAN' ||
-            item['jenis_transaksi'] == 'PIUTANG') {
-          if (isValidTransaksi) {
-            bool isUangLaci = kategori.contains('MODAL') ||
-                kategori.contains('KEMBALIAN') ||
-                kategori.contains('SALDO') ||
-                kategori.contains('KAS');
-
-            // 🚀 SUNTIKAN: Pemasukan manual non-POS yang di-approve owner resmi masuk laci kasir
-            if (!isUangLaci && !isAutoPOS) {
-              hitungUangMasukDariPos += nominal;
-            }
+        if (_isIncome(item) && _isApprovedOrPos(item)) {
+          // Omzet POS sudah dari tabel sales — tambah hanya manual / closing.
+          if (!_isPosSaleRef(item) && !_isModalNoise(kategori)) {
+            hitungUangMasukDariPos += nominal;
           }
-        } else if (item['jenis_transaksi'] == 'PENGELUARAN' ||
-            item['jenis_transaksi'] == 'HUTANG') {
-          if (isValidTransaksi) {
-            // 🌟 Pengeluaran manual tetep tertahan kecuali sudah approved
+        } else if (_isExpense(item) && _isApprovedOrPos(item)) {
+          if (!_isModalNoise(kategori)) {
             hitungPengeluaran += nominal;
           }
         }
 
-        String tanggalKey = item['tanggal_transaksi'] ??
-            item['created_at'].toString().split('T')[0];
-        if (!temporaryGroup.containsKey(tanggalKey)) {
-          temporaryGroup[tanggalKey] = [];
+        final tanggalKey = (item['tanggal_transaksi'] ??
+                item['created_at']?.toString().split('T').first ??
+                '')
+            .toString();
+        if (tanggalKey.isNotEmpty) {
+          temporaryGroup.putIfAbsent(tanggalKey, () => []).add(item);
         }
-        temporaryGroup[tanggalKey]!.add(item);
       }
+
+      await _normalizeLegacyClosing(dataFinance);
 
       final Set<String> setTanggalMaster = {};
       setTanggalMaster.addAll(tempDailyPosCash.keys);
@@ -310,6 +509,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         jurnalGroupedByDay = temporaryGroup;
         dailyPosCashIn = tempDailyPosCash;
         dailyPosDebt = tempDailyPosDebt;
+        dailyPosOmzet = tempDailyOmzet;
         listTanggalJurnal = setTanggalMaster.toList()
           ..sort((a, b) => b.compareTo(a));
 
@@ -326,7 +526,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         isLoading = false;
       });
     } catch (e) {
-      _showSnackEror("❌ Gagal memetakan database finansial korporat: $e");
+      _showSnackEror("Gagal memuat data keuangan: $e");
     }
   }
 
@@ -356,6 +556,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         'BCA': 0,
         'MANDIRI': 0,
         'QRIS': 0,
+        'MIDTRANS': 0,
         'LAINNYA': 0
       };
 
@@ -366,6 +567,18 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             sale['metode_pembayaran']?.toString().trim().toUpperCase() ??
                 'CASH';
         if (currentMetode == 'TUNAI') currentMetode = 'CASH';
+        // Online Member / gateway → bucket Midtrans (bukan hilang di LAINNYA).
+        if (currentMetode.contains('MIDTRANS') ||
+            currentMetode.contains('GOPAY') ||
+            currentMetode.contains('SHOPEEPAY') ||
+            currentMetode.contains('OVO') ||
+            currentMetode.contains('DANA') ||
+            currentMetode == 'CREDIT_CARD' ||
+            currentMetode == 'BANK_TRANSFER' ||
+            (sale['channel']?.toString().toLowerCase() == 'member_online' &&
+                currentMetode != 'CASH')) {
+          currentMetode = 'MIDTRANS';
+        }
 
         int saleTotal =
             int.tryParse(sale['total_harga']?.toString() ?? '0') ?? 0;
@@ -414,17 +627,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       int calcPpn = akumulasiOmzet - calcDpp;
 
       List<Map<String, dynamic>> txHariIni = jurnalGroupedByDay[dateStr] ?? [];
-      int pengeluaranHariIni = txHariIni
-          .where((e) =>
-              (e['jenis_transaksi'] == 'PENGELUARAN' ||
-                  e['jenis_transaksi'] ==
-                      'HUTANG') && // 🚀 KUNCI: Harus murni grup pengeluaran, bukan nge-exclude pemasukan!
-              (e['status_konfirmasi']?.toString().toUpperCase() == 'APPROVED' ||
-                  e['referensi_id'] != null))
-          .fold(
-              0,
-              (sum, item) =>
-                  sum + (int.tryParse(item['nominal'].toString()) ?? 0));
+      int pengeluaranHariIni = _opexForPl(txHariIni);
 
       setState(() {
         dailyItemsSold = temporaryItems;
@@ -437,11 +640,64 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         isLoading = false;
       });
     } catch (e) {
-      _showSnackEror("❌ Gagal memuat rincian finansial & audit instrumen: $e");
+      _showSnackEror("Gagal memuat rincian harian: $e");
     }
   }
 
   // --- DIALOG ENTRI JURNAL MANUAL BERBASIS CHART OF ACCOUNTS (COA) STANDARD ---
+  static const _coaJenisOptions = [
+    AdminPickerOption(
+      value: 'PEMASUKAN',
+      label: 'Pemasukan kas',
+      icon: Icons.arrow_downward_rounded,
+    ),
+    AdminPickerOption(
+      value: 'PENGELUARAN',
+      label: 'Beban operasional',
+      icon: Icons.arrow_upward_rounded,
+    ),
+    AdminPickerOption(
+      value: 'PIUTANG',
+      label: 'Piutang usaha',
+      icon: Icons.account_balance_wallet_outlined,
+    ),
+    AdminPickerOption(
+      value: 'HUTANG',
+      label: 'Hutang supplier',
+      icon: Icons.receipt_long_outlined,
+    ),
+  ];
+
+  static const _coaMetodeOptions = [
+    AdminPickerOption(value: 'CASH', label: 'Tunai', icon: Icons.payments_outlined),
+    AdminPickerOption(value: 'BCA', label: 'BCA', icon: Icons.account_balance_outlined),
+    AdminPickerOption(value: 'MANDIRI', label: 'Mandiri', icon: Icons.account_balance_outlined),
+    AdminPickerOption(value: 'QRIS', label: 'QRIS', icon: Icons.qr_code_rounded),
+    AdminPickerOption(value: 'LAINNYA', label: 'Lainnya', icon: Icons.more_horiz_rounded),
+  ];
+
+  static const _coaStatusOptions = [
+    AdminPickerOption(value: 'LUNAS', label: 'Lunas', icon: Icons.check_circle_outline),
+    AdminPickerOption(value: 'BELUM LUNAS', label: 'Belum lunas', icon: Icons.pending_outlined),
+  ];
+
+  String _coaJenisLabel(String value) =>
+      _coaJenisOptions
+          .firstWhere((o) => o.value == value, orElse: () => _coaJenisOptions.first)
+          .label;
+
+  String _coaMetodeLabel(String value) =>
+      _coaMetodeOptions
+          .firstWhere((o) => o.value == value,
+              orElse: () => _coaMetodeOptions.first)
+          .label;
+
+  String _coaStatusLabel(String value) =>
+      _coaStatusOptions
+          .firstWhere((o) => o.value == value,
+              orElse: () => _coaStatusOptions.first)
+          .label;
+
   void _showAddTransactionDialog() {
     TextEditingController nominalCtrl = TextEditingController();
     TextEditingController dibayarCtrl = TextEditingController();
@@ -466,9 +722,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             backgroundColor: OptikAdminTokens.card,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-            title: const Text("Catat Keuangan Manual (COA Ledger)",
+            title: const Text("Catat keuangan manual",
                 style: TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 14,
                     fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
@@ -476,8 +732,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   ? const SizedBox(
                       height: 100,
                       child: Center(
-                          child: CircularProgressIndicator(
-                              color: Colors.blueAccent)))
+                          child: CircularProgressIndicator(color: OptikAdminTokens.ice)))
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -495,61 +750,47 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             padding: const EdgeInsets.symmetric(
                                 vertical: 12, horizontal: 10),
                             decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.05),
+                                color: OptikAdminTokens.navy.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(8)),
                             child: Row(children: [
                               const Icon(Icons.calendar_today,
-                                  color: Colors.blueAccent, size: 18),
+                                  color: OptikAdminTokens.navy, size: 18),
                               const SizedBox(width: 10),
                               Text(
                                   "Tanggal Buku: ${selectedDate.toString().split(' ')[0]}",
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 13)),
+                                      color: OptikAdminTokens.navy, fontSize: 13)),
                             ]),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: selectedJenis,
-                          dropdownColor: OptikAdminTokens.bgMid,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 13),
-                          decoration: InputDecoration(
-                              labelText: "Klasifikasi Akun Akuntansi",
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.05),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide.none)),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'PEMASUKAN',
-                                child: Text("[4102] Pemasukan Kas / Modal")),
-                            DropdownMenuItem(
-                                value: 'PENGELUARAN',
-                                child: Text("[5101] Beban OPEX / Operasional")),
-                            DropdownMenuItem(
-                                value: 'PIUTANG',
-                                child: Text("[1103] Pencatatan Piutang Usaha")),
-                            DropdownMenuItem(
-                                value: 'HUTANG',
-                                child: Text(
-                                    "[2101] Pencatatan Hutang Dagang Supplier")),
-                          ],
-                          onChanged: (val) =>
-                              setInnerState(() => selectedJenis = val!),
+                        AdminPickerField(
+                          label: 'Jenis transaksi',
+                          valueText: _coaJenisLabel(selectedJenis),
+                          icon: Icons.account_balance_outlined,
+                          onTap: () async {
+                            final sel = await showAdminPicker<String>(
+                              context: context,
+                              title: 'Klasifikasi Akun Akuntansi',
+                              selected: selectedJenis,
+                              searchable: false,
+                              options: _coaJenisOptions,
+                            );
+                            if (sel == null || sel.isClear) return;
+                            setInnerState(() => selectedJenis = sel.value!);
+                          },
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: kategoriCtrl,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 13),
+                              color: OptikAdminTokens.navy, fontSize: 13),
                           decoration: InputDecoration(
-                              labelText: "Nama Kategori Akun Akrual",
+                              labelText: "Kategori",
                               hintText: "e.g. Listrik, Sewa Ruko, Modal Awal",
-                              hintStyle: const TextStyle(color: Colors.white24),
+                              hintStyle: const TextStyle(color: OptikAdminTokens.lineStrong),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.05),
+                              fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide.none)),
@@ -566,15 +807,15 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           style: TextStyle(
                               color: (selectedJenis == 'PENGELUARAN' ||
                                       selectedJenis == 'HUTANG')
-                                  ? Colors.redAccent
-                                  : Colors.greenAccent,
+                                  ? OptikAdminTokens.danger
+                                  : OptikAdminTokens.success,
                               fontWeight: FontWeight.bold,
                               fontSize: 14),
                           decoration: InputDecoration(
-                              labelText: "Total Nominal Tagihan (Rp)",
+                              labelText: "Nominal (Rp)",
                               prefixText: "Rp ",
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.05),
+                              fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide.none)),
@@ -592,16 +833,16 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             style: TextStyle(
                                 color: (selectedJenis == 'PENGELUARAN' ||
                                         selectedJenis == 'HUTANG')
-                                    ? Colors.redAccent
-                                    : Colors.greenAccent,
+                                    ? OptikAdminTokens.danger
+                                    : OptikAdminTokens.success,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14),
                             decoration: InputDecoration(
                                 labelText:
-                                    "Biaya yang Dibayarkan Sekarang (Rp)",
+                                    "Jumlah dibayar sekarang (Rp)",
                                 prefixText: "Rp ",
                                 filled: true,
-                                fillColor: Colors.white.withOpacity(0.05),
+                                fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                                 border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                     borderSide: BorderSide.none)),
@@ -612,11 +853,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           controller: deskripsiCtrl,
                           maxLines: 2,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 13),
+                              color: OptikAdminTokens.navy, fontSize: 13),
                           decoration: InputDecoration(
-                              labelText: "Memo / Deskripsi Bukti Audit",
+                              labelText: "Catatan / keterangan",
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.05),
+                              fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide.none)),
@@ -640,13 +881,13 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 vertical: 12, horizontal: 10),
                             decoration: BoxDecoration(
                                 color: fileBuktiFoto != null
-                                    ? Colors.teal.withOpacity(0.15)
-                                    : Colors.white.withOpacity(0.05),
+                                    ? OptikAdminTokens.accentSoft.withOpacity(0.15)
+                                    : OptikAdminTokens.snow.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                     color: fileBuktiFoto != null
-                                        ? Colors.tealAccent
-                                        : Colors.white10,
+                                        ? OptikAdminTokens.navy
+                                        : OptikAdminTokens.line,
                                     width: 1)),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -656,19 +897,19 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                       ? Icons.check_circle_rounded
                                       : Icons.camera_alt_rounded,
                                   color: fileBuktiFoto != null
-                                      ? Colors.tealAccent
-                                      : Colors.blueAccent,
+                                      ? OptikAdminTokens.navy
+                                      : OptikAdminTokens.ice,
                                   size: 18,
                                 ),
                                 const SizedBox(width: 10),
                                 Text(
                                   fileBuktiFoto != null
-                                      ? "FOTO STRUK BERHASIL TERLAMPIR"
-                                      : "AMBIL FOTO STRUK / INVOICE BUKTI",
+                                      ? "Foto struk terlampir"
+                                      : "Ambil foto struk / bukti",
                                   style: TextStyle(
                                       color: fileBuktiFoto != null
-                                          ? Colors.tealAccent
-                                          : Colors.white70,
+                                          ? OptikAdminTokens.navy
+                                          : OptikAdminTokens.textSecondary,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold),
                                 ),
@@ -680,46 +921,42 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
                         Row(children: [
                           Expanded(
-                              child: DropdownButtonFormField<String>(
-                            value: selectedMetode,
-                            dropdownColor: OptikAdminTokens.bgMid,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12),
-                            decoration: InputDecoration(
-                                labelText: "Kanal Likuiditas",
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.05),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide.none)),
-                            items: ['CASH', 'BCA', 'MANDIRI', 'QRIS', 'LAINNYA']
-                                .map((val) => DropdownMenuItem(
-                                    value: val, child: Text(val)))
-                                .toList(),
-                            onChanged: (val) =>
-                                setInnerState(() => selectedMetode = val!),
-                          )),
+                            child: AdminPickerField(
+                              label: 'Metode bayar',
+                              valueText: _coaMetodeLabel(selectedMetode),
+                              icon: Icons.payments_outlined,
+                              onTap: () async {
+                                final sel = await showAdminPicker<String>(
+                                  context: context,
+                                  title: 'Kanal Likuiditas',
+                                  selected: selectedMetode,
+                                  searchable: false,
+                                  options: _coaMetodeOptions,
+                                );
+                                if (sel == null || sel.isClear) return;
+                                setInnerState(() => selectedMetode = sel.value!);
+                              },
+                            ),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
-                              child: DropdownButtonFormField<String>(
-                            value: selectedStatus,
-                            dropdownColor: OptikAdminTokens.bgMid,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12),
-                            decoration: InputDecoration(
-                                labelText: "Klarifikasi Status",
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.05),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide.none)),
-                            items: ['LUNAS', 'BELUM LUNAS']
-                                .map((val) => DropdownMenuItem(
-                                    value: val, child: Text(val)))
-                                .toList(),
-                            onChanged: (val) =>
-                                setInnerState(() => selectedStatus = val!),
-                          )),
+                            child: AdminPickerField(
+                              label: 'Status bayar',
+                              valueText: _coaStatusLabel(selectedStatus),
+                              icon: Icons.flag_outlined,
+                              onTap: () async {
+                                final sel = await showAdminPicker<String>(
+                                  context: context,
+                                  title: 'Klarifikasi Status',
+                                  selected: selectedStatus,
+                                  searchable: false,
+                                  options: _coaStatusOptions,
+                                );
+                                if (sel == null || sel.isClear) return;
+                                setInnerState(() => selectedStatus = sel.value!);
+                              },
+                            ),
+                          ),
                         ]),
                       ],
                     ),
@@ -733,11 +970,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       child: TextButton(
                           onPressed: () => Navigator.pop(ctx),
                           child: const Text("Batal",
-                              style: TextStyle(color: Colors.grey))),
+                              style: TextStyle(color: OptikAdminTokens.textMuted))),
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent),
+                          backgroundColor: OptikAdminTokens.accent),
                       onPressed: () async {
                         // 1. Validasi dasar akun & nominal total
                         if (nominalCtrl.text.isEmpty ||
@@ -834,7 +1071,16 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 'Staff Optik',
                             'status_konfirmasi': statusAwalKonfirmasi,
                             'updated_at': DateTime.now().toIso8601String(),
-                          }).select('id').single();
+                          }).select().single();
+
+                          if (statusAwalKonfirmasi == 'APPROVED') {
+                            try {
+                              await GlPostingService().postManualFinance(
+                                ft: Map<String, dynamic>.from(inserted),
+                                createdBy: widget.profile['nama']?.toString(),
+                              );
+                            } catch (_) {}
+                          }
 
                           Navigator.pop(ctx);
 
@@ -854,8 +1100,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   ),
                                   backgroundColor: outcome ==
                                           TrainingApprovalOutcome.rejected
-                                      ? Colors.orangeAccent
-                                      : const Color(0xFFB45309),
+                                      ? OptikAdminTokens.warning
+                                      : OptikAdminTokens.training,
                                 ),
                               );
                             }
@@ -866,11 +1112,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           setInnerState(() => isSaving = false);
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                               content:
-                                  Text("❌ Gagal menyimpan entri & file: $e"),
-                              backgroundColor: Colors.red));
+                                  Text("Gagal menyimpan entri: $e"),
+                              backgroundColor: OptikAdminTokens.danger));
                         }
                       },
-                      child: const Text("SIMPAN JURNAL"),
+                      child: const Text("Simpan jurnal"),
                     )
                   ],
           ),
@@ -881,74 +1127,146 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   }
 
 // --- POP-UP REKONSILIASI: OTORISASI APPROVAL & DELETE RECORD CONTROL ---
-  void _showOptionDialog(Map<String, dynamic> item) {
-    // Membaca hak akses user yang sedang login aktif di aplikasi
-    String role = widget.profile['role']?.toString().toLowerCase() ?? 'kasir';
-    bool isPending =
+  Future<void> _showOptionDialog(Map<String, dynamic> item) async {
+    final role = widget.profile['role']?.toString().toLowerCase() ?? 'kasir';
+    final isPending =
         item['status_konfirmasi']?.toString().toUpperCase() == 'PENDING';
+    final isPosAuto = _isPosSaleRef(item);
+    final isClosing = _isClosingShift(item);
 
-    showDialog(
+    final options = <AdminPickerOption<String>>[];
+    if (role == 'owner' && isPending && !isPosAuto) {
+      options.add(const AdminPickerOption(
+        value: 'approve',
+        label: 'Setujui transaksi',
+        icon: Icons.check_circle_rounded,
+      ));
+    }
+    // Hapus hanya owner; transaksi POS auto tidak boleh dihapus dari sini.
+    if (role == 'owner' && !isPosAuto) {
+      options.add(AdminPickerOption(
+        value: 'delete',
+        label: isClosing
+            ? 'Hapus penutupan toko'
+            : 'Hapus rekaman transaksi',
+        icon: Icons.delete_outline_rounded,
+      ));
+    }
+
+    if (options.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Tidak ada tindakan yang tersedia untuk transaksi ini.'),
+        backgroundColor: OptikAdminTokens.textMuted,
+      ));
+      return;
+    }
+
+    final sel = await showAdminPicker<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        title: const Text("Pilih Tindakan Audit",
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 🎯 SUNTIK UTAMA PUSAT: Tombol Konfirmasi Otorisasi (Hanya muncul jika user adalah Owner & data masih PENDING)
-            if (role == 'owner' && isPending) ...[
-              ListTile(
-                leading: const Icon(Icons.check_circle_rounded,
-                    color: Colors.tealAccent, size: 20),
-                title: const Text("Setujui (Approve) Transaksi",
-                    style: TextStyle(color: Colors.white, fontSize: 13)),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  setState(() => isLoading = true);
-                  try {
-                    // Update status di Supabase dari PENDING menjadi APPROVED
-                    await supabase.from('finance_transactions').update(
-                        {'status_konfirmasi': 'APPROVED'}).eq('id', item['id']);
+      title: 'Pilih tindakan',
+      searchable: false,
+      headerIcon: Icons.gavel_rounded,
+      options: options,
+    );
+    if (sel == null || sel.isClear) return;
 
-                    // Tarik data terbaru untuk langsung mengkalkulasi ulang Saldo Toko resmi
-                    _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
-                  } catch (e) {
-                    _showSnackEror("❌ Gagal menyetujui mutasi kas: $e");
-                  }
-                },
+    if (sel.value == 'approve') {
+      setState(() => isLoading = true);
+      try {
+        await supabase
+            .from('finance_transactions')
+            .update({'status_konfirmasi': 'APPROVED'}).eq('id', item['id']);
+        final approved = Map<String, dynamic>.from(item);
+        approved['status_konfirmasi'] = 'APPROVED';
+        try {
+          await GlPostingService().postManualFinance(
+            ft: approved,
+            createdBy: widget.profile['nama']?.toString(),
+          );
+        } catch (_) {}
+        _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
+      } catch (e) {
+        _showSnackEror("Gagal menyetujui mutasi kas: $e");
+      }
+      return;
+    }
+
+    if (sel.value == 'delete') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: OptikAdminTokens.card,
+          title: const Text('Hapus transaksi?',
+              style: TextStyle(
+                  color: OptikAdminTokens.navy,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold)),
+          content: Text(
+            'Rekaman "${item['kategori'] ?? '-'}" akan dihapus permanen.',
+            style: const TextStyle(
+                color: OptikAdminTokens.textSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal',
+                  style: TextStyle(color: OptikAdminTokens.textMuted)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: OptikAdminTokens.danger,
+                foregroundColor: OptikAdminTokens.snow,
               ),
-              const Divider(color: Colors.white10, height: 1),
-            ],
-
-            // Tombol Hapus Record (Bawaan)
-            ListTile(
-              leading:
-                  const Icon(Icons.delete, color: Colors.redAccent, size: 20),
-              title: const Text("Hapus Rekaman Transaksi",
-                  style: TextStyle(color: Colors.white, fontSize: 13)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  await supabase
-                      .from('finance_transactions')
-                      .delete()
-                      .eq('id', item['id']);
-                  _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text("❌ Gagal menghapus rekaman: $e"),
-                      backgroundColor: Colors.red));
-                }
-              },
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Hapus'),
             ),
           ],
         ),
-      ),
-    );
+      );
+      if (ok != true) return;
+      try {
+        // Void GL terkait (DB trigger BEFORE DELETE juga menutup CLOSE/SETTLE/MANUAL).
+        try {
+          final gl = GlPostingService();
+          final by = widget.profile['nama']?.toString();
+          final ref = (item['referensi_id'] ?? '').toString();
+          final refU = ref.toUpperCase();
+          final kat = (item['kategori'] ?? '').toString().toUpperCase();
+          if (refU.startsWith('CLOSE-') ||
+              kat.contains('PENUTUPAN') ||
+              kat.contains('CLOSING')) {
+            await gl.voidBySumberRef(
+              sumber: 'CLOSING',
+              referensiId: ref.isNotEmpty ? ref : 'CLOSE-FT-${item['id']}',
+              createdBy: by,
+            );
+          } else if (refU.startsWith('SETTLE-') || kat.contains('PELUNASAN')) {
+            await gl.voidBySumberRef(
+              sumber: 'SETTLE',
+              referensiId: ref,
+              createdBy: by,
+            );
+          } else {
+            await gl.voidBySumberRef(
+              sumber: 'MANUAL',
+              referensiId: 'FT-${item['id']}',
+              createdBy: by,
+            );
+          }
+        } catch (_) {}
+        await supabase
+            .from('finance_transactions')
+            .delete()
+            .eq('id', item['id']);
+        _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("Gagal menghapus rekaman: $e"),
+            backgroundColor: OptikAdminTokens.danger));
+      }
+    }
   }
 
   // ==========================================================================
@@ -965,23 +1283,21 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   // ==========================================================================
   Widget _buildStage1ListCabang() {
     if (listCabangUnik.isEmpty) {
-      return const Center(
-        child: Text("Belum mendeteksi perputaran dana di cabang mana pun.",
-            style: TextStyle(color: Colors.white54, fontSize: 12)),
+      return const PremiumEmptyState(
+        message: 'Belum ada perputaran dana di cabang mana pun.',
+        icon: Icons.account_balance_wallet_outlined,
       );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(15),
       itemCount: listCabangUnik.length,
       itemBuilder: (context, index) {
-        String tokoId = listCabangUnik[index];
+        final tokoId = listCabangUnik[index];
         return PremiumListTile(
-          title: tokoId == 'PUSAT'
-              ? 'OPTIK B. RISKI - PUSAT'
-              : 'OPTIK B. RISKI - $tokoId',
+          title: 'Optik B. Riski · ${_tokoLabel(tokoId)}',
           subtitle: 'Buka jurnal keuangan cabang',
           icon: Icons.store_rounded,
-          iconColor: Colors.blueAccent,
+          iconColor: OptikAdminTokens.navy,
           onTap: () {
             setState(() => selectedTokoId = tokoId);
             _fetchTransaksiPerCabang(tokoId);
@@ -995,35 +1311,51 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   // STAGE 2: DASBOR JURNAL KALENDER HARIAN (5 KARTU SINKRON & STRUKTUR FISKAL)
   // ==========================================================================
   Widget _buildStage2JurnalHarian() {
+    final kpiDates = _datesInFilter(listTanggalJurnal);
+    var kpiCashIn = 0;
+    var kpiOut = 0;
+    var kpiOmzet = 0;
+    var kpiDebt = 0;
+    for (final tgl in kpiDates) {
+      final listTx = jurnalGroupedByDay[tgl] ?? [];
+      kpiCashIn += (dailyPosCashIn[tgl] ?? 0) + _manualCashInForDay(listTx);
+      kpiOut += _cashOutForDay(listTx);
+      kpiOmzet += dailyPosOmzet[tgl] ?? 0;
+      kpiDebt += dailyPosDebt[tgl] ?? 0;
+    }
+    final kpiSaldo = kpiCashIn - kpiOut;
+    final kpiDpp = (kpiOmzet / 1.11).round();
+    final kpiPpn = kpiOmzet - kpiDpp;
+
     return Column(
       children: [
         PremiumStatGrid(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           items: [
             PremiumStatItem(
-              label: '↓ Kas Masuk POS',
-              value: _formatRupiah(totalPemasukanPOS),
-              color: Colors.greenAccent,
+              label: 'Kas masuk',
+              value: _formatRupiah(kpiCashIn),
+              color: OptikAdminTokens.success,
             ),
             PremiumStatItem(
-              label: '↑ Pengeluaran',
-              value: _formatRupiah(totalPengeluaran),
-              color: Colors.redAccent,
+              label: 'Pengeluaran',
+              value: _formatRupiah(kpiOut),
+              color: OptikAdminTokens.danger,
             ),
             PremiumStatItem(
-              label: 'Jualan Riil',
-              value: _formatRupiah(totalPenjualanRiilCabang),
-              color: Colors.blueAccent,
+              label: 'Omzet riil',
+              value: _formatRupiah(kpiOmzet),
+              color: OptikAdminTokens.navy,
             ),
             PremiumStatItem(
-              label: 'Belum Bayar',
-              value: _formatRupiah(totalSisaTagihanCabang),
-              color: Colors.orangeAccent,
+              label: 'Belum bayar',
+              value: _formatRupiah(kpiDebt),
+              color: OptikAdminTokens.warning,
             ),
             PremiumStatItem(
-              label: 'Saldo Toko',
-              value: _formatRupiah(saldoTokoAkhir),
-              color: Colors.white,
+              label: 'Saldo toko',
+              value: _formatRupiah(kpiSaldo),
+              color: OptikAdminTokens.navy,
             ),
           ],
         ),
@@ -1035,17 +1367,17 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           child: PremiumPanel(
             padding: const EdgeInsets.all(14),
             borderRadius: 16,
-            borderColor: Colors.amberAccent.withOpacity(0.28),
+            borderColor: OptikAdminTokens.warning.withOpacity(0.28),
             child: Column(
               children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("DPP (Dasar Pengenaan Pajak / Omzet Netto):",
-                      style: TextStyle(color: Colors.white38, fontSize: 10.5)),
-                  Text(_formatRupiah(globalDppNetto),
+                  const Text("DPP (omzet netto):",
+                      style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10.5)),
+                  Text(_formatRupiah(kpiDpp),
                       style: const TextStyle(
-                          color: Colors.white70,
+                          color: OptikAdminTokens.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.bold)),
                 ],
@@ -1054,11 +1386,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Alokasi PPN Keluaran Terutang (11%):",
-                      style: TextStyle(color: Colors.white38, fontSize: 10.5)),
-                  Text(_formatRupiah(globalPpnKeluaran),
+                  const Text("PPN keluaran (11%):",
+                      style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10.5)),
+                  Text(_formatRupiah(kpiPpn),
                       style: const TextStyle(
-                          color: Colors.amberAccent,
+                          color: OptikAdminTokens.warning,
                           fontSize: 11,
                           fontWeight: FontWeight.bold)),
                 ],
@@ -1076,7 +1408,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               const Text(
                 "Jurnal Keuangan Harian",
                 style: TextStyle(
-                    color: Colors.white60,
+                    color: OptikAdminTokens.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.bold),
               ),
@@ -1086,29 +1418,36 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 onTap: _openPeriodPicker,
               ),
               const SizedBox(height: OptikAdminTokens.spaceMd),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilterChip(
-                  selected: _useDateFilter,
-                  label: Text(
-                      _useDateFilter ? 'Pakai tanggal' : 'Semua tanggal'),
-                  onSelected: (v) => setState(() => _useDateFilter = v),
-                  selectedColor: OptikAdminTokens.accent.withOpacity(0.25),
-                  backgroundColor: OptikAdminTokens.panel,
-                  checkmarkColor: OptikAdminTokens.accentSoft,
-                  labelStyle: TextStyle(
-                    color: _useDateFilter
-                        ? OptikAdminTokens.accentSoft
-                        : OptikAdminTokens.textSecondary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                  side: BorderSide(
-                    color: _useDateFilter
-                        ? OptikAdminTokens.accent
-                        : OptikAdminTokens.lineStrong,
-                  ),
-                ),
+              AdminPickerField(
+                label: 'Rentang tanggal',
+                valueText:
+                    _useDateFilter ? 'Pakai tanggal' : 'Semua tanggal',
+                icon: Icons.date_range_rounded,
+                onTap: () async {
+                  final sel = await showAdminPicker<bool>(
+                    context: context,
+                    title: 'Filter tanggal jurnal',
+                    searchable: false,
+                    selected: _useDateFilter,
+                    headerIcon: Icons.date_range_rounded,
+                    options: const [
+                      AdminPickerOption(
+                        value: true,
+                        label: 'Pakai tanggal',
+                        subtitle: 'Tampilkan hanya rentang terpilih',
+                        icon: Icons.event_available_rounded,
+                      ),
+                      AdminPickerOption(
+                        value: false,
+                        label: 'Semua tanggal',
+                        subtitle: 'Tampilkan seluruh jurnal',
+                        icon: Icons.event_busy_rounded,
+                      ),
+                    ],
+                  );
+                  if (sel == null || sel.isClear) return;
+                  setState(() => _useDateFilter = sel.value!);
+                },
               ),
               const SizedBox(height: OptikAdminTokens.spaceMd),
             ],
@@ -1119,28 +1458,13 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         Expanded(
           child: Builder(
             builder: (context) {
-// Engine Akuntansi Multi-Periode untuk Rekonsiliasi Kalender
-              String todayStr = DateTime.now().toIso8601String().split('T')[0];
-
-              final startBound = _dateOnly(_filterStart);
-              final endBound = _dateOnly(_filterEnd);
-              List<String> displayedDates = listTanggalJurnal.where((tgl) {
-                if (!_useDateFilter) return true;
-                try {
-                  final itemDate = DateTime.parse(tgl);
-                  final day =
-                      DateTime(itemDate.year, itemDate.month, itemDate.day);
-                  return !day.isBefore(startBound) && !day.isAfter(endBound);
-                } catch (_) {
-                  return false;
-                }
-              }).toList();
+              final todayStr = DateTime.now().toIso8601String().split('T')[0];
+              final displayedDates = _datesInFilter(listTanggalJurnal);
 
               if (displayedDates.isEmpty) {
-                return const Center(
-                  child: Text(
-                      "Tidak ada arsip pembukuan untuk periode terpilih.",
-                      style: TextStyle(color: Colors.white38, fontSize: 12)),
+                return const PremiumEmptyState(
+                  message: 'Tidak ada arsip pembukuan untuk periode terpilih.',
+                  icon: Icons.event_busy_rounded,
                 );
               }
 
@@ -1148,48 +1472,23 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 padding: const EdgeInsets.fromLTRB(15, 5, 15, 88),
                 itemCount: displayedDates.length,
                 itemBuilder: (context, index) {
-                  String tglKey = displayedDates[index];
-                  List<Map<String, dynamic>> listTxHariIni =
-                      jurnalGroupedByDay[tglKey] ?? [];
+                  final tglKey = displayedDates[index];
+                  final listTxHariIni = jurnalGroupedByDay[tglKey] ?? [];
 
-// 🚀 Pemisahan via referensi_id untuk indikator sirkulasi harian kalender
-                  int financeIn = listTxHariIni
-                      .where((e) =>
-                          (e['jenis_transaksi'] == 'PEMASUKAN' ||
-                              e['jenis_transaksi'] == 'PIUTANG') &&
-                          (e['status_konfirmasi']?.toString().toUpperCase() ==
-                                  'APPROVED' ||
-                              e['referensi_id'] != null))
-                      .fold(
-                          0,
-                          (sum, item) =>
-                              sum +
-                              (int.tryParse(item['nominal'].toString()) ?? 0));
-
-                  int dayOut = listTxHariIni
-                      .where((e) =>
-                          (e['jenis_transaksi'] != 'PEMASUKAN' &&
-                              e['jenis_transaksi'] != 'PIUTANG') &&
-                          (e['status_konfirmasi']?.toString().toUpperCase() ==
-                                  'APPROVED' ||
-                              e['referensi_id'] != null))
-                      .fold(
-                          0,
-                          (sum, item) =>
-                              sum +
-                              (int.tryParse(item['nominal'].toString()) ?? 0));
-
-                  int dayIn = (dailyPosCashIn[tglKey] ?? 0) + financeIn;
-                  int dayNet = dayIn - dayOut;
-                  int dayDebt = dailyPosDebt[tglKey] ?? 0;
+                  // POS cash + jurnal manual/closing saja (anti double-count POS).
+                  final dayIn = (dailyPosCashIn[tglKey] ?? 0) +
+                      _manualCashInForDay(listTxHariIni);
+                  final dayOut = _cashOutForDay(listTxHariIni);
+                  final dayNet = dayIn - dayOut;
+                  final dayDebt = dailyPosDebt[tglKey] ?? 0;
 
                   Color netColor;
                   if (dayDebt > 0) {
-                    netColor = Colors.grey;
+                    netColor = OptikAdminTokens.textMuted;
                   } else if (dayNet < 0) {
-                    netColor = Colors.redAccent;
+                    netColor = OptikAdminTokens.danger;
                   } else {
-                    netColor = Colors.tealAccent;
+                    netColor = OptikAdminTokens.ice;
                   }
 
                   return PremiumPanel(
@@ -1207,7 +1506,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       children: [
                         PremiumIconBadge(
                           icon: Icons.calendar_today_rounded,
-                          color: Colors.tealAccent,
+                          color: OptikAdminTokens.navy,
                           size: 40,
                         ),
                         const SizedBox(width: 12),
@@ -1219,10 +1518,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      _formatTanggalIndonesia(tglKey)
-                                          .toUpperCase(),
+                                      _formatTanggalIndonesia(tglKey),
                                       style: const TextStyle(
-                                          color: Colors.white,
+                                          color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 11.5),
                                       maxLines: 1,
@@ -1235,20 +1533,20 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                         horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: tglKey == todayStr
-                                          ? Colors.amber.withOpacity(0.15)
-                                          : Colors.white10,
+                                          ? OptikAdminTokens.warning.withOpacity(0.15)
+                                          : OptikAdminTokens.line,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
                                       tglKey == todayStr
-                                          ? "OPEN SESSION"
-                                          : "CLOSED AUDITED",
+                                          ? "Sesi terbuka"
+                                          : "Ditutup",
                                       style: TextStyle(
                                         color: tglKey == todayStr
-                                            ? Colors.amber
-                                            : Colors.white38,
+                                            ? OptikAdminTokens.warning
+                                            : OptikAdminTokens.textMuted,
                                         fontSize: 8,
-                                        fontWeight: FontWeight.bold,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                   ),
@@ -1257,20 +1555,20 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  Text("In: ${_formatRupiah(dayIn)}",
+                                  Text("Masuk: ${_formatRupiah(dayIn)}",
                                       style: const TextStyle(
-                                          color: Colors.greenAccent,
+                                          color: OptikAdminTokens.success,
                                           fontSize: 11)),
                                   const SizedBox(width: 10),
-                                  Text("Out: ${_formatRupiah(dayOut)}",
+                                  Text("Keluar: ${_formatRupiah(dayOut)}",
                                       style: const TextStyle(
-                                          color: Colors.redAccent, fontSize: 11)),
+                                          color: OptikAdminTokens.danger, fontSize: 11)),
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        Text("Net: ${_formatRupiah(dayNet)}",
+                        Text("Netto: ${_formatRupiah(dayNet)}",
                             style: TextStyle(
                                 color: netColor,
                                 fontSize: 11,
@@ -1294,24 +1592,15 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   // STAGE 3: LAPORAN ENTERPRISE AUDIT JEROAN LABA-RUGI & DETAILED AUDIT TRAIL
   // ==========================================================================
   Widget _buildStage3RincianItemPerHari() {
-    List<Map<String, dynamic>> txKasManual =
-        jurnalGroupedByDay[selectedDateStr] ?? [];
+    final txKasManual = jurnalGroupedByDay[selectedDateStr] ?? [];
 
-    int totalPemasukanKasManual = txKasManual
-        .where((e) =>
-            (e['jenis_transaksi'] == 'PEMASUKAN' ||
-                e['jenis_transaksi'] == 'PIUTANG') &&
-            (e['status_konfirmasi']?.toString().toUpperCase() == 'APPROVED' ||
-                e['referensi_id'] !=
-                    null)) // 🚀 KUNCI: POS otomatis bypass hitungan laba bersih harian ruko
-        .fold(
-            0,
-            (sum, item) =>
-                sum + (int.tryParse(item['nominal'].toString()) ?? 0));
+    // Jangan campur omzet POS (sudah di dailyOmzet) / closing ke laba produk.
+    final totalPemasukanKasManual = _manualIncomeForPl(txKasManual);
+    final biayaOpex = _opexForPl(txKasManual);
 
-    int untungKotorProduk = dailyOmzetPemasukan - dailyTotalHppModal;
-    int labaBersihReal =
-        untungKotorProduk + totalPemasukanKasManual - dailyBiayaPengeluaran;
+    final untungKotorProduk = dailyOmzetPemasukan - dailyTotalHppModal;
+    final labaBersihReal =
+        untungKotorProduk + totalPemasukanKasManual - biayaOpex;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -1325,23 +1614,23 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             decoration: BoxDecoration(
                 color: OptikAdminTokens.card,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white10, width: 0.5)),
+                border: Border.all(color: OptikAdminTokens.line, width: 0.5)),
             child: Column(
               children: [
-                _buildRowFinansialCorporate("Total Penjualan (Omzet Bruto POS)",
-                    _formatRupiah(dailyOmzetPemasukan), Colors.white),
+                _buildRowFinansialCorporate("Omzet bruto POS",
+                    _formatRupiah(dailyOmzetPemasukan), OptikAdminTokens.navy),
                 // 🎯 SUNTIK DATA 3: Konsistensi Deklarasi Pajak Mikro Di Jeroan Laba Rugi
                 Padding(
                   padding: const EdgeInsets.only(left: 10, bottom: 4),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("↳ DPP (Omzet Netto):",
+                      const Text("↳ DPP (omzet netto):",
                           style:
-                              TextStyle(color: Colors.white24, fontSize: 10)),
+                              TextStyle(color: OptikAdminTokens.lineStrong, fontSize: 10)),
                       Text(_formatRupiah(dailyDppNetto),
                           style: const TextStyle(
-                              color: Colors.white38, fontSize: 10)),
+                              color: OptikAdminTokens.textMuted, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -1350,42 +1639,42 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("↳ Titipan PPN Keluaran (11%):",
+                      const Text("↳ PPN keluaran (11%):",
                           style:
-                              TextStyle(color: Colors.white24, fontSize: 10)),
+                              TextStyle(color: OptikAdminTokens.lineStrong, fontSize: 10)),
                       Text(_formatRupiah(dailyPpnKeluaran),
                           style: TextStyle(
-                              color: Colors.amber.withOpacity(0.4),
+                              color: OptikAdminTokens.warning.withOpacity(0.4),
                               fontSize: 10)),
                     ],
                   ),
                 ),
-                _buildRowFinansialCorporate("Total HPP / Modal Pokok Barang",
-                    "- ${_formatRupiah(dailyTotalHppModal)}", Colors.white70),
-                const Divider(color: Colors.white10, height: 16),
+                _buildRowFinansialCorporate("Total HPP / modal pokok",
+                    "- ${_formatRupiah(dailyTotalHppModal)}", OptikAdminTokens.textSecondary),
+                const Divider(color: OptikAdminTokens.line, height: 16),
                 _buildRowFinansialCorporate(
-                    "Pemasukan Kas Manual (Non-Produk)",
+                    "Pemasukan kas manual",
                     "+ ${_formatRupiah(totalPemasukanKasManual)}",
-                    Colors.greenAccent),
+                    OptikAdminTokens.success),
                 _buildRowFinansialCorporate(
-                    "Beban Biaya Operasional (OPEX)",
-                    "- ${_formatRupiah(dailyBiayaPengeluaran)}",
-                    Colors.redAccent),
-                const Divider(color: Colors.white24, thickness: 1, height: 20),
+                    "Beban operasional",
+                    "- ${_formatRupiah(biayaOpex)}",
+                    OptikAdminTokens.danger),
+                const Divider(color: OptikAdminTokens.lineStrong, thickness: 1, height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("LABA BERSIH HARIAN (NET PROFIT)",
+                    const Text("Laba bersih harian",
                         style: TextStyle(
-                            color: Colors.white,
+                            color: OptikAdminTokens.navy,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5)),
                     Text(_formatRupiah(labaBersihReal),
                         style: TextStyle(
                             color: labaBersihReal >= 0
-                                ? Colors.tealAccent
-                                : Colors.orangeAccent,
+                                ? OptikAdminTokens.navy
+                                : OptikAdminTokens.warning,
                             fontSize: 13.5,
                             fontWeight: FontWeight.w900)),
                   ],
@@ -1402,17 +1691,17 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             decoration: BoxDecoration(
                 color: OptikAdminTokens.card,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white10, width: 0.5)),
+                border: Border.all(color: OptikAdminTokens.line, width: 0.5)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                    "💳 AUDIT REKONSILIASI KANAL SETORAN LIKUIDITAS HARIAN",
+                    "Rekonsiliasi kanal setoran harian",
                     style: TextStyle(
-                        color: Colors.blueAccent,
-                        fontSize: 9.5,
+                        color: OptikAdminTokens.navy,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5)),
+                        letterSpacing: 0.2)),
                 const SizedBox(height: 8),
                 PremiumChipWrap(
                   children: dailyPaymentBreakdown.entries.map((e) {
@@ -1420,19 +1709,19 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 5, horizontal: 8),
                       decoration: BoxDecoration(
-                          color: Colors.black12,
+                          color: OptikAdminTokens.line,
                           borderRadius: BorderRadius.circular(6),
                           border:
-                              Border.all(color: Colors.white10, width: 0.5)),
+                              Border.all(color: OptikAdminTokens.line, width: 0.5)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text("${e.key}: ",
                               style: const TextStyle(
-                                  color: Colors.white38, fontSize: 10)),
+                                  color: OptikAdminTokens.textMuted, fontSize: 10)),
                           Text(_formatRupiah(e.value),
                               style: const TextStyle(
-                                  color: Colors.white,
+                                  color: OptikAdminTokens.navy,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold)),
                         ],
@@ -1446,37 +1735,29 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           const SizedBox(height: 20),
 
           // 📦 PANEL C: TABEL DETAIL MUTASI BARANG KELUAR DENGAN JEJAK DOKUMEN AUDIT TRAIL KORPORAT
-          const Text("📦 MATRIKS BARANG KELUAR & PROFIT MARGIN",
+          const Text("Barang keluar & margin",
               style: TextStyle(
-                  color: Colors.white70,
+                  color: OptikAdminTokens.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           dailyItemsSold.isEmpty
-              ? Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: const Center(
-                      child: Text(
-                          "Tidak ada sirkulasi produk keluar pada hari ini.",
-                          style:
-                              TextStyle(color: Colors.white38, fontSize: 11))),
+              ? const PremiumEmptyState(
+                  message: 'Tidak ada sirkulasi produk keluar pada hari ini.',
+                  icon: Icons.inventory_2_outlined,
                 )
               : Container(
                   decoration: BoxDecoration(
                       color: OptikAdminTokens.card,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white10, width: 0.5)),
+                      border: Border.all(color: OptikAdminTokens.line, width: 0.5)),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: HScroll(
                       minWidth: 640,
                       child: Table(
                       border:
-                          TableBorder.all(color: Colors.white10, width: 0.5),
+                          TableBorder.all(color: OptikAdminTokens.line, width: 0.5),
                       columnWidths: const {
                         0: FlexColumnWidth(
                             2.8), // Nama Produk + Audit Trail Dokumen Nota
@@ -1490,18 +1771,18 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           decoration:
                               const BoxDecoration(color: OptikAdminTokens.bgMid),
                           children: [
-                            'PRODUK / AUDIT TRAIL',
-                            'QTY',
-                            'JUAL',
-                            'MODAL',
-                            'MARGIN'
+                            'Produk',
+                            'Qty',
+                            'Jual',
+                            'Modal',
+                            'Margin'
                           ]
                               .map((txt) => Padding(
                                   padding: const EdgeInsets.symmetric(
                                       vertical: 8, horizontal: 4),
                                   child: Text(txt,
                                       style: const TextStyle(
-                                          color: Colors.white38,
+                                          color: OptikAdminTokens.textMuted,
                                           fontSize: 9,
                                           fontWeight: FontWeight.bold),
                                       textAlign: TextAlign.center)))
@@ -1518,14 +1799,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   children: [
                                     Text(item['nama_produk'].toString(),
                                         style: const TextStyle(
-                                            color: Colors.white,
+                                            color: OptikAdminTokens.navy,
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 3),
                                     Text(
                                         "${item['no_invoice']} • ${item['nama_pelanggan']}",
                                         style: const TextStyle(
-                                            color: Colors.white54,
+                                            color: OptikAdminTokens.textMuted,
                                             fontSize: 8.5,
                                             fontStyle: FontStyle.italic)),
                                   ],
@@ -1535,26 +1816,26 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   padding: const EdgeInsets.all(8),
                                   child: Text(item['qty'].toString(),
                                       style: const TextStyle(
-                                          color: Colors.white70, fontSize: 11),
+                                          color: OptikAdminTokens.textSecondary, fontSize: 11),
                                       textAlign: TextAlign.center)),
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(_formatRupiah(item['harga_jual']),
                                       style: const TextStyle(
-                                          color: Colors.white, fontSize: 11),
+                                          color: OptikAdminTokens.navy, fontSize: 11),
                                       textAlign: TextAlign.end)),
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(
                                       _formatRupiah(item['harga_modal']),
                                       style: const TextStyle(
-                                          color: Colors.white54, fontSize: 11),
+                                          color: OptikAdminTokens.textMuted, fontSize: 11),
                                       textAlign: TextAlign.end)),
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(_formatRupiah(item['margin']),
                                       style: const TextStyle(
-                                          color: Colors.greenAccent,
+                                          color: OptikAdminTokens.success,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold),
                                       textAlign: TextAlign.end)),
@@ -1569,9 +1850,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           children: [
                             Padding(
                                 padding: const EdgeInsets.all(8),
-                                child: const Text('TOTAL EVALUASI PERSYARATAN',
+                                child: const Text('Total',
                                     style: TextStyle(
-                                        color: Colors.white,
+                                        color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold))),
                             Padding(
@@ -1579,7 +1860,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 child: Text(
                                     '${dailyItemsSold.fold(0, (sum, item) => sum + (item['qty'] as int))}',
                                     style: const TextStyle(
-                                        color: Colors.white,
+                                        color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
                                     textAlign: TextAlign.center)),
@@ -1587,7 +1868,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 padding: const EdgeInsets.all(8),
                                 child: Text(_formatRupiah(dailyOmzetPemasukan),
                                     style: const TextStyle(
-                                        color: Colors.white,
+                                        color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
                                     textAlign: TextAlign.end)),
@@ -1595,7 +1876,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 padding: const EdgeInsets.all(8),
                                 child: Text(_formatRupiah(dailyTotalHppModal),
                                     style: const TextStyle(
-                                        color: Colors.white,
+                                        color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
                                     textAlign: TextAlign.end)),
@@ -1605,7 +1886,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                     _formatRupiah(dailyOmzetPemasukan -
                                         dailyTotalHppModal),
                                     style: const TextStyle(
-                                        color: Colors.greenAccent,
+                                        color: OptikAdminTokens.success,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
                                     textAlign: TextAlign.end)),
@@ -1619,17 +1900,18 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           const SizedBox(height: 20),
 
           // 🏛 PANEL D: REKAMAN MUTASI OPERASIONAL DENGAN USER IDENTIFIER SISTEM
-          const Text("🏛 BEBAN OPEX & MUTASI OPERASIONAL LAINNYA",
+          const Text("Beban OPEX & mutasi operasional",
               style: TextStyle(
-                  color: Colors.white70,
+                  color: OptikAdminTokens.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           txKasManual.isEmpty
-              ? const Center(
-                  child: Text(
-                      "Tidak ada rekaman mutasi operasional manual pada tanggal ini.",
-                      style: TextStyle(color: Colors.white24, fontSize: 11)))
+              ? const PremiumEmptyState(
+                  message:
+                      'Tidak ada rekaman mutasi operasional pada tanggal ini.',
+                  icon: Icons.receipt_long_outlined,
+                )
               : ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -1641,12 +1923,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                     int nominal =
                         int.tryParse(tx['nominal']?.toString() ?? '0') ?? 0;
 
-                    bool isApproved =
+                    final isApproved =
                         tx['status_konfirmasi']?.toString().toUpperCase() ==
                             'APPROVED';
-                    bool isAutoSystem = tx['referensi_id'] != null;
-                    bool isNgawangManual = !isApproved &&
-                        !isAutoSystem; // Karantina murni isian manual kasir ruko
+                    final isAutoSystem = _isPosSaleRef(tx) || _isClosingShift(tx);
+                    final isNgawangManual = !isApproved && !isAutoSystem;
 
                     return Card(
                       color: isNgawangManual
@@ -1657,53 +1938,57 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
                               color: isNgawangManual
-                                  ? Colors.orangeAccent.withOpacity(0.4)
+                                  ? OptikAdminTokens.warning.withOpacity(0.4)
                                   : (isAutoSystem && !isApproved
-                                      ? Colors.tealAccent.withOpacity(0.3)
-                                      : Colors.white10),
+                                      ? OptikAdminTokens.accentSoft.withOpacity(0.3)
+                                      : OptikAdminTokens.line),
                               width: isNgawangManual ? 1.0 : 0.5)),
                       child: ListTile(
                         onLongPress: () => _showOptionDialog(tx),
                         title: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                                tx['kategori']?.toString().toUpperCase() ??
-                                    'KAS UNCLASSIFIED',
+                            Expanded(
+                              child: Text(
+                                tx['kategori']?.toString() ?? 'Tanpa kategori',
                                 style: TextStyle(
                                     color: isNgawangManual
-                                        ? Colors.white60
-                                        : Colors.white,
+                                        ? OptikAdminTokens.textSecondary
+                                        : OptikAdminTokens.navy,
                                     fontSize: 11.5,
-                                    fontWeight: FontWeight.bold)),
+                                    fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             if (isNgawangManual)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.orangeAccent.withOpacity(0.15),
+                                  color: OptikAdminTokens.warning.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
-                                  "⏳ MANUAL PENDING PUSAT",
+                                  "Menunggu pusat",
                                   style: TextStyle(
-                                      color: Colors.orangeAccent,
+                                      color: OptikAdminTokens.warning,
                                       fontSize: 8,
                                       fontWeight: FontWeight.bold),
                                 ),
                               ),
-                            if (isAutoSystem && !isApproved)
+                            if (isAutoSystem)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.tealAccent.withOpacity(0.15),
+                                  color: OptikAdminTokens.accentSoft.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text(
-                                  "🎯 VALID AUTOMATIC POS/DP",
-                                  style: TextStyle(
-                                      color: Colors.tealAccent,
+                                child: Text(
+                                  _isClosingShift(tx) ? "Tutup toko" : "POS / DP",
+                                  style: const TextStyle(
+                                      color: OptikAdminTokens.navy,
                                       fontSize: 8,
                                       fontWeight: FontWeight.bold),
                                 ),
@@ -1718,17 +2003,17 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                               Text(tx['deskripsi'] ?? '-',
                                   style: TextStyle(
                                       color: isNgawangManual
-                                          ? Colors.white24
-                                          : Colors.white38,
+                                          ? OptikAdminTokens.lineStrong
+                                          : OptikAdminTokens.textMuted,
                                       fontSize: 11,
                                       fontStyle: FontStyle.italic)),
                               const SizedBox(height: 2),
                               Text(
-                                  "Oleh: ${tx['nama_kasir'] ?? 'System'} • Kanal: ${tx['metode_pembayaran'] ?? 'CASH'}",
+                                  "Oleh: ${tx['nama_kasir'] ?? 'Sistem'} · Kanal: ${tx['metode_pembayaran'] ?? 'Tunai'}",
                                   style: TextStyle(
                                       color: isNgawangManual
-                                          ? Colors.blueAccent.withOpacity(0.3)
-                                          : Colors.blueAccent.withOpacity(0.6),
+                                          ? OptikAdminTokens.accentSoft.withOpacity(0.3)
+                                          : OptikAdminTokens.accentSoft.withOpacity(0.6),
                                       fontSize: 9,
                                       fontWeight: FontWeight.w600)),
                             ],
@@ -1738,10 +2023,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           "${isPemasukan ? '+' : '-'} ${_formatRupiah(nominal)}",
                           style: TextStyle(
                               color: isNgawangManual
-                                  ? Colors.white30
+                                  ? OptikAdminTokens.textMuted
                                   : (isPemasukan
-                                      ? Colors.greenAccent
-                                      : Colors.redAccent),
+                                      ? OptikAdminTokens.success
+                                      : OptikAdminTokens.danger),
                               fontSize: 12,
                               decoration: isNgawangManual
                                   ? TextDecoration.lineThrough
@@ -1763,7 +2048,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(color: Colors.white60, fontSize: 11)),
+              style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 11)),
           Text(value,
               style: TextStyle(
                   color: color, fontSize: 11, fontWeight: FontWeight.bold))
@@ -1779,18 +2064,21 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          icon: const Icon(Icons.arrow_back, color: OptikAdminTokens.navy, size: 20),
           onPressed: () {
+            final role =
+                widget.profile['role']?.toString().toLowerCase() ?? '';
             setState(() {
               if (selectedDateStr != null) {
                 selectedDateStr = null;
               } else if (selectedTokoId != null &&
-                  widget.profile['role'] == 'owner') {
+                  (role == 'owner' ||
+                      (widget.profile['toko_id']?.toString().toUpperCase() ==
+                          'PUSAT'))) {
                 selectedTokoId = null;
                 _fetchTransaksiGlobalOwner();
               } else {
@@ -1801,24 +2089,41 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         ),
         title: Text(
           selectedDateStr != null
-              ? "📅 NET INCOME STATEMENT: $selectedDateStr"
+              ? "Laba rugi · ${_formatTanggalIndonesia(selectedDateStr!)}"
               : selectedTokoId != null
-                  ? "🏪 RINGKASAN LEDGER: $selectedTokoId"
-                  : "🏢 ARSIP INTEGRATED GENERAL LEDGER PUSAT",
+                  ? "Jurnal · ${_tokoLabel(selectedTokoId)}"
+                  : "Keuangan & Kas",
           style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
+              color: OptikAdminTokens.navy,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
-              letterSpacing: 0.5),
+              letterSpacing: 0.2),
         ),
         centerTitle: true,
         actions: [
+          if (_canAccessGl)
+            IconButton(
+              icon: const Icon(Icons.account_balance_rounded,
+                  color: OptikAdminTokens.navy, size: 20),
+              tooltip: 'General Ledger',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EnterpriseGlPage(
+                      profile: widget.profile,
+                      initialTokoId: selectedTokoId,
+                    ),
+                  ),
+                );
+              },
+            ),
           // 🚀 TOMBOL REKONSILIASI BRANKAS MANUAL COA (KHUSUS OWNER)
           if (widget.profile['role']?.toString().toLowerCase() == 'owner')
             IconButton(
               icon: const Icon(Icons.gavel_rounded,
-                  color: Colors.orangeAccent, size: 20),
-              tooltip: "Buka Vault Karantina COA",
+                  color: OptikAdminTokens.warning, size: 20),
+              tooltip: "Persetujuan COA manual",
               onPressed: () {
                 Navigator.push(
                   context,
@@ -1833,16 +2138,16 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           if (selectedDateStr == null && selectedTokoId != null) ...[
             Center(
               child: Text(
-                "Sync: $lastSyncTime  ",
+                "Sinkron: $lastSyncTime  ",
                 style: const TextStyle(
-                    color: Colors.white38,
+                    color: OptikAdminTokens.textMuted,
                     fontSize: 9.5,
                     fontWeight: FontWeight.bold),
               ),
             ),
             IconButton(
               icon: const Icon(Icons.refresh_rounded,
-                  color: Colors.blueAccent, size: 20),
+                  color: OptikAdminTokens.navy, size: 20),
               tooltip: "Tarik Data Terbaru Cabang",
               onPressed: () => _fetchTransaksiPerCabang(selectedTokoId!),
             ),
@@ -1850,35 +2155,25 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           if (selectedDateStr != null)
             IconButton(
               icon: const Icon(Icons.download_for_offline_rounded,
-                  color: Colors.tealAccent, size: 20),
-              tooltip: "Ekspor Berkas PDF/Excel",
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        "💾 Laporan Keuangan Hari $selectedDateStr Berhasil Diekspor ke PDF!"),
-                    backgroundColor: Colors.teal,
-                  ),
-                );
-              },
+                  color: OptikAdminTokens.navy, size: 20),
+              tooltip: "Ekspor PDF laporan harian",
+              onPressed: _exportDailyLedgerPdf,
             ),
         ],
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                  color: OptikAdminTokens.accentSoft))
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _orchestrateBukuBesarFlowLayout(),
       floatingActionButton: selectedTokoId == null
           ? null
           : FloatingActionButton.extended(
               onPressed: _showAddTransactionDialog,
-              backgroundColor: OptikAdminTokens.accent,
-              foregroundColor: Colors.white,
+              foregroundColor: OptikAdminTokens.snow,
               elevation: 6,
               icon: const Icon(Icons.add_rounded, size: 20),
               label: const Text(
-                'Catat Kas (COA)',
+                'Catat kas',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
               ),
             ),

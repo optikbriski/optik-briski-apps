@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../invoice/invoice_delivery_service.dart';
+import '../invoice/sale_fulfillment_service.dart';
 import 'product_identity.dart';
 import 'stock_mutation_service.dart';
 
@@ -24,9 +26,9 @@ class RequestOrderService {
       case 'APPROVED':
         return 'DISETUJUI';
       case 'PREPARING':
-        return 'PREPARING';
+        return 'DISIAPKAN';
       case 'SHIPPING':
-        return 'PENGIRIMAN';
+        return 'DALAM_PERJALANAN';
       case 'SUCCESS':
         return 'SELESAI';
       case 'REJECTED':
@@ -39,22 +41,36 @@ class RequestOrderService {
   static String labelStatus(String? status) {
     switch ((status ?? '').toUpperCase()) {
       case 'PENDING':
-        return 'Di cabang';
+        return 'Antrian cabang';
       case 'SENT_TO_HQ':
         return 'Menunggu approval';
       case 'APPROVED':
         return 'Disetujui';
       case 'PREPARING':
-        return 'Preparing';
+        return 'Disiapkan';
       case 'SHIPPING':
-        return 'Pengiriman';
+        return 'Dalam perjalanan';
       case 'SUCCESS':
-        return 'Selesai';
+        return 'Diterima';
       case 'REJECTED':
         return 'Ditolak';
       default:
         return status ?? '-';
     }
+  }
+
+  static int? requestIdOf(Map<String, dynamic> req) {
+    final v = req['id'];
+    if (v is int) return v;
+    return int.tryParse(v?.toString() ?? '');
+  }
+
+  static String tokoLabel(String? id) {
+    final t = (id ?? '').trim().toUpperCase();
+    if (t.isEmpty) return '-';
+    if (t == 'PUSAT') return 'Pusat';
+    if (t.startsWith('CABANG-')) return t.replaceFirst('CABANG-', '');
+    return t;
   }
 
   Future<List<Map<String, dynamic>>> listByStatuses(List<String> statuses) async {
@@ -144,8 +160,40 @@ class RequestOrderService {
     }).inFilter('id', ids);
   }
 
+  /// Batas hari lokal (WIB/device) untuk antrian RO "hari ini".
+  static ({DateTime startUtc, DateTime endExclusiveUtc}) localDayBoundsUtc(
+      [DateTime? nowLocal]) {
+    final n = nowLocal ?? DateTime.now();
+    final startLocal = DateTime(n.year, n.month, n.day);
+    final endLocal = startLocal.add(const Duration(days: 1));
+    return (startUtc: startLocal.toUtc(), endExclusiveUtc: endLocal.toUtc());
+  }
+
+  /// Failsafe EOD: kirim semua PENDING cabang untuk hari lokal ini ke pusat.
+  /// Dipakai tombol manual + auto jam ≥ 23:59.
+  Future<int> autoSendTodayPendingToHq(String tokoId) async {
+    final tid = tokoId.trim();
+    if (tid.isEmpty) return 0;
+    final bounds = localDayBoundsUtc();
+    final rows = await _client
+        .from('pending_requests')
+        .select('id')
+        .eq('toko_id', tid)
+        .eq('status', 'PENDING')
+        .gte('created_at', bounds.startUtc.toIso8601String())
+        .lt('created_at', bounds.endExclusiveUtc.toIso8601String());
+    final ids = (rows as List)
+        .map((e) => (e as Map)['id'])
+        .whereType<Object>()
+        .toList();
+    if (ids.isEmpty) return 0;
+    await sendToHq(ids);
+    return ids.length;
+  }
+
   Future<void> approve(Map<String, dynamic> req) async {
-    final id = req['id'] as int;
+    final id = requestIdOf(req);
+    if (id == null) throw 'ID request tidak valid.';
     final status = (req['status'] ?? '').toString().toUpperCase();
     if (status != 'SENT_TO_HQ' && status != 'PENDING') {
       throw 'Hanya request menunggu approval yang bisa disetujui.';
@@ -174,8 +222,9 @@ class RequestOrderService {
       throw 'SKU produk wajib untuk reservasi RO.';
     }
 
-    // Approve langsung masuk Preparing + reservasi aktif (Pending terpusat).
-    await StockMutationService(client: _client).reserve(
+    final mut = StockMutationService(client: _client);
+    // Approve langsung masuk Disiapkan + reservasi aktif (Pending terpusat).
+    await mut.reserve(
       tokoId: 'PUSAT',
       sku: sku,
       qty: qty,
@@ -184,18 +233,51 @@ class RequestOrderService {
       refId: id.toString(),
     );
 
-    await _client.from('pending_requests').update({
-      'status': 'PREPARING',
-      'tracking_status': trackingFor('PREPARING'),
-      'reserved_qty': qty,
-      'sku': sku,
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'reviewed_by': userId,
-    }).eq('id', id).inFilter('status', ['SENT_TO_HQ', 'PENDING']);
+    try {
+      final updated = await _client
+          .from('pending_requests')
+          .update({
+            'status': 'PREPARING',
+            'tracking_status': trackingFor('PREPARING'),
+            'reserved_qty': qty,
+            'sku': sku,
+            'reviewed_at': DateTime.now().toIso8601String(),
+            'reviewed_by': userId,
+          })
+          .eq('id', id)
+          .inFilter('status', ['SENT_TO_HQ', 'PENDING'])
+          .select('id');
+      if ((updated as List).isEmpty) {
+        await mut.releaseReservation(
+          kind: StockReserveKind.ro,
+          refType: 'pending_request',
+          refId: id.toString(),
+          sku: sku,
+          tokoId: 'PUSAT',
+        );
+        throw 'Request sudah diproses orang lain / status berubah.';
+      }
+    } catch (e) {
+      // Lepas reservasi jika update gagal (kecuali sudah dilepas di cabang empty).
+      final msg = e.toString();
+      if (!msg.contains('sudah diproses')) {
+        try {
+          await mut.releaseReservation(
+            kind: StockReserveKind.ro,
+            refType: 'pending_request',
+            refId: id.toString(),
+            sku: sku,
+            tokoId: 'PUSAT',
+          );
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
   Future<void> reject(Map<String, dynamic> req, {String? note}) async {
-    final id = req['id'] as int;
+    final id = requestIdOf(req);
+    if (id == null) throw 'ID request tidak valid.';
     final status = (req['status'] ?? '').toString().toUpperCase();
     if (!const {
       'SENT_TO_HQ',
@@ -213,19 +295,33 @@ class RequestOrderService {
       refId: id.toString(),
       tokoId: 'PUSAT',
     );
-    await _client.from('pending_requests').update({
-      'status': 'REJECTED',
-      'tracking_status': trackingFor('REJECTED'),
-      'reserved_qty': 0,
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'reviewed_by': userId,
-      if (note != null && note.trim().isNotEmpty) 'detail_resep': note.trim(),
-    }).eq('id', id);
+    final updated = await _client
+        .from('pending_requests')
+        .update({
+          'status': 'REJECTED',
+          'tracking_status': trackingFor('REJECTED'),
+          'reserved_qty': 0,
+          'reviewed_at': DateTime.now().toIso8601String(),
+          'reviewed_by': userId,
+          if (note != null && note.trim().isNotEmpty) 'detail_resep': note.trim(),
+        })
+        .eq('id', id)
+        .inFilter('status', const [
+          'SENT_TO_HQ',
+          'PENDING',
+          'APPROVED',
+          'PREPARING',
+        ])
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw 'Request tidak bisa ditolak — status sudah berubah.';
+    }
   }
 
   /// Legacy: data lama status APPROVED digeser ke PREPARING.
   Future<void> toPreparing(Map<String, dynamic> req) async {
-    final id = req['id'] as int;
+    final id = requestIdOf(req);
+    if (id == null) throw 'ID request tidak valid.';
     final status = (req['status'] ?? '').toString().toUpperCase();
     if (status != 'APPROVED') {
       throw 'Request sudah di tahap Preparing atau selesai.';
@@ -298,16 +394,17 @@ class RequestOrderService {
     }).eq('status', 'APPROVED');
   }
 
-  /// Potong stok Pusat + buat stock_move TRANSIT + lepas reservasi.
+  /// Potong stok Pusat (consume reservasi RO) + buat stock_move TRANSIT.
   Future<String> ship(
     Map<String, dynamic> req, {
     String? kurirKaryawanId,
     String? kurirNama,
   }) async {
-    final id = req['id'] as int;
+    final id = requestIdOf(req);
+    if (id == null) throw 'ID request tidak valid.';
     final status = (req['status'] ?? '').toString().toUpperCase();
     if (status != 'PREPARING' && status != 'APPROVED') {
-      throw 'Shipping hanya dari Preparing.';
+      throw 'Kirim hanya dari status Disiapkan.';
     }
 
     final qty = (req['qty_request'] as num?)?.toInt() ?? 0;
@@ -327,16 +424,15 @@ class RequestOrderService {
     final sku = ProductIdentity.skuOf(product) ??
         ProductIdentity.normalizeSku(req['sku']);
     if (sku == null) {
-      throw 'SKU produk wajib untuk shipping RO. Lengkapi di Product Master.';
+      throw 'SKU produk wajib untuk kirim RO. Lengkapi di Master Produk.';
     }
 
     final realNow = StockQty.realOf(product);
     final pendingNow = StockQty.pendingOf(product);
-    // Shipping RO: lepas pending dulu lalu potong real — available harus mencakup qty
-    // (pending RO sendiri akan di-consume, jadi cek real >= qty).
+    // Consume dulu melepas pending RO sendiri, lalu potong real — cek real >= qty.
     if (realNow < qty) {
-      throw 'Stok real Pusat tidak cukup untuk shipping '
-          '(real $realNow, pending $pendingNow, minta $qty).';
+      throw 'Stok real Pusat tidak cukup untuk dikirim '
+          '(real $realNow, booking $pendingNow, minta $qty).';
     }
 
     final resi =
@@ -375,48 +471,54 @@ class RequestOrderService {
         .single();
 
     final mut = StockMutationService(client: _client);
+    final moveId = move['id'].toString();
     try {
-      // Consume RO pending lalu potong Real
-      await mut.releaseReservation(
+      // Atomik: consum reservasi RO + TRANSFER_OUT real (satu RPC).
+      final consumed = await mut.consumeReservationAndShipOut(
         kind: StockReserveKind.ro,
         refType: 'pending_request',
         refId: id.toString(),
-        sku: sku,
         tokoId: 'PUSAT',
+        alasanText: 'Kirim RO $resi → $tokoTujuan',
+        ledgerRefType: 'stock_move',
+        ledgerRefId: moveId,
       );
-      await mut.shipOut(
-        fromToko: 'PUSAT',
-        sku: sku,
-        qty: qty,
-        reason: StockReason.transferOut,
-        alasanText: 'Ship RO $resi → $tokoTujuan',
-        refType: 'stock_move',
-        refId: move['id'].toString(),
-      );
-    } catch (e) {
-      await _client.from('stock_move_history').delete().eq('id', move['id']);
-      // Coba pulihkan pending jika ship gagal setelah release
-      try {
-        await mut.reserve(
-          tokoId: 'PUSAT',
+      final items = consumed['items'];
+      if (items is! List || items.isEmpty) {
+        // Legacy APPROVED tanpa baris reservasi — fallback shipOut langsung.
+        await mut.shipOut(
+          fromToko: 'PUSAT',
           sku: sku,
           qty: qty,
-          kind: StockReserveKind.ro,
-          refType: 'pending_request',
-          refId: id.toString(),
+          reason: StockReason.transferOut,
+          alasanText: 'Kirim RO $resi → $tokoTujuan (tanpa reservasi)',
+          refType: 'stock_move',
+          refId: moveId,
         );
-      } catch (_) {}
+      }
+    } catch (e) {
+      await _client.from('stock_move_history').delete().eq('id', move['id']);
       rethrow;
     }
 
-    await _client.from('pending_requests').update({
-      'status': 'SHIPPING',
-      'tracking_status': trackingFor('SHIPPING'),
-      'reserved_qty': 0,
-      'stock_move_id': move['id'],
-      'stock_move_resi': resi,
-      'sku': sku,
-    }).eq('id', id);
+    final updated = await _client
+        .from('pending_requests')
+        .update({
+          'status': 'SHIPPING',
+          'tracking_status': trackingFor('SHIPPING'),
+          'reserved_qty': 0,
+          'stock_move_id': move['id'],
+          'stock_move_resi': resi,
+          'sku': sku,
+        })
+        .eq('id', id)
+        .inFilter('status', ['PREPARING', 'APPROVED'])
+        .select('id');
+    if ((updated as List).isEmpty) {
+      // Stok sudah terpotong — jangan rollback diam-diam; tandai error jelas.
+      throw 'Stok sudah dipotong, tapi status RO gagal diubah. '
+          'Cek resi $resi / move $moveId di Tracking & Verifikasi Terima.';
+    }
 
     return resi;
   }
@@ -425,26 +527,84 @@ class RequestOrderService {
     required String stockMoveId,
     String? resi,
   }) async {
+    final successPatch = {
+      'status': 'SUCCESS',
+      'tracking_status': trackingFor('SUCCESS'),
+      'reserved_qty': 0,
+      'reviewed_at': DateTime.now().toIso8601String(),
+    };
+
     final byId = await _client
         .from('pending_requests')
-        .select('id')
+        .select('id, sale_item_id, sale_id')
         .eq('stock_move_id', stockMoveId)
         .eq('status', 'SHIPPING');
     if ((byId as List).isNotEmpty) {
-      await _client.from('pending_requests').update({
-        'status': 'SUCCESS',
-        'tracking_status': trackingFor('SUCCESS'),
-        'reserved_qty': 0,
-      }).eq('stock_move_id', stockMoveId);
+      await _client
+          .from('pending_requests')
+          .update(successPatch)
+          .eq('stock_move_id', stockMoveId)
+          .eq('status', 'SHIPPING');
+      await _syncSaleItemsReadyFromRequests(
+        byId.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      );
       return;
     }
 
-    if (resi != null && resi.isNotEmpty) {
-      await _client.from('pending_requests').update({
-        'status': 'SUCCESS',
-        'tracking_status': trackingFor('SUCCESS'),
-        'reserved_qty': 0,
-      }).eq('stock_move_resi', resi).eq('status', 'SHIPPING');
+    final resiClean = (resi ?? '').trim();
+    if (resiClean.isEmpty) return;
+
+    final byResi = await _client
+        .from('pending_requests')
+        .select('id, sale_item_id, sale_id')
+        .eq('stock_move_resi', resiClean)
+        .eq('status', 'SHIPPING');
+    if ((byResi as List).isEmpty) return;
+
+    await _client
+        .from('pending_requests')
+        .update(successPatch)
+        .eq('stock_move_resi', resiClean)
+        .eq('status', 'SHIPPING');
+    await _syncSaleItemsReadyFromRequests(
+      byResi.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+    );
+  }
+
+  /// RO SUCCESS → sales_items READY + re-arm QR + kirim ke pelanggan.
+  Future<void> _syncSaleItemsReadyFromRequests(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final fulfill = SaleFulfillmentService(client: _client);
+    final deliveredSaleIds = <String>{};
+    for (final row in rows) {
+      try {
+        final sale = await fulfill.markReadyFromPendingRequest(
+          pendingRequestId: row['id'],
+          saleItemId: row['sale_item_id']?.toString(),
+        );
+        if (sale == null) {
+          // ignore: avoid_print
+          print(
+            'RO SUCCESS: tidak ada sales_item untuk PR ${row['id']} '
+            '(sale_item_id=${row['sale_item_id']}). Link POS saat checkout.',
+          );
+          continue;
+        }
+        if (sale['qr_rearmed'] != true) continue;
+        final sid = sale['id']?.toString() ?? '';
+        if (sid.isEmpty || deliveredSaleIds.contains(sid)) continue;
+        deliveredSaleIds.add(sid);
+        try {
+          await InvoiceDeliveryService(client: _client).deliver(
+            sale: sale,
+            mode: InvoiceDeliveryMode.goodsReady,
+          );
+        } catch (_) {}
+      } catch (e) {
+        // ignore: avoid_print
+        print('RO SUCCESS sync line/QR gagal PR ${row['id']}: $e');
+      }
     }
   }
 }

@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 /// Kartu rating bintang untuk kasir / pembuat (dipakai APK Member).
 class InvoiceRatingCard extends StatefulWidget {
@@ -38,24 +39,24 @@ class _InvoiceRatingCardState extends State<InvoiceRatingCard> {
   Widget build(BuildContext context) {
     final nama = (widget.nama ?? '').trim();
     final done = widget.existing != null;
-    final fg = widget.dark ? Colors.white : const Color(0xFF0F172A);
-    final muted = widget.dark ? Colors.white54 : Colors.black54;
-    final gold = const Color(0xFFE8C872);
-    final teal = const Color(0xFF0F766E);
+    final fg = widget.dark ? OptikAdminTokens.snow : OptikAdminTokens.navy;
+    final muted = widget.dark ? OptikAdminTokens.slate : OptikAdminTokens.slate;
+    final gold = OptikAdminTokens.ice;
+    final teal = OptikAdminTokens.success;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: widget.dark ? Colors.white.withOpacity(0.05) : Colors.white,
+        color: widget.dark ? OptikAdminTokens.snow.withOpacity(0.05) : OptikAdminTokens.snow,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: widget.dark ? Colors.white12 : Colors.black12,
+          color: widget.dark ? OptikAdminTokens.line : OptikAdminTokens.line,
         ),
         boxShadow: widget.dark
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: OptikAdminTokens.navy.withOpacity(0.04),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -72,7 +73,7 @@ class _InvoiceRatingCardState extends State<InvoiceRatingCard> {
           Text(
             nama.isEmpty ? 'invoice_hub_nama_belum'.tr() : nama,
             style: TextStyle(
-              color: nama.isEmpty ? Colors.orange.shade700 : muted,
+              color: nama.isEmpty ? OptikAdminTokens.warning : muted,
               fontSize: 13,
             ),
           ),
@@ -126,8 +127,8 @@ class _InvoiceRatingCardState extends State<InvoiceRatingCard> {
                 hintStyle: TextStyle(color: muted),
                 filled: true,
                 fillColor: widget.dark
-                    ? Colors.white.withOpacity(0.04)
-                    : const Color(0xFFF8FAFC),
+                    ? OptikAdminTokens.snow.withOpacity(0.04)
+                    : OptikAdminTokens.bgMid,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -156,7 +157,7 @@ class _InvoiceRatingCardState extends State<InvoiceRatingCard> {
                 style: FilledButton.styleFrom(
                   backgroundColor: widget.dark ? gold : teal,
                   foregroundColor:
-                      widget.dark ? const Color(0xFF0F172A) : Colors.white,
+                      widget.dark ? OptikAdminTokens.navy : OptikAdminTokens.snow,
                 ),
                 child: _busy
                     ? const SizedBox(

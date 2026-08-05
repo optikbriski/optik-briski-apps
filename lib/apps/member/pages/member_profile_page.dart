@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/member/member_home_controller.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_status_watch.dart';
@@ -68,6 +69,8 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
     if (ok != true || !mounted) return;
     await MemberSession.instance.logout();
     MemberStatusWatch.instance.stop();
+    // Bersihkan cache beranda agar guest/login berikutnya tidak lihat data lama.
+    await MemberHomeController.instance.refresh(force: true);
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/login');
   }

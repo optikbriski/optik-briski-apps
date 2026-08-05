@@ -236,7 +236,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
     if (_booting) {
       return const PremiumScaffold(
         body: Center(
-          child: CircularProgressIndicator(color: OptikAdminTokens.accentSoft),
+          child: CircularProgressIndicator(color: OptikAdminTokens.ice),
         ),
       );
     }

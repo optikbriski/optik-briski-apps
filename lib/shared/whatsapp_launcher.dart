@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'invoice/invoice_settings_service.dart';
+
 /// Nomor WA fallback jika invoice_settings.phone kosong.
 const String defaultAdminWhatsApp = '6281288801697';
 
@@ -13,16 +15,15 @@ String normalizeWaNumber(String raw) {
   return digits;
 }
 
-Future<String> resolveAdminWhatsApp({SupabaseClient? client}) async {
-  final c = client ?? Supabase.instance.client;
+Future<String> resolveAdminWhatsApp({
+  SupabaseClient? client,
+  String? tokoId,
+}) async {
   try {
-    final row = await c
-        .from('invoice_settings')
-        .select('phone')
-        .limit(1)
-        .maybeSingle();
-    final phone = row?['phone']?.toString() ?? '';
-    if (phone.trim().isNotEmpty) {
+    final settings = await InvoiceSettingsService(client: client)
+        .fetchForToko(tokoId ?? 'PUSAT');
+    final phone = settings.phone.trim();
+    if (phone.isNotEmpty && phone != '-') {
       return normalizeWaNumber(phone);
     }
   } catch (_) {}

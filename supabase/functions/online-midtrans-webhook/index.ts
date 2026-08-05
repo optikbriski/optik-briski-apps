@@ -27,6 +27,9 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const db = createClient(supabaseUrl, serviceKey);
   const serverKey = Deno.env.get("MIDTRANS_SERVER_KEY") ?? "";
+  const allowUnsigned =
+    (Deno.env.get("ALLOW_UNSIGNED_MIDTRANS_WEBHOOK") ?? "").toLowerCase() ===
+      "true";
 
   try {
     // Dev shortcut: GET ?dev_pay=ORDER_ID (hanya jika tidak ada Midtrans key)
@@ -44,9 +47,12 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ ok: true, service: "online-midtrans-webhook" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: true, service: "online-midtrans-webhook" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const payload = await req.json();
@@ -59,47 +65,89 @@ Deno.serve(async (req: Request) => {
     const paymentType = String(payload.payment_type ?? "Midtrans");
 
     if (!orderId) {
-      return new Response(JSON.stringify({ ok: false, error: "order_id missing" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: false, error: "order_id missing" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     if (serverKey.trim()) {
       const expected = await sha512Hex(
         `${orderId}${statusCode}${grossAmount}${serverKey}`,
       );
-      if (signature && signature !== expected) {
-        console.error("Invalid Midtrans signature");
-        return new Response(JSON.stringify({ ok: false, error: "invalid signature" }), {
+      if (!signature || signature !== expected) {
+        console.error("Invalid or missing Midtrans signature");
+        return new Response(
+          JSON.stringify({ ok: false, error: "invalid signature" }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    } else if (!allowUnsigned) {
+      // Tanpa server key: tolak POST (cegah fulfill palsu). Pakai GET ?dev_pay= untuk uji.
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error:
+            "MIDTRANS_SERVER_KEY kosong — webhook POST ditolak. Set key atau ALLOW_UNSIGNED_MIDTRANS_WEBHOOK=true (dev).",
+        }),
+        {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+        },
+      );
     }
 
     const paid =
-      transactionStatus === "capture" && fraudStatus === "accept" ||
+      (transactionStatus === "capture" && fraudStatus === "accept") ||
       transactionStatus === "settlement";
 
     if (transactionStatus === "expire" || transactionStatus === "cancel") {
-      await db
+      // Ambil id lalu cancel_pending (lepas ONLINE_HOLD) — fallback update status.
+      const { data: row } = await db
         .from("online_orders")
-        .update({
-          status: transactionStatus === "expire" ? "expired" : "cancelled",
-          updated_at: new Date().toISOString(),
-        })
+        .select("id")
         .eq("midtrans_order_id", orderId)
-        .eq("status", "pending_payment");
-      return new Response(JSON.stringify({ ok: true, skipped: transactionStatus }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        .eq("status", "pending_payment")
+        .maybeSingle();
+
+      if (row?.id) {
+        if (transactionStatus === "cancel") {
+          await db.rpc("cancel_pending_online_order", {
+            p_online_order_id: row.id,
+            p_reason: "midtrans_cancel",
+          });
+        } else {
+          await db
+            .from("online_orders")
+            .update({
+              status: "expired",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", row.id)
+            .eq("status", "pending_payment");
+        }
+      }
+      return new Response(
+        JSON.stringify({ ok: true, skipped: transactionStatus }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     if (!paid) {
-      return new Response(JSON.stringify({ ok: true, skipped: transactionStatus }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: true, skipped: transactionStatus }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const gross = Math.round(parseFloat(grossAmount) || 0);

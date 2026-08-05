@@ -53,8 +53,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   List<ExportDownloadHistoryEntry> _history = const [];
 
   static const _bg = OptikAdminTokens.bgMid;
-  static const _accent = Color(0xFF38BDF8);
-  static const _gold = Color(0xFFC9A84C);
+  static const _accent = OptikAdminTokens.ice;
+  static const _gold = OptikAdminTokens.trainingSoft;
 
   static const _presetLabels = {
     'last7': '7 hari terakhir',
@@ -102,7 +102,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('export_pusat_only'.tr()),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: OptikAdminTokens.warning,
           ),
         );
         Navigator.pop(context);
@@ -232,7 +232,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('export_no_domain'.tr()),
-          backgroundColor: Colors.orange.shade800,
+          backgroundColor: OptikAdminTokens.warning,
         ),
       );
       return;
@@ -253,7 +253,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('training_export_stub_done'.tr()),
-            backgroundColor: const Color(0xFFB45309),
+            backgroundColor: OptikAdminTokens.training,
           ),
         );
       }
@@ -288,7 +288,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('export_salinan_local_warn'.tr()),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: OptikAdminTokens.warning,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -365,7 +365,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                   ? 'export_salinan_local_warn'.tr()
                   : 'export_history_warn'.tr(),
             ),
-            backgroundColor: Colors.orange.shade800,
+            backgroundColor: OptikAdminTokens.warning,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -389,7 +389,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
         SnackBar(
           content: Text(doneMsg),
           backgroundColor:
-              result.hasErrors ? Colors.orange.shade800 : Colors.teal.shade700,
+              result.hasErrors ? OptikAdminTokens.warning : OptikAdminTokens.ice,
           duration: Duration(seconds: fileCount > 1 ? 8 : 6),
           action: SnackBarAction(
             label: fileCount > 1
@@ -397,7 +397,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                     namedArgs: {'count': '$fileCount'},
                   )
                 : 'export_open_file'.tr(),
-            textColor: Colors.white,
+            textColor: OptikAdminTokens.snow,
             onPressed: () => _openExportedFiles(exportedFiles),
           ),
         ),
@@ -407,7 +407,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_friendlyExportError(e)),
-          backgroundColor: Colors.red.shade800,
+          backgroundColor: OptikAdminTokens.danger,
           duration: const Duration(seconds: 8),
         ),
       );
@@ -509,7 +509,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             },
           ),
         ),
-        backgroundColor: Colors.red.shade800,
+        backgroundColor: OptikAdminTokens.danger,
         duration: const Duration(seconds: 6),
       ),
     );
@@ -547,7 +547,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             Text(
               'export_page_desc'.tr(),
               style: TextStyle(
-                color: Colors.white.withOpacity(0.65),
+                color: OptikAdminTokens.navy.withOpacity(0.65),
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -556,7 +556,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             Text(
               'export_pdf_note'.tr(),
               style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
+                color: OptikAdminTokens.navy.withOpacity(0.45),
                 fontSize: 11.5,
                 height: 1.35,
               ),
@@ -582,7 +582,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                 PremiumStatItem(
                   label: 'Salinan berikut',
                   value: _salinanPreviewLabel,
-                  color: Colors.tealAccent,
+                  color: OptikAdminTokens.navy,
                 ),
               ],
             ),
@@ -611,7 +611,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                   Text(
                     'export_jakarta_note'.tr(),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: OptikAdminTokens.navy.withOpacity(0.4),
                       fontSize: 11,
                     ),
                   ),
@@ -641,7 +641,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                         child: Text(
                           'export_clear_all'.tr(),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(_busy ? 0.25 : 0.55),
+                            color: OptikAdminTokens.navy.withOpacity(_busy ? 0.25 : 0.55),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -659,7 +659,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       },
                     ),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.45),
+                      color: OptikAdminTokens.navy.withOpacity(0.45),
                       fontSize: 11,
                     ),
                   ),
@@ -669,14 +669,14 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                     enabled: !_busy,
                     onChanged: (v) => setState(() => _domainQuery = v),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: OptikAdminTokens.navy.withOpacity(0.9),
                       fontSize: 13,
                     ),
                     cursorColor: _accent,
                     decoration: InputDecoration(
                       hintText: 'export_domains_search'.tr(),
                       hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
+                        color: OptikAdminTokens.navy.withOpacity(0.35),
                         fontSize: 12.5,
                       ),
                       prefixIcon: Icon(
@@ -697,7 +697,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                               icon: Icon(
                                 Icons.close_rounded,
                                 size: 18,
-                                color: Colors.white.withOpacity(0.45),
+                                color: OptikAdminTokens.navy.withOpacity(0.45),
                               ),
                             ),
                       filled: true,
@@ -710,13 +710,13 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.08),
+                          color: OptikAdminTokens.navy.withOpacity(0.08),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.08),
+                          color: OptikAdminTokens.navy.withOpacity(0.08),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -728,7 +728,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       disabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.05),
+                          color: OptikAdminTokens.navy.withOpacity(0.05),
                         ),
                       ),
                     ),
@@ -740,7 +740,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       color: _bg,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.08),
+                        color: OptikAdminTokens.navy.withOpacity(0.08),
                       ),
                     ),
                     child: filteredDomains.isEmpty
@@ -753,7 +753,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                               child: Text(
                                 'export_domains_empty'.tr(),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.45),
+                                  color: OptikAdminTokens.navy.withOpacity(0.45),
                                   fontSize: 13,
                                 ),
                               ),
@@ -770,7 +770,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                               itemCount: filteredDomains.length,
                               separatorBuilder: (_, __) => Divider(
                                 height: 1,
-                                color: Colors.white.withOpacity(0.05),
+                                color: OptikAdminTokens.navy.withOpacity(0.05),
                               ),
                               itemBuilder: (context, i) {
                                 final d = filteredDomains[i];
@@ -791,7 +791,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                                         ? '${d.sheetName} ★'
                                         : d.sheetName,
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.9),
+                                      color: OptikAdminTokens.navy.withOpacity(0.9),
                                       fontSize: 13,
                                     ),
                                   ),
@@ -804,7 +804,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                   Text(
                     'export_snapshot_legend'.tr(),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: OptikAdminTokens.navy.withOpacity(0.4),
                       fontSize: 11,
                       height: 1.35,
                     ),
@@ -819,63 +819,52 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                     opacity: modeEnabled ? 1 : 0.45,
                     child: Column(
                       children: [
-                        RadioListTile<ExportPdfMode>(
-                          dense: true,
-                          value: ExportPdfMode.gabung,
-                          groupValue: _multiSelected
-                              ? _mode
-                              : ExportPdfMode.gabung,
-                          onChanged: modeEnabled
-                              ? (v) {
-                                  if (v != null) {
-                                    setState(() => _mode = v);
+                        AdminPickerField(
+                          label: 'export_output_mode'.tr(),
+                          valueText: (!_multiSelected
+                                  ? ExportPdfMode.gabung
+                                  : _mode) ==
+                              ExportPdfMode.pisah
+                              ? 'export_mode_pisah'.tr()
+                              : 'export_mode_gabung'.tr(),
+                          icon: Icons.picture_as_pdf_outlined,
+                          enabled: modeEnabled,
+                          onTap: modeEnabled
+                              ? () async {
+                                  final sel =
+                                      await showAdminPicker<ExportPdfMode>(
+                                    context: context,
+                                    title: 'export_output_mode'.tr(),
+                                    headerIcon: Icons.picture_as_pdf_outlined,
+                                    searchable: false,
+                                    selected: _multiSelected
+                                        ? _mode
+                                        : ExportPdfMode.gabung,
+                                    options: [
+                                      AdminPickerOption(
+                                        value: ExportPdfMode.gabung,
+                                        label: 'export_mode_gabung'.tr(),
+                                        subtitle:
+                                            'export_mode_gabung_hint'.tr(),
+                                        icon: Icons.merge_type_rounded,
+                                      ),
+                                      AdminPickerOption(
+                                        value: ExportPdfMode.pisah,
+                                        label: 'export_mode_pisah'.tr(),
+                                        subtitle:
+                                            'export_mode_pisah_hint'.tr(),
+                                        icon: Icons.call_split_rounded,
+                                      ),
+                                    ],
+                                  );
+                                  if (sel == null ||
+                                      sel.isClear ||
+                                      sel.value == null) {
+                                    return;
                                   }
+                                  setState(() => _mode = sel.value!);
                                 }
                               : null,
-                          activeColor: _accent,
-                          title: Text(
-                            'export_mode_gabung'.tr(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'export_mode_gabung_hint'.tr(),
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.4),
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                        RadioListTile<ExportPdfMode>(
-                          dense: true,
-                          value: ExportPdfMode.pisah,
-                          groupValue: _multiSelected
-                              ? _mode
-                              : ExportPdfMode.gabung,
-                          onChanged: modeEnabled
-                              ? (v) {
-                                  if (v != null) {
-                                    setState(() => _mode = v);
-                                  }
-                                }
-                              : null,
-                          activeColor: _accent,
-                          title: Text(
-                            'export_mode_pisah'.tr(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'export_mode_pisah_hint'.tr(),
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.4),
-                              fontSize: 11,
-                            ),
-                          ),
                         ),
                       ],
                     ),
@@ -886,7 +875,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       child: Text(
                         'export_mode_single_hint'.tr(),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
+                          color: OptikAdminTokens.navy.withOpacity(0.4),
                           fontSize: 11,
                         ),
                       ),
@@ -928,7 +917,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                                     ? 'export_salinan_hint_missing'.tr()
                                     : 'export_salinan_hint'.tr(),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.4),
+                                  color: OptikAdminTokens.navy.withOpacity(0.4),
                                   fontSize: 11,
                                 ),
                               ),
@@ -945,9 +934,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                     child: ElevatedButton.icon(
                       onPressed: _busy ? null : _runExport,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _accent,
                         foregroundColor: OptikAdminTokens.bgMid,
-                        disabledBackgroundColor: Colors.blueGrey.shade700,
+                        disabledBackgroundColor: OptikAdminTokens.slate,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -973,7 +961,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                         child: Text(
                           'export_pdf_helper'.tr(),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
+                            color: OptikAdminTokens.navy.withOpacity(0.4),
                             fontSize: 11,
                             height: 1.3,
                           ),
@@ -1000,7 +988,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                         child: Text(
                           s,
                           style: const TextStyle(
-                            color: Colors.white70,
+                            color: OptikAdminTokens.textSecondary,
                             fontSize: 12,
                           ),
                         ),
@@ -1010,7 +998,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       Text(
                         'export_errors_title'.tr(),
                         style: TextStyle(
-                          color: Colors.orange.shade300,
+                          color: OptikAdminTokens.warning,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -1019,7 +1007,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                         Text(
                           e,
                           style: TextStyle(
-                            color: Colors.orange.shade200,
+                            color: OptikAdminTokens.warning.withOpacity(0.35),
                             fontSize: 11,
                           ),
                         ),
@@ -1037,7 +1025,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                 icon: Icon(
                   Icons.refresh_rounded,
                   size: 20,
-                  color: Colors.white.withOpacity(0.55),
+                  color: OptikAdminTokens.navy.withOpacity(0.55),
                 ),
               ),
             ),
@@ -1062,7 +1050,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                       ? 'export_history_migration'.tr()
                       : 'export_history_empty'.tr(),
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
+                    color: OptikAdminTokens.navy.withOpacity(0.45),
                     fontSize: 12,
                     height: 1.35,
                   ),
@@ -1081,15 +1069,15 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF7C2D12).withOpacity(0.55),
+        color: OptikAdminTokens.warning.withOpacity(0.55),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade700.withOpacity(0.7)),
+        border: Border.all(color: OptikAdminTokens.warning.withOpacity(0.7)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.warning_amber_rounded,
-              size: 20, color: Colors.orange.shade200),
+              size: 20, color: OptikAdminTokens.warning.withOpacity(0.35)),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1098,7 +1086,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                 Text(
                   'export_infra_banner'.tr(),
                   style: TextStyle(
-                    color: Colors.orange.shade100,
+                    color: OptikAdminTokens.warning.withOpacity(0.18),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     height: 1.35,
@@ -1112,7 +1100,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.orange.shade200.withOpacity(0.75),
+                      color: OptikAdminTokens.warning.withOpacity(0.35).withOpacity(0.75),
                       fontSize: 10.5,
                       height: 1.3,
                     ),
@@ -1161,7 +1149,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
               Text(
                 _historyDtFmt.format(h.createdAt),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
+                  color: OptikAdminTokens.navy.withOpacity(0.45),
                   fontSize: 11,
                 ),
               ),
@@ -1170,7 +1158,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
           const SizedBox(height: 6),
           Text(
             period,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1178,7 +1166,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                   'n': '${h.fileCount}',
                 })}',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: OptikAdminTokens.navy.withOpacity(0.5),
               fontSize: 11,
             ),
           ),
@@ -1186,7 +1174,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
           Text(
             domainNames.isEmpty ? '—' : domainNames,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.55),
+              color: OptikAdminTokens.navy.withOpacity(0.55),
               fontSize: 11,
               height: 1.3,
             ),
@@ -1197,7 +1185,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
           Text(
             'export_history_by'.tr(namedArgs: {'who': who}),
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
+              color: OptikAdminTokens.navy.withOpacity(0.35),
               fontSize: 10.5,
             ),
           ),

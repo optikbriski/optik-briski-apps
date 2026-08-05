@@ -59,11 +59,13 @@ class PremiumStatItem {
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 }
 
 class _StatTile extends StatelessWidget {
@@ -74,6 +76,7 @@ class _StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PremiumPanel(
+      onTap: item.onTap,
       padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
       borderRadius: 16,
       borderColor: item.color.withOpacity(0.28),

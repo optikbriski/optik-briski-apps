@@ -2,6 +2,7 @@ import 'dart:async'; // ✅ WAJIB: Menghilangkan error merah pada objek Timer pe
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'verifikasi_terima.dart'; // ✅ SEFOLDER: Otomatis tersambung ke sistem verifikasi terima barang Bos
+import '../../shared/theme.dart';
 
 // ============================================================================
 // MODUL 12: GLOBAL NOTIFICATION ICON (LONCENG PINTAR)
@@ -45,7 +46,7 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
           .from('stock_move_history')
           .select('id')
           .eq('ke_lokasi', tokoSaya)
-          .inFilter('status', ['PENDING', 'TRANSIT']);
+          .inFilter('status', ['TRANSIT', 'PENDING']);
 
       if (mounted) {
         setState(() {
@@ -64,7 +65,7 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
       children: [
         IconButton(
           icon: const Icon(Icons.notifications_active_rounded,
-              color: Colors.orangeAccent, size: 22),
+              color: OptikAdminTokens.warning, size: 22),
           onPressed: () {
             // ✅ NAVIGASI AKTIF: Langsung diarahkan menuju screen verifikasi terima paket
             Navigator.push(
@@ -85,11 +86,11 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: const BoxDecoration(
-                  color: Colors.redAccent, shape: BoxShape.circle),
+                  color: OptikAdminTokens.danger, shape: BoxShape.circle),
               child: Text(
                 pendingCount > 9 ? '9+' : pendingCount.toString(),
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 9,
                     fontWeight: FontWeight.bold),
               ),

@@ -11,6 +11,8 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'attendance/face_template.dart';
 import 'attendance/liveness_result.dart';
 import 'responsive.dart';
+import 'theme.dart';
+import 'widgets/admin/admin_premium.dart';
 
 class LivenessCameraPage extends StatefulWidget {
   const LivenessCameraPage({super.key});
@@ -25,7 +27,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
   bool _isBusy = false;
   bool _isFaceDetected = false;
   late String _livenessStatus;
-  Color _statusColor = Colors.orangeAccent;
+  Color _statusColor = OptikAdminTokens.warning;
 
   // Penampung Timer resmi agar bisa dibatalkan saat dispose (Anti-Leak)
   Timer? _webTimer1;
@@ -110,14 +112,14 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
       setState(() {
         _isFaceDetected = true;
         _livenessStatus = "liveness_senyum".tr();
-        _statusColor = Colors.blueAccent;
+        _statusColor = OptikAdminTokens.navy;
       });
 
       _webTimer2 = Timer(const Duration(seconds: 3), () {
         if (!mounted) return;
         setState(() {
           _livenessStatus = "liveness_sukses".tr();
-          _statusColor = Colors.green;
+          _statusColor = OptikAdminTokens.success;
         });
         _berhasilAbsen();
       });
@@ -232,7 +234,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
             setState(() {
               _isFaceDetected = false;
               _livenessStatus = "liveness_wajah_tidak_terlihat".tr();
-              _statusColor = Colors.redAccent;
+              _statusColor = OptikAdminTokens.danger;
             });
           }
         }
@@ -245,7 +247,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
             if (mounted) {
               setState(() {
                 _livenessStatus = "liveness_sukses".tr();
-                _statusColor = Colors.green;
+                _statusColor = OptikAdminTokens.success;
               });
             }
             _berhasilAbsen();
@@ -253,7 +255,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
             if (mounted) {
               setState(() {
                 _livenessStatus = "liveness_senyum".tr();
-                _statusColor = Colors.blueAccent;
+                _statusColor = OptikAdminTokens.navy;
               });
             }
           }
@@ -299,7 +301,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
     if (mounted) {
       setState(() {
         _livenessStatus = "liveness_sukses".tr();
-        _statusColor = Colors.green;
+        _statusColor = OptikAdminTokens.success;
       });
     }
 
@@ -339,8 +341,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
   @override
   Widget build(BuildContext context) {
     if (_errorMessage != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+      return PremiumScaffold(
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -348,12 +349,12 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.videocam_off_rounded,
-                    color: Colors.redAccent, size: 60),
+                    color: OptikAdminTokens.danger, size: 60),
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 14),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -370,10 +371,9 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
     }
 
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+      return const PremiumScaffold(
         body:
-            Center(child: CircularProgressIndicator(color: Colors.blueAccent)),
+            Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy)),
       );
     }
 
@@ -393,20 +393,12 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
           Navigator.pop(context, false);
         }
       },
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          title: Text(
-            "liveness_title".tr(),
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+      child: PremiumScaffold(
+        appBar: PremiumAppBar(
+          title: 'liveness_title'.tr(),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white),
+                color: OptikAdminTokens.navy),
             onPressed: () {
               // Menangani klik tombol back manual di sudut kiri atas layar aplikasi
               if (!_isSuccessTriggered) {
@@ -489,7 +481,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
                   "liveness_instruksi".tr(),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Colors.white70,
+                    color: OptikAdminTokens.slate,
                     fontSize: 13,
                     height: 1.5,
                   ),

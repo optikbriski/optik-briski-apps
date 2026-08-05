@@ -1,6 +1,7 @@
 /// Barrel export for Admin premium UI primitives.
 library;
 
+export 'admin_picker.dart';
 export 'premium_app_bar.dart';
 export 'premium_chip_wrap.dart';
 export 'premium_empty_state.dart';

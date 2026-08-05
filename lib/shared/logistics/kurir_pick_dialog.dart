@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/admin/admin_picker.dart';
 import 'logistics_tracking_service.dart';
 
 /// Pilih kurir (opsional). Return map karyawan, atau null jika batal / lewati.
@@ -11,7 +12,7 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
   String? tokoId,
   bool pusatOnly = false,
   bool allowSkip = true,
-  String title = 'Pilih kurir (opsional)',
+  String title = 'Pilih kurir',
 }) async {
   final list = await service.listKaryawanAktif(
     tokoId: tokoId,
@@ -19,48 +20,28 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
   );
   if (!context.mounted) return null;
 
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (ctx) {
-      return AlertDialog(
-        backgroundColor: OptikAdminTokens.bgMid,
+  if (list.isEmpty) {
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
+          side: const BorderSide(color: OptikAdminTokens.ice, width: 1.2),
+        ),
         title: Text(
           title,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
+          style: const TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
         ),
-        content: SizedBox(
-          width: 360,
-          height: 360,
-          child: list.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Tidak ada karyawan aktif.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: Colors.white12, height: 1),
-                  itemBuilder: (_, i) {
-                    final k = list[i];
-                    return ListTile(
-                      leading: const Icon(Icons.delivery_dining_rounded,
-                          color: OptikAdminTokens.accentSoft),
-                      title: Text(
-                        k['nama']?.toString() ?? '-',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      subtitle: Text(
-                        '${k['nik'] ?? '-'} · ${k['toko_id'] ?? '-'}'
-                        '${k['jabatan'] != null ? ' · ${k['jabatan']}' : ''}',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12),
-                      ),
-                      onTap: () => Navigator.pop(ctx, k),
-                    );
-                  },
-                ),
+        content: Text(
+          pusatOnly
+              ? 'Tidak ada karyawan aktif di Pusat.'
+              : 'Tidak ada karyawan aktif di toko ini.',
+          style: const TextStyle(color: OptikAdminTokens.slate),
         ),
         actions: [
           if (allowSkip)
@@ -73,9 +54,43 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
             child: const Text('Batal'),
           ),
         ],
-      );
+      ),
+    );
+  }
+
+  final sel = await showAdminPicker<Map<String, dynamic>>(
+    context: context,
+    title: title,
+    subtitle: 'Karyawan aktif sebagai kurir pengiriman',
+    headerIcon: Icons.delivery_dining_rounded,
+    searchHint: 'Cari nama / NIK…',
+    clearLabel: allowSkip ? 'Hapus / lewati kurir' : null,
+    clearSubtitle:
+        allowSkip ? 'Surat jalan tanpa kurir ditetapkan' : null,
+    clearIcon: Icons.skip_next_rounded,
+    options: [
+      for (final k in list)
+        AdminPickerOption(
+          value: k,
+          label: k['nama']?.toString() ?? '-',
+          subtitle:
+              '${k['nik'] ?? '-'} · ${k['toko_id'] ?? '-'}'
+              '${k['jabatan'] != null ? ' · ${k['jabatan']}' : ''}',
+          icon: Icons.delivery_dining_rounded,
+        ),
+    ],
+    filterOption: (option, query) {
+      final k = option.value;
+      final hay =
+          '${option.label} ${option.subtitle ?? ''} ${k['nik'] ?? ''}'
+          .toLowerCase();
+      return hay.contains(query);
     },
   );
+
+  if (sel == null) return null;
+  if (sel.isClear) return <String, dynamic>{};
+  return sel.value;
 }
 
 /// Helper: null = batal; map kosong = lewati; map berisi = kurir dipilih.

@@ -8,9 +8,10 @@ import 'logistics_tracking_page.dart';
 import 'stock_move_report.dart';
 import 'barcode_scanner.dart';
 import 'restore_operation.dart';
+import 'global_notification.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
-import '../../shared/logistics/product_identity.dart';
+import 'verifikasi_terima.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
@@ -18,6 +19,7 @@ import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import 'write_off_dialog.dart';
 
 // ============================================================================
 // MODUL 05: ENTERPRISE INVENTORY ASSET CONTROL & VALUATION SYSTEM
@@ -57,117 +59,12 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   }
 
   Future<void> _showWriteOffDialog() async {
-    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+    final ok = await showWriteOffDialog(
       context: context,
       profile: widget.profile,
-      actionLabel: 'write-off stok rusak',
     );
-    if (!allowed || !mounted) return;
-
-    final skuCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController(text: '1');
-    final alasanCtrl = TextEditingController();
-    final toko =
-        (widget.profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: OptikAdminTokens.card,
-        title: const Text('Stok Rusak / Write-off',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Toko: $toko',
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: skuCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'SKU / Barcode',
-                labelStyle: TextStyle(color: Colors.white54),
-              ),
-            ),
-            TextField(
-              controller: qtyCtrl,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Qty rusak',
-                labelStyle: TextStyle(color: Colors.white54),
-              ),
-            ),
-            TextField(
-              controller: alasanCtrl,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Alasan (wajib)',
-                labelStyle: TextStyle(color: Colors.white54),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('BATAL')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('PROSES'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true || !mounted) {
-      skuCtrl.dispose();
-      qtyCtrl.dispose();
-      alasanCtrl.dispose();
-      return;
-    }
-
-    try {
-      final raw = skuCtrl.text.trim();
-      final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-      final alasan = alasanCtrl.text.trim();
-      skuCtrl.dispose();
-      qtyCtrl.dispose();
-      alasanCtrl.dispose();
-
-      final prod = await ProductIdentity.findAtToko(
-        tokoId: toko,
-        sku: raw,
-        barcode: raw,
-      );
-      final sku = ProductIdentity.normalizeSku(prod?['sku']) ??
-          ProductIdentity.normalizeSku(raw) ??
-          ProductIdentity.normalizeBarcode(raw);
-      if (sku == null) throw 'Produk/SKU tidak ditemukan di $toko.';
-
-      await StockMutationService().writeOff(
-        tokoId: toko,
-        sku: sku,
-        qty: qty,
-        alasan: alasan,
-        actorNama:
-            (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString(),
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Stok rusak tercatat di ledger.'),
-        backgroundColor: Colors.green,
-      ));
+    if (ok && mounted) {
       _fetchInventoryFinancials();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal write-off: $e'),
-        backgroundColor: Colors.redAccent,
-      ));
     }
   }
 
@@ -175,7 +72,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     final progress = ValueNotifier<StockLeakProgress>(
       const StockLeakProgress(
         percent: 0,
-        phase: 'Menyiapkan mesin audit…',
+        phase: 'Menyiapkan pengecekan…',
       ),
     );
 
@@ -219,9 +116,9 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal cek kebocoran: $e\n'
-          'Pastikan SQL 00012 sudah dijalankan di Supabase.',
+          'Pastikan migrasi stock ledger (00012+) sudah dijalankan di Supabase.',
         ),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
       progress.dispose();
@@ -258,9 +155,9 @@ class _InventoryOverviewState extends State<InventoryOverview> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: report.isClean
-                      ? const Color(0xFF14B8A6)
-                      : Colors.orangeAccent,
-                  foregroundColor: Colors.black,
+                      ? OptikAdminTokens.navy
+                      : OptikAdminTokens.warning,
+                  foregroundColor: OptikAdminTokens.bg,
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -268,7 +165,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                 ),
                 onPressed: () => Navigator.pop(ctx),
                 child: Text(
-                  report.isClean ? 'SELESAI' : 'TUTUP',
+                  report.isClean ? 'Selesai' : 'Tutup',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
@@ -294,7 +191,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         backgroundColor: OptikAdminTokens.card,
         title: const Text(
           'Catat selisih ke ledger',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -308,16 +205,16 @@ class _InventoryOverviewState extends State<InventoryOverview> {
               'agar rumus stok = jejak kembali cocok.\n\n'
               'Ini TIDAK mengubah jumlah barang di rak — hanya melengkapi '
               'jejak supaya kebocoran terdata.',
-              style: const TextStyle(color: Colors.white70, height: 1.4),
+              style: const TextStyle(color: OptikAdminTokens.textSecondary, height: 1.4),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: alasanCtrl,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: OptikAdminTokens.navy),
               maxLines: 2,
               decoration: const InputDecoration(
                 labelText: 'Penjelasan selisih (wajib)',
-                labelStyle: TextStyle(color: Colors.white54),
+                labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
               ),
             ),
           ],
@@ -325,11 +222,11 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('BATAL'),
+            child: const Text('Batal'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('CATAT'),
+            child: const Text('Catat'),
           ),
         ],
       ),
@@ -348,7 +245,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Selisih tercatat. Cek ulang untuk pastikan AMAN.'),
-        backgroundColor: Colors.green,
+        backgroundColor: OptikAdminTokens.success,
       ));
       await _runIntegrityCheck();
     } catch (e) {
@@ -356,9 +253,9 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal catat selisih: $e\n'
-          'Jalankan juga SQL 00013 di Supabase.',
+          'Jalankan migrasi recognize_stock_variance (00013 / 00004) di Supabase.',
         ),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: OptikAdminTokens.danger,
       ));
     }
   }
@@ -435,15 +332,14 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded,
-                color: Colors.white, size: 20),
+                color: OptikAdminTokens.navy, size: 20),
             onPressed: _fetchInventoryFinancials,
           )
         ],
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                  color: OptikAdminTokens.accentSoft))
+              child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : ListView(
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
               children: [
@@ -456,7 +352,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     PremiumStatItem(
                       label: 'Aset Pokok (HPP)',
                       value: _formatRupiah(totalAssetValuation),
-                      color: OptikAdminTokens.accentSoft,
+                      color: OptikAdminTokens.navy,
                     ),
                     PremiumStatItem(
                       label: 'Potensi Omzet',
@@ -466,7 +362,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     PremiumStatItem(
                       label: 'Proyeksi Margin',
                       value: _formatRupiah(totalPotentialMargin),
-                      color: Colors.tealAccent,
+                      color: OptikAdminTokens.navy,
                     ),
                     PremiumStatItem(
                       label: 'Total Volume',
@@ -485,7 +381,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   icon: isPusat
                       ? Icons.local_shipping_rounded
                       : Icons.assignment_return_rounded,
-                  iconColor: OptikAdminTokens.accentSoft,
+                  iconColor: OptikAdminTokens.navy,
                   onTap: () {
                     if (isPusat) {
                       Navigator.push(
@@ -511,7 +407,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   title: "inv_smr_title".tr(),
                   subtitle: "inv_smr_desc".tr(),
                   icon: Icons.receipt_long_rounded,
-                  iconColor: Colors.cyanAccent,
+                  iconColor: OptikAdminTokens.navy,
                   onTap: () {
                     Navigator.push(
                       context,
@@ -524,26 +420,45 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                 ),
 
                 PremiumListTile(
+                  title: 'Verifikasi Terima Barang',
+                  subtitle:
+                      'Antrian DO · RO · Retur masuk cabang — foto + stok',
+                  icon: Icons.fact_check_outlined,
+                  iconColor: OptikAdminTokens.warning,
+                  trailing: GlobalNotificationIcon(profile: widget.profile),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) =>
+                            IncomingVerification(profile: widget.profile),
+                      ),
+                    );
+                  },
+                ),
+
+                PremiumListTile(
                   title: 'Stok Rusak / Write-off',
-                  subtitle: 'Kurangi stok dengan alasan wajib (tercatat ledger)',
+                  subtitle:
+                      'Scan produk · potong stok tersedia · jejak WRITE_OFF',
                   icon: Icons.report_gmailerrorred_rounded,
-                  iconColor: Colors.orangeAccent,
+                  iconColor: OptikAdminTokens.warning,
                   onTap: _showWriteOffDialog,
                 ),
 
                 PremiumListTile(
                   title: 'Cek Kebocoran Stok',
                   subtitle:
-                      'Deteksi selisih stok vs jejak ledger — wajib 0 selisih',
+                      'Audit stok vs ledger · paket perjalanan · penjualan POS',
                   icon: Icons.fact_check_rounded,
-                  iconColor: Colors.lightGreenAccent,
+                  iconColor: OptikAdminTokens.success,
                   onTap: _runIntegrityCheck,
                 ),
 
                 PremiumListTile(
                   title: 'Tracking Logistics',
                   subtitle:
-                      'Peta OSM gratis · status DO/RO/Retur · assign kurir',
+                      'Peta OSM · DO/RO/Retur aktif · pilih kurir · rute toko',
                   icon: Icons.map_rounded,
                   iconColor: OptikAdminTokens.warning,
                   onTap: () {
@@ -562,8 +477,8 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                       ? 'Request Order Pusat'
                       : 'Request Order Cabang',
                   subtitle: isPusat
-                      ? 'Approval → Preparing → Shipping → Success + reservasi stok'
-                      : 'Kirim antrean ke Pusat & lacak status',
+                      ? 'Approval → Disiapkan → Perjalanan → Diterima'
+                      : 'Kirim antrian ke Pusat · lacak · terima di Verifikasi',
                   icon: Icons.assignment_turned_in_rounded,
                   iconColor: OptikAdminTokens.trainingSoft,
                   onTap: () {
@@ -657,12 +572,12 @@ class _InventoryOverviewState extends State<InventoryOverview> {
             title: Row(
               children: [
                 const Icon(Icons.analytics_rounded,
-                    color: Colors.blueAccent, size: 20),
+                    color: OptikAdminTokens.navy, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                     child: Text(product['nama'] ?? 'inv_detail_produk'.tr(),
                         style: const TextStyle(
-                            color: Colors.white,
+                            color: OptikAdminTokens.navy,
                             fontSize: 14,
                             fontWeight: FontWeight.bold))),
               ],
@@ -678,53 +593,53 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     _infoRow(
                         'Real',
                         "${StockQty.realOf(Map<String, dynamic>.from(product))} PCS",
-                        Colors.greenAccent),
+                        OptikAdminTokens.success),
                     _infoRow(
-                        'Pending',
+                        'Booking',
                         "${StockQty.pendingOf(Map<String, dynamic>.from(product))} PCS",
-                        Colors.orangeAccent),
+                        OptikAdminTokens.warning),
                     _infoRow(
-                        'Tersedia / Total jual',
+                        'Tersedia',
                         "${StockQty.availableOf(Map<String, dynamic>.from(product))} PCS",
-                        const Color(0xFF2DD4BF)),
+                        OptikAdminTokens.ice),
                     _infoRow("inv_kategori".tr(), product['kategori'] ?? '-',
-                        Colors.white70),
-                    const Divider(color: Colors.white10, height: 16),
+                        OptikAdminTokens.textSecondary),
+                    const Divider(color: OptikAdminTokens.line, height: 16),
                     const Text("📊 STRUKTUR AKUNTANSI ASSET PROD",
                         style: TextStyle(
-                            color: Colors.amberAccent,
+                            color: OptikAdminTokens.warning,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5)),
                     const SizedBox(height: 6),
                     _infoRow("Harga Pokok (HPP)", _formatRupiah(modal),
-                        Colors.white),
+                        OptikAdminTokens.snow),
                     _infoRow("Harga Jual Retail", _formatRupiah(jual),
-                        Colors.blueAccent),
+                        OptikAdminTokens.ice),
                     _infoRow("Margin Bersih / Pcs", _formatRupiah(marginItem),
-                        Colors.tealAccent),
+                        OptikAdminTokens.ice),
                     _infoRow(
                         "Gross Profit Margin",
                         "${pctMargin.toStringAsFixed(1)} %",
                         pctMargin >= 50
-                            ? Colors.greenAccent
-                            : Colors.orangeAccent),
-                    const Divider(color: Colors.white10, height: 16),
+                            ? OptikAdminTokens.success
+                            : OptikAdminTokens.warning),
+                    const Divider(color: OptikAdminTokens.line, height: 16),
                     if (product['kategori'] == 'Frame' &&
                         product['warna'] != null)
                       _infoRow("inv_warna_frame".tr(), product['warna'],
-                          Colors.orangeAccent),
+                          OptikAdminTokens.warning),
                     if (product['kategori'] == 'Lensa') ...[
                       _infoRow("inv_jenis_lensa".tr(),
-                          product['jenis_lensa'] ?? '-', Colors.orangeAccent),
+                          product['jenis_lensa'] ?? '-', OptikAdminTokens.warning),
                       _infoRow("SPH", _formatOpticLocal(product['sph_r']),
-                          Colors.cyanAccent),
+                          OptikAdminTokens.ice),
                       _infoRow("CYL", _formatOpticLocal(product['cyl_r']),
-                          Colors.cyanAccent),
+                          OptikAdminTokens.ice),
                       if (product['jenis_lensa'] == 'Progresif' ||
                           product['jenis_lensa'] == 'Kryptok')
                         _infoRow("ADD", _formatOpticLocal(product['add_r']),
-                            Colors.purpleAccent),
+                            OptikAdminTokens.slate),
                     ],
                     const SizedBox(height: 12),
                     if (product['image_url'] != null &&
@@ -737,7 +652,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                             fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => const Icon(
                                 Icons.image_not_supported,
-                                color: Colors.white10,
+                                color: OptikAdminTokens.line,
                                 size: 40)),
                       ),
                   ],
@@ -749,7 +664,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   onPressed: () => Navigator.pop(ctx),
                   child: Text("inv_mengerti".tr(),
                       style: const TextStyle(
-                          color: Colors.blueAccent,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.bold,
                           fontSize: 13)))
             ],
@@ -758,7 +673,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("inv_not_found".tr()),
-            backgroundColor: Colors.redAccent));
+            backgroundColor: OptikAdminTokens.danger));
       }
     } catch (e) {
       debugPrint("❌ Gagal rekonsiliasi data audit item: $e");
@@ -772,7 +687,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(color: Colors.white38, fontSize: 11.5)),
+              style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11.5)),
           Text(val,
               style: TextStyle(
                   color: valColor, fontWeight: FontWeight.bold, fontSize: 12)),
@@ -822,7 +737,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
   @override
   Widget build(BuildContext context) {
     final clean = report.isClean;
-    final accent = clean ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
+    final accent = clean ? OptikAdminTokens.success : OptikAdminTokens.warning;
     final pusatQty = report.stockByToko['PUSAT'] ?? 0;
     final cabangEntries = _sortedDesc(
       Map.fromEntries(
@@ -846,7 +761,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
               colors: [
                 accent.withOpacity(0.18),
                 accent.withOpacity(0.04),
-                Colors.white.withOpacity(0.02),
+                OptikAdminTokens.snow.withOpacity(0.02),
               ],
             ),
           ),
@@ -870,12 +785,12 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
               ),
               const SizedBox(height: 12),
               Text(
-                clean ? 'SISTEM AMAN' : 'ADA INDIKASI BOCOR',
+                clean ? 'Sistem aman' : 'Ada indikasi bocor',
                 style: TextStyle(
                   color: accent,
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
-                  letterSpacing: 0.8,
+                  letterSpacing: 0.2,
                 ),
               ),
               const SizedBox(height: 6),
@@ -883,7 +798,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 report.verdict,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.72),
+                  color: OptikAdminTokens.navy.withOpacity(0.72),
                   fontSize: 12,
                   height: 1.35,
                 ),
@@ -893,7 +808,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 '${report.checkedProducts} baris dicek · ketuk kategori di bawah untuk detail',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
+                  color: OptikAdminTokens.navy.withOpacity(0.4),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -905,10 +820,19 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
         Text(
           'HASIL PER KATEGORI',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.45),
+            color: OptikAdminTokens.navy.withOpacity(0.45),
             fontSize: 10.5,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Paket perjalanan = normal (bukan bocor). Selisih = stok ≠ jejak ledger.',
+          style: TextStyle(
+            color: OptikAdminTokens.navy.withOpacity(0.38),
+            fontSize: 11,
+            height: 1.3,
           ),
         ),
         const SizedBox(height: 8),
@@ -916,10 +840,10 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
         _categoryTile(
           keyName: 'transit',
           icon: Icons.local_shipping_rounded,
-          title: 'Transit',
+          title: 'Paket perjalanan',
           countLabel: '${report.openTransitQty}',
           unit: 'pcs',
-          color: Colors.lightBlueAccent,
+          color: OptikAdminTokens.navy,
           detail: _transitDetail(),
         ),
         _categoryTile(
@@ -928,7 +852,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           title: 'Stok Pusat',
           countLabel: '$pusatQty',
           unit: 'pcs',
-          color: const Color(0xFF2DD4BF),
+          color: OptikAdminTokens.navy,
           detail: _stockLinesDetail('PUSAT'),
         ),
         _categoryTile(
@@ -937,7 +861,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           title: 'Stok Cabang',
           countLabel: '$cabangTotal',
           unit: '${cabangEntries.length} lokasi',
-          color: const Color(0xFF60A5FA),
+          color: OptikAdminTokens.navy,
           detail: _cabangStockDetail(cabangEntries),
         ),
         _categoryTile(
@@ -946,7 +870,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           title: 'Terjual POS (30 hari)',
           countLabel: '${report.totalSold30d}',
           unit: 'pcs',
-          color: const Color(0xFFFBBF24),
+          color: OptikAdminTokens.warning,
           detail: _posDetail(soldEntries),
         ),
         _categoryTile(
@@ -956,8 +880,8 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           countLabel: '${report.mismatches.length}',
           unit: 'item',
           color: report.mismatches.isEmpty
-              ? const Color(0xFF34D399)
-              : const Color(0xFFFBBF24),
+              ? OptikAdminTokens.success
+              : OptikAdminTokens.warning,
           detail: _selisihDetail(),
         ),
         _categoryTile(
@@ -967,17 +891,17 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           countLabel: '${report.missingSkuCount}',
           unit: 'produk',
           color: report.missingSkuCount == 0
-              ? Colors.white60
-              : Colors.orangeAccent,
+              ? OptikAdminTokens.textSecondary
+              : OptikAdminTokens.warning,
           detail: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             child: Text(
               report.missingSkuCount == 0
                   ? 'Semua produk punya SKU valid.'
                   : '${report.missingSkuCount} baris produk tanpa SKU / NOSKU. '
-                      'Lengkapi di Product Master agar jejak ledger bisa dilacak.',
+                      'Lengkapi di Master Produk agar jejak ledger bisa dilacak.',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.55),
+                color: OptikAdminTokens.navy.withOpacity(0.55),
                 fontSize: 12,
                 height: 1.35,
               ),
@@ -989,15 +913,15 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
+            color: OptikAdminTokens.navy.withOpacity(0.03),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
+            border: Border.all(color: OptikAdminTokens.line),
           ),
           child: Text(
-            'Rumus: stok toko = Σ ledger (+/−) per SKU. '
-            'Bedanya angka = kebocoran.',
+            'Rumus: stok toko = Σ ledger (+/−) per SKU · lokasi. '
+            'Angka beda = kebocoran. Catat selisih melengkapi jejak tanpa mengubah stok rak.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
+              color: OptikAdminTokens.navy.withOpacity(0.4),
               fontSize: 11,
               height: 1.35,
             ),
@@ -1022,9 +946,9 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withOpacity(open ? 0.05 : 0.03),
+        color: OptikAdminTokens.navy.withOpacity(open ? 0.05 : 0.03),
         border: Border.all(
-          color: open ? color.withOpacity(0.45) : Colors.white10,
+          color: open ? color.withOpacity(0.45) : OptikAdminTokens.line,
         ),
       ),
       child: Column(
@@ -1061,7 +985,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                       child: Text(
                         title,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 13.5,
                         ),
@@ -1088,7 +1012,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                     Text(
                       unit,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
+                        color: OptikAdminTokens.navy.withOpacity(0.4),
                         fontSize: 10.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1098,7 +1022,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                       open
                           ? Icons.expand_less_rounded
                           : Icons.expand_more_rounded,
-                      color: Colors.white54,
+                      color: OptikAdminTokens.textMuted,
                       size: 22,
                     ),
                   ],
@@ -1107,7 +1031,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
             ),
           ),
           if (open) ...[
-            Divider(height: 1, color: Colors.white.withOpacity(0.08)),
+            Divider(height: 1, color: OptikAdminTokens.navy.withOpacity(0.08)),
             detail,
           ],
         ],
@@ -1121,7 +1045,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
       child: Text(
         msg,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.45),
+          color: OptikAdminTokens.navy.withOpacity(0.45),
           fontSize: 12,
         ),
       ),
@@ -1131,67 +1055,106 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
   Widget _transitDetail() {
     final items = report.openTransitItems;
     if (items.isEmpty) {
-      return _emptyDetail('Tidak ada paket sedang transit / preparing.');
+      return _emptyDetail(
+        'Tidak ada paket Disiapkan / dalam perjalanan. Ini normal — bukan kebocoran.',
+      );
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
       child: Column(
-        children: items.map((t) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.white.withOpacity(0.03),
-              border: Border.all(color: Colors.white10),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+            child: Text(
+              'Informasi saja — stok sudah / sedang dipindah lewat DO·RO·Retur.',
+              style: TextStyle(
+                color: OptikAdminTokens.navy.withOpacity(0.42),
+                fontSize: 11,
+                height: 1.3,
+              ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t.resi,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12.5,
+          ),
+          ...items.map((t) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: OptikAdminTokens.navy.withOpacity(0.03),
+                border: Border.all(color: OptikAdminTokens.line),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: OptikAdminTokens.navy.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                t.kindLabel,
+                                style: const TextStyle(
+                                  color: OptikAdminTokens.navy,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                t.resi,
+                                style: const TextStyle(
+                                  color: OptikAdminTokens.navy,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${_tokoLabel(t.fromToko)} → ${_tokoLabel(t.toToko)}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 11,
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_tokoLabel(t.fromToko)} → ${_tokoLabel(t.toToko)}',
+                          style: TextStyle(
+                            color: OptikAdminTokens.navy.withOpacity(0.5),
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        t.status,
-                        style: const TextStyle(
-                          color: Colors.lightBlueAccent,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
+                        const SizedBox(height: 2),
+                        Text(
+                          t.statusLabel,
+                          style: const TextStyle(
+                            color: OptikAdminTokens.navy,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  '${t.qty} pcs',
-                  style: const TextStyle(
-                    color: Colors.lightBlueAccent,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                  Text(
+                    '${t.qty} pcs',
+                    style: const TextStyle(
+                      color: OptikAdminTokens.navy,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -1212,7 +1175,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
               child: Text(
                 '+${lines.length - 30} SKU lain (top 30 ditampilkan)',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
+                  color: OptikAdminTokens.navy.withOpacity(0.4),
                   fontSize: 11,
                 ),
               ),
@@ -1235,8 +1198,8 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
-              color: Colors.white.withOpacity(0.02),
+              border: Border.all(color: OptikAdminTokens.line),
+              color: OptikAdminTokens.navy.withOpacity(0.02),
             ),
             child: Column(
               children: [
@@ -1262,7 +1225,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                           child: Text(
                             _tokoLabel(e.key),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.w700,
                               fontSize: 12.5,
                             ),
@@ -1271,7 +1234,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                         Text(
                           '${e.value} pcs',
                           style: const TextStyle(
-                            color: Color(0xFF60A5FA),
+                            color: OptikAdminTokens.navy,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -1279,7 +1242,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                           (_expandedKey == nestedKey)
                               ? Icons.expand_less
                               : Icons.chevron_right,
-                          color: Colors.white38,
+                          color: OptikAdminTokens.textMuted,
                           size: 18,
                         ),
                       ],
@@ -1308,8 +1271,8 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
-              color: Colors.white.withOpacity(0.02),
+              border: Border.all(color: OptikAdminTokens.line),
+              color: OptikAdminTokens.navy.withOpacity(0.02),
             ),
             child: Column(
               children: [
@@ -1333,7 +1296,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                           child: Text(
                             'POS ${_tokoLabel(e.key)}',
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.w700,
                               fontSize: 12.5,
                             ),
@@ -1342,7 +1305,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                         Text(
                           '${e.value} terjual',
                           style: const TextStyle(
-                            color: Color(0xFFFBBF24),
+                            color: OptikAdminTokens.warning,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -1350,7 +1313,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                           (_expandedKey == nestedKey)
                               ? Icons.expand_less
                               : Icons.chevron_right,
-                          color: Colors.white38,
+                          color: OptikAdminTokens.textMuted,
                           size: 18,
                         ),
                       ],
@@ -1397,7 +1360,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikAdminTokens.navy,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1405,7 +1368,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 Text(
                   sku,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.35),
+                    color: OptikAdminTokens.navy.withOpacity(0.35),
                     fontSize: 10,
                   ),
                 ),
@@ -1415,7 +1378,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           Text(
             '$qty $unit',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.85),
+              color: OptikAdminTokens.navy.withOpacity(0.85),
               fontWeight: FontWeight.w800,
               fontSize: 12,
             ),
@@ -1442,9 +1405,9 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Colors.white.withOpacity(0.03),
+              color: OptikAdminTokens.navy.withOpacity(0.03),
               border: Border.all(
-                color: const Color(0xFFFBBF24).withOpacity(0.28),
+                color: OptikAdminTokens.warning.withOpacity(0.28),
               ),
             ),
             child: Column(
@@ -1456,7 +1419,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                       child: Text(
                         e.nama ?? e.sku,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                         ),
@@ -1465,7 +1428,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                     Text(
                       'Δ $deltaLabel',
                       style: const TextStyle(
-                        color: Color(0xFFFBBF24),
+                        color: OptikAdminTokens.warning,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -1475,7 +1438,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 Text(
                   'SKU ${e.sku} · ${_tokoLabel(e.tokoId)}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.38),
+                    color: OptikAdminTokens.navy.withOpacity(0.38),
                     fontSize: 11,
                   ),
                 ),
@@ -1483,7 +1446,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 Text(
                   'Stok ${e.stock}  vs  Ledger ${e.ledgerSum}',
                   style: const TextStyle(
-                    color: Colors.white70,
+                    color: OptikAdminTokens.textSecondary,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1492,7 +1455,7 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                 Text(
                   e.diagnosis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                    color: OptikAdminTokens.navy.withOpacity(0.5),
                     fontSize: 11,
                     height: 1.3,
                   ),
@@ -1505,8 +1468,8 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                     children: reasonChips.map((r) {
                       final sign = r.value > 0 ? '+' : '';
                       final c = r.value < 0
-                          ? const Color(0xFFF87171)
-                          : const Color(0xFF2DD4BF);
+                          ? OptikAdminTokens.danger
+                          : OptikAdminTokens.ice;
                       return Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
@@ -1532,11 +1495,11 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
                   child: TextButton.icon(
                     onPressed: () => widget.onRecognize(e),
                     icon: const Icon(Icons.playlist_add_check_rounded,
-                        size: 16, color: Color(0xFF2DD4BF)),
+                        size: 16, color: OptikAdminTokens.navy),
                     label: const Text(
-                      'CATAT SELISIH',
+                      'Catat selisih',
                       style: TextStyle(
-                        color: Color(0xFF2DD4BF),
+                        color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.w800,
                         fontSize: 11,
                       ),
@@ -1562,7 +1525,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = progress.percent.clamp(0.0, 1.0);
     final pctLabel = progress.percentInt;
-    final accent = pct >= 1.0 ? Colors.greenAccent : const Color(0xFF2DD4BF);
+    final accent = pct >= 1.0 ? OptikAdminTokens.success : OptikAdminTokens.ice;
 
     return SizedBox(
       width: 340,
@@ -1572,7 +1535,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
           const Text(
             'Audit Kebocoran Stok',
             style: TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
               fontSize: 16,
               letterSpacing: 0.2,
@@ -1583,7 +1546,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
             'Sedang memverifikasi jejak',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.45),
+              color: OptikAdminTokens.navy.withOpacity(0.45),
               fontSize: 11.5,
             ),
           ),
@@ -1605,7 +1568,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
                       child: CircularProgressIndicator(
                         value: value <= 0 ? null : value,
                         strokeWidth: 8,
-                        backgroundColor: Colors.white.withOpacity(0.08),
+                        backgroundColor: OptikAdminTokens.snow.withOpacity(0.08),
                         color: accent,
                         strokeCap: StrokeCap.round,
                       ),
@@ -1627,9 +1590,9 @@ class _LeakCheckProgressBody extends StatelessWidget {
                         Text(
                           progress.total > 0
                               ? '${progress.checked}/${progress.total}'
-                              : 'scan',
+                              : 'memuat',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
+                            color: OptikAdminTokens.navy.withOpacity(0.4),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1646,7 +1609,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
             progress.phase,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Colors.white,
+              color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w700,
               fontSize: 13.5,
               height: 1.3,
@@ -1658,9 +1621,9 @@ class _LeakCheckProgressBody extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: OptikAdminTokens.navy.withOpacity(0.04),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: OptikAdminTokens.line),
               ),
               child: Text(
                 progress.currentLabel!,
@@ -1668,7 +1631,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.65),
+                  color: OptikAdminTokens.navy.withOpacity(0.65),
                   fontSize: 11.5,
                   height: 1.35,
                 ),
@@ -1682,7 +1645,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
                 child: _miniStat(
                   'Terverifikasi',
                   '${progress.checked}',
-                  Colors.white70,
+                  OptikAdminTokens.textSecondary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1691,8 +1654,8 @@ class _LeakCheckProgressBody extends StatelessWidget {
                   'Selisih',
                   '${progress.foundLeaks}',
                   progress.foundLeaks > 0
-                      ? Colors.orangeAccent
-                      : Colors.greenAccent,
+                      ? OptikAdminTokens.warning
+                      : OptikAdminTokens.success,
                 ),
               ),
             ],
@@ -1703,7 +1666,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
             child: LinearProgressIndicator(
               value: pct <= 0 ? null : pct,
               minHeight: 5,
-              backgroundColor: Colors.white.withOpacity(0.08),
+              backgroundColor: OptikAdminTokens.snow.withOpacity(0.08),
               color: accent,
             ),
           ),
@@ -1716,9 +1679,9 @@ class _LeakCheckProgressBody extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: OptikAdminTokens.navy.withOpacity(0.03),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: OptikAdminTokens.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1726,7 +1689,7 @@ class _LeakCheckProgressBody extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
+              color: OptikAdminTokens.navy.withOpacity(0.4),
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),

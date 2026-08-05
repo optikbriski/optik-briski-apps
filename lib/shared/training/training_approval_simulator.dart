@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'training_data_client.dart';
 import 'training_mode.dart';
 import '../theme.dart';
+import '../widgets/admin/admin_picker.dart';
 
 /// Simulated pusat decision in Training Mode only.
 enum TrainingApprovalOutcome {
@@ -275,7 +276,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
       padding: EdgeInsets.only(bottom: bottom),
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFFF8FAFC),
+          color: OptikAdminTokens.bgMid,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -292,7 +293,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 14),
                     decoration: BoxDecoration(
-                      color: Colors.black26,
+                      color: OptikAdminTokens.lineStrong,
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -318,7 +319,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
-                          color: OptikAdminTokens.bgMid,
+                          color: OptikAdminTokens.navy,
                         ),
                       ),
                     ),
@@ -330,32 +331,58 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                   style: const TextStyle(
                     fontSize: 13,
                     height: 1.35,
-                    color: Color(0xFF475569),
+                    color: OptikAdminTokens.slate,
                   ),
                 ),
                 const SizedBox(height: 16),
-                _optionTile(
-                  outcome: TrainingApprovalOutcome.approved,
-                  icon: Icons.check_circle_rounded,
-                  color: const Color(0xFF059669),
-                  title: 'training_approval_sim_approve'.tr(),
-                  subtitle: 'training_approval_sim_approve_desc'.tr(),
-                ),
-                const SizedBox(height: 8),
-                _optionTile(
-                  outcome: TrainingApprovalOutcome.rejected,
-                  icon: Icons.cancel_rounded,
-                  color: const Color(0xFFDC2626),
-                  title: 'training_approval_sim_reject'.tr(),
-                  subtitle: 'training_approval_sim_reject_desc'.tr(),
-                ),
-                const SizedBox(height: 8),
-                _optionTile(
-                  outcome: TrainingApprovalOutcome.pending,
-                  icon: Icons.hourglass_top_rounded,
-                  color: const Color(0xFFD97706),
-                  title: 'training_approval_sim_pending'.tr(),
-                  subtitle: 'training_approval_sim_pending_desc'.tr(),
+                AdminPickerField(
+                  label: 'Keputusan simulasi',
+                  valueText: _selected == null
+                      ? 'Pilih keputusan…'
+                      : switch (_selected!) {
+                          TrainingApprovalOutcome.approved =>
+                            'training_approval_sim_approve'.tr(),
+                          TrainingApprovalOutcome.rejected =>
+                            'training_approval_sim_reject'.tr(),
+                          TrainingApprovalOutcome.pending =>
+                            'training_approval_sim_pending'.tr(),
+                        },
+                  hint: 'Pilih keputusan…',
+                  icon: Icons.gavel_rounded,
+                  badgeColor: OptikAdminTokens.training,
+                  onTap: () async {
+                    final sel = await showAdminPicker<TrainingApprovalOutcome>(
+                      context: context,
+                      title: 'training_approval_sim_title'.tr(),
+                      subtitle: widget.body ?? 'training_approval_sim_body'.tr(),
+                      headerIcon: Icons.school_rounded,
+                      headerBadgeColor: OptikAdminTokens.training,
+                      searchable: false,
+                      selected: _selected,
+                      options: [
+                        AdminPickerOption(
+                          value: TrainingApprovalOutcome.approved,
+                          label: 'training_approval_sim_approve'.tr(),
+                          subtitle: 'training_approval_sim_approve_desc'.tr(),
+                          icon: Icons.check_circle_rounded,
+                        ),
+                        AdminPickerOption(
+                          value: TrainingApprovalOutcome.rejected,
+                          label: 'training_approval_sim_reject'.tr(),
+                          subtitle: 'training_approval_sim_reject_desc'.tr(),
+                          icon: Icons.cancel_rounded,
+                        ),
+                        AdminPickerOption(
+                          value: TrainingApprovalOutcome.pending,
+                          label: 'training_approval_sim_pending'.tr(),
+                          subtitle: 'training_approval_sim_pending_desc'.tr(),
+                          icon: Icons.hourglass_top_rounded,
+                        ),
+                      ],
+                    );
+                    if (sel == null || sel.isClear || sel.value == null) return;
+                    setState(() => _selected = sel.value);
+                  },
                 ),
                 if (_selected == TrainingApprovalOutcome.rejected) ...[
                   const SizedBox(height: 14),
@@ -364,7 +391,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
-                      color: Color(0xFF334155),
+                      color: OptikAdminTokens.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -374,7 +401,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     decoration: InputDecoration(
                       hintText: 'training_approval_sim_note_hint'.tr(),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: OptikAdminTokens.snow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -392,8 +419,8 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     onPressed: _selected == null ? null : _confirm,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: OptikAdminTokens.training,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.black12,
+                      foregroundColor: OptikAdminTokens.snow,
+                      disabledBackgroundColor: OptikAdminTokens.line,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -412,68 +439,4 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
     );
   }
 
-  Widget _optionTile({
-    required TrainingApprovalOutcome outcome,
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-  }) {
-    final selected = _selected == outcome;
-    return Material(
-      color: selected ? color.withOpacity(0.12) : Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: () => setState(() => _selected = outcome),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? color : const Color(0xFFE2E8F0),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: color, size: 26),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: selected ? color : OptikAdminTokens.bgMid,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.3,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: selected ? color : Colors.black26,
-                size: 22,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

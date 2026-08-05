@@ -27,6 +27,28 @@ class TrainingRpcStubs {
       case 'allocate_export_salinan':
         // Consumer expects a positive int (salinan number), not a Map.
         return 1;
+      case 'lookup_member_promo':
+        return {
+          'ok': true,
+          'training': true,
+          'id': 'training-promo',
+          'title': 'Training Promo',
+          'voucher_code': (params?['p_code'] ?? 'TRAIN').toString(),
+          'discount_type': 'nominal',
+          'discount_value': 1000,
+          'quantity_remaining': 99,
+          'points_cost': 0,
+          'channel': params?['p_channel'] ?? 'pos',
+        };
+      case 'redeem_member_promo':
+        // Training: jangan sentuh kuota live — stub sukses di sandbox.
+        return {
+          'ok': true,
+          'training': true,
+          'voucher_code': (params?['p_code'] ?? '').toString(),
+          'points_spent': 0,
+          'skipped': false,
+        };
       default:
         return _defaultStub(fn, params);
     }

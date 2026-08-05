@@ -1,10 +1,13 @@
 import 'dart:typed_data';
 
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 
-/// Overlay gimmick "memverifikasi wajah" setelah liveness.
-/// Bukan biometrik nyata — selalu sukses setelah animasi singkat.
+/// Overlay konfirmasi foto absensi setelah liveness (web / Absensi Toko).
+///
+/// Bukan face-match biometrik penuh — liveness + foto masuk antrean
+/// Monitor Absensi untuk Valid/Mencurigakan. Selalu lanjut setelah animasi.
 Future<void> showFaceVerifyGimmick(
   BuildContext context, {
   required Uint8List photoBytes,
@@ -76,13 +79,12 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF38BDF8);
-    const ok = Color(0xFF4ADE80);
+    const accent = OptikAdminTokens.ice;
+    const ok = OptikAdminTokens.success;
 
     return PopScope(
       canPop: false,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+      child: PremiumScaffold(
         body: SafeArea(
           child: Center(
             child: Padding(
@@ -92,11 +94,12 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
                 children: [
                   Text(
                     _done
-                        ? 'web_liveness_verify_ok'.tr()
-                        : 'web_liveness_capturing'.tr(),
+                        ? 'Foto absensi tersimpan'
+                        : 'Menyimpan foto absensi…',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: _done ? ok : accent,
+                      // Ice bukan body text di snow — navy saat proses.
+                      color: _done ? ok : OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 18,
                       height: 1.3,
@@ -144,18 +147,18 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
                           builder: (_, __) => LinearProgressIndicator(
                             value: _progress.value,
                             minHeight: 6,
-                            backgroundColor: Colors.white12,
                             color: accent,
                           ),
                         ),
                       ),
                     ),
                   const SizedBox(height: 16),
-                  Text(
-                    'web_liveness_verify_hint'.tr(),
+                  const Text(
+                    'Liveness OK. Validasi wajah final di Monitor Absensi '
+                    '(Valid / Mencurigakan) — bukan reject otomatis di kiosk.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white38,
+                    style: TextStyle(
+                      color: OptikAdminTokens.slate,
                       fontSize: 12,
                       height: 1.35,
                     ),

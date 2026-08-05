@@ -87,7 +87,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
                 "retur_maksimal".tr().replaceFirst('{}', maxStok.toString())),
-            backgroundColor: Colors.orange));
+            backgroundColor: OptikAdminTokens.warning));
       } else {
         returnItems[id] = next;
         qtyControllers[id]?.text = next.toString();
@@ -202,14 +202,14 @@ class _RestoreOperationState extends State<RestoreOperation> {
                     : 'training_stock_move_outcome_${outcome.name}'.tr(),
               ),
               backgroundColor: outcome == TrainingApprovalOutcome.rejected
-                  ? Colors.orangeAccent
-                  : const Color(0xFFB45309),
+                  ? OptikAdminTokens.warning
+                  : OptikAdminTokens.training,
             ));
           }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text("retur_sukses_dikirim".tr()),
-              backgroundColor: Colors.green));
+              backgroundColor: OptikAdminTokens.success));
         }
         _fetchMyStock(); // Tarik ulang data stok terbaru cabang
       }
@@ -217,7 +217,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("Gagal memproses retur: $e"),
-            backgroundColor: Colors.redAccent));
+            backgroundColor: OptikAdminTokens.danger));
       }
     } finally {
       if (mounted) setState(() => isProcessing = false);
@@ -243,12 +243,12 @@ class _RestoreOperationState extends State<RestoreOperation> {
             child: TextField(
               controller: searchController,
               onChanged: (v) => setState(() {}),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: OptikAdminTokens.navy),
               decoration: InputDecoration(
                   hintText: "retur_cari_produk".tr(),
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  prefixIcon: const Icon(Icons.search, color: OptikAdminTokens.textMuted),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.05),
+                  fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none)),
@@ -259,11 +259,11 @@ class _RestoreOperationState extends State<RestoreOperation> {
           Expanded(
             child: isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent))
+                    child: CircularProgressIndicator(color: OptikAdminTokens.ice))
                 : displayList.isEmpty
                     ? Center(
                         child: Text("retur_stok_kosong".tr(),
-                            style: const TextStyle(color: Colors.grey)))
+                            style: const TextStyle(color: OptikAdminTokens.textMuted)))
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         itemCount: displayList.length,
@@ -277,26 +277,25 @@ class _RestoreOperationState extends State<RestoreOperation> {
 
                           return Card(
                             color: isSelected
-                                ? Colors.redAccent.withOpacity(0.1)
-                                : const Color(
-                                    0xFF1E293B), // Warna gelap standar ERP Bos Natan
+                                ? OptikAdminTokens.danger.withOpacity(0.1)
+                                : OptikAdminTokens.card,
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 side: BorderSide(
                                     color: isSelected
-                                        ? Colors.redAccent
-                                        : Colors.white.withOpacity(0.05))),
+                                        ? OptikAdminTokens.danger
+                                        : OptikAdminTokens.ice.withOpacity(0.45))),
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 4),
                               title: Text(item['nama'] ?? '-',
                                   style: const TextStyle(
-                                      color: Colors.white,
+                                      color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13)),
                               subtitle: Text("Stok di Cabang: $maxStok PCS",
                                   style: const TextStyle(
-                                      color: Colors.grey, fontSize: 11)),
+                                      color: OptikAdminTokens.textMuted, fontSize: 11)),
                               trailing: isSelected
                                   ? Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -305,19 +304,19 @@ class _RestoreOperationState extends State<RestoreOperation> {
                                         IconButton(
                                             icon: const Icon(
                                                 Icons.remove_circle,
-                                                color: Colors.orangeAccent,
+                                                color: OptikAdminTokens.warning,
                                                 size: 22),
                                             onPressed: () => _updateReturnQty(
                                                 id, -1, maxStok)),
                                         Text("${returnItems[id]}",
                                             style: const TextStyle(
-                                                color: Colors.white,
+                                                color: OptikAdminTokens.navy,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 14)),
                                         // Tombol Tambah Angka Retur
                                         IconButton(
                                             icon: const Icon(Icons.add_circle,
-                                                color: Colors.greenAccent,
+                                                color: OptikAdminTokens.success,
                                                 size: 22),
                                             onPressed: () => _updateReturnQty(
                                                 id, 1, maxStok)),
@@ -325,7 +324,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
                                     )
                                   : IconButton(
                                       icon: const Icon(Icons.keyboard_return,
-                                          color: Colors.redAccent, size: 22),
+                                          color: OptikAdminTokens.danger, size: 22),
                                       onPressed: () {
                                         setState(() {
                                           returnItems[id] = 1;
@@ -345,7 +344,6 @@ class _RestoreOperationState extends State<RestoreOperation> {
             color: OptikAdminTokens.bgMid,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
                   minimumSize: const Size(double.infinity, 55),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12))),
@@ -356,11 +354,11 @@ class _RestoreOperationState extends State<RestoreOperation> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.local_shipping, color: Colors.white),
+                          color: OptikAdminTokens.navy, strokeWidth: 2))
+                  : const Icon(Icons.local_shipping, color: OptikAdminTokens.navy),
               label: Text("retur_btn_kirim".tr(),
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+                      color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
             ),
           )
         ],

@@ -2,8 +2,9 @@
 //
 // OBRPROD|v1|<sku>|<product_id>       → product_code.dart
 // OBRATT|v1|<toko_id>|<token>         → qr_route.dart AttendanceQrPayload
-// OBRINV|v1|<no>|<DP|LUNAS|CLAIM>|<token>  → QR PELANGGAN (sekali pakai per fase)
-// OBRTXN|v1|<no_invoice>                    → QR TOKO (lihat detail saja)
+// OBRINV|v1|<no>|<DP|LUNAS|CLAIM>|<token>|<ONLINE|OFFLINE>
+//   → QR PELANGGAN (sekali pakai per fase); channel opsional, default OFFLINE
+// OBRTXN|v1|<no_invoice>|<ONLINE|OFFLINE>   → QR TOKO (lihat detail saja)
 // OBRPREP|v1|<resi>|<tujuan>   → klaim tim preparing (QUEUED → PREPARING)
 // OBRDO|v1|<resi>|<tujuan>     → QR jalan (driver → TRANSIT, cabang → SUCCESS)
 // OBRRO|v1|<resi>|<tujuan>
@@ -25,6 +26,7 @@ class ObrInvoiceData {
     this.phase,
     this.token,
     this.customerLifecycle = false,
+    this.channel = ObrSaleChannel.offline,
   });
 
   final String noInvoice;
@@ -34,9 +36,43 @@ class ObrInvoiceData {
   final String? token;
   /// True hanya untuk QR pelanggan bertoken (`OBRINV|…|DP/LUNAS/CLAIM|<token>`).
   final bool customerLifecycle;
+  /// `online` (APK Member) | `offline` (beli di toko). Default offline (QR lama).
+  final String channel;
 
   /// Alias kompatibilitas.
   String? get paymentStatus => phase;
+
+  bool get isOnline => channel == ObrSaleChannel.online;
+}
+
+/// Channel belanja di payload QR invoice.
+class ObrSaleChannel {
+  ObrSaleChannel._();
+
+  static const online = 'online';
+  static const offline = 'offline';
+
+  /// Normalisasi field QR → `online` | `offline` (default offline).
+  static String normalize(String? raw) {
+    final s = (raw ?? '').trim().toUpperCase();
+    if (s == 'ONLINE' || s == 'MEMBER' || s == 'MEMBER_ONLINE' || s == 'APK') {
+      return online;
+    }
+    return offline;
+  }
+
+  /// Dari kolom `sales.channel` → nilai QR.
+  static String fromSaleChannel(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase();
+    if (s == 'member_online' || s == 'online' || s == 'member') {
+      return online;
+    }
+    return offline;
+  }
+
+  /// Encode ke field payload (`ONLINE` | `OFFLINE`).
+  static String encodeField(String? channel) =>
+      normalize(channel) == online ? 'ONLINE' : 'OFFLINE';
 }
 
 class ObrInvoice {
@@ -45,27 +81,39 @@ class ObrInvoice {
   static const prefix = 'OBRINV';
   static const version = 'v1';
 
-  /// QR pelanggan sekali pakai: `OBRINV|v1|<no>|<fase>|<token>`.
+  /// QR pelanggan: `OBRINV|v1|<no>|<fase>|<token>|<ONLINE|OFFLINE>`.
   static String encodeCustomer(
     String noInvoice, {
     required String paymentStatus,
     required String token,
+    String channel = ObrSaleChannel.offline,
   }) {
     final n = _clean(noInvoice);
     final st = normalizePhase(paymentStatus);
     final t = _clean(token).replaceAll(' ', '');
     if (n.isEmpty || st == null || t.length < 8) return '';
-    return '$prefix|$version|$n|$st|$t';
+    final ch = ObrSaleChannel.encodeField(channel);
+    return '$prefix|$version|$n|$st|$t|$ch';
   }
 
   @Deprecated('Gunakan encodeCustomer(+token) untuk QR pelanggan')
-  static String encode(String noInvoice, {String? paymentStatus, String? token}) {
+  static String encode(
+    String noInvoice, {
+    String? paymentStatus,
+    String? token,
+    String channel = ObrSaleChannel.offline,
+  }) {
     final st = normalizePhase(paymentStatus);
     final t = (token ?? '').trim();
     if (st != null && t.length >= 8) {
-      return encodeCustomer(noInvoice, paymentStatus: st, token: t);
+      return encodeCustomer(
+        noInvoice,
+        paymentStatus: st,
+        token: t,
+        channel: channel,
+      );
     }
-    return ObrTxn.encode(noInvoice);
+    return ObrTxn.encode(noInvoice, channel: channel);
   }
 
   static bool looksLike(String? raw) => parse(raw) != null;
@@ -83,6 +131,10 @@ class ObrInvoice {
     final st = parts.length >= 4 ? normalizePhase(parts[3]) : null;
     final token = parts.length >= 5 ? parts[4].trim() : '';
     final hasToken = token.length >= 8;
+    // Field channel di akhir; QR lama tanpa field → offline.
+    final channel = parts.length >= 6
+        ? ObrSaleChannel.normalize(parts[5])
+        : ObrSaleChannel.offline;
     return ObrInvoiceData(
       noInvoice: no,
       phase: st,
@@ -90,6 +142,7 @@ class ObrInvoice {
       // Legacy tanpa token: dikenali sebagai invoice, tapi BUKAN lifecycle aktif.
       customerLifecycle:
           hasToken && (st == 'DP' || st == 'LUNAS' || st == 'CLAIM'),
+      channel: channel,
     );
   }
 
@@ -110,6 +163,18 @@ class ObrInvoice {
   }
 }
 
+class ObrTxnData {
+  const ObrTxnData({
+    required this.noInvoice,
+    this.channel = ObrSaleChannel.offline,
+  });
+
+  final String noInvoice;
+  final String channel;
+
+  bool get isOnline => channel == ObrSaleChannel.online;
+}
+
 /// QR internal toko — hanya buka detail transaksi (bukan aksi DP/garansi/klaim).
 class ObrTxn {
   ObrTxn._();
@@ -117,19 +182,31 @@ class ObrTxn {
   static const prefix = 'OBRTXN';
   static const version = 'v1';
 
-  static String encode(String noInvoice) {
+  /// `OBRTXN|v1|<no>` atau `OBRTXN|v1|<no>|<ONLINE|OFFLINE>`.
+  static String encode(
+    String noInvoice, {
+    String channel = ObrSaleChannel.offline,
+  }) {
     final n = _clean(noInvoice);
     if (n.isEmpty) return '';
-    return '$prefix|$version|$n';
+    final ch = ObrSaleChannel.encodeField(channel);
+    return '$prefix|$version|$n|$ch';
   }
 
   static bool looksLike(String? raw) => parse(raw) != null;
 
-  static String? parse(String? raw) {
+  /// No invoice saja (kompatibel pemanggil lama).
+  static String? parse(String? raw) => parseData(raw)?.noInvoice;
+
+  static ObrTxnData? parseData(String? raw) {
     final parts = _parts(raw, prefix);
     if (parts == null || parts.length < 3) return null;
     final no = parts[2].trim();
-    return no.isEmpty ? null : no;
+    if (no.isEmpty) return null;
+    final channel = parts.length >= 4
+        ? ObrSaleChannel.normalize(parts[3])
+        : ObrSaleChannel.offline;
+    return ObrTxnData(noInvoice: no, channel: channel);
   }
 }
 

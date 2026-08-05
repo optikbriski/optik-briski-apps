@@ -41,6 +41,8 @@ class _MemberAppState extends State<MemberApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Jangan listen session di sini: rebuild `home` saat update profil
+    // bisa mereset Navigator stack. Login/logout pakai named routes.
     return MaterialApp(
       navigatorKey: _navKey,
       title: 'Optik B. Riski — Member',

@@ -9,13 +9,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
-/// Halaman persiapan DO: daftar barang yang harus disiapkan + Generate QR perjalanan.
+/// Halaman persiapan DO: ceklis barang → foto packing → QR perjalanan.
 class DoPreparingPage extends StatefulWidget {
   const DoPreparingPage({
     super.key,
@@ -96,6 +97,23 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
   String get _status =>
       (_move?['status'] ?? '').toString().toUpperCase();
 
+  String get _statusLabel {
+    switch (_status) {
+      case 'PREPARING':
+      case 'WAITING':
+        return 'Disiapkan';
+      case 'TRANSIT':
+        return 'Dalam perjalanan';
+      case 'SUCCESS':
+      case 'SELESAI':
+        return 'Diterima';
+      case 'BATAL':
+        return 'Dibatalkan';
+      default:
+        return _status.isEmpty ? '-' : _status;
+    }
+  }
+
   bool get _canReadyToSend =>
       _status == 'PREPARING' || _status == 'WAITING';
 
@@ -105,12 +123,74 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
   }
 
   bool get _allChecked =>
-      _items.isEmpty || _checked.length >= _items.length;
+      _items.isNotEmpty && _checked.length >= _items.length;
 
   int get _totalQty => _items.fold<int>(
         0,
         (s, it) => s + (int.tryParse('${it['qty'] ?? 0}') ?? 0),
       );
+
+  Future<void> _cancelDo() async {
+    if (_move == null || !_canReadyToSend) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: OptikAdminTokens.card,
+        title: const Text(
+          'Batalkan surat jalan?',
+          style: TextStyle(
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
+        content: const Text(
+          'Booking sementara di Pusat akan dilepas. '
+          'Surat jalan dibatalkan. Stok Real tidak berubah.',
+          style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('TIDAK'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: OptikAdminTokens.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YA, BATALKAN'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await StockMutationService().releaseReservation(
+        kind: StockReserveKind.doPreparing,
+        refType: 'stock_move',
+        refId: widget.moveId,
+        tokoId: 'PUSAT',
+      );
+      await _db.from('stock_move_history').update({
+        'status': 'BATAL',
+      }).eq('id', widget.moveId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Surat jalan dibatalkan. Booking dilepas.'),
+        backgroundColor: OptikAdminTokens.success,
+      ));
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal batalkan: $e'),
+        backgroundColor: OptikAdminTokens.danger,
+      ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _pickKurir() async {
     final pick = await showKurirPickDialog(
@@ -135,7 +215,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal set kurir: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Gagal set kurir: $e'), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -145,12 +225,22 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
   Future<void> _readyToSend({bool forceNewPhoto = false}) async {
     if (_move == null || !_canReadyToSend) return;
 
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Daftar barang kosong / tidak terbaca. Batalkan surat jalan atau perbaiki data.',
+        ),
+        backgroundColor: OptikAdminTokens.danger,
+      ));
+      return;
+    }
+
     if (!_allChecked) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Centang semua barang dulu (${_checked.length}/${_items.length}).',
         ),
-        backgroundColor: Colors.orange,
+        backgroundColor: OptikAdminTokens.warning,
       ));
       return;
     }
@@ -160,12 +250,12 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       var foto = (_move!['bukti_foto_pengirim'] ?? '').toString().trim();
       final needPhoto = forceNewPhoto || foto.isEmpty || foto == '-';
 
-      // Ready to Send: foto packing WAJIB.
+      // Foto packing wajib sebelum QR perjalanan.
       if (needPhoto) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Wajib foto packing sebelum Ready to Send.'),
-          backgroundColor: Color(0xFF0F766E),
+          content: Text('Wajib foto packing sebelum tampilkan QR kurir.'),
+          backgroundColor: OptikAdminTokens.slate,
         ));
         final photo = await pickImageSafe(
           picker: _picker,
@@ -177,8 +267,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
           if (!mounted) return;
           setState(() => _busy = false);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Dibatalkan. Foto wajib untuk Ready to Send.'),
-            backgroundColor: Colors.redAccent,
+            content: Text('Dibatalkan. Foto packing wajib untuk QR perjalanan.'),
+            backgroundColor: OptikAdminTokens.danger,
           ));
           return;
         }
@@ -213,8 +303,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal Ready to Send: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Gagal tampilkan QR: $e'),
+          backgroundColor: OptikAdminTokens.danger,
         ),
       );
     } finally {
@@ -243,16 +333,16 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
             decoration: BoxDecoration(
               color: OptikAdminTokens.card,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: OptikAdminTokens.navy.withOpacity(0.08)),
             ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'READY TO SEND',
+                    'QR PERJALANAN',
                     style: TextStyle(
-                      color: Color(0xFF2DD4BF),
+                      color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1.1,
                       fontSize: 13,
@@ -260,21 +350,22 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'QR perjalanan untuk driver',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    'Status tetap Disiapkan sampai kurir scan → Dalam perjalanan',
+                    style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     resi,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
                     ),
                   ),
                   Text(
                     'Tujuan: $tujuan',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                   ),
                   if (fotoUrl.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -293,23 +384,23 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: OptikAdminTokens.navy,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: QrImageView(
                       data: qr,
                       version: QrVersions.auto,
                       size: 200,
-                      backgroundColor: Colors.white,
+                      backgroundColor: OptikAdminTokens.snow,
                     ),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Driver scan QR ini (+ foto barang) → status TRANSIT.\n'
+                    'Kurir scan QR ini (+ foto barang) → status Dalam perjalanan.\n'
                     'Cabang scan QR yang sama saat menerima.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: OptikAdminTokens.navy.withOpacity(0.7),
                       fontSize: 11.5,
                       height: 1.4,
                     ),
@@ -321,20 +412,20 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                       if (!ctx.mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(
-                          content: Text('Payload QR disalin'),
-                          backgroundColor: Colors.green,
+                          content: Text('Kode QR disalin'),
+                          backgroundColor: OptikAdminTokens.success,
                         ),
                       );
                     },
                     icon: const Icon(Icons.copy_rounded, size: 16),
-                    label: const Text('Salin payload'),
+                    label: const Text('Salin kode QR'),
                   ),
                   const SizedBox(height: 6),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => Navigator.pop(ctx),
-                      child: const Text('TUTUP'),
+                      child: const Text('Tutup'),
                     ),
                   ),
                 ],
@@ -352,17 +443,24 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
     final resi = (move?['product_name'] ?? '-').toString();
     final tujuan = (move?['ke_lokasi'] ?? '-').toString();
     final kurir = (move?['kurir_nama'] ?? '').toString().trim();
-    final status = _status;
+    final status = _status; // DB status for logic (TRANSIT gate)
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Preparing DO',
-        subtitle: 'Ceklis barang → Ready to Send (wajib foto) → QR driver',
+        title: 'Disiapkan',
+        subtitle: 'Ceklis barang → foto packing → QR kurir',
         actions: [
+          if (_canReadyToSend)
+            IconButton(
+              tooltip: 'Batalkan surat jalan',
+              onPressed: _loading || _busy ? null : _cancelDo,
+              icon: const Icon(Icons.cancel_outlined,
+                  color: OptikAdminTokens.danger),
+            ),
           IconButton(
             tooltip: 'Muat ulang',
             onPressed: _loading || _busy ? null : _load,
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.textSecondary),
           ),
         ],
       ),
@@ -373,25 +471,18 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(_error!,
-                        style: const TextStyle(color: Colors.redAccent)),
+                        style: const TextStyle(color: OptikAdminTokens.danger)),
                   ),
                 )
               : Column(
                   children: [
                     Expanded(
                       child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2DD4BF).withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color:
-                                    const Color(0xFF2DD4BF).withOpacity(0.35),
-                              ),
-                            ),
+                          PremiumPanel(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                            borderRadius: 14,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -401,9 +492,9 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       child: Text(
                                         resi,
                                         style: const TextStyle(
-                                          color: Colors.white,
+                                          color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w900,
-                                          fontSize: 16,
+                                          fontSize: 15,
                                         ),
                                       ),
                                     ),
@@ -411,14 +502,14 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF2DD4BF)
+                                        color: OptikAdminTokens.accentSoft
                                             .withOpacity(0.16),
                                         borderRadius: BorderRadius.circular(999),
                                       ),
                                       child: Text(
-                                        status.isEmpty ? '-' : status,
+                                        _statusLabel,
                                         style: const TextStyle(
-                                          color: Color(0xFF2DD4BF),
+                                          color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w800,
                                           fontSize: 11,
                                         ),
@@ -426,28 +517,22 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 6),
                                 Text(
-                                  'Tujuan: $tujuan',
+                                  'Ke $tujuan · $_totalQty pcs · ${_items.length} item',
                                   style: const TextStyle(
-                                    color: Colors.white70,
+                                    color: OptikAdminTokens.textSecondary,
                                     fontWeight: FontWeight.w600,
+                                    fontSize: 12.5,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Total: $_totalQty pcs · ${_items.length} SKU',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.45),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 8),
                                 Row(
                                   children: [
                                     Icon(Icons.delivery_dining_rounded,
                                         size: 16,
-                                        color: Colors.white.withOpacity(0.55)),
+                                        color: OptikAdminTokens.navy
+                                            .withOpacity(0.55)),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
@@ -455,7 +540,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                             ? 'Kurir belum dipilih'
                                             : 'Kurir: $kurir',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.75),
+                                          color: OptikAdminTokens.navy
+                                              .withOpacity(0.75),
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -463,10 +549,14 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                     ),
                                     TextButton(
                                       onPressed: _busy ? null : _pickKurir,
+                                      style: TextButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                      ),
                                       child: Text(
                                         kurir.isEmpty ? 'Pilih' : 'Ganti',
                                         style: const TextStyle(
-                                          color: Color(0xFF2DD4BF),
+                                          color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w800,
                                         ),
                                       ),
@@ -476,28 +566,25 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            'DAFTAR SIAPKAN (${_checked.length}/${_items.length})',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.4),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.1,
+                          const SizedBox(height: 14),
+                          PremiumSectionHeader(
+                            label: 'Siapkan barang',
+                            padding: const EdgeInsets.only(bottom: 8),
+                            trailing: Text(
+                              '${_checked.length}/${_items.length}',
+                              style: const TextStyle(
+                                color: OptikAdminTokens.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 10),
                           if (_items.isEmpty)
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.03),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Text(
-                                'Detail item tidak terbaca. Cek field keterangan surat jalan.',
-                                style: TextStyle(color: Colors.white54),
-                              ),
+                            const PremiumEmptyState(
+                              message:
+                                  'Detail item tidak terbaca. Batalkan surat jalan atau perbaiki data.',
+                              icon: Icons.warning_amber_rounded,
+                              accent: OptikAdminTokens.warning,
                             )
                           else
                             ...List.generate(_items.length, (i) {
@@ -510,18 +597,20 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                               final warna = (it['warna'] ?? '-').toString();
                               final checked = _checked.contains(i);
                               return Container(
-                                margin: const EdgeInsets.only(bottom: 10),
+                                margin: const EdgeInsets.only(bottom: 8),
                                 decoration: BoxDecoration(
                                   color: OptikAdminTokens.card,
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: checked
-                                        ? const Color(0xFF2DD4BF)
+                                        ? OptikAdminTokens.accentSoft
                                             .withOpacity(0.45)
-                                        : Colors.white.withOpacity(0.07),
+                                        : OptikAdminTokens.ice.withOpacity(0.3),
                                   ),
+                                  boxShadow: OptikAdminTokens.cardShadow,
                                 ),
                                 child: CheckboxListTile(
+                                  dense: true,
                                   value: checked,
                                   onChanged: (v) {
                                     setState(() {
@@ -532,34 +621,34 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       }
                                     });
                                   },
-                                  activeColor: const Color(0xFF2DD4BF),
-                                  checkColor: Colors.black,
+                                  activeColor: OptikAdminTokens.navy,
+                                  checkColor: OptikAdminTokens.bg,
                                   controlAffinity:
                                       ListTileControlAffinity.leading,
                                   title: Text(
                                     nama,
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 13,
+                                      fontSize: 12.5,
                                       decoration: checked
                                           ? TextDecoration.lineThrough
                                           : null,
                                     ),
                                   ),
                                   subtitle: Text(
-                                    'SKU $sku · $warna · ${qty}x',
+                                    'Kode $sku · $warna',
                                     style: const TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 11.5,
+                                      color: OptikAdminTokens.textMuted,
+                                      fontSize: 11,
                                     ),
                                   ),
                                   secondary: Text(
                                     '${qty}x',
                                     style: const TextStyle(
-                                      color: Colors.orangeAccent,
+                                      color: OptikAdminTokens.warning,
                                       fontWeight: FontWeight.w900,
-                                      fontSize: 14,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
@@ -569,25 +658,25 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.orangeAccent.withOpacity(0.08),
+                              color: OptikAdminTokens.warning.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.orangeAccent.withOpacity(0.3),
+                                color: OptikAdminTokens.warning.withOpacity(0.3),
                               ),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Icon(Icons.photo_camera_rounded,
-                                    color: Colors.orangeAccent, size: 18),
+                                    color: OptikAdminTokens.warning, size: 18),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _hasPackingPhoto
-                                        ? 'Foto packing sudah ada. Ready to Send bisa tampilkan QR lagi, atau ganti foto.'
-                                        : 'Ready to Send wajib foto packing barang. Tanpa foto, QR jalan tidak dibuat.',
+                                        ? 'Foto packing sudah ada. Bisa tampilkan QR lagi, atau ganti foto.'
+                                        : 'Wajib foto packing sebelum QR perjalanan. Tanpa foto, kurir tidak bisa jemput.',
                                     style: const TextStyle(
-                                      color: Colors.orangeAccent,
+                                      color: OptikAdminTokens.warning,
                                       fontSize: 12,
                                       height: 1.35,
                                       fontWeight: FontWeight.w600,
@@ -600,21 +689,22 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                           if (status == 'TRANSIT') ...[
                             const SizedBox(height: 12),
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.orangeAccent.withOpacity(0.1),
+                                color: OptikAdminTokens.warning.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: Colors.orangeAccent.withOpacity(0.35),
+                                  color: OptikAdminTokens.warning.withOpacity(0.35),
                                 ),
                               ),
                               child: const Text(
-                                'Status sudah TRANSIT — driver sudah scan QR perjalanan. '
+                                'Sudah dalam perjalanan — kurir sudah scan QR. '
                                 'Cabang tujuan bisa menerima paket.',
                                 style: TextStyle(
-                                  color: Colors.orangeAccent,
+                                  color: OptikAdminTokens.warning,
                                   fontSize: 12,
                                   height: 1.35,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
@@ -628,6 +718,32 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                         child: Column(
                           children: [
+                            if (_canReadyToSend)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  height: 44,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _busy ? null : _cancelDo,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: OptikAdminTokens.danger,
+                                      side: const BorderSide(
+                                          color: OptikAdminTokens.danger),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.cancel_outlined,
+                                        size: 18),
+                                    label: const Text(
+                                      'BATALKAN SURAT JALAN',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             if (_hasPackingPhoto && _canReadyToSend)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
@@ -635,13 +751,13 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                   width: double.infinity,
                                   height: 44,
                                   child: OutlinedButton.icon(
-                                    onPressed: _busy
+                                    onPressed: _busy || _items.isEmpty
                                         ? null
                                         : () => _readyToSend(forceNewPhoto: true),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.orangeAccent,
+                                      foregroundColor: OptikAdminTokens.warning,
                                       side: const BorderSide(
-                                          color: Colors.orangeAccent),
+                                          color: OptikAdminTokens.warning),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(14),
                                       ),
@@ -660,14 +776,15 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                               width: double.infinity,
                               height: 52,
                               child: FilledButton.icon(
-                                onPressed: _busy || !_canReadyToSend
+                                onPressed: _busy ||
+                                        !_canReadyToSend ||
+                                        _items.isEmpty
                                     ? null
                                     : () => _readyToSend(
                                           forceNewPhoto: !_hasPackingPhoto,
                                         ),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0F766E),
-                                  disabledBackgroundColor: Colors.white12,
+                                  disabledBackgroundColor: OptikAdminTokens.line,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
@@ -678,7 +795,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                         height: 18,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Colors.white,
+                                          color: OptikAdminTokens.navy,
                                         ),
                                       )
                                     : Icon(
@@ -688,10 +805,12 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       ),
                                 label: Text(
                                   !_canReadyToSend
-                                      ? 'Hanya untuk status PREPARING'
-                                      : _hasPackingPhoto
-                                          ? 'READY TO SEND · TAMPILKAN QR'
-                                          : 'READY TO SEND · WAJIB FOTO',
+                                      ? 'Hanya untuk status Disiapkan'
+                                      : _items.isEmpty
+                                          ? 'Barang tidak terbaca'
+                                          : _hasPackingPhoto
+                                              ? 'Tampilkan QR perjalanan'
+                                              : 'Foto packing · lalu QR',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 0.3,
@@ -752,8 +871,20 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal muat: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Gagal muat: $e'), backgroundColor: OptikAdminTokens.danger),
       );
+    }
+  }
+
+  String _statusLabel(String raw) {
+    switch (raw.trim().toUpperCase()) {
+      case 'PREPARING':
+      case 'WAITING':
+        return 'Disiapkan';
+      case 'TRANSIT':
+        return 'Dalam perjalanan';
+      default:
+        return raw.isEmpty ? '-' : raw;
     }
   }
 
@@ -761,97 +892,52 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Antrian Preparing',
-        subtitle: 'DO yang belum generate QR / belum dijemput kurir',
+        title: 'Antrian disiapkan',
+        subtitle: 'Menunggu packing / QR kurir',
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+            icon: const Icon(Icons.refresh_rounded,
+                color: OptikAdminTokens.textSecondary),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _rows.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Tidak ada DO preparing.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
+              ? const PremiumEmptyState(
+                  message: 'Tidak ada surat jalan yang sedang disiapkan.',
+                  icon: Icons.fact_check_rounded,
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(20),
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                   itemCount: _rows.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, i) {
                     final m = _rows[i];
                     final resi = (m['product_name'] ?? '-').toString();
                     final tujuan = (m['ke_lokasi'] ?? '-').toString();
                     final qty = m['jumlah'] ?? 0;
-                    final status = (m['status'] ?? '').toString();
-                    return Material(
-                      color: OptikAdminTokens.card,
-                      borderRadius: BorderRadius.circular(14),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DoPreparingPage(
-                                profile: widget.profile,
-                                moveId: m['id'].toString(),
-                              ),
+                    final status = _statusLabel((m['status'] ?? '').toString());
+                    return PremiumListTile(
+                      dense: true,
+                      icon: Icons.inventory_2_outlined,
+                      iconColor: OptikAdminTokens.navy,
+                      title: resi,
+                      subtitle: 'Ke $tujuan · $qty pcs · $status',
+                      trailing: const Icon(Icons.chevron_right_rounded,
+                          color: OptikAdminTokens.textMuted),
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DoPreparingPage(
+                              profile: widget.profile,
+                              moveId: m['id'].toString(),
                             ),
-                          );
-                          _load();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2DD4BF)
-                                      .withOpacity(0.14),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.inventory_2_outlined,
-                                  color: Color(0xFF2DD4BF),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      resi,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '$tujuan · $qty pcs · $status',
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.chevron_right_rounded,
-                                  color: Colors.white38),
-                            ],
                           ),
-                        ),
-                      ),
+                        );
+                        _load();
+                      },
                     );
                   },
                 ),

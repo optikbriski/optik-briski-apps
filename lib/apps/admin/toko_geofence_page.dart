@@ -939,7 +939,16 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
   void _toast(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
+      SnackBar(
+        backgroundColor: color,
+        content: Text(
+          msg,
+          style: const TextStyle(
+            color: OptikAdminTokens.snow,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 
@@ -986,180 +995,31 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   Future<void> _pickToko() async {
     if (!_isPusat || _tokoList.length <= 1) return;
 
-    var query = '';
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            final q = query.trim().toLowerCase();
-            final filtered = _tokoList.where((t) {
-              if (q.isEmpty) return true;
-              final id = (t['id'] ?? '').toString().toLowerCase();
-              final nama = (t['toko_id'] ?? '').toString().toLowerCase();
-              return id.contains(q) || nama.contains(q);
-            }).toList();
+    final options = _tokoList.map((t) {
+      final id = t['id']?.toString() ?? '';
+      return AdminPickerOption<String>(
+        value: id,
+        label: _tokoLabel(t),
+        icon: Icons.storefront_outlined,
+        trailing: _GeofenceRegBadge(registered: _tokoHasGeofence(t)),
+      );
+    }).toList();
 
-            return AlertDialog(
-              backgroundColor: OptikAdminTokens.card,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              ),
-              title: const Text(
-                'Pilih toko',
-                style: TextStyle(
-                  color: OptikAdminTokens.textPrimary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
-              ),
-              content: SizedBox(
-                width: 420,
-                height: 440,
-                child: Column(
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      style: const TextStyle(
-                        color: OptikAdminTokens.textPrimary,
-                        fontSize: 14,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Cari kode / nama toko…',
-                        hintStyle: TextStyle(
-                          color: OptikAdminTokens.textMuted.withOpacity(0.85),
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.search_rounded,
-                          color: OptikAdminTokens.accentSoft,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.05),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            OptikAdminTokens.radiusSm,
-                          ),
-                          borderSide:
-                              const BorderSide(color: OptikAdminTokens.line),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            OptikAdminTokens.radiusSm,
-                          ),
-                          borderSide:
-                              const BorderSide(color: OptikAdminTokens.line),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            OptikAdminTokens.radiusSm,
-                          ),
-                          borderSide: const BorderSide(
-                            color: OptikAdminTokens.accentSoft,
-                            width: 1.4,
-                          ),
-                        ),
-                      ),
-                      onChanged: (v) => setModal(() => query = v),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Tidak ada toko cocok.',
-                                style: TextStyle(
-                                  color: OptikAdminTokens.textMuted,
-                                ),
-                              ),
-                            )
-                          : DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.03),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: OptikAdminTokens.line,
-                                ),
-                              ),
-                              child: ListView.separated(
-                                itemCount: filtered.length,
-                                separatorBuilder: (_, __) => const Divider(
-                                  height: 1,
-                                  color: OptikAdminTokens.line,
-                                ),
-                                itemBuilder: (_, i) {
-                                  final t = filtered[i];
-                                  final id = t['id']?.toString() ?? '';
-                                  final selected = id == _selectedTokoId;
-                                  final registered = _tokoHasGeofence(t);
-                                  return ListTile(
-                                    dense: true,
-                                    selected: selected,
-                                    selectedTileColor: OptikAdminTokens.accent
-                                        .withOpacity(0.14),
-                                    leading: Icon(
-                                      selected
-                                          ? Icons.storefront_rounded
-                                          : Icons.storefront_outlined,
-                                      size: 20,
-                                      color: selected
-                                          ? OptikAdminTokens.warning
-                                          : OptikAdminTokens.textMuted,
-                                    ),
-                                    title: Text(
-                                      _tokoLabel(t),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: OptikAdminTokens.textPrimary,
-                                        fontWeight: selected
-                                            ? FontWeight.w800
-                                            : FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _GeofenceRegBadge(
-                                          registered: registered,
-                                        ),
-                                        if (selected) ...[
-                                          const SizedBox(width: 8),
-                                          const Icon(
-                                            Icons.check_circle_rounded,
-                                            color: OptikAdminTokens.warning,
-                                            size: 18,
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    onTap: () => Navigator.pop(ctx, id),
-                                  );
-                                },
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Batal'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final result = await showAdminPicker<String>(
+      context: context,
+      title: 'Pilih toko',
+      options: options,
+      selected: _selectedTokoId,
+      searchHint: 'Cari kode / nama toko…',
+      headerIcon: Icons.storefront_rounded,
+      filterOption: (o, q) =>
+          o.label.toLowerCase().contains(q) ||
+          o.value.toLowerCase().contains(q),
     );
 
-    if (picked != null && picked != _selectedTokoId) {
+    if (result == null || result.value == null) return;
+    final picked = result.value!;
+    if (picked != _selectedTokoId) {
       _applyToko(picked);
     }
   }
@@ -1248,12 +1108,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           IconButton(
             tooltip: 'Muat ulang',
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? Center(
                   child: Padding(
@@ -1263,13 +1123,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       children: [
                         Text(
                           _error!,
-                          style: const TextStyle(color: Colors.redAccent),
+                          style: const TextStyle(color: OptikAdminTokens.danger),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 12),
-                        FilledButton(
+                        PremiumPrimaryButton(
+                          label: 'Coba lagi',
                           onPressed: _load,
-                          child: const Text('Coba lagi'),
+                          expand: false,
                         ),
                       ],
                     ),
@@ -1297,7 +1158,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                 const EdgeInsets.fromLTRB(16, 14, 16, 14),
                             borderRadius: OptikAdminTokens.radiusLg,
                             borderColor:
-                                OptikAdminTokens.accent.withOpacity(0.28),
+                                OptikAdminTokens.ice.withOpacity(0.55),
                             child: _buildTokoSelector(),
                           ),
                           const SizedBox(height: 18),
@@ -1389,11 +1250,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                       .toDouble(),
                                                   useRadiusInMeter: true,
                                                   color: OptikAdminTokens
-                                                      .accent
+                                                      .ice
                                                       .withOpacity(0.22),
                                                   borderColor:
-                                                      OptikAdminTokens
-                                                          .accentSoft,
+                                                      OptikAdminTokens.ice,
                                                   borderStrokeWidth: 2.5,
                                                 ),
                                               ],
@@ -1409,8 +1269,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                     if (_corners.length >= 3)
                                                       _corners.first,
                                                   ],
-                                                  color: OptikAdminTokens
-                                                      .accentSoft,
+                                                  color: OptikAdminTokens.ice,
                                                   strokeWidth: 2.5,
                                                 ),
                                               ],
@@ -1425,11 +1284,10 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                     _corners,
                                                   ),
                                                   color: OptikAdminTokens
-                                                      .accent
+                                                      .ice
                                                       .withOpacity(0.22),
                                                   borderColor:
-                                                      OptikAdminTokens
-                                                          .accentSoft,
+                                                      OptikAdminTokens.ice,
                                                   borderStrokeWidth: 2.5,
                                                 ),
                                               ],
@@ -1485,7 +1343,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                               .satellite_alt_rounded,
                                                       size: 16,
                                                       color: OptikAdminTokens
-                                                          .warning,
+                                                          .navy,
                                                     ),
                                                     const SizedBox(width: 6),
                                                     Text(
@@ -1494,8 +1352,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                           : 'Satelit',
                                                       style: const TextStyle(
                                                         color:
-                                                            OptikAdminTokens
-                                                                .textSecondary,
+                                                            OptikAdminTokens.slate,
                                                         fontSize: 12,
                                                         fontWeight:
                                                             FontWeight.w700,
@@ -1553,7 +1410,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                               strokeWidth: 1.6,
                                                               color:
                                                                   OptikAdminTokens
-                                                                      .warning,
+                                                                      .ice,
                                                             ),
                                                           )
                                                         else
@@ -1563,7 +1420,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                             size: 14,
                                                             color:
                                                                 OptikAdminTokens
-                                                                    .warning,
+                                                                    .navy,
                                                           ),
                                                         const SizedBox(
                                                             width: 8),
@@ -1576,8 +1433,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                             style:
                                                                 const TextStyle(
                                                               color:
-                                                                  OptikAdminTokens
-                                                                      .textSecondary,
+                                                                  OptikAdminTokens.slate,
                                                               fontSize: 11,
                                                               fontWeight:
                                                                   FontWeight
@@ -1637,14 +1493,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: Colors.white.withOpacity(0.04),
+            color: OptikAdminTokens.navy.withOpacity(0.04),
             border: Border.all(color: OptikAdminTokens.lineStrong),
           ),
           child: Row(
             children: [
               const PremiumIconBadge(
                 icon: Icons.storefront_rounded,
-                color: OptikAdminTokens.accentSoft,
+                color: OptikAdminTokens.navy,
                 size: 40,
               ),
               const SizedBox(width: 12),
@@ -1655,7 +1511,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     Text(
                       canPick ? 'TOKO AKTIF' : 'TOKO',
                       style: TextStyle(
-                        color: OptikAdminTokens.accentSoft.withOpacity(0.95),
+                        color: OptikAdminTokens.slate,
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.2,
@@ -1667,7 +1523,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: OptikAdminTokens.textPrimary,
+                        color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
                         height: 1.2,
@@ -1685,7 +1541,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             '${_tokoList.length} cabang · ketuk untuk ganti',
                             style: TextStyle(
                               color:
-                                  OptikAdminTokens.textMuted.withOpacity(0.9),
+                                  OptikAdminTokens.slate.withOpacity(0.9),
                               fontSize: 11,
                             ),
                           ),
@@ -1697,7 +1553,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               if (canPick)
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  color: OptikAdminTokens.textMuted.withOpacity(0.95),
+                  color: OptikAdminTokens.slate.withOpacity(0.95),
                 ),
             ],
           ),
@@ -1711,36 +1567,37 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SegmentedButton<_FenceDrawMode>(
-          style: ButtonStyle(
-            visualDensity: VisualDensity.comfortable,
-            tapTargetSize: MaterialTapTargetSize.padded,
-            side: const WidgetStatePropertyAll(
-              BorderSide(color: OptikAdminTokens.lineStrong),
-            ),
-            foregroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
-                return OptikAdminTokens.textPrimary;
-              }
-              return OptikAdminTokens.textMuted;
-            }),
-          ),
-          segments: const [
-            ButtonSegment(
-              value: _FenceDrawMode.circle,
-              label: Text('Lingkaran', style: TextStyle(fontSize: 13)),
-              icon: Icon(Icons.radio_button_checked, size: 16),
-            ),
-            ButtonSegment(
-              value: _FenceDrawMode.corners4,
-              label: Text('4 sudut', style: TextStyle(fontSize: 13)),
-              icon: Icon(Icons.crop_free, size: 16),
-            ),
-          ],
-          selected: {_mode},
-          onSelectionChanged: (s) {
+        AdminPickerField(
+          label: 'Mode gambar',
+          valueText: _mode == _FenceDrawMode.circle ? 'Lingkaran' : '4 sudut',
+          icon: _mode == _FenceDrawMode.circle
+              ? Icons.radio_button_checked
+              : Icons.crop_free,
+          onTap: () async {
+            final sel = await showAdminPicker<_FenceDrawMode>(
+              context: context,
+              title: 'Mode gambar geofence',
+              searchable: false,
+              selected: _mode,
+              headerIcon: Icons.map_outlined,
+              options: const [
+                AdminPickerOption(
+                  value: _FenceDrawMode.circle,
+                  label: 'Lingkaran',
+                  subtitle: 'Ketuk peta / geser pin pusat · atur radius',
+                  icon: Icons.radio_button_checked,
+                ),
+                AdminPickerOption(
+                  value: _FenceDrawMode.corners4,
+                  label: '4 sudut',
+                  subtitle: 'Ketuk hingga 4 sudut · geser penanda',
+                  icon: Icons.crop_free,
+                ),
+              ],
+            );
+            if (sel == null || sel.isClear) return;
             setState(() {
-              _mode = s.first;
+              _mode = sel.value!;
               _selectedCorner = null;
             });
             _refreshReverseForActivePoint(immediate: true);
@@ -1753,7 +1610,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               : 'Ketuk hingga 4 sudut (${_corners.length}/4) · '
                   'geser penanda · ketuk penanda untuk hapus.',
           style: TextStyle(
-            color: OptikAdminTokens.warning.withOpacity(0.9),
+            color: OptikAdminTokens.slate.withOpacity(0.9),
             fontSize: 12,
             height: 1.35,
           ),
@@ -1763,7 +1620,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           'Default: satelit Esri mosaic terbaru. Badge di peta menampilkan '
           'tanggal foto di lokasi tersebut. Google-level “hari ini” butuh API berbayar.',
           style: TextStyle(
-            color: OptikAdminTokens.textMuted.withOpacity(0.9),
+            color: OptikAdminTokens.slate.withOpacity(0.9),
             fontSize: 11,
             height: 1.35,
           ),
@@ -1775,7 +1632,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               const Text(
                 'Radius',
                 style: TextStyle(
-                  color: OptikAdminTokens.textMuted,
+                  color: OptikAdminTokens.slate,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1784,7 +1641,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               Text(
                 '$_minRadius–$_maxRadius m',
                 style: TextStyle(
-                  color: OptikAdminTokens.textMuted.withOpacity(0.85),
+                  color: OptikAdminTokens.slate.withOpacity(0.85),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1809,7 +1666,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     min: _minRadius.toDouble(),
                     max: _maxRadius.toDouble(),
                     label: '$_radiusMeters m',
-                    activeColor: OptikAdminTokens.accentSoft,
+                    activeColor: OptikAdminTokens.navy,
                     onChanged: (v) {
                       setState(
                         () => _setRadius(v.round(), updateText: true),
@@ -1840,7 +1697,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   ],
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: OptikAdminTokens.warning,
+                    color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
                   ),
@@ -1851,12 +1708,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     isDense: true,
                     suffixText: 'm',
                     suffixStyle: TextStyle(
-                      color: OptikAdminTokens.warning.withOpacity(0.8),
+                      color: OptikAdminTokens.navy.withOpacity(0.8),
                       fontWeight: FontWeight.w700,
                       fontSize: 11,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.06),
+                    fillColor: OptikAdminTokens.bgMid,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 10,
@@ -1876,7 +1733,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       borderRadius:
                           BorderRadius.circular(OptikAdminTokens.radiusSm),
                       borderSide: const BorderSide(
-                        color: OptikAdminTokens.accentSoft,
+                        color: OptikAdminTokens.navy,
                         width: 1.6,
                       ),
                     ),
@@ -1909,7 +1766,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 'Pusat: ${_lat!.toStringAsFixed(6)}, '
                 '${_lng!.toStringAsFixed(6)}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
+                  color: OptikAdminTokens.slate.withOpacity(0.75),
                   fontSize: 11,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -1917,23 +1774,34 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             ),
         ] else ...[
           const SizedBox(height: 12),
-          PremiumChipWrap(
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              PremiumActionChip(
-                label: 'Hapus terakhir',
-                icon: Icons.undo_rounded,
+              TextButton.icon(
                 onPressed: _corners.isEmpty ? null : _undoCorner,
+                icon: const Icon(Icons.undo_rounded, size: 18),
+                label: const Text('Hapus terakhir'),
+                style: TextButton.styleFrom(
+                  foregroundColor: OptikAdminTokens.slate,
+                ),
               ),
               if (_selectedCorner != null)
-                PremiumActionChip(
-                  label: 'Hapus ${_selectedCorner! + 1}',
-                  icon: Icons.delete_outline_rounded,
+                TextButton.icon(
                   onPressed: () => _deleteCorner(_selectedCorner!),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: Text('Hapus ${_selectedCorner! + 1}'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: OptikAdminTokens.danger,
+                  ),
                 ),
-              PremiumActionChip(
-                label: 'Ulang',
-                icon: Icons.refresh_rounded,
+              TextButton.icon(
                 onPressed: _corners.isEmpty ? null : _resetCorners,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Ulang'),
+                style: TextButton.styleFrom(
+                  foregroundColor: OptikAdminTokens.slate,
+                ),
               ),
             ],
           ),
@@ -1948,12 +1816,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 childrenPadding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
                 dense: true,
-                iconColor: OptikAdminTokens.textMuted,
-                collapsedIconColor: OptikAdminTokens.textMuted,
+                iconColor: OptikAdminTokens.slate,
+                collapsedIconColor: OptikAdminTokens.slate,
                 title: Text(
                   'Koordinat sudut (${_corners.length}/4)',
                   style: const TextStyle(
-                    color: OptikAdminTokens.textMuted,
+                    color: OptikAdminTokens.slate,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1983,8 +1851,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             '${p.longitude.toStringAsFixed(6)}',
                             style: TextStyle(
                               color: selected
-                                  ? OptikAdminTokens.warning
-                                  : Colors.white38,
+                                  ? OptikAdminTokens.navy
+                                  : OptikAdminTokens.slate,
                               fontSize: 11,
                               fontWeight: selected
                                   ? FontWeight.w700
@@ -2036,9 +1904,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           color: OptikAdminTokens.bgMid.withOpacity(0.94),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: OptikAdminTokens.lineStrong),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Colors.black45,
+              color: OptikAdminTokens.navy.withOpacity(0.2),
               blurRadius: 10,
               offset: Offset(0, 3),
             ),
@@ -2050,11 +1918,11 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             children: [
               CircleAvatar(
                 radius: 12,
-                backgroundColor: OptikAdminTokens.warning,
+                backgroundColor: OptikAdminTokens.navy,
                 child: Text(
                   '${i + 1}',
                   style: const TextStyle(
-                    color: Colors.black87,
+                    color: OptikAdminTokens.snow,
                     fontWeight: FontWeight.w900,
                     fontSize: 11,
                   ),
@@ -2065,7 +1933,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 child: Text(
                   'Sudut ${i + 1} dipilih · geser untuk pindah',
                   style: const TextStyle(
-                    color: OptikAdminTokens.textSecondary,
+                    color: OptikAdminTokens.slate,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2104,7 +1972,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: OptikAdminTokens.navy.withOpacity(0.04),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: OptikAdminTokens.lineStrong),
             ),
@@ -2115,7 +1983,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   controller: _searchCtrl,
                   focusNode: _searchFocus,
                   style: const TextStyle(
-                    color: OptikAdminTokens.textPrimary,
+                    color: OptikAdminTokens.navy,
                     fontSize: 14,
                   ),
                   textInputAction: TextInputAction.search,
@@ -2124,7 +1992,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   decoration: InputDecoration(
                     hintText: 'Cari alamat (mis. Jl. Braga No. 1, Bandung)…',
                     hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: OptikAdminTokens.slate.withOpacity(0.65),
                       fontSize: 13.5,
                     ),
                     prefixIcon: _searching
@@ -2135,13 +2003,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: OptikAdminTokens.warning,
+                                color: OptikAdminTokens.ice,
                               ),
                             ),
                           )
                         : const Icon(
                             Icons.search_rounded,
-                            color: OptikAdminTokens.warning,
+                            color: OptikAdminTokens.navy,
                           ),
                     suffixIcon: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -2151,13 +2019,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             tooltip: 'Hapus',
                             onPressed: _clearSearch,
                             icon: const Icon(Icons.close_rounded, size: 18),
-                            color: Colors.white54,
+                            color: OptikAdminTokens.slate,
                           ),
                         IconButton(
                           tooltip: 'Cari',
                           onPressed: _searching ? null : _searchAddress,
                           icon: const Icon(Icons.arrow_forward_rounded),
-                          color: OptikAdminTokens.warning,
+                          color: OptikAdminTokens.navy,
                         ),
                       ],
                     ),
@@ -2177,7 +2045,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   controller: _coordsCtrl,
                   focusNode: _coordsFocus,
                   style: const TextStyle(
-                    color: OptikAdminTokens.textPrimary,
+                    color: OptikAdminTokens.navy,
                     fontSize: 13.5,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
@@ -2191,19 +2059,19 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   decoration: InputDecoration(
                     hintText: 'Tempel koordinat / link Maps…',
                     hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: OptikAdminTokens.slate.withOpacity(0.65),
                       fontSize: 13,
                     ),
                     prefixIcon: const Icon(
                       Icons.my_location_rounded,
-                      color: OptikAdminTokens.accentSoft,
+                      color: OptikAdminTokens.navy,
                       size: 20,
                     ),
                     suffixIcon: IconButton(
                       tooltip: 'Pakai koordinat',
                       onPressed: _goToPastedCoords,
                       icon: const Icon(Icons.arrow_forward_rounded, size: 20),
-                      color: OptikAdminTokens.accentSoft,
+                      color: OptikAdminTokens.navy,
                     ),
                     filled: true,
                     fillColor: Colors.transparent,
@@ -2224,7 +2092,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             'Belum ketemu di pencarian? Buka Google Maps → bagikan/salin '
             'koordinat → tempel di sini.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.55),
+              color: OptikAdminTokens.slate.withOpacity(0.85),
               fontSize: 11,
               height: 1.3,
             ),
@@ -2233,7 +2101,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             const SizedBox(height: 8),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: OptikAdminTokens.navy.withOpacity(0.04),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
@@ -2243,7 +2111,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 child: Text(
                   _coordsFeedback ?? _searchFeedback!,
                   style: const TextStyle(
-                    color: Colors.white70,
+                    color: OptikAdminTokens.slate,
                     fontSize: 12,
                     height: 1.3,
                   ),
@@ -2255,7 +2123,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
             const SizedBox(height: 8),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: OptikAdminTokens.navy.withOpacity(0.04),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
@@ -2273,7 +2141,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                           height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: OptikAdminTokens.accentSoft,
+                            color: OptikAdminTokens.navy,
                           ),
                         ),
                       )
@@ -2283,7 +2151,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         child: Icon(
                           Icons.place_rounded,
                           size: 16,
-                          color: OptikAdminTokens.accentSoft,
+                          color: OptikAdminTokens.navy,
                         ),
                       ),
                     Expanded(
@@ -2296,7 +2164,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                 : (_reverseLabel ??
                                     'Alamat tidak tersedia (tetap pakai koordinat).'),
                             style: const TextStyle(
-                              color: Colors.white70,
+                              color: OptikAdminTokens.slate,
                               fontSize: 12,
                               height: 1.3,
                             ),
@@ -2305,7 +2173,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                           Text(
                             coordsLine!,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.45),
+                              color: OptikAdminTokens.slate.withOpacity(0.75),
                               fontSize: 11,
                               fontFeatures: const [
                                 FontFeature.tabularFigures(),
@@ -2326,7 +2194,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               constraints: const BoxConstraints(maxHeight: 220),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.04),
+                  color: OptikAdminTokens.navy.withOpacity(0.04),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: OptikAdminTokens.lineStrong),
                 ),
@@ -2348,8 +2216,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       leading: Icon(
                         i == 0 ? Icons.place_rounded : Icons.place_outlined,
                         color: i == 0
-                            ? OptikAdminTokens.warning
-                            : Colors.white54,
+                            ? OptikAdminTokens.navy
+                            : OptikAdminTokens.slate,
                         size: 20,
                       ),
                       title: Text(
@@ -2357,7 +2225,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: OptikAdminTokens.navy,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           height: 1.3,
@@ -2370,7 +2238,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.55),
+                                color: OptikAdminTokens.slate.withOpacity(0.85),
                                 fontSize: 11.5,
                                 height: 1.3,
                               ),
@@ -2443,11 +2311,12 @@ class _CornerMarkerChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = selected ? 40.0 : 34.0;
-    final fill = (selected ? OptikAdminTokens.warning : OptikAdminTokens.accent)
-        .withOpacity(selected ? 0.52 : 0.46);
+    final fill = selected
+        ? OptikAdminTokens.navy.withOpacity(0.88)
+        : OptikAdminTokens.ice.withOpacity(0.46);
     final border = selected
-        ? OptikAdminTokens.warning.withOpacity(0.95)
-        : Colors.white.withOpacity(0.75);
+        ? OptikAdminTokens.navy
+        : OptikAdminTokens.ice.withOpacity(0.75);
 
     return Tooltip(
       message: 'Sudut $index · ketuk untuk pilih · geser untuk pindah',
@@ -2471,7 +2340,7 @@ class _CornerMarkerChip extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: OptikAdminTokens.navy.withOpacity(0.35),
                     blurRadius: selected ? 8 : 5,
                     offset: const Offset(0, 1),
                   ),
@@ -2482,14 +2351,17 @@ class _CornerMarkerChip extends StatelessWidget {
               child: Text(
                 '$index',
                 style: TextStyle(
-                  color: selected ? Colors.black87 : Colors.white,
+                  color: selected ? OptikAdminTokens.snow : OptikAdminTokens.navy,
                   fontWeight: FontWeight.w900,
                   fontSize: selected ? 12 : 11,
                   height: 1,
                   shadows: selected
                       ? null
-                      : const [
-                          Shadow(color: Colors.black54, blurRadius: 3),
+                      : [
+                          Shadow(
+                            color: OptikAdminTokens.navy.withOpacity(0.2),
+                            blurRadius: 3,
+                          ),
                         ],
                 ),
               ),
@@ -2499,19 +2371,19 @@ class _CornerMarkerChip extends StatelessWidget {
               width: selected ? 8 : 7,
               height: selected ? 8 : 7,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFF1A1A1A)
-                      : OptikAdminTokens.accentDeep,
+                      ? OptikAdminTokens.snow
+                      : OptikAdminTokens.ice,
                   width: 1.4,
                 ),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
-                    color: Colors.black54,
+                    color: OptikAdminTokens.navy.withOpacity(0.2),
                     blurRadius: 3,
-                    offset: Offset(0, 1),
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
@@ -2541,10 +2413,10 @@ class _PreviewTargetMarker extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: OptikAdminTokens.accentSoft.withOpacity(0.28),
+                color: OptikAdminTokens.ice.withOpacity(0.28),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: OptikAdminTokens.accentSoft.withOpacity(0.95),
+                  color: OptikAdminTokens.ice.withOpacity(0.95),
                   width: 2,
                 ),
               ),
@@ -2553,7 +2425,7 @@ class _PreviewTargetMarker extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: const BoxDecoration(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 shape: BoxShape.circle,
               ),
             ),
@@ -2561,12 +2433,12 @@ class _PreviewTargetMarker extends StatelessWidget {
             Container(
               width: 22,
               height: 1.5,
-              color: Colors.white.withOpacity(0.7),
+              color: OptikAdminTokens.navy.withOpacity(0.7),
             ),
             Container(
               width: 1.5,
               height: 22,
-              color: Colors.white.withOpacity(0.7),
+              color: OptikAdminTokens.navy.withOpacity(0.7),
             ),
           ],
         ),
@@ -2594,15 +2466,15 @@ class _CenterAnchorMarker extends StatelessWidget {
               width: size,
               height: size,
               decoration: BoxDecoration(
-                color: OptikAdminTokens.warning.withOpacity(0.48),
+                color: OptikAdminTokens.ice.withOpacity(0.48),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: OptikAdminTokens.warning.withOpacity(0.95),
+                  color: OptikAdminTokens.ice.withOpacity(0.95),
                   width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: OptikAdminTokens.navy.withOpacity(0.35),
                     blurRadius: 6,
                     offset: const Offset(0, 1),
                   ),
@@ -2613,17 +2485,17 @@ class _CenterAnchorMarker extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: OptikAdminTokens.navy,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: const Color(0xFF1A1A1A),
+                  color: OptikAdminTokens.snow,
                   width: 1.4,
                 ),
-                boxShadow: const [
+                boxShadow: [
                   BoxShadow(
-                    color: Colors.black54,
+                    color: OptikAdminTokens.navy.withOpacity(0.2),
                     blurRadius: 3,
-                    offset: Offset(0, 1),
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),

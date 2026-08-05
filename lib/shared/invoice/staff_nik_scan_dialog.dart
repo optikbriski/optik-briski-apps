@@ -1,23 +1,33 @@
 // ignore_for_file: use_build_context_synchronously
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Scan barcode NIK karyawan (HID scanner web admin) sebelum aksi lifecycle.
+import '../qr/hid_scan_intake.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
+import '../widgets/admin/premium_app_bar.dart';
+
+/// Scan barcode NIK karyawan (kamera full-page + HID) sebelum aksi lifecycle.
+///
+/// Bukan form ketik: barcode masuk lewat kamera / scanner toko.
 Future<Map<String, dynamic>?> showStaffNikScanDialog(
   BuildContext context, {
   String title = 'Scan barcode karyawan',
   String subtitle =
-      'Scan NIK karyawan yang menangani transaksi ini (scanner toko).',
+      'Arahkan kamera atau scanner toko ke barcode NIK karyawan.',
 }) {
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => _StaffNikScanDialog(title: title, subtitle: subtitle),
+  return Navigator.of(context).push<Map<String, dynamic>>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _StaffNikScanPage(title: title, subtitle: subtitle),
+    ),
   );
 }
 
-class _StaffNikScanDialog extends StatefulWidget {
-  const _StaffNikScanDialog({
+class _StaffNikScanPage extends StatefulWidget {
+  const _StaffNikScanPage({
     required this.title,
     required this.subtitle,
   });
@@ -26,37 +36,56 @@ class _StaffNikScanDialog extends StatefulWidget {
   final String subtitle;
 
   @override
-  State<_StaffNikScanDialog> createState() => _StaffNikScanDialogState();
+  State<_StaffNikScanPage> createState() => _StaffNikScanPageState();
 }
 
-class _StaffNikScanDialogState extends State<_StaffNikScanDialog> {
-  final _ctrl = TextEditingController();
-  final _focus = FocusNode();
+class _StaffNikScanPageState extends State<_StaffNikScanPage> {
+  MobileScannerController? _camera;
   bool _busy = false;
+  bool _locked = false;
   String? _error;
+  bool _cameraReady = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
-    });
+    // Di web, kamera di dialog sering zero-size → hit-test error.
+    // Full-page + start setelah layout.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initCamera());
+  }
+
+  Future<void> _initCamera() async {
+    if (!mounted) return;
+    final ctrl = MobileScannerController(
+      facing: CameraFacing.back,
+      torchEnabled: false,
+    );
+    _camera = ctrl;
+    setState(() => _cameraReady = true);
+    try {
+      await ctrl.start();
+    } catch (_) {
+      // Web tanpa izin kamera: tetap bisa HID scanner.
+    }
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
-    _focus.dispose();
+    _camera?.dispose();
     super.dispose();
   }
 
   Future<void> _submit(String raw) async {
     final nik = raw.trim();
-    if (nik.isEmpty || _busy) return;
+    if (nik.isEmpty || _busy || _locked) return;
     setState(() {
       _busy = true;
+      _locked = true;
       _error = null;
     });
+    try {
+      await _camera?.stop();
+    } catch (_) {}
     try {
       final res = await Supabase.instance.client
           .from('karyawan')
@@ -67,20 +96,24 @@ class _StaffNikScanDialogState extends State<_StaffNikScanDialog> {
       if (res == null) {
         setState(() {
           _busy = false;
-          _error = 'NIK tidak ditemukan.';
-          _ctrl.clear();
+          _locked = false;
+          _error = 'Barcode NIK tidak ditemukan.';
         });
-        _focus.requestFocus();
+        try {
+          await _camera?.start();
+        } catch (_) {}
         return;
       }
       final status = (res['status_approval'] ?? '').toString();
       if (status.isNotEmpty && status.toLowerCase() != 'aktif') {
         setState(() {
           _busy = false;
+          _locked = false;
           _error = 'Karyawan tidak aktif.';
-          _ctrl.clear();
         });
-        _focus.requestFocus();
+        try {
+          await _camera?.start();
+        } catch (_) {}
         return;
       }
       Navigator.pop(context, Map<String, dynamic>.from(res));
@@ -88,74 +121,124 @@ class _StaffNikScanDialogState extends State<_StaffNikScanDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _locked = false;
         _error = e.toString();
       });
-      _focus.requestFocus();
+      try {
+        await _camera?.start();
+      } catch (_) {}
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF0F172A),
-      title: Text(
-        widget.title,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            widget.subtitle,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 13,
-              height: 1.35,
-            ),
+    return HidScanIntake(
+      tryHandleKnown: (result) async {
+        await _submit(result.raw);
+        return true;
+      },
+      onUnknown: (raw) async {
+        await _submit(raw);
+        return true;
+      },
+      child: PremiumScaffold(
+        appBar: PremiumAppBar(
+          title: widget.title,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _busy ? null : () => Navigator.pop(context),
           ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _ctrl,
-            focusNode: _focus,
-            enabled: !_busy,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'NIK karyawan',
-              labelStyle: TextStyle(color: Colors.white.withOpacity(0.55)),
-              hintText: 'Arahkan scanner ke sini…',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.06),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onSubmitted: _submit,
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-          ],
-          if (_busy) ...[
-            const SizedBox(height: 12),
-            const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Batal'),
         ),
-      ],
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_cameraReady && _camera != null)
+              MobileScanner(
+                controller: _camera!,
+                fit: BoxFit.cover,
+                onDetect: (capture) {
+                  if (_locked || _busy) return;
+                  final barcodes = capture.barcodes;
+                  if (barcodes.isEmpty) return;
+                  final raw = barcodes.first.rawValue;
+                  if (raw == null || raw.trim().isEmpty) return;
+                  _submit(raw);
+                },
+              )
+            else
+              const ColoredBox(color: Colors.black87),
+            IgnorePointer(
+              child: Center(
+                child: Container(
+                  width: 240,
+                  height: 240,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: OptikAdminTokens.ice, width: 3),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 40,
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.subtitle,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      kIsWeb
+                          ? 'Scanner USB/Bluetooth langsung terbaca di halaman ini.'
+                          : 'Arahkan barcode NIK ke kotak bidik.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.75),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: OptikAdminTokens.danger,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    if (_busy) ...[
+                      const SizedBox(height: 14),
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

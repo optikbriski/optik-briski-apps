@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../invoice/invoice_hub_service.dart';
 import '../whatsapp_launcher.dart';
+import 'member_inbox_unread.dart';
 import 'member_realtime.dart';
 import 'member_repository.dart';
 import 'member_session.dart';
@@ -279,6 +280,10 @@ class MemberStatusWatch with WidgetsBindingObserver {
       await prefs.setStringList(_seenAlertsKey, trimmed);
       _refreshController.add(null);
     }
+    // Selalu sync badge Inbox (read state terpisah dari dedupe push).
+    try {
+      await MemberInboxUnread.instance.refresh();
+    } catch (_) {}
   }
 
   List<Map<String, dynamic>> _asMapList(dynamic res) {

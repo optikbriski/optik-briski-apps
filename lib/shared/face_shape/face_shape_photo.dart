@@ -1,3 +1,4 @@
+import '../theme.dart';
 import 'package:flutter/material.dart';
 
 import 'face_shape_type.dart';
@@ -49,7 +50,7 @@ class FaceShapePhoto extends StatelessWidget {
               fit: BoxFit.cover,
               filterQuality: FilterQuality.high,
               errorBuilder: (_, __, ___) => ColoredBox(
-                color: const Color(0xFFE2E8F0),
+                color: OptikAdminTokens.lineStrong,
                 child: Center(
                   child: Text(
                     shape.labelId,
@@ -94,13 +95,13 @@ class FaceFrameOverlayPainter extends CustomPainter {
     final rightCx = size.width / 2 + halfGap + lensW / 2;
 
     final stroke = Paint()
-      ..color = const Color(0xE00F172A)
+      ..color = OptikAdminTokens.navy.withOpacity(0.88)
       ..style = PaintingStyle.stroke
       ..strokeWidth = style.bold ? 3.6 : 2.6
       ..strokeJoin = StrokeJoin.round;
 
     final fill = Paint()
-      ..color = const Color(0x280F172A)
+      ..color = OptikAdminTokens.navy.withOpacity(0.16)
       ..style = PaintingStyle.fill;
 
     Path lens(double cx) {
@@ -170,7 +171,7 @@ class FaceFrameOverlayPainter extends CustomPainter {
 
     if (style.browline) {
       final brow = Paint()
-        ..color = const Color(0xE00F172A)
+        ..color = OptikAdminTokens.navy.withOpacity(0.88)
         ..strokeWidth = 5
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(

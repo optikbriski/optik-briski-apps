@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'liveness_result.dart';
 import 'web_face_signature.dart';
 import 'web_liveness_speech.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 
 enum _WebLiveStep {
   position,
@@ -67,10 +69,10 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   String? _feedback;
 
   static const _flashColors = <Color>[
-    Color(0xFFFF3B30),
-    Color(0xFF34C759),
-    Color(0xFF007AFF),
-    Color(0xFFFFFFFF),
+    OptikAdminTokens.danger,
+    OptikAdminTokens.success,
+    OptikAdminTokens.navy,
+    OptikAdminTokens.snow,
   ];
   int _flashIndex = 0;
   final List<double> _flashLumas = [];
@@ -281,24 +283,24 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
 
   Color get _statusColor {
     if (_feedback != null && _lastVerdict == _MoveVerdict.wrong) {
-      return Colors.redAccent;
+      return OptikAdminTokens.danger;
     }
     if (_feedback != null && _lastVerdict == _MoveVerdict.correct) {
-      return Colors.greenAccent;
+      return OptikAdminTokens.success;
     }
     if (_colorActive && _step == _WebLiveStep.move) {
       // Saat gerakan: panah tetap biru terang agar instruksi kebaca di atas flash.
-      return const Color(0xFF7DD3FC);
+      return OptikAdminTokens.ice;
     }
     switch (_step) {
       case _WebLiveStep.position:
-        return Colors.orangeAccent;
+        return OptikAdminTokens.warning;
       case _WebLiveStep.move:
-        return const Color(0xFF7DD3FC);
+        return OptikAdminTokens.ice;
       case _WebLiveStep.holdStill:
-        return Colors.tealAccent;
+        return OptikAdminTokens.ice;
       case _WebLiveStep.capturing:
-        return Colors.greenAccent;
+        return OptikAdminTokens.success;
     }
   }
 
@@ -663,10 +665,16 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
         backgroundColor: _lastVerdict == _MoveVerdict.wrong
-            ? Colors.redAccent
-            : Colors.orangeAccent,
+            ? OptikAdminTokens.danger
+            : OptikAdminTokens.warning,
+        content: Text(
+          msg,
+          style: const TextStyle(
+            color: OptikAdminTokens.snow,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -684,7 +692,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   Widget build(BuildContext context) {
     final flashBg = _colorActive
         ? _flashColors[_flashIndex].withValues(alpha: 0.88)
-        : const Color(0xFF0F172A);
+        : OptikAdminTokens.navy;
 
     return PopScope(
       canPop: false,
@@ -694,14 +702,11 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         color: flashBg,
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            title: Text('web_liveness_title'.tr()),
+        child: PremiumScaffold(
+          appBar: PremiumAppBar(
+            title: 'web_liveness_title'.tr(),
             leading: IconButton(
-              icon: const Icon(Icons.close_rounded),
+              icon: const Icon(Icons.close_rounded, color: OptikAdminTokens.navy),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -710,7 +715,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
               : _booting || _camera == null || !_camera!.value.isInitialized
                   ? const Center(
                       child:
-                          CircularProgressIndicator(color: Colors.blueAccent),
+                          CircularProgressIndicator(color: OptikAdminTokens.navy),
                     )
                   : _content(),
         ),
@@ -726,12 +731,12 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.videocam_off_rounded,
-                color: Colors.redAccent, size: 56),
+                color: OptikAdminTokens.danger, size: 56),
             const SizedBox(height: 16),
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, height: 1.4),
+              style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -755,7 +760,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.72),
+          color: OptikAdminTokens.navy.withOpacity(0.72),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: accent,
@@ -797,7 +802,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
               _actionTitle,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.white,
+                color: OptikAdminTokens.snow,
                 fontWeight: FontWeight.w900,
                 fontSize: 28,
                 height: 1.15,
@@ -809,7 +814,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
               _actionSubtitle,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
+                color: OptikAdminTokens.snow.withValues(alpha: 0.85),
                 fontWeight: FontWeight.w600,
                 fontSize: 15,
                 height: 1.3,
@@ -825,18 +830,18 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: (ok
-                          ? Colors.greenAccent
+                          ? OptikAdminTokens.success
                           : bad
-                              ? Colors.redAccent
-                              : Colors.amberAccent)
+                              ? OptikAdminTokens.danger
+                              : OptikAdminTokens.warning)
                       .withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: ok
-                        ? Colors.greenAccent
+                        ? OptikAdminTokens.success
                         : bad
-                            ? Colors.redAccent
-                            : Colors.amberAccent,
+                            ? OptikAdminTokens.danger
+                            : OptikAdminTokens.warning,
                     width: 1.5,
                   ),
                 ),
@@ -845,10 +850,10 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: ok
-                        ? Colors.greenAccent
+                        ? OptikAdminTokens.success
                         : bad
-                            ? const Color(0xFFFF8A80)
-                            : Colors.amberAccent,
+                            ? OptikAdminTokens.danger
+                            : OptikAdminTokens.warning,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
                     height: 1.25,
@@ -875,10 +880,10 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
               color: i < _movesPassed
-                  ? Colors.tealAccent
+                  ? OptikAdminTokens.ice
                   : i == _moveIndex && _step == _WebLiveStep.move
-                      ? const Color(0xFF7DD3FC)
-                      : Colors.white24,
+                      ? OptikAdminTokens.ice
+                      : OptikAdminTokens.lineStrong,
             ),
           ),
         ],
@@ -915,7 +920,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.55),
+                color: OptikAdminTokens.navy.withOpacity(0.55),
                 shape: BoxShape.circle,
                 border: Border.all(color: accent, width: 2),
               ),
@@ -996,7 +1001,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                       : 'web_liveness_disclaimer'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: inFlash ? Colors.white70 : Colors.white54,
+                    color: inFlash ? OptikAdminTokens.slate : OptikAdminTokens.slate,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1007,8 +1012,8 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                   height: 54,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF38BDF8),
-                      foregroundColor: Colors.black,
+                      backgroundColor: OptikAdminTokens.navy,
+                      foregroundColor: OptikAdminTokens.snow,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1020,7 +1025,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: OptikAdminTokens.snow),
                           )
                         : Text(
                             _step == _WebLiveStep.holdStill

@@ -21,7 +21,6 @@ class PremiumPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final g = gradient ?? OptikAdminTokens.accentGradient;
     final enabled = onPressed != null && !loading;
 
     final child = loading
@@ -30,7 +29,7 @@ class PremiumPrimaryButton extends StatelessWidget {
             width: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2.2,
-              color: Colors.white,
+              color: OptikAdminTokens.snow,
             ),
           )
         : Row(
@@ -38,13 +37,14 @@ class PremiumPrimaryButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 18),
+                Icon(icon, size: 18, color: OptikAdminTokens.snow),
                 const SizedBox(width: 8),
               ],
               Text(
                 label,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w800,
+                  color: OptikAdminTokens.snow,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.3,
                   fontSize: 14,
                 ),
@@ -64,14 +64,9 @@ class PremiumPrimaryButton extends StatelessWidget {
             height: 52,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              gradient: g,
-              boxShadow: [
-                BoxShadow(
-                  color: OptikAdminTokens.accent.withOpacity(0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              color: OptikAdminTokens.navy,
+              gradient: gradient,
+              boxShadow: OptikAdminTokens.glow(OptikAdminTokens.navy),
             ),
             child: Center(child: child),
           ),

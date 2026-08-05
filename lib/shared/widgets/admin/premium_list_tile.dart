@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 import 'premium_icon_badge.dart';
 
-/// Feature row — Training Mode module chip / dialog list language.
 class PremiumListTile extends StatelessWidget {
   const PremiumListTile({
     super.key,
     required this.title,
     this.subtitle,
     this.icon,
-    this.iconColor = OptikAdminTokens.accentSoft,
+    this.iconColor = OptikAdminTokens.ice,
     this.leading,
     this.trailing,
     this.onTap,
@@ -47,27 +46,16 @@ class PremiumListTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           child: Ink(
             padding: EdgeInsets.symmetric(
-              horizontal: 14,
+              horizontal: 16,
               vertical: dense ? 12 : 14,
             ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  OptikAdminTokens.card.withOpacity(0.96),
-                  OptikAdminTokens.panel.withOpacity(0.98),
-                ],
+              color: OptikAdminTokens.card,
+              border: Border.all(
+                color: OptikAdminTokens.ice.withOpacity(0.4),
               ),
-              border: Border.all(color: iconColor.withOpacity(0.28)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.28),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              boxShadow: OptikAdminTokens.cardShadow,
             ),
             child: Row(
               children: [
@@ -82,10 +70,11 @@ class PremiumListTile extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                          color: OptikAdminTokens.textPrimary,
+                          color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                           fontSize: 13.5,
                           height: 1.25,
+                          letterSpacing: -0.15,
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -95,7 +84,7 @@ class PremiumListTile extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.65),
+                            color: OptikAdminTokens.slate.withOpacity(0.95),
                             fontSize: 11.5,
                             height: 1.35,
                           ),
@@ -105,9 +94,9 @@ class PremiumListTile extends StatelessWidget {
                   ),
                 ),
                 trailing ??
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
-                      color: OptikAdminTokens.textMuted,
+                      color: OptikAdminTokens.slate.withOpacity(0.45),
                       size: 20,
                     ),
               ],

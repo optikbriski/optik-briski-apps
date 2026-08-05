@@ -34,8 +34,8 @@ class TrainingBanner extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.school_rounded,
-                      color: Colors.white, size: 22),
+                  Icon(Icons.school_rounded,
+                      color: OptikAdminTokens.snow, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -45,7 +45,7 @@ class TrainingBanner extends StatelessWidget {
                         Text(
                           'training_banner_title'.tr(),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: OptikAdminTokens.snow,
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
                             letterSpacing: 0.4,
@@ -55,7 +55,7 @@ class TrainingBanner extends StatelessWidget {
                         Text(
                           'training_banner_subtitle'.tr(),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: OptikAdminTokens.snow.withOpacity(0.9),
                             fontSize: 11,
                             height: 1.25,
                           ),
@@ -67,8 +67,8 @@ class TrainingBanner extends StatelessWidget {
                   TextButton(
                     onPressed: onExitRequested,
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.black26,
+                      foregroundColor: OptikAdminTokens.snow,
+                      backgroundColor: OptikAdminTokens.bg.withOpacity(0.26),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
@@ -125,7 +125,7 @@ class TrainingModeDialogs {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'dismiss',
-      barrierColor: Colors.black.withOpacity(0.65),
+      barrierColor: OptikAdminTokens.navy.withOpacity(0.65),
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (ctx, anim, sec) {
         return const SizedBox.shrink();
@@ -162,7 +162,7 @@ class TrainingModeDialogs {
         context: context,
         barrierDismissible: false,
         barrierLabel: 'training-loading',
-        barrierColor: Colors.black.withOpacity(0.72),
+        barrierColor: OptikAdminTokens.navy.withOpacity(0.72),
         transitionDuration: const Duration(milliseconds: 220),
         pageBuilder: (ctx, a, b) => const SizedBox.shrink(),
         transitionBuilder: (ctx, anim, sec, child) {
@@ -191,7 +191,7 @@ class TrainingModeDialogs {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'dismiss',
-      barrierColor: Colors.black.withOpacity(0.65),
+      barrierColor: OptikAdminTokens.navy.withOpacity(0.65),
       transitionDuration: const Duration(milliseconds: 260),
       pageBuilder: (ctx, a, b) => const SizedBox.shrink(),
       transitionBuilder: (ctx, anim, sec, child) {
@@ -223,11 +223,11 @@ class TrainingModeDialogs {
                             ],
                           ),
                           border: Border.all(
-                            color: Colors.redAccent.withOpacity(0.35),
+                            color: OptikAdminTokens.danger.withOpacity(0.35),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.45),
+                              color: OptikAdminTokens.navy.withOpacity(0.45),
                               blurRadius: 32,
                               offset: const Offset(0, 16),
                             ),
@@ -242,12 +242,12 @@ class TrainingModeDialogs {
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.redAccent.withOpacity(0.15),
+                                    color: OptikAdminTokens.danger.withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.delete_forever_rounded,
-                                    color: Colors.redAccent,
+                                    color: OptikAdminTokens.danger,
                                     size: 26,
                                   ),
                                 ),
@@ -256,7 +256,7 @@ class TrainingModeDialogs {
                                   child: Text(
                                     'training_exit_title'.tr(),
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: OptikAdminTokens.snow,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 18,
                                       height: 1.2,
@@ -269,7 +269,7 @@ class TrainingModeDialogs {
                             Text(
                               'training_exit_body'.tr(),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.78),
+                                color: OptikAdminTokens.snow.withOpacity(0.78),
                                 fontSize: 13.5,
                                 height: 1.45,
                               ),
@@ -288,8 +288,8 @@ class TrainingModeDialogs {
                                   flex: 2,
                                   child: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.redAccent,
-                                      foregroundColor: Colors.white,
+                                      backgroundColor: OptikAdminTokens.danger,
+                                      foregroundColor: OptikAdminTokens.snow,
                                       padding: const EdgeInsets.symmetric(
                                         vertical: 14,
                                       ),
@@ -372,7 +372,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                       offset: const Offset(0, 18),
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
+                      color: OptikAdminTokens.navy.withOpacity(0.5),
                       blurRadius: 28,
                       offset: const Offset(0, 12),
                     ),
@@ -405,9 +405,9 @@ class _EnterConfirmSheet extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.school_rounded,
-                              color: Colors.white,
+                              color: OptikAdminTokens.snow,
                               size: 28,
                             ),
                           ),
@@ -429,7 +429,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                                 Text(
                                   'training_enter_title'.tr(),
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: OptikAdminTokens.snow,
                                     fontWeight: FontWeight.w800,
                                     fontSize: 20,
                                     height: 1.2,
@@ -444,7 +444,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                       Text(
                         'training_enter_lead'.tr(),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.78),
+                          color: OptikAdminTokens.snow.withOpacity(0.78),
                           fontSize: 13.5,
                           height: 1.45,
                         ),
@@ -453,7 +453,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                       Text(
                         'training_enter_modules_label'.tr(),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.55),
+                          color: OptikAdminTokens.snow.withOpacity(0.55),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.1,
@@ -471,10 +471,10 @@ class _EnterConfirmSheet extends StatelessWidget {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.05),
+                                color: OptikAdminTokens.snow.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.08),
+                                  color: OptikAdminTokens.snow.withOpacity(0.08),
                                 ),
                               ),
                               child: Row(
@@ -489,7 +489,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                                   Text(
                                     moduleKeys[i].tr(),
                                     style: const TextStyle(
-                                      color: Colors.white,
+                                      color: OptikAdminTokens.snow,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -520,7 +520,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                               child: Text(
                                 'training_enter_safe_note'.tr(),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.85),
+                                  color: OptikAdminTokens.snow.withOpacity(0.85),
                                   fontSize: 12.5,
                                   height: 1.4,
                                 ),
@@ -533,7 +533,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                       Text(
                         'training_enter_wipe_note'.tr(),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
+                          color: OptikAdminTokens.snow.withOpacity(0.5),
                           fontSize: 11.5,
                           height: 1.35,
                         ),
@@ -545,7 +545,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                             child: TextButton(
                               onPressed: () => Navigator.pop(context, false),
                               style: TextButton.styleFrom(
-                                foregroundColor: Colors.white70,
+                                foregroundColor: OptikAdminTokens.textSecondary,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
                               ),
@@ -573,7 +573,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
-                                  foregroundColor: Colors.white,
+                                  foregroundColor: OptikAdminTokens.snow,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 15,
                                   ),
@@ -708,9 +708,9 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                           child: child,
                         );
                       },
-                      child: const Icon(
+                      child: Icon(
                         Icons.school_rounded,
-                        color: Colors.white,
+                        color: OptikAdminTokens.snow,
                         size: 34,
                       ),
                     ),
@@ -719,7 +719,7 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                       'training_loading_title'.tr(),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: OptikAdminTokens.snow,
                         fontWeight: FontWeight.w800,
                         fontSize: 17,
                       ),
@@ -732,7 +732,7 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                         key: ValueKey(_step),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                          color: OptikAdminTokens.snow.withOpacity(0.7),
                           fontSize: 13,
                           height: 1.35,
                         ),
@@ -743,8 +743,8 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                       borderRadius: BorderRadius.circular(99),
                       child: LinearProgressIndicator(
                         minHeight: 4,
-                        backgroundColor: Colors.white.withOpacity(0.08),
-                        color: const Color(0xFFF59E0B),
+                        backgroundColor: OptikAdminTokens.snow.withOpacity(0.08),
+                        color: OptikAdminTokens.warning,
                       ),
                     ),
                   ],

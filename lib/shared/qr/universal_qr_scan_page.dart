@@ -5,6 +5,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'hid_scan_intake.dart';
 import 'qr_route.dart';
+import '../theme.dart';
+import '../widgets/admin/admin_premium.dart';
 
 /// Satu halaman kamera QR. Hasil: [QrRouteResult] (mode navigate) atau [String] (returnRawOnly).
 class UniversalQrScanPage extends StatefulWidget {
@@ -107,10 +109,10 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
       if (widget.returnRawOnly &&
           widget.allowedTypes?.contains(QrPayloadType.attendance) == true &&
           result.type != QrPayloadType.attendance) {
-        _snack('universal_qr_need_attendance'.tr(), color: Colors.orange);
+        _snack('universal_qr_need_attendance'.tr(), color: OptikAdminTokens.warning);
         return;
       }
-      _snack('universal_qr_unknown'.tr(), color: Colors.orange);
+      _snack('universal_qr_unknown'.tr(), color: OptikAdminTokens.warning);
       return;
     }
 
@@ -137,10 +139,8 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
         await _onRaw(raw);
         return true;
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
+      child: PremiumScaffold(
         appBar: AppBar(
-          backgroundColor: Colors.black,
           title: Text(widget.titleKey.tr()),
         ),
         body: Stack(
@@ -161,7 +161,7 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
               width: 250,
               height: 250,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.blueAccent, width: 3),
+                border: Border.all(color: OptikAdminTokens.navy, width: 3),
                 borderRadius: BorderRadius.circular(18),
               ),
             ),
@@ -172,7 +172,7 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
               child: Text(
                 widget.hintKey.tr(),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, height: 1.4),
+                style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
               ),
             ),
           ],

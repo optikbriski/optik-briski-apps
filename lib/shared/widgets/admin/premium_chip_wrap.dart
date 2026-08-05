@@ -50,13 +50,13 @@ class PremiumActionChip extends StatelessWidget {
     return ActionChip(
       avatar: icon == null
           ? null
-          : Icon(icon, size: 16, color: OptikAdminTokens.textSecondary),
+          : Icon(icon, size: 16, color: OptikAdminTokens.slate),
       label: Text(label),
       onPressed: onPressed,
       backgroundColor: OptikAdminTokens.card,
       side: const BorderSide(color: OptikAdminTokens.lineStrong),
       labelStyle: const TextStyle(
-        color: OptikAdminTokens.textSecondary,
+        color: OptikAdminTokens.slate,
         fontSize: 12,
         fontWeight: FontWeight.w600,
       ),

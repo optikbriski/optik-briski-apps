@@ -50,7 +50,10 @@ class InvoiceHubService {
     if (sale == null) return null;
     final items = await _db
         .from('sales_items')
-        .select('nama_produk, tipe_produk, qty, subtotal')
+        .select(
+          'id, nama_produk, tipe_produk, qty, subtotal, '
+          'needs_fulfillment, fulfillment_status, diambil_at',
+        )
         .eq('sale_id', sale['id']);
     final garansi = await _db
         .from('garansi_kartu')
@@ -78,6 +81,10 @@ class InvoiceHubService {
       'no_wa': sale['no_wa'],
       'email_pelanggan': sale['email_pelanggan'],
       'alamat': sale['alamat'],
+      'channel': sale['channel'],
+      'fulfillment': sale['fulfillment'],
+      'courier': sale['courier'],
+      'online_order_id': sale['online_order_id'],
       'items': items,
       'garansi': garansi,
       'garansi_claimable': (garansi as List).any((raw) {
@@ -143,16 +150,96 @@ class InvoiceHubService {
   }
 
   static String statusLabel(Map<String, dynamic> hub) {
-    if (hub['diambil_at'] != null) return 'Sudah diambil';
-    final t = (hub['tracking_status']?.toString() ?? '').trim().toUpperCase();
-    if (t == 'DIAMBIL') return 'Sudah diambil';
-    if (t == 'SIAP_DIAMBIL' || t == 'CLEAR') return 'Siap diambil';
-    if (t == 'SIAP_PELUNASAN') {
-      return 'Siap pelunasan & pengambilan';
+    final items = hub['items'];
+    if (items is List && items.isNotEmpty) {
+      final maps = items
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      // Import avoided — inline counts for label
+      var pendingRo = 0, ready = 0, diambil = 0;
+      for (final i in maps) {
+        final st =
+            (i['fulfillment_status'] ?? 'READY').toString().toUpperCase();
+        if (st == 'PENDING_RO' || st == 'PENDING') {
+          pendingRo++;
+        } else if (st == 'DIAMBIL') {
+          diambil++;
+        } else {
+          ready++;
+        }
+      }
+      final total = maps.length;
+      if (total > 0 && diambil == total) {
+        // Board CLEAR — jangan "Sudah diambil" generik.
+        if (isCaseClosed(hub) || !isGaransiClaimable(hub)) {
+          return 'CLEAR · Garansi mati';
+        }
+        return 'CLEAR · Garansi aktif';
+      }
+      if (ready > 0 && pendingRo > 0) {
+        return 'Partial · siap ambil ready ($ready) · RO $pendingRo';
+      }
+      if (diambil > 0 && pendingRo > 0) {
+        return 'Partial · RO pending';
+      }
+      if (pendingRo > 0 && ready == 0) return 'RO · stok pending';
     }
-    if (t == 'PENDING_PO') return 'Menunggu / proses';
-    if (t == 'DIPROSES_DI_CABANG') return 'Diproses di cabang';
+    if (hub['diambil_at'] != null ||
+        (hub['tracking_status']?.toString() ?? '').toUpperCase() == 'DIAMBIL') {
+      if (isCaseClosed(hub) || !isGaransiClaimable(hub)) {
+        return 'CLEAR · Garansi mati';
+      }
+      return 'CLEAR · Garansi aktif';
+    }
+    final t = (hub['tracking_status']?.toString() ?? '').trim().toUpperCase();
+    if (t == 'SIAP_DIAMBIL') return 'Siap diambil';
+    if (t == 'CLEAR') return 'CLEAR · siap diambil';
+    if (t == 'SIAP_PELUNASAN') return 'Siap pelunasan';
+    if (isDpOpen(hub) && t == 'PENDING_PO') return 'DP · menunggu barang ready';
+    if (t == 'PENDING_PO') return 'PENDING · menunggu barang ready';
+    if (t == 'DIPROSES_DI_CABANG' || t == 'DIPROSES') {
+      return 'Diproses di cabang';
+    }
+    if (t == 'DIKIRIM' || t == 'SHIPPED') return 'Dalam pengiriman';
     return t.isEmpty ? 'Dalam proses' : t;
+  }
+
+  static bool hasPendingRoLines(Map<String, dynamic> hub) {
+    final items = hub['items'];
+    if (items is! List) return false;
+    for (final raw in items) {
+      final st = (Map<String, dynamic>.from(raw as Map)['fulfillment_status'] ??
+              '')
+          .toString()
+          .toUpperCase();
+      if (st == 'PENDING_RO' || st == 'PENDING') return true;
+    }
+    return false;
+  }
+
+  static bool hasReadyLines(Map<String, dynamic> hub) {
+    final items = hub['items'];
+    // Tanpa data line → jangan asumsikan READY (hindari panel serah terima palsu).
+    if (items is! List || items.isEmpty) return false;
+    for (final raw in items) {
+      final st = (Map<String, dynamic>.from(raw as Map)['fulfillment_status'] ??
+              'READY')
+          .toString()
+          .toUpperCase();
+      if (st == 'READY') return true;
+    }
+    return false;
+  }
+
+  static bool hasDiambilLines(Map<String, dynamic> hub) {
+    final items = hub['items'];
+    if (items is! List || items.isEmpty) return false;
+    for (final raw in items) {
+      final m = Map<String, dynamic>.from(raw as Map);
+      final st = (m['fulfillment_status'] ?? '').toString().toUpperCase();
+      if (st == 'DIAMBIL' || m['diambil_at'] != null) return true;
+    }
+    return false;
   }
 
   Future<List<Map<String, dynamic>>> listKaryawanToko(String tokoId) async {
@@ -178,6 +265,45 @@ class InvoiceHubService {
         'p_karyawan_id': karyawanId,
       },
     );
+  }
+
+  /// Tandai pesanan online delivery sudah diserahkan ke kurir.
+  Future<Map<String, dynamic>> markOnlineShipped({
+    required String onlineOrderId,
+    String? courierTracking,
+    String? storeNote,
+  }) async {
+    final res = await _db.rpc(
+      'update_online_order_fulfillment',
+      params: {
+        'p_order_id': onlineOrderId,
+        'p_status': 'shipped',
+        'p_courier_tracking': courierTracking ?? '',
+        'p_store_note': storeNote ?? '',
+      },
+    );
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {'ok': true};
+  }
+
+  /// Panggil kurir Biteship (create order) lalu status → shipped.
+  Future<Map<String, dynamic>> createBiteshipShipment({
+    required String onlineOrderId,
+  }) async {
+    try {
+      final res = await _db.functions.invoke(
+        'biteship-create-order',
+        body: {'online_order_id': onlineOrderId},
+      );
+      final data = res.data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return {
+        'ok': false,
+        'error': 'Respons Biteship tidak valid (HTTP ${res.status})',
+      };
+    } catch (e) {
+      return {'ok': false, 'error': '$e'};
+    }
   }
 
   Future<void> submitRating({

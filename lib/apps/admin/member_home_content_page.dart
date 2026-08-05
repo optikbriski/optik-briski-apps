@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -34,9 +35,16 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   List<Map<String, dynamic>> _sections = [];
   Map<String, bool> _flags = {};
   List<Map<String, dynamic>> _promos = [];
+  /// ID promo server yang dihapus di draft — di-commit saat Update.
+  final Set<String> _promoDeletedIds = {};
 
   bool _loading = true;
-  bool _saving = false;
+  bool _publishing = false;
+  bool _ready = false;
+  bool _draftDirty = false;
+  /// true = Simpan sudah dikunci; tunggu tombol Update untuk push ke APK.
+  bool _pendingUpdate = false;
+  String? _selectedSectionKey;
   String? _error;
 
   static const _defaultSections = [
@@ -44,7 +52,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     {'key': 'greeting', 'label': 'Kartu sapaan', 'visible': true, 'order': 1},
     {'key': 'promo', 'label': 'Kartu promo', 'visible': true, 'order': 2},
     {'key': 'reminders', 'label': 'Pengingat', 'visible': true, 'order': 3},
-    {'key': 'store', 'label': 'Cabang terkait', 'visible': true, 'order': 4},
+    {'key': 'store', 'label': 'Cabang saya', 'visible': true, 'order': 4},
     {
       'key': 'services_main',
       'label': 'Layanan utama',
@@ -55,11 +63,11 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   ];
 
   static const _flagLabels = {
-    'katalog': 'Katalog produk',
+    'katalog': 'Belanja Online',
     'janji_kontrol': 'Janji kontrol',
     'resep': 'Resep / reorder',
     'rating': 'Rating',
-    'notif': 'Notifikasi',
+    'notif': 'Inbox',
     'perawatan': 'Perawatan',
     'bentuk_wajah': 'Bentuk wajah (scan)',
   };
@@ -67,15 +75,18 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   static const _sectionMeta = <String, ({IconData icon, String hint})>{
     'hero': (icon: Icons.image_outlined, hint: 'Banner atas beranda'),
     'greeting': (icon: Icons.waving_hand_outlined, hint: 'Sapaan + poin'),
-    'promo': (icon: Icons.local_offer_outlined, hint: 'Shortcut promo'),
+    'promo': (
+      icon: Icons.local_offer_outlined,
+      hint: 'Promo live + shortcut poin'
+    ),
     'reminders': (
       icon: Icons.notifications_active_outlined,
       hint: 'Status pesanan'
     ),
-    'store': (icon: Icons.storefront_outlined, hint: 'Cabang terkait'),
+    'store': (icon: Icons.storefront_outlined, hint: 'Cabang saya (pilihan)'),
     'services_main': (
       icon: Icons.grid_view_rounded,
-      hint: 'Katalog & janji kontrol'
+      hint: 'Belanja Online & janji kontrol'
     ),
     'services_other': (icon: Icons.apps_outlined, hint: 'Menu sekunder'),
   };
@@ -102,7 +113,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Hanya Owner / Admin Pusat.'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: OptikAdminTokens.danger,
           ),
         );
         Navigator.pop(context);
@@ -113,7 +124,33 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   }
 
   void _refreshPreview() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (_ready) {
+        _draftDirty = true;
+        _pendingUpdate = false;
+      }
+    });
+  }
+
+  void _markDraft([VoidCallback? mutate]) {
+    setState(() {
+      mutate?.call();
+      if (_ready) {
+        _draftDirty = true;
+        _pendingUpdate = false;
+      }
+    });
+  }
+
+  bool get _hasUnpublishedWork => _draftDirty || _pendingUpdate;
+
+  void _selectSection(String key) {
+    setState(() => _selectedSectionKey = key);
+    // Ketuk section di HP → pastikan tab Tata letak (inspector) terbuka.
+    if (_tabs.index != 0) {
+      _tabs.animateTo(0);
+    }
   }
 
   void _wireSlideListeners() {
@@ -148,6 +185,10 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     setState(() {
       _loading = true;
       _error = null;
+      // Cegah listener controller menandai draft kotor saat isi ulang dari server.
+      _ready = false;
+      _draftDirty = false;
+      _pendingUpdate = false;
     });
     try {
       final row = await _db
@@ -158,22 +199,19 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       final data =
           row == null ? <String, dynamic>{} : Map<String, dynamic>.from(row);
 
-      _brand.text = (data['brand_label'] ?? 'OPTIK B. RISKI').toString();
-      _greeting.text =
+      final brand =
+          (data['brand_label'] ?? 'OPTIK B. RISKI').toString();
+      final greeting =
           (data['greeting_guest'] ?? 'Hi, Teman Optik!').toString();
-      _greetingSub.text = (data['greeting_subtitle_guest'] ??
+      final greetingSub = (data['greeting_subtitle_guest'] ??
               'Login untuk lihat pesanan & garansi')
           .toString();
-      _promoTitle.text =
+      final promoTitle =
           (data['promo_title'] ?? 'Promo & poin').toString();
-      _promoSub.text =
+      final promoSub =
           (data['promo_subtitle'] ?? 'Voucher dan saldo poin kamu')
               .toString();
 
-      for (final s in _slides) {
-        s.dispose();
-      }
-      _slides.clear();
       var slidesList = <dynamic>[];
       final rawSlides = data['slides'];
       if (rawSlides is List) {
@@ -195,18 +233,18 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           },
         ];
       }
+      final newSlides = <_SlideEditors>[];
       for (final s in slidesList) {
         final m = Map<String, dynamic>.from(s as Map);
-        _slides.add(_SlideEditors(
+        newSlides.add(_SlideEditors(
           title: (m['title'] ?? '').toString(),
           subtitle: (m['subtitle'] ?? '').toString(),
           imageUrl: (m['image_url'] ?? '').toString(),
         ));
       }
-      _wireSlideListeners();
 
-      _sections = _parseSections(data['sections']);
-      _flags = _parseFlags(data['feature_flags']);
+      final newSections = _parseSections(data['sections']);
+      final newFlags = _parseFlags(data['feature_flags']);
 
       List promoRows = [];
       try {
@@ -218,32 +256,88 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       } catch (_) {
         promoRows = [];
       }
-      _promos = promoRows
+      final newPromos = promoRows
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
 
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (!mounted) {
+        for (final s in newSlides) {
+          s.dispose();
+        }
+        return;
+      }
+
+      // Swap hanya setelah fetch sukses — gagal reload tidak mengosongkan draft.
+      for (final s in _slides) {
+        s.dispose();
+      }
+      _slides
+        ..clear()
+        ..addAll(newSlides);
+      _wireSlideListeners();
+
+      _brand.text = brand;
+      _greeting.text = greeting;
+      _greetingSub.text = greetingSub;
+      _promoTitle.text = promoTitle;
+      _promoSub.text = promoSub;
+      _sections = newSections;
+      _flags = newFlags;
+      _promos = newPromos;
+      _promoDeletedIds.clear();
+
+      setState(() {
+        _loading = false;
+        _ready = true;
+        _draftDirty = false;
+        _pendingUpdate = false;
+        _selectedSectionKey ??= 'hero';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = '$e';
+        // Tetap ready agar draft lokal / tombol Coba lagi tidak stuck.
+        _ready = true;
       });
     }
   }
 
+  bool _isDraftPromoId(dynamic id) {
+    final s = id?.toString() ?? '';
+    return s.isEmpty || s.startsWith('draft_');
+  }
+
   List<Map<String, dynamic>> _parseSections(dynamic raw) {
+    final defaultsByKey = {
+      for (final e in _defaultSections) (e['key'] ?? '').toString(): e,
+    };
     final list = <Map<String, dynamic>>[];
     if (raw is List) {
       for (final e in raw) {
-        if (e is Map) list.add(Map<String, dynamic>.from(e));
+        if (e is! Map) continue;
+        final m = Map<String, dynamic>.from(e);
+        final key = (m['key'] ?? '').toString();
+        final def = defaultsByKey[key];
+        if (def != null) {
+          // Label CMS selalu ikut copy terbaru (key tetap kontrak app).
+          m['label'] = def['label'];
+        }
+        list.add(m);
       }
     }
     if (list.isEmpty) {
       return _defaultSections
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+    }
+    // Pastikan section baru (jika ada) ikut masuk.
+    for (final def in _defaultSections) {
+      final key = (def['key'] ?? '').toString();
+      if (list.every((s) => (s['key'] ?? '') != key)) {
+        list.add(Map<String, dynamic>.from(def));
+      }
     }
     list.sort((a, b) => ((a['order'] as num?)?.toInt() ?? 0)
         .compareTo((b['order'] as num?)?.toInt() ?? 0));
@@ -277,6 +371,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   }
 
   Future<void> _pickSlideImage(int index) async {
+    if (index < 0 || index >= _slides.length) return;
     final file = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       maxWidth: 1600,
@@ -287,7 +382,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     try {
       final url = await _uploadBanner(bytes, file.name);
       if (!mounted) return;
-      setState(() => _slides[index].imageUrl = url ?? '');
+      if (index < 0 || index >= _slides.length) return;
+      _markDraft(() => _slides[index].imageUrl = url ?? '');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -296,53 +392,328 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     }
   }
 
-  Future<void> _saveHome() async {
-    setState(() => _saving = true);
+  List<Map<String, dynamic>> _collectSlidesOrThrow() {
+    final slides = _slides
+        .map((s) => {
+              'title': s.titleCtrl.text.trim(),
+              'subtitle': s.subtitleCtrl.text.trim(),
+              'image_url': s.imageUrl.trim(),
+            })
+        .where((s) => (s['title'] as String).isNotEmpty)
+        .toList();
+    if (slides.isEmpty) {
+      throw Exception('Minimal 1 slide banner dengan judul.');
+    }
+    return slides;
+  }
+
+  /// Simpan = kunci draft lokal. Belum menyentuh APK / server home.
+  Future<void> _saveDraft() async {
+    if (_publishing) return;
     try {
-      final slides = _slides
-          .map((s) => {
-                'title': s.titleCtrl.text.trim(),
-                'subtitle': s.subtitleCtrl.text.trim(),
-                'image_url': s.imageUrl.trim(),
-              })
-          .where((s) => (s['title'] as String).isNotEmpty)
-          .toList();
-      if (slides.isEmpty) throw Exception('Minimal 1 slide banner.');
-
-      for (var i = 0; i < _sections.length; i++) {
-        _sections[i]['order'] = i;
-      }
-
-      await _db.from('member_home_content').upsert({
-        'id': 'default',
-        'brand_label': _brand.text.trim().isEmpty
-            ? 'OPTIK B. RISKI'
-            : _brand.text.trim(),
-        'slides': slides,
-        'greeting_guest': _greeting.text.trim(),
-        'greeting_subtitle_guest': _greetingSub.text.trim(),
-        'promo_title': _promoTitle.text.trim(),
-        'promo_subtitle': _promoSub.text.trim(),
-        'sections': _sections,
-        'feature_flags': _flags,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Layout & banner tersimpan.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _collectSlidesOrThrow();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Gagal: $e'), backgroundColor: Colors.redAccent),
+          content: Text('$e'),
+          backgroundColor: OptikAdminTokens.warning,
+        ),
       );
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      return;
     }
+    if (!_draftDirty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Simpan draft?'),
+        content: const Text(
+          'Draft di kunci di editor. APK Member belum berubah — '
+          'tekan Update setelah ini untuk apply ke APK.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Simpan draft'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    for (var i = 0; i < _sections.length; i++) {
+      _sections[i]['order'] = i;
+    }
+    setState(() {
+      _draftDirty = false;
+      _pendingUpdate = true;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Draft tersimpan. APK belum berubah — tekan Update untuk apply.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _homeContentPayload(List<Map<String, dynamic>> slides) {
+    for (var i = 0; i < _sections.length; i++) {
+      _sections[i]['order'] = i;
+    }
+    // Salin JSON-safe agar upsert tidak gagal karena referensi mutable.
+    final sectionsJson = jsonDecode(jsonEncode(_sections)) as List<dynamic>;
+    final flagsJson =
+        jsonDecode(jsonEncode(_flags)) as Map<String, dynamic>;
+    return {
+      'id': 'default',
+      'brand_label': _brand.text.trim().isEmpty
+          ? 'OPTIK B. RISKI'
+          : _brand.text.trim(),
+      'slides': slides,
+      'greeting_guest': _greeting.text.trim(),
+      'greeting_subtitle_guest': _greetingSub.text.trim(),
+      'promo_title': _promoTitle.text.trim(),
+      'promo_subtitle': _promoSub.text.trim(),
+      'sections': sectionsJson,
+      'feature_flags': flagsJson,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> _promoDbPayload(Map<String, dynamic> p) {
+    final payload = <String, dynamic>{
+      'title': (p['title'] ?? '').toString().trim(),
+      'description': (p['description'] ?? '').toString(),
+      'voucher_code': () {
+        final c = (p['voucher_code'] ?? '').toString().trim();
+        return c.isEmpty ? null : c.toUpperCase();
+      }(),
+      'points_cost': int.tryParse('${p['points_cost'] ?? 0}') ?? 0,
+      'quantity': int.tryParse('${p['quantity'] ?? ''}'),
+      'quantity_remaining': int.tryParse('${p['quantity_remaining'] ?? ''}'),
+      'discount_type': (p['discount_type'] ?? 'nominal').toString(),
+      'discount_value': int.tryParse('${p['discount_value'] ?? 0}') ?? 0,
+      'show_on_member': p['show_on_member'] != false,
+      'show_on_pos': p['show_on_pos'] != false,
+      'active': p['active'] != false,
+      'sort_order': int.tryParse('${p['sort_order'] ?? 0}') ?? 0,
+      'terms': () {
+        final t = (p['terms'] ?? '').toString().trim();
+        return t.isEmpty ? null : t;
+      }(),
+      'image_url': () {
+        final u = (p['image_url'] ?? '').toString().trim();
+        return u.isEmpty ? null : u;
+      }(),
+      'valid_until': p['valid_until'],
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    return payload;
+  }
+
+  /// Update = push draft yang sudah di-Simpan ke APK (server).
+  Future<void> _publishToApk() async {
+    if (_publishing) return;
+    if (_draftDirty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ada edit baru. Tekan Simpan dulu, lalu Update.'),
+          backgroundColor: OptikAdminTokens.warning,
+        ),
+      );
+      return;
+    }
+    if (!_pendingUpdate) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update ke APK Member?'),
+        content: const Text(
+          'Draft yang sudah disimpan akan diterapkan ke beranda APK Member. Lanjutkan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Update APK'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _publishing = true);
+    var homeOk = false;
+    var promoOk = false;
+    try {
+      final slides = _collectSlidesOrThrow();
+      await _db.from('member_home_content').upsert(_homeContentPayload(slides));
+      homeOk = true;
+
+      await _commitPromoDrafts();
+      promoOk = true;
+
+      if (!mounted) return;
+      setState(() {
+        _pendingUpdate = false;
+        _draftDirty = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Beranda Member diperbarui di APK.'),
+          backgroundColor: OptikAdminTokens.success,
+        ),
+      );
+      // Reload terpisah: gagal refresh UI jangan dianggap gagal Update.
+      try {
+        await _load();
+      } catch (e) {
+        debugPrint('reload after publish: $e');
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _ready = true;
+          });
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final msg = !homeOk
+          ? 'Gagal update APK: $e'
+          : !promoOk
+              ? 'Layout sudah ter-update, tapi promo gagal: $e'
+              : 'Gagal update APK: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: OptikAdminTokens.danger),
+      );
+      if (homeOk) {
+        setState(() {
+          _pendingUpdate = false;
+          _draftDirty = !promoOk;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
+
+  /// Hanya promo yang diubah/dihapus di draft — aman di-retry jika gagal di tengah.
+  Future<void> _commitPromoDrafts() async {
+    // Hapus dulu — tiap sukses langsung lepas dari set agar tidak dobel.
+    for (final id in _promoDeletedIds.toList(growable: false)) {
+      if (_isDraftPromoId(id)) {
+        _promoDeletedIds.remove(id);
+        continue;
+      }
+      await _db.from('member_promos').delete().eq('id', id);
+      _promoDeletedIds.remove(id);
+    }
+
+    // Insert draft baru. Tanpa .select(): insert sukses + select gagal
+    // dulu bisa meninggalkan draft_* → retry dobel. Setelah insert OK,
+    // id lokal diganti non-draft; reload berikutnya sync id server.
+    for (final p in _promos.where((e) => _isDraftPromoId(e['id'])).toList()) {
+      await _db.from('member_promos').insert(_promoDbPayload(p));
+      p['id'] = 'synced_${DateTime.now().microsecondsSinceEpoch}';
+      p.remove('_draft');
+    }
+
+    // Update hanya yang diedit di draft.
+    for (final p in _promos
+        .where((e) =>
+            e['_draft'] == true &&
+            !_isDraftPromoId(e['id']) &&
+            (e['id']?.toString().isNotEmpty ?? false))
+        .toList()) {
+      await _db
+          .from('member_promos')
+          .update(_promoDbPayload(p))
+          .eq('id', p['id']);
+      p.remove('_draft');
+    }
+  }
+
+  Future<void> _discardDraft() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Buang draft?'),
+        content: const Text(
+          'Semua edit yang belum di-Update ke APK akan dibuang. Kembali ke data server?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Buang draft'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _load();
+  }
+
+  Future<bool> _confirmLeaveIfDirty() async {
+    if (!_hasUnpublishedWork) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar tanpa Update?'),
+        content: Text(
+          _pendingUpdate && !_draftDirty
+              ? 'Draft sudah di-Simpan tapi belum di-Update ke APK. Keluar dan buang?'
+              : 'Ada draft yang belum di-Update ke APK. Keluar dan buang?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Lanjut edit'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Buang & keluar'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  void _moveSection(String key, int delta) {
+    final i = _sections.indexWhere((s) => (s['key'] ?? '') == key);
+    if (i < 0) return;
+    final j = i + delta;
+    if (j < 0 || j >= _sections.length) return;
+    _markDraft(() {
+      final item = _sections.removeAt(i);
+      _sections.insert(j, item);
+      for (var n = 0; n < _sections.length; n++) {
+        _sections[n]['order'] = n;
+      }
+    });
+  }
+
+  Map<String, dynamic>? _sectionByKey(String key) {
+    for (final s in _sections) {
+      if ((s['key'] ?? '') == key) return s;
+    }
+    return null;
   }
 
   Future<void> _editPromo([Map<String, dynamic>? existing]) async {
@@ -395,24 +766,49 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                           const InputDecoration(labelText: 'Deskripsi')),
                   TextField(
                       controller: code,
+                      textCapitalization: TextCapitalization.characters,
                       decoration: const InputDecoration(
-                          labelText: 'Kode voucher (untuk POS/Member)')),
+                          labelText:
+                              'Kode voucher * (wajib jika Nominal/Persen)',
+                          helperText:
+                              'Dipakai redeem kuota/poin di POS & Belanja Online')),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: discType,
-                    decoration:
-                        const InputDecoration(labelText: 'Tipe diskon POS'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'nominal', child: Text('Nominal (Rp)')),
-                      DropdownMenuItem(
-                          value: 'percent', child: Text('Persen (%)')),
-                      DropdownMenuItem(
+                  AdminPickerField(
+                    label: 'Tipe diskon POS',
+                    valueText: switch (discType) {
+                      'percent' => 'Persen (%)',
+                      'info' => 'Info saja (tanpa potong POS)',
+                      _ => 'Nominal (Rp)',
+                    },
+                    icon: Icons.discount_outlined,
+                    onTap: () async {
+                      const options = [
+                        AdminPickerOption(
+                          value: 'nominal',
+                          label: 'Nominal (Rp)',
+                          icon: Icons.payments_outlined,
+                        ),
+                        AdminPickerOption(
+                          value: 'percent',
+                          label: 'Persen (%)',
+                          icon: Icons.percent_rounded,
+                        ),
+                        AdminPickerOption(
                           value: 'info',
-                          child: Text('Info saja (tanpa potong POS)')),
-                    ],
-                    onChanged: (v) =>
-                        setLocal(() => discType = v ?? 'nominal'),
+                          label: 'Info saja (tanpa potong POS)',
+                          icon: Icons.info_outline_rounded,
+                        ),
+                      ];
+                      final sel = await showAdminPicker<String>(
+                        context: ctx,
+                        title: 'Tipe diskon POS',
+                        selected: discType,
+                        searchable: false,
+                        options: options,
+                      );
+                      if (sel == null || sel.isClear) return;
+                      setLocal(() => discType = sel.value!);
+                    },
                   ),
                   TextField(
                     controller: discVal,
@@ -541,7 +937,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 child: const Text('Batal')),
             FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Simpan')),
+                child: const Text('Ke draft')),
           ],
         ),
       ),
@@ -554,11 +950,35 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       );
       return;
     }
+    if (discType != 'info' && code.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Kode voucher wajib diisi untuk tipe Nominal/Persen '
+            '(supaya bisa di-redeem di POS & Belanja Online).',
+          ),
+          backgroundColor: OptikAdminTokens.warning,
+        ),
+      );
+      return;
+    }
+    if (discType != 'info' &&
+        (int.tryParse(discVal.text) ?? 0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nilai diskon harus > 0 untuk Nominal/Persen'),
+          backgroundColor: OptikAdminTokens.warning,
+        ),
+      );
+      return;
+    }
 
-    final payload = {
+    final payload = <String, dynamic>{
       'title': title.text.trim(),
       'description': desc.text.trim(),
-      'voucher_code': code.text.trim().isEmpty ? null : code.text.trim(),
+      'voucher_code': code.text.trim().isEmpty
+          ? null
+          : code.text.trim().toUpperCase(),
       'points_cost': int.tryParse(points.text) ?? 0,
       'quantity': int.tryParse(qty.text),
       'quantity_remaining': int.tryParse(qtyLeft.text.isEmpty
@@ -574,41 +994,39 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       'terms': terms.text.trim().isEmpty ? null : terms.text.trim(),
       'image_url': imageUrl.isEmpty ? null : imageUrl,
       'valid_until': validUntil?.toIso8601String().substring(0, 10),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      '_draft': true,
     };
 
-    try {
+    _markDraft(() {
       if (isNew) {
-        await _db.from('member_promos').insert(payload);
+        _promos.insert(0, {
+          ...payload,
+          'id': 'draft_${DateTime.now().microsecondsSinceEpoch}',
+        });
       } else {
-        await _db
-            .from('member_promos')
-            .update(payload)
-            .eq('id', existing['id']);
+        final i = _promos.indexWhere((e) => e['id'] == existing['id']);
+        if (i >= 0) {
+          _promos[i] = {...existing, ...payload, 'id': existing['id']};
+        }
       }
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Promo tersimpan'),
-            backgroundColor: Colors.green),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Gagal simpan promo: $e'),
-            backgroundColor: Colors.redAccent),
-      );
-    }
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Promo masuk draft. Simpan → Update untuk ke APK.'),
+        backgroundColor: OptikAdminTokens.warning,
+      ),
+    );
   }
 
   Future<void> _deletePromo(Map<String, dynamic> p) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus promo?'),
-        content: Text('Hapus "${p['title']}"?'),
+        title: const Text('Hapus promo dari draft?'),
+        content: Text(
+          'Hapus "${p['title']}"? Baru hilang dari APK setelah Update.',
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -620,14 +1038,19 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       ),
     );
     if (ok != true) return;
-    await _db.from('member_promos').delete().eq('id', p['id']);
-    await _load();
+    final id = p['id']?.toString();
+    _markDraft(() {
+      _promos.removeWhere((e) => e['id'] == p['id']);
+      if (id != null && !_isDraftPromoId(id)) {
+        _promoDeletedIds.add(id);
+      }
+    });
   }
 
   void _openPreview() {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.72),
+      barrierColor: OptikAdminTokens.navy.withOpacity(0.72),
       builder: (ctx) {
         final maxH = MediaQuery.sizeOf(ctx).height * 0.9;
         return Dialog(
@@ -653,7 +1076,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.phone_iphone_rounded,
-                              size: 18, color: Colors.white),
+                              size: 18, color: OptikAdminTokens.navy),
                         ),
                         const SizedBox(width: 10),
                         const Expanded(
@@ -686,14 +1109,19 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                     const SizedBox(height: 14),
                     Expanded(
                       child: SingleChildScrollView(
-                        child: Center(child: _buildPhonePreview()),
+                        child: Center(
+                            child: _buildPhonePreview(interactive: false)),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Belum tersimpan ke server — ini preview editan saat ini.',
+                    Text(
+                      _pendingUpdate && !_draftDirty
+                          ? 'Draft siap Update — belum ke APK sampai Update ditekan.'
+                          : _draftDirty
+                              ? 'Preview draft lokal — tekan Simpan lalu Update ke APK.'
+                              : 'Preview sesuai data yang sedang di editor.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontSize: 11.5,
                       ),
@@ -708,37 +1136,140 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     );
   }
 
-  Widget _buildPhonePreview() {
+  Widget _buildPhonePreview({bool interactive = false}) {
+    final memberPromos = _promos
+        .where((p) =>
+            p['active'] != false &&
+            p['show_on_member'] != false)
+        .toList();
     return _MemberHomePhonePreview(
       brand: _brand.text.trim().isEmpty ? 'OPTIK B. RISKI' : _brand.text.trim(),
       greeting: _greeting.text.trim().isEmpty
           ? 'Hi, Teman Optik!'
           : _greeting.text.trim(),
-      greetingSub: _greetingSub.text.trim(),
+      greetingSub: _greetingSub.text.trim().isEmpty
+          ? 'Login untuk lihat pesanan & garansi'
+          : _greetingSub.text.trim(),
       promoTitle: _promoTitle.text.trim().isEmpty
           ? 'Promo & poin'
           : _promoTitle.text.trim(),
-      promoSub: _promoSub.text.trim(),
+      promoSub: _promoSub.text.trim().isEmpty
+          ? 'Voucher dan saldo poin kamu'
+          : _promoSub.text.trim(),
       slides: _slides
           .map((s) => (
                 title: s.titleCtrl.text,
                 subtitle: s.subtitleCtrl.text,
                 imageUrl: s.imageUrl,
               ))
+          .where((s) => s.title.trim().isNotEmpty)
           .toList(),
       sections: _sections,
       flags: _flags,
-      promoCount: _promos.where((p) => p['show_on_member'] != false).length,
+      promoPreviews: memberPromos
+          .take(6)
+          .map((p) => (
+                title: (p['title'] ?? 'Promo').toString(),
+                label: _promoDiscountPreview(p),
+                code: (p['voucher_code'] ?? '').toString(),
+              ))
+          .toList(),
+      interactive: interactive,
+      selectedKey: _selectedSectionKey,
+      onSectionTap: interactive ? _selectSection : null,
+      onSectionLongPress: interactive
+          ? (key) => _showReorderSheet(key)
+          : null,
+      draftBadge: _hasUnpublishedWork,
+      pendingUpdate: _pendingUpdate && !_draftDirty,
+      selectedLabel: () {
+        final k = _selectedSectionKey;
+        if (k == null) return null;
+        return (_sectionByKey(k)?['label'] ?? k).toString();
+      }(),
     );
+  }
+
+  Future<void> _showReorderSheet(String key) async {
+    _selectSection(key);
+    final label = (_sectionByKey(key)?['label'] ?? key).toString();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Urutan: $label',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Long-press di preview untuk ubah urutan section.',
+                style: TextStyle(
+                  color: OptikAdminTokens.textMuted,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        _moveSection(key, -1);
+                        Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.arrow_upward_rounded),
+                      label: const Text('Naik'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        _moveSection(key, 1);
+                        Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.arrow_downward_rounded),
+                      label: const Text('Turun'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _promoDiscountPreview(Map<String, dynamic> p) {
+    final type = (p['discount_type'] ?? 'nominal').toString();
+    final value = int.tryParse('${p['discount_value'] ?? 0}') ?? 0;
+    if (type == 'percent') return 'Diskon $value%';
+    if (type == 'nominal' && value > 0) return 'Potongan Rp $value';
+    return (p['title'] ?? 'Promo Member').toString();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: OptikAdminTokens.bg,
-      body: DecoratedBox(
-        decoration: BoxDecoration(gradient: OptikAdminTokens.bgGradient),
-        child: SafeArea(
+    return PopScope(
+      canPop: !_hasUnpublishedWork && !_publishing,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _publishing) return;
+        final leave = await _confirmLeaveIfDirty();
+        if (leave && context.mounted) Navigator.pop(context);
+      },
+      child: PremiumScaffold(
+        body: SafeArea(
           child: Column(
             children: [
               _buildTopBar(),
@@ -769,60 +1300,134 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   }
 
   Widget _buildTopBar() {
+    final statusChip = !_hasUnpublishedWork
+        ? null
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: (_pendingUpdate && !_draftDirty
+                      ? OptikAdminTokens.accent
+                      : OptikAdminTokens.warning)
+                  .withOpacity(0.18),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: (_pendingUpdate && !_draftDirty
+                        ? OptikAdminTokens.navy
+                        : OptikAdminTokens.warning)
+                    .withOpacity(0.45),
+              ),
+            ),
+            child: Text(
+              _pendingUpdate && !_draftDirty ? 'SIAP UPDATE' : 'DRAFT',
+              style: TextStyle(
+                color: _pendingUpdate && !_draftDirty
+                    ? OptikAdminTokens.navy
+                    : OptikAdminTokens.warning,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+              ),
+            ),
+          );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          const SizedBox(width: 4),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Konten Home Member',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    letterSpacing: -0.2,
-                  ),
+          Row(
+            children: [
+              IconButton(
+                onPressed: _publishing
+                    ? null
+                    : () async {
+                        final leave = await _confirmLeaveIfDirty();
+                        if (leave && mounted) Navigator.pop(context);
+                      },
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Konten Home Member',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    Text(
+                      _draftDirty
+                          ? 'Draft di preview · tekan Simpan (belum ke APK)'
+                          : _pendingUpdate
+                              ? 'Draft siap · tekan Update untuk apply ke APK'
+                              : 'Ketuk HP untuk atur · Simpan lalu Update ke APK',
+                      style: TextStyle(
+                        color: _hasUnpublishedWork
+                            ? OptikAdminTokens.warning
+                            : OptikAdminTokens.textMuted,
+                        fontSize: 12.5,
+                        fontWeight: _hasUnpublishedWork
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Atur konsep beranda · tekan Preview untuk lihat di HP',
-                  style: TextStyle(
-                    color: OptikAdminTokens.textMuted,
-                    fontSize: 12.5,
+              ),
+              if (statusChip != null) statusChip,
+            ],
+          ),
+          if (!_loading && _error == null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              children: [
+                if (_hasUnpublishedWork)
+                  TextButton(
+                    onPressed:
+                        _loading || _publishing ? null : _discardDraft,
+                    child: const Text('Buang'),
                   ),
+                OutlinedButton.icon(
+                  onPressed: _publishing ? null : _openPreview,
+                  icon: const Icon(Icons.fullscreen_rounded, size: 18),
+                  label: const Text('Fullscreen'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _loading || _publishing || !_draftDirty
+                          ? null
+                          : _saveDraft,
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: const Text('Simpan'),
+                ),
+                FilledButton.icon(
+                  onPressed: _loading ||
+                          _publishing ||
+                          _draftDirty ||
+                          !_pendingUpdate
+                      ? null
+                      : _publishToApk,
+                  icon: _publishing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: OptikAdminTokens.navy,
+                          ),
+                        )
+                      : const Icon(Icons.system_update_alt_rounded, size: 18),
+                  label: Text(_publishing ? 'Updating…' : 'Update'),
                 ),
               ],
             ),
-          ),
-          if (!_loading && _error == null) ...[
-            OutlinedButton.icon(
-              onPressed: _openPreview,
-              icon: const Icon(Icons.phone_iphone_rounded, size: 18),
-              label: const Text('Preview'),
-            ),
-            if (_tabs.index != 2) const SizedBox(width: 8),
           ],
-          if (_tabs.index != 2)
-            FilledButton.icon(
-              onPressed: _loading || _saving ? null : _saveHome,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.save_rounded, size: 18),
-              label: Text(_saving ? 'Menyimpan…' : 'Simpan'),
-            ),
         ],
       ),
     );
@@ -843,7 +1448,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           borderRadius: BorderRadius.circular(12),
           gradient: OptikAdminTokens.accentGradient,
         ),
-        labelColor: Colors.white,
+        labelColor: OptikAdminTokens.snow,
         unselectedLabelColor: OptikAdminTokens.textMuted,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
         tabs: const [
@@ -897,7 +1502,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 color: OptikAdminTokens.accent.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 18, color: OptikAdminTokens.accentSoft),
+              child: Icon(icon, size: 18, color: OptikAdminTokens.navy),
             ),
             const SizedBox(width: 10),
           ],
@@ -922,196 +1527,406 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   }
 
   Widget _buildLayoutTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-      children: [
-        PremiumPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sectionHeader(
-                'Urutan & tampilan section',
-                'Geser ↑↓ untuk urutan. Matikan switch untuk hide di APK.',
-                icon: Icons.view_agenda_outlined,
+    final wide = MediaQuery.sizeOf(context).width >= 960;
+    final phone = _buildPhonePreview(interactive: true);
+    final inspector = _buildSectionInspector();
+
+    if (!wide) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          Center(child: phone),
+          const SizedBox(height: 16),
+          inspector,
+        ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 5,
+            child: Container(
+              decoration: BoxDecoration(
+                color: OptikAdminTokens.bgMid,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: OptikAdminTokens.line),
               ),
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                proxyDecorator: (child, index, animation) {
-                  return Material(
-                    color: Colors.transparent,
-                    elevation: 8,
-                    shadowColor: OptikAdminTokens.accent.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(14),
-                    child: child,
-                  );
-                },
-                itemCount: _sections.length,
-                onReorder: (oldIndex, newIndex) {
-                  setState(() {
-                    if (newIndex > oldIndex) newIndex -= 1;
-                    final item = _sections.removeAt(oldIndex);
-                    _sections.insert(newIndex, item);
-                  });
-                },
-                itemBuilder: (context, i) {
-                  final s = _sections[i];
-                  final key = (s['key'] ?? '').toString();
-                  final meta = _sectionMeta[key];
-                  final on = s['visible'] != false;
-                  return Container(
-                    key: ValueKey(key),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: on
-                          ? OptikAdminTokens.panel
-                          : OptikAdminTokens.bg.withOpacity(0.55),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: on
-                            ? OptikAdminTokens.accent.withOpacity(0.28)
-                            : OptikAdminTokens.line,
-                      ),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 2),
-                      leading: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.drag_handle_rounded,
-                              color: OptikAdminTokens.textMuted),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 26,
-                            height: 26,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: OptikAdminTokens.accent.withOpacity(0.18),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${i + 1}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: OptikAdminTokens.accentSoft,
-                              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.touch_app_rounded,
+                            size: 18, color: OptikAdminTokens.navy),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Ketuk bagian di HP untuk membuka setting',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            meta?.icon ?? Icons.widgets_outlined,
-                            size: 20,
-                            color: on
-                                ? OptikAdminTokens.accentSoft
-                                : OptikAdminTokens.textMuted,
-                          ),
-                        ],
-                      ),
-                      title: Text(
-                        (s['label'] ?? key).toString(),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: on
-                              ? OptikAdminTokens.textPrimary
-                              : OptikAdminTokens.textMuted,
                         ),
-                      ),
-                      subtitle: Text(
-                        meta?.hint ?? key,
-                        style: const TextStyle(fontSize: 11.5),
-                      ),
-                      trailing: Switch.adaptive(
-                        value: on,
-                        onChanged: (v) =>
-                            setState(() => _sections[i]['visible'] = v),
+                        TextButton(
+                          onPressed: _openPreview,
+                          child: const Text('Fullscreen'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: phone,
                       ),
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        PremiumPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sectionHeader(
-                'Fitur tombol (hide / see)',
-                'Matikan agar tidak muncul di grid layanan Member.',
-                icon: Icons.toggle_on_outlined,
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _flagLabels.entries.map((e) {
-                  final on = _flags[e.key] != false;
-                  return FilterChip(
-                    selected: on,
-                    showCheckmark: false,
-                    label: Text(e.value),
-                    avatar: Icon(
-                      on
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_outlined,
-                      size: 16,
-                    ),
-                    onSelected: (v) => setState(() => _flags[e.key] = v),
-                    selectedColor: OptikAdminTokens.accent.withOpacity(0.25),
-                    labelStyle: TextStyle(
-                      color: on
-                          ? OptikAdminTokens.textPrimary
-                          : OptikAdminTokens.textMuted,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        PremiumPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sectionHeader(
-                'Teks sapaan & kartu promo',
-                'Langsung terlihat di preview HP.',
-                icon: Icons.edit_note_rounded,
-              ),
-              TextField(
-                controller: _greeting,
-                decoration:
-                    const InputDecoration(labelText: 'Sapaan (belum login)'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _greetingSub,
-                decoration:
-                    const InputDecoration(labelText: 'Subtitle sapaan'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _promoTitle,
-                decoration:
-                    const InputDecoration(labelText: 'Judul kartu promo'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _promoSub,
-                decoration:
-                    const InputDecoration(labelText: 'Subtitle kartu promo'),
-              ),
-            ],
-          ),
-        ),
-      ],
+          const SizedBox(width: 12),
+          Expanded(flex: 6, child: inspector),
+        ],
+      ),
     );
+  }
+
+  Widget _buildSectionInspector() {
+    final key = _selectedSectionKey ?? 'hero';
+    final section = _sectionByKey(key);
+    final meta = _sectionMeta[key];
+    final label = (section?['label'] ?? meta?.hint ?? key).toString();
+    final visible = section?['visible'] != false;
+    final idx = _sections.indexWhere((s) => (s['key'] ?? '') == key);
+
+    return PremiumPanel(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+        children: [
+          _sectionHeader(
+            'Mengatur: $label',
+            'Edit = draft. Simpan = kunci draft. Update = apply ke APK.',
+            icon: meta?.icon ?? Icons.tune_rounded,
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final s in _sections)
+                ChoiceChip(
+                  label: Text(
+                    (s['label'] ?? s['key']).toString(),
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  selected: (s['key'] ?? '') == key,
+                  onSelected: (_) =>
+                      _selectSection((s['key'] ?? '').toString()),
+                  selectedColor: OptikAdminTokens.accent.withOpacity(0.35),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (section != null) ...[
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Tampil di beranda'),
+              subtitle: Text(visible
+                  ? 'Section ini muncul di APK (setelah Update)'
+                  : 'Disembunyikan dari beranda'),
+              value: visible,
+              onChanged: (v) => _markDraft(() => section['visible'] = v),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: idx <= 0 ? null : () => _moveSection(key, -1),
+                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                    label: const Text('Naik'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: idx < 0 || idx >= _sections.length - 1
+                        ? null
+                        : () => _moveSection(key, 1),
+                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                    label: const Text('Turun'),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 28),
+          ],
+          ..._inspectorFieldsFor(key),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _inspectorFieldsFor(String key) {
+    switch (key) {
+      case 'hero':
+        return [
+          TextField(
+            controller: _brand,
+            decoration: const InputDecoration(
+              labelText: 'Label brand di banner',
+              hintText: 'OPTIK B. RISKI',
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Slide banner',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < _slides.length; i++) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: OptikAdminTokens.line),
+                borderRadius: BorderRadius.circular(12),
+                color: OptikAdminTokens.panel,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Slide ${i + 1}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const Spacer(),
+                      if (_slides.length > 1)
+                        IconButton(
+                          tooltip: 'Hapus slide',
+                          onPressed: () => _markDraft(() {
+                            _slides[i].dispose();
+                            _slides.removeAt(i);
+                          }),
+                          icon: const Icon(Icons.delete_outline,
+                              color: OptikAdminTokens.danger, size: 20),
+                        ),
+                    ],
+                  ),
+                  if (_slides[i].imageUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        _slides[i].imageUrl,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const SizedBox(height: 80),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pickSlideImage(i),
+                        icon: const Icon(Icons.image_outlined, size: 16),
+                        label: const Text('Gambar'),
+                      ),
+                      if (_slides[i].imageUrl.isNotEmpty)
+                        TextButton(
+                          onPressed: () =>
+                              _markDraft(() => _slides[i].imageUrl = ''),
+                          child: const Text('Hapus gambar'),
+                        ),
+                    ],
+                  ),
+                  TextField(
+                    controller: _slides[i].titleCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Judul'),
+                  ),
+                  TextField(
+                    controller: _slides[i].subtitleCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Subtitle'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          OutlinedButton.icon(
+            onPressed: () => _markDraft(() {
+              _slides.add(
+                  _SlideEditors(title: '', subtitle: '', imageUrl: ''));
+              _wireSlideListeners();
+            }),
+            icon: const Icon(Icons.add),
+            label: const Text('Tambah slide'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => _tabs.animateTo(1),
+            child: const Text('Buka tab Banner (panduan ukuran)'),
+          ),
+        ];
+      case 'greeting':
+        return [
+          TextField(
+            controller: _greeting,
+            decoration:
+                const InputDecoration(labelText: 'Sapaan (belum login)'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _greetingSub,
+            decoration: const InputDecoration(labelText: 'Subtitle sapaan'),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Poin / Pesanan / Garansi diisi otomatis dari data Member (live di APK).',
+            style: TextStyle(
+              color: OptikAdminTokens.textMuted,
+              fontSize: 12.5,
+            ),
+          ),
+        ];
+      case 'promo':
+        return [
+          TextField(
+            controller: _promoTitle,
+            decoration: const InputDecoration(labelText: 'Judul kartu promo'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _promoSub,
+            decoration:
+                const InputDecoration(labelText: 'Subtitle kartu promo'),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Promo (draft)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => _editPromo(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Tambah'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_promos.isEmpty)
+            const Text(
+              'Belum ada promo di draft.',
+              style: TextStyle(
+                color: OptikAdminTokens.textMuted,
+                fontSize: 12.5,
+              ),
+            )
+          else
+            for (final p in _promos.take(8))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(
+                  (p['title'] ?? 'Promo').toString(),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  [
+                    if ((p['voucher_code'] ?? '').toString().isNotEmpty)
+                      p['voucher_code'].toString(),
+                    if (p['_draft'] == true || _isDraftPromoId(p['id']))
+                      'baru',
+                  ].join(' · '),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: () => _editPromo(p),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                    ),
+                    IconButton(
+                      onPressed: () => _deletePromo(p),
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: OptikAdminTokens.danger),
+                    ),
+                  ],
+                ),
+              ),
+          TextButton(
+            onPressed: () => _tabs.animateTo(2),
+            child: const Text('Buka tab Promo lengkap'),
+          ),
+        ];
+      case 'reminders':
+        return const [
+          Text(
+            'Pengingat diisi otomatis dari pesanan aktif, DP, dan janji kontrol Member. Tidak ada teks CMS di sini — hanya show/hide & urutan.',
+            style: TextStyle(
+              color: OptikAdminTokens.textMuted,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ];
+      case 'store':
+        return const [
+          Text(
+            'Cabang dipilih Member di APK (atau dari nota terakhir). CMS hanya mengatur apakah section ini tampil.',
+            style: TextStyle(
+              color: OptikAdminTokens.textMuted,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ];
+      case 'services_main':
+        return [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Belanja Online'),
+            value: _flags['katalog'] != false,
+            onChanged: (v) => _markDraft(() => _flags['katalog'] = v),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Janji Kontrol'),
+            value: _flags['janji_kontrol'] != false,
+            onChanged: (v) => _markDraft(() => _flags['janji_kontrol'] = v),
+          ),
+        ];
+      case 'services_other':
+        return [
+          for (final e in _flagLabels.entries)
+            if (e.key != 'katalog' && e.key != 'janji_kontrol')
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: Text(e.value),
+                value: _flags[e.key] != false,
+                onChanged: (v) => _markDraft(() => _flags[e.key] = v),
+              ),
+        ];
+      default:
+        return const [
+          Text('Pilih bagian di preview HP.'),
+        ];
+    }
   }
 
   Widget _buildBannerTab() {
@@ -1166,7 +1981,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                     if (_slides.length > 1)
                       IconButton(
                         tooltip: 'Hapus banner',
-                        onPressed: () => setState(() {
+                        onPressed: () => _markDraft(() {
                           _slides[i].dispose();
                           _slides.removeAt(i);
                         }),
@@ -1205,7 +2020,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                     if (_slides[i].imageUrl.isNotEmpty)
                       TextButton(
                         onPressed: () =>
-                            setState(() => _slides[i].imageUrl = ''),
+                            _markDraft(() => _slides[i].imageUrl = ''),
                         child: const Text('Hapus gambar'),
                       ),
                   ],
@@ -1232,7 +2047,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           const SizedBox(height: 12),
         ],
         OutlinedButton.icon(
-          onPressed: () => setState(() {
+          onPressed: () => _markDraft(() {
             _slides.add(_SlideEditors(title: '', subtitle: '', imageUrl: ''));
             _wireSlideListeners();
           }),
@@ -1320,7 +2135,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: OptikAdminTokens.accentSoft),
+          Icon(icon, size: 18, color: OptikAdminTokens.navy),
           const SizedBox(width: 8),
           Expanded(
             child: RichText(
@@ -1358,7 +2173,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               Expanded(
                 child: _sectionHeader(
                   'Promo sinkron Member + POS',
-                  'Kuota, kode voucher, nilai diskon — kasir bisa Cek di POS.',
+                  'Edit masuk draft. Simpan lalu Update agar masuk APK & POS.',
                   icon: Icons.confirmation_number_outlined,
                 ),
               ),
@@ -1412,7 +2227,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                               ),
                               Text('Kode: $code',
                                   style: const TextStyle(
-                                      color: Colors.white70, fontSize: 12.5)),
+                                      color: OptikAdminTokens.textSecondary, fontSize: 12.5)),
                             ],
                           ),
                         ),
@@ -1458,12 +2273,12 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         decoration: BoxDecoration(
           color: ok
               ? OptikAdminTokens.success.withOpacity(0.15)
-              : Colors.white12,
+              : OptikAdminTokens.line,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: ok
                 ? OptikAdminTokens.success.withOpacity(0.35)
-                : Colors.white10,
+                : OptikAdminTokens.line,
           ),
         ),
         child: Text(
@@ -1515,9 +2330,9 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        OptikMemberTokens.blueDeep,
-                        OptikMemberTokens.blue,
-                        Color(0xFF2E86DE),
+                        OptikAdminTokens.navy,
+                        OptikAdminTokens.navy,
+                        OptikAdminTokens.accent,
                       ],
                     ),
                   ),
@@ -1528,28 +2343,28 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                   top: 0,
                   bottom: 0,
                   width: 28,
-                  child: ColoredBox(color: Colors.red.withOpacity(0.28)),
+                  child: ColoredBox(color: OptikAdminTokens.danger.withOpacity(0.28)),
                 ),
                 Positioned(
                   right: 0,
                   top: 0,
                   bottom: 0,
                   width: 28,
-                  child: ColoredBox(color: Colors.red.withOpacity(0.28)),
+                  child: ColoredBox(color: OptikAdminTokens.danger.withOpacity(0.28)),
                 ),
                 Positioned(
                   left: 0,
                   right: 0,
                   top: 0,
                   height: 22,
-                  child: ColoredBox(color: Colors.red.withOpacity(0.22)),
+                  child: ColoredBox(color: OptikAdminTokens.danger.withOpacity(0.22)),
                 ),
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
                   height: 22,
-                  child: ColoredBox(color: Colors.red.withOpacity(0.22)),
+                  child: ColoredBox(color: OptikAdminTokens.danger.withOpacity(0.22)),
                 ),
                 // Safe zone
                 Positioned.fill(
@@ -1569,12 +2384,12 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                           'AREA AMAN\n(subjek & fokus penting)',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white,
+                            color: OptikAdminTokens.navy,
                             fontWeight: FontWeight.w800,
                             fontSize: 11,
                             height: 1.25,
                             shadows: [
-                              Shadow(blurRadius: 6, color: Colors.black54),
+                              Shadow(blurRadius: 6, color: OptikAdminTokens.slate),
                             ],
                           ),
                         ),
@@ -1588,7 +2403,7 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                   child: Text(
                     'BRAND',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: OptikAdminTokens.textSecondary,
                       fontSize: 8,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1,
@@ -1601,7 +2416,7 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                   child: Text(
                     'Judul + subtitle',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: OptikAdminTokens.navy,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1612,11 +2427,17 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        const Row(
+        Row(
           children: [
-            _LegendDot(color: Color(0x88EF4444), label: 'Bisa kepotong'),
-            SizedBox(width: 12),
-            _LegendDot(color: OptikAdminTokens.success, label: 'Area aman'),
+            _LegendDot(
+              color: OptikAdminTokens.danger.withOpacity(0.53),
+              label: 'Bisa kepotong',
+            ),
+            const SizedBox(width: 12),
+            const _LegendDot(
+              color: OptikAdminTokens.success,
+              label: 'Area aman',
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -1690,8 +2511,8 @@ class _BannerApkMock extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        OptikMemberTokens.blueDeep,
-                        OptikMemberTokens.blue,
+                        OptikAdminTokens.navy,
+                        OptikAdminTokens.navy,
                       ],
                     ),
                   ),
@@ -1704,20 +2525,23 @@ class _BannerApkMock extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      OptikMemberTokens.blueDeep,
-                      OptikMemberTokens.blue,
-                      Color(0xFF2E86DE),
+                      OptikAdminTokens.navy,
+                      OptikAdminTokens.navy,
+                      OptikAdminTokens.accent,
                     ],
                   ),
                 ),
               ),
             if (imageUrl.trim().isNotEmpty)
-              const DecoratedBox(
+              DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0x550F172A), Color(0x990F172A)],
+                    colors: [
+                      OptikAdminTokens.bgMid.withOpacity(0.33),
+                      OptikAdminTokens.bgMid.withOpacity(0.60),
+                    ],
                   ),
                 ),
               ),
@@ -1729,7 +2553,7 @@ class _BannerApkMock extends StatelessWidget {
                   Text(
                     brand,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
+                      color: OptikAdminTokens.navy.withOpacity(0.75),
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.1,
                       fontSize: 9,
@@ -1741,7 +2565,7 @@ class _BannerApkMock extends StatelessWidget {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: OptikAdminTokens.navy,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       height: 1.15,
@@ -1754,7 +2578,7 @@ class _BannerApkMock extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.88),
+                        color: OptikAdminTokens.navy.withOpacity(0.88),
                         fontSize: 11,
                         height: 1.3,
                       ),
@@ -1769,7 +2593,7 @@ class _BannerApkMock extends StatelessWidget {
                 top: 12,
                 child: Text(
                   'Belum ada gambar',
-                  style: TextStyle(color: Colors.white54, fontSize: 10),
+                  style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10),
                 ),
               ),
           ],
@@ -1779,7 +2603,7 @@ class _BannerApkMock extends StatelessWidget {
   }
 }
 
-/// Phone mock — meniru layout beranda Member (bukan runtime APK).
+/// Phone mock — mirror visual Home Member APK (OptikMemberTokens).
 class _MemberHomePhonePreview extends StatelessWidget {
   const _MemberHomePhonePreview({
     required this.brand,
@@ -1790,7 +2614,14 @@ class _MemberHomePhonePreview extends StatelessWidget {
     required this.slides,
     required this.sections,
     required this.flags,
-    required this.promoCount,
+    required this.promoPreviews,
+    this.interactive = false,
+    this.selectedKey,
+    this.onSectionTap,
+    this.onSectionLongPress,
+    this.draftBadge = false,
+    this.pendingUpdate = false,
+    this.selectedLabel,
   });
 
   final String brand;
@@ -1801,7 +2632,14 @@ class _MemberHomePhonePreview extends StatelessWidget {
   final List<({String title, String subtitle, String imageUrl})> slides;
   final List<Map<String, dynamic>> sections;
   final Map<String, bool> flags;
-  final int promoCount;
+  final List<({String title, String label, String code})> promoPreviews;
+  final bool interactive;
+  final String? selectedKey;
+  final ValueChanged<String>? onSectionTap;
+  final ValueChanged<String>? onSectionLongPress;
+  final bool draftBadge;
+  final bool pendingUpdate;
+  final String? selectedLabel;
 
   bool _visible(String key) {
     for (final s in sections) {
@@ -1811,20 +2649,26 @@ class _MemberHomePhonePreview extends StatelessWidget {
   }
 
   List<String> get _orderedVisibleKeys {
-    final list = sections
+    final sorted = [...sections]..sort((a, b) =>
+        ((a['order'] as num?)?.toInt() ?? 0)
+            .compareTo((b['order'] as num?)?.toInt() ?? 0));
+    return sorted
         .where((s) => s['visible'] != false)
         .map((s) => (s['key'] ?? '').toString())
         .where((k) => k.isNotEmpty)
         .toList();
-    return list;
   }
 
   @override
   Widget build(BuildContext context) {
     const phoneW = 280.0;
-    const phoneH = 560.0;
+    const phoneH = 580.0;
     final slide = slides.isEmpty
-        ? (title: 'Banner', subtitle: '', imageUrl: '')
+        ? (
+            title: 'Kacamata siap?\nLangsung tahu di sini',
+            subtitle: 'Pantau status pesanan & ambil tanpa ribet',
+            imageUrl: '',
+          )
         : slides.first;
 
     return Column(
@@ -1835,25 +2679,12 @@ class _MemberHomePhonePreview extends StatelessWidget {
           padding: const EdgeInsets.all(9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(36),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF334155),
-                Color(0xFF0F172A),
-                Color(0xFF1E293B),
-              ],
-            ),
+            color: const Color(0xFF1A1A1A),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.55),
+                color: OptikAdminTokens.navy.withOpacity(0.35),
                 blurRadius: 28,
                 offset: const Offset(0, 16),
-              ),
-              BoxShadow(
-                color: OptikAdminTokens.accent.withOpacity(0.12),
-                blurRadius: 36,
-                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -1863,12 +2694,11 @@ class _MemberHomePhonePreview extends StatelessWidget {
             decoration: BoxDecoration(
               color: OptikMemberTokens.canvas,
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: const Color(0xFF1E293B), width: 2),
+              border: Border.all(color: Colors.black87, width: 2),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                // Status bar fake
                 Container(
                   height: 22,
                   color: _visible('hero')
@@ -1899,64 +2729,108 @@ class _MemberHomePhonePreview extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
+                  child: Stack(
                     children: [
-                      for (final key in _orderedVisibleKeys)
-                        if (key == 'hero')
-                          _previewHero(slide)
-                        else if (key == 'greeting')
-                          _previewGreeting()
-                        else if (key == 'promo')
-                          _previewPromoCard()
-                        else if (key == 'reminders')
-                          _previewReminders()
-                        else if (key == 'store')
-                          _previewStore()
-                        else if (key == 'services_main')
-                          _previewServicesMain()
-                        else if (key == 'services_other')
-                          _previewServicesOther(),
-                      const SizedBox(height: 56),
+                      ListView(
+                        padding: EdgeInsets.zero,
+                        children: [
+                          for (final key in _orderedVisibleKeys)
+                            _tapWrap(
+                              key,
+                              child: key == 'hero'
+                                  ? _previewHero(slide)
+                                  : key == 'greeting'
+                                      ? _previewGreeting()
+                                      : key == 'promo'
+                                          ? _previewPromoCard()
+                                          : key == 'reminders'
+                                              ? _previewReminders()
+                                              : key == 'store'
+                                                  ? _previewStore()
+                                                  : key == 'services_main'
+                                                      ? _previewServicesMain()
+                                                      : key == 'services_other'
+                                                          ? _previewServicesOther()
+                                                          : const SizedBox
+                                                              .shrink(),
+                            ),
+                          const SizedBox(height: 64),
+                        ],
+                      ),
+                      if (_visible('hero'))
+                        Positioned(
+                          top: 6,
+                          right: 10,
+                          child: Material(
+                            color: Colors.white.withOpacity(0.92),
+                            shape: const CircleBorder(),
+                            elevation: 1,
+                            child: const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(
+                                Icons.shopping_cart_outlined,
+                                size: 14,
+                                color: OptikMemberTokens.blueDeep,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (interactive)
+                        Positioned(
+                          left: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: OptikAdminTokens.navy.withOpacity(0.82),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              pendingUpdate
+                                  ? 'SIAP UPDATE · belum ke APK'
+                                  : draftBadge
+                                      ? 'DRAFT · Simpan dulu'
+                                      : 'Ketuk edit · tahan urutan',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                // Bottom nav fake
                 Container(
                   height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
+                  decoration: const BoxDecoration(
+                    color: OptikMemberTokens.white,
                     border: Border(
                       top: BorderSide(color: OptikMemberTokens.lineSoft),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: OptikMemberTokens.blueDeep.withOpacity(0.06),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _nav(Icons.home_rounded, 'Beranda', true),
                       _nav(Icons.receipt_long_outlined, 'Pesanan', false),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              OptikMemberTokens.blue,
-                              OptikMemberTokens.blueDeep,
-                            ],
-                          ),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: const BoxDecoration(
+                                color: OptikMemberTokens.blue,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.qr_code_scanner_rounded,
+                                  color: Colors.white, size: 16),
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.qr_code_2_rounded,
-                            color: Colors.white, size: 20),
                       ),
                       _nav(Icons.storefront_outlined, 'Cabang', false),
                       _nav(Icons.person_outline_rounded, 'Akun', false),
@@ -1969,41 +2843,128 @@ class _MemberHomePhonePreview extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          promoCount > 0
-              ? '$promoCount promo aktif di Member'
-              : 'Belum ada promo Member',
+          promoPreviews.isEmpty
+              ? 'Belum ada promo Member · samakan dengan tab Promo'
+              : '${promoPreviews.length} promo tampil di strip beranda',
           style: const TextStyle(
             color: OptikAdminTokens.textMuted,
             fontSize: 11.5,
           ),
         ),
+        if (draftBadge)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              pendingUpdate
+                  ? 'Draft siap · tekan Update untuk ke APK'
+                  : 'Preview draft · APK Member belum berubah',
+              style: const TextStyle(
+                color: OptikAdminTokens.warning,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _nav(IconData icon, String label, bool on) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon,
-            size: 18,
-            color: on ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 8,
-            fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-            color: on ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted,
+  Widget _tapWrap(String key, {required Widget child}) {
+    if (!interactive || onSectionTap == null) return child;
+    final selected = selectedKey == key;
+    final tag = selected
+        ? (selectedLabel == null || selectedLabel!.isEmpty
+            ? 'Mengatur'
+            : 'Mengatur: $selectedLabel')
+        : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onSectionTap!(key),
+          onLongPress: onSectionLongPress == null
+              ? null
+              : () => onSectionLongPress!(key),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: selected
+                    ? OptikMemberTokens.blue
+                    : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: OptikMemberTokens.blue.withOpacity(0.22),
+                        blurRadius: 8,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              children: [
+                child,
+                if (tag != null)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: OptikMemberTokens.blue,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        tag,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _nav(IconData icon, String label, bool on) {
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon,
+              size: 17,
+              color: on ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+              color: on ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _previewHero(
       ({String title, String subtitle, String imageUrl}) slide) {
     return SizedBox(
-      height: 148,
+      height: 132,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -2011,8 +2972,18 @@ class _MemberHomePhonePreview extends StatelessWidget {
             Image.network(
               slide.imageUrl.trim(),
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const ColoredBox(
-                color: OptikMemberTokens.blueDeep,
+              errorBuilder: (_, __, ___) => const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      OptikMemberTokens.blueDeep,
+                      OptikMemberTokens.blue,
+                      Color(0xFF2E86DE),
+                    ],
+                  ),
+                ),
               ),
             )
           else
@@ -2035,22 +3006,24 @@ class _MemberHomePhonePreview extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0x550F172A), Color(0x990F172A)],
+                  colors: [Color(0x660F172A), Color(0x990F172A)],
                 ),
               ),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   brand,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.75),
+                    color: Colors.white.withOpacity(0.92),
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    fontSize: 8,
+                    letterSpacing: 0.4,
+                    fontSize: 9,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -2060,18 +3033,18 @@ class _MemberHomePhonePreview extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                     height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   slide.subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withOpacity(0.88),
                     fontSize: 9.5,
                     height: 1.3,
                   ),
@@ -2085,15 +3058,18 @@ class _MemberHomePhonePreview extends StatelessWidget {
   }
 
   Widget _previewGreeting() {
-    final overlap = _visible('hero');
+    // Overlap hanya jika greeting langsung setelah hero (sama seperti APK).
+    final keys = _orderedVisibleKeys;
+    final gi = keys.indexOf('greeting');
+    final overlap = gi > 0 && keys[gi - 1] == 'hero';
     return Transform.translate(
-      offset: Offset(0, overlap ? -18 : 0),
+      offset: Offset(0, overlap ? -20 : 0),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+        padding: EdgeInsets.fromLTRB(12, overlap ? 0 : 8, 12, 0),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: OptikMemberTokens.white,
             borderRadius: BorderRadius.circular(14),
             boxShadow: OptikMemberTokens.cardShadow,
             border: Border.all(color: OptikMemberTokens.lineSoft),
@@ -2101,30 +3077,55 @@ class _MemberHomePhonePreview extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                greeting,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  color: OptikMemberTokens.ink,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                greetingSub,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: OptikMemberTokens.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 8),
               Row(
                 children: [
-                  _miniStat('Poin', '—'),
-                  const SizedBox(width: 6),
-                  _miniStat('Pesanan', '—'),
-                  const SizedBox(width: 6),
-                  _miniStat('Garansi', '—'),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          greeting,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: OptikMemberTokens.blueDeep,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          greetingSub,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: OptikMemberTokens.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: OptikMemberTokens.blue,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Login',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _roundStat(Icons.loyalty_rounded, 'Poin', '0'),
+                  _roundStat(Icons.local_shipping_outlined, 'Pesanan', '0 aktif'),
+                  _roundStat(Icons.verified_user_outlined, 'Garansi', '0'),
                 ],
               ),
             ],
@@ -2134,26 +3135,31 @@ class _MemberHomePhonePreview extends StatelessWidget {
     );
   }
 
-  Widget _miniStat(String label, String value) {
+  Widget _roundStat(IconData icon, String label, String value) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: OptikMemberTokens.blueMist,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Text(value,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                    color: OptikMemberTokens.blueDeep)),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 8, color: OptikMemberTokens.inkMuted)),
-          ],
-        ),
+      child: Column(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: OptikMemberTokens.blueSoft,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 16, color: OptikMemberTokens.blue),
+          ),
+          const SizedBox(height: 3),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w600,
+                  color: OptikMemberTokens.inkMuted)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: OptikMemberTokens.blueDeep)),
+        ],
       ),
     );
   }
@@ -2161,47 +3167,99 @@ class _MemberHomePhonePreview extends StatelessWidget {
   Widget _previewPromoCard() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: OptikMemberTokens.lineSoft),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: OptikMemberTokens.blueSoft,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: const Icon(Icons.local_offer_outlined,
-                  size: 16, color: OptikMemberTokens.blue),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: OptikMemberTokens.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: OptikMemberTokens.lineSoft),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(promoTitle,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11.5,
-                          color: OptikMemberTokens.ink)),
-                  Text(promoSub,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 9.5, color: OptikMemberTokens.inkMuted)),
-                ],
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(promoTitle,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11.5,
+                              color: OptikMemberTokens.blueDeep)),
+                      Text(
+                        'Login untuk lihat voucher & tukar poin',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 9.5, color: OptikMemberTokens.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: OptikMemberTokens.blueSoft,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.local_offer_outlined,
+                      size: 15, color: OptikMemberTokens.blue),
+                ),
+              ],
+            ),
+          ),
+          if (promoPreviews.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: promoPreviews.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final p = promoPreviews[i];
+                  return Container(
+                    width: 120,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: OptikMemberTokens.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: OptikMemberTokens.lineSoft),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            color: OptikMemberTokens.blueDeep,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          p.code.isEmpty ? p.title : p.code,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: OptikMemberTokens.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                size: 18, color: OptikMemberTokens.inkMuted),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -2209,33 +3267,50 @@ class _MemberHomePhonePreview extends StatelessWidget {
   Widget _previewReminders() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Pengingat',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 11.5,
-              color: OptikMemberTokens.ink,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: OptikMemberTokens.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: OptikMemberTokens.lineSoft),
+          boxShadow: OptikMemberTokens.cardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Pengingat',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: OptikMemberTokens.blueDeep,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Login dulu',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: OptikMemberTokens.blue,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: OptikMemberTokens.lineSoft),
-            ),
-            child: const Text(
-              'Login untuk lihat status pesanan aktif',
+            const SizedBox(height: 6),
+            const Text(
+              'Login untuk melihat kacamata siap diambil, DP, dan jadwal kontrol.',
               style: TextStyle(
-                  fontSize: 10, color: OptikMemberTokens.inkMuted, height: 1.3),
+                fontSize: 10,
+                color: OptikMemberTokens.inkMuted,
+                height: 1.35,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2247,31 +3322,56 @@ class _MemberHomePhonePreview extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Cabang terkait',
+            'Cabang saya',
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              fontSize: 11.5,
+              fontSize: 12,
               color: OptikMemberTokens.ink,
             ),
           ),
           const SizedBox(height: 6),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
-              color: OptikMemberTokens.blueSoft,
-              borderRadius: BorderRadius.circular(99),
+              color: OptikMemberTokens.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: OptikMemberTokens.lineSoft),
             ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Icon(Icons.storefront_rounded,
-                    size: 14, color: OptikMemberTokens.blueDeep),
-                SizedBox(width: 6),
-                Text('Contoh cabang',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: OptikMemberTokens.blueDeep)),
+                const Icon(Icons.store_mall_directory_outlined,
+                    size: 16, color: OptikMemberTokens.blue),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Belum dipilih',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: OptikMemberTokens.inkMuted,
+                        ),
+                      ),
+                      Text(
+                        'Pilih cabang untuk janji & pengingat',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: OptikMemberTokens.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'Pilih',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: OptikMemberTokens.blue,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2283,7 +3383,7 @@ class _MemberHomePhonePreview extends StatelessWidget {
   Widget _previewServicesMain() {
     final items = <(IconData, String)>[
       if (flags['katalog'] != false)
-        (Icons.visibility_outlined, 'Katalog\nproduk'),
+        (Icons.storefront_rounded, 'Belanja\nOnline'),
       if (flags['janji_kontrol'] != false)
         (Icons.event_available_rounded, 'Janji\nKontrol'),
     ];
@@ -2297,7 +3397,7 @@ class _MemberHomePhonePreview extends StatelessWidget {
             'Layanan utama',
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              fontSize: 11.5,
+              fontSize: 12,
               color: OptikMemberTokens.ink,
             ),
           ),
@@ -2308,26 +3408,34 @@ class _MemberHomePhonePreview extends StatelessWidget {
                 if (i > 0) const SizedBox(width: 8),
                 Expanded(
                   child: Container(
-                    height: 64,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: OptikMemberTokens.blueDeep,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: OptikMemberTokens.lineSoft),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Row(
                       children: [
-                        Icon(items[i].$1,
-                            size: 18, color: OptikMemberTokens.blue),
-                        const SizedBox(height: 4),
-                        Text(
-                          items[i].$2,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: OptikMemberTokens.ink,
-                            height: 1.15,
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: const BoxDecoration(
+                            color: OptikMemberTokens.blue,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(items[i].$1,
+                              size: 14, color: Colors.white),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            items[i].$2,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.15,
+                            ),
                           ),
                         ),
                       ],
@@ -2349,10 +3457,12 @@ class _MemberHomePhonePreview extends StatelessWidget {
       if (flags['notif'] != false)
         (Icons.notifications_active_outlined, 'Notif'),
       if (flags['perawatan'] != false) (Icons.menu_book_outlined, 'Perawatan'),
+      if (flags['bentuk_wajah'] != false)
+        (Icons.face_retouching_natural_rounded, 'Bentuk'),
     ];
     if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2360,44 +3470,45 @@ class _MemberHomePhonePreview extends StatelessWidget {
             'Lainnya',
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              fontSize: 11.5,
+              fontSize: 12,
               color: OptikMemberTokens.ink,
             ),
           ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          const SizedBox(height: 8),
+          Row(
             children: [
-              for (final item in items)
-                SizedBox(
-                  width: 58,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border:
-                              Border.all(color: OptikMemberTokens.lineSoft),
-                        ),
-                        child: Icon(item.$1,
-                            size: 18, color: OptikMemberTokens.blue),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item.$2,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w600,
-                          color: OptikMemberTokens.inkSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
+              for (var i = 0; i < 4; i++)
+                Expanded(
+                  child: i < items.length
+                      ? Column(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: OptikMemberTokens.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: OptikMemberTokens.lineSoft),
+                              ),
+                              child: Icon(items[i].$1,
+                                  size: 18, color: OptikMemberTokens.blue),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              items[i].$2,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w600,
+                                color: OptikMemberTokens.inkSecondary,
+                              ),
+                            ),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
                 ),
             ],
           ),
