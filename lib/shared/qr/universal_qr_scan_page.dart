@@ -159,63 +159,69 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
             ),
           ],
         ),
-        body: Stack(
-          alignment: Alignment.center,
+        // Column (not Stack overlay): on Flutter web, MobileScanner's HTML
+        // platform view paints above canvas siblings and hid the paste field.
+        body: Column(
           children: [
-            MobileScanner(
-              controller: _controller,
-              // Package pauses/resumes camera with app lifecycle by default.
-              useAppLifecycleState: true,
-              errorBuilder: (context, error) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.videocam_off_rounded,
-                          color: OptikAdminTokens.danger,
-                          size: 48,
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'universal_qr_camera_denied'.tr(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: OptikAdminTokens.slate,
-                            height: 1.4,
-                            fontSize: 13,
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  MobileScanner(
+                    controller: _controller,
+                    // Package pauses/resumes camera with app lifecycle by default.
+                    useAppLifecycleState: true,
+                    errorBuilder: (context, error) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.videocam_off_rounded,
+                                color: OptikAdminTokens.danger,
+                                size: 48,
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                'universal_qr_camera_denied'.tr(),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: OptikAdminTokens.slate,
+                                  height: 1.4,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      );
+                    },
+                    onDetect: (capture) {
+                      if (_done) return;
+                      final barcodes = capture.barcodes;
+                      if (barcodes.isEmpty) return;
+                      final raw = barcodes.first.rawValue;
+                      if (raw == null || raw.isEmpty) return;
+                      _onRaw(raw);
+                    },
+                  ),
+                  Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: OptikAdminTokens.navy, width: 3),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                   ),
-                );
-              },
-              onDetect: (capture) {
-                if (_done) return;
-                final barcodes = capture.barcodes;
-                if (barcodes.isEmpty) return;
-                final raw = barcodes.first.rawValue;
-                if (raw == null || raw.isEmpty) return;
-                _onRaw(raw);
-              },
-            ),
-            Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                border: Border.all(color: OptikAdminTokens.navy, width: 3),
-                borderRadius: BorderRadius.circular(18),
+                ],
               ),
             ),
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
-              child: SafeArea(
-                top: false,
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -21,6 +21,10 @@ class MemberUpdateCoordinator {
   /// Hindari dialog dobel dari MemberApp + MemberShell di sesi yang sama.
   static bool _launchCheckDone = false;
 
+  /// Resume boleh cek ulang, tapi tidak spam tiap switch-app.
+  static DateTime? _lastSilentCheckAt;
+  static const _resumeCheckCooldown = Duration(hours: 6);
+
   Future<void> onAppResumed(BuildContext context) async {
     try {
       final outcome =
@@ -40,12 +44,28 @@ class MemberUpdateCoordinator {
     } catch (e) {
       debugPrint('member cek hasil install: $e');
     }
+    if (!context.mounted) return;
+    // Blok 2.9: setelah resume, cek update baru (throttled).
+    await checkSilent(context, fromResume: true);
   }
 
-  Future<void> checkSilent(BuildContext context) async {
+  Future<void> checkSilent(
+    BuildContext context, {
+    bool fromResume = false,
+  }) async {
     if (kIsWeb) return;
-    if (_launchCheckDone) return;
-    _launchCheckDone = true;
+    if (!fromResume) {
+      if (_launchCheckDone) return;
+      _launchCheckDone = true;
+    } else {
+      if (_dialogShown || _autoDownloadRunning || _installConfirmShown) return;
+      final last = _lastSilentCheckAt;
+      if (last != null &&
+          DateTime.now().difference(last) < _resumeCheckCooldown) {
+        return;
+      }
+    }
+    _lastSilentCheckAt = DateTime.now();
     try {
       final info = await _service.checkForUpdate(appFlavor: flavor);
       if (!info.hasUpdate || !context.mounted) return;
