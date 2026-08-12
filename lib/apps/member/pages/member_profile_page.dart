@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../shared/member/member_home_controller.dart';
+import '../../../shared/member/member_inbox_unread.dart';
+import '../../../shared/member/member_points_grade.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_status_watch.dart';
@@ -11,12 +13,16 @@ import '../../../shared/theme.dart';
 import '../../../shared/wilayah/indonesia_wilayah_api.dart';
 import '../member_forgot_password_page.dart';
 import '../member_layout.dart';
+import '../member_rating_page.dart';
 import '../member_widgets.dart';
+import 'member_bantuan_bot_page.dart';
 import 'member_care_page.dart';
 import 'member_date_picker.dart';
 import 'member_face_shape_page.dart';
 import 'member_notifications_page.dart';
 import 'member_option_picker.dart';
+import 'member_points_page.dart';
+import 'member_reorder_page.dart';
 import 'member_software_update_page.dart';
 
 /// Tab Akun — daftar menu; isi detail dibuka setelah diklik.
@@ -31,19 +37,67 @@ class MemberProfilePage extends StatefulWidget {
 }
 
 class _MemberProfilePageState extends State<MemberProfilePage> {
+  final _repo = MemberRepository();
+  MemberPointsSnapshot _points =
+      const MemberPointsSnapshot(rewardPoints: 0, statusPoints: 0);
+  bool _pointsLoading = false;
+
   @override
   void initState() {
     super.initState();
     MemberSession.instance.addListener(_onSession);
+    MemberHomeController.instance.addListener(_onHome);
+    MemberInboxUnread.instance.addListener(_onInboxUnread);
+    MemberInboxUnread.instance.refresh();
+    _loadPoints();
   }
 
   void _onSession() {
     if (mounted) setState(() {});
+    _loadPoints();
+  }
+
+  void _onHome() {
+    if (mounted) setState(() {});
+  }
+
+  void _onInboxUnread() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadPoints() async {
+    final s = MemberSession.instance;
+    final mid = s.memberId;
+    if (!s.isLoggedIn || mid == null || mid.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _points = const MemberPointsSnapshot(rewardPoints: 0, statusPoints: 0);
+        _pointsLoading = false;
+      });
+      return;
+    }
+    setState(() => _pointsLoading = true);
+    final snap = await _repo.pointsSummary(mid);
+    if (!mounted) return;
+    setState(() {
+      _points = snap;
+      _pointsLoading = false;
+    });
+  }
+
+  Future<void> _openPoints() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const MemberPointsPage()),
+    );
+    if (!mounted) return;
+    await _loadPoints();
   }
 
   @override
   void dispose() {
     MemberSession.instance.removeListener(_onSession);
+    MemberHomeController.instance.removeListener(_onHome);
+    MemberInboxUnread.instance.removeListener(_onInboxUnread);
     super.dispose();
   }
 
@@ -67,20 +121,32 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
       ),
     );
     if (ok != true || !mounted) return;
+    await MemberStatusWatch.instance.clearLocalState();
     await MemberSession.instance.logout();
-    MemberStatusWatch.instance.stop();
     // Bersihkan cache beranda agar guest/login berikutnya tidak lihat data lama.
     await MemberHomeController.instance.refresh(force: true);
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/login');
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
-  void _open(Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  Future<void> _open(Widget page) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    await MemberInboxUnread.instance.refresh();
   }
 
   List<_MenuItem> _accountMenus(MemberSession s) {
+    final pointsSub = _pointsLoading
+        ? 'Memuat saldo…'
+        : '${formatMemberPoints(_points.rewardPoints)} Reward · '
+            '${_points.palette.label} '
+            '(${formatMemberPoints(_points.statusPoints)} Status)';
     return [
+      _MenuItem(
+        icon: Icons.loyalty_rounded,
+        title: 'Poin & grade',
+        subtitle: pointsSub,
+        onTap: _openPoints,
+      ),
       _MenuItem(
         icon: Icons.badge_outlined,
         title: 'Data diri',
@@ -115,24 +181,48 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
   }
 
   List<_MenuItem> _otherMenus() {
+    final snap = MemberHomeController.instance.snapshot;
+    final showBentuk = snap?.flag('bentuk_wajah') ?? true;
+    final showResep = snap?.flag('resep') ?? true;
     return [
+      _MenuItem(
+        icon: Icons.star_rate_rounded,
+        title: 'member_rating_title'.tr(),
+        subtitle: 'member_rating_tile_sub'.tr(),
+        onTap: () => _open(const MemberRatingPage()),
+      ),
+      if (showResep)
+        _MenuItem(
+          icon: Icons.history_edu_outlined,
+          title: 'Resep & pesan ulang',
+          subtitle: 'Riwayat resep dari nota belanja',
+          onTap: () => _open(const MemberReorderPage()),
+        ),
+      _MenuItem(
+        icon: Icons.support_agent_rounded,
+        title: 'member_help_menu_title'.tr(),
+        subtitle: 'member_help_menu_sub'.tr(),
+        onTap: () => _open(const MemberBantuanBotPage()),
+      ),
       _MenuItem(
         icon: Icons.system_update_rounded,
         title: 'Update aplikasi',
         subtitle: 'Cek & pasang versi terbaru Member',
         onTap: () => _open(const MemberSoftwareUpdatePage()),
       ),
+      if (showBentuk)
+        _MenuItem(
+          icon: Icons.face_retouching_natural_rounded,
+          title: 'Bentuk',
+          subtitle: 'Referensi bentuk + rekomendasi frame',
+          onTap: () => _open(const MemberFaceShapePage()),
+        ),
       _MenuItem(
-        icon: Icons.face_retouching_natural_rounded,
-        title: 'Bentuk wajah',
-        subtitle: 'Referensi bentuk + rekomendasi frame',
-        onTap: () => _open(const MemberFaceShapePage()),
-      ),
-      _MenuItem(
-        icon: Icons.notifications_active_outlined,
-        title: 'Notifikasi',
-        subtitle: 'Update status pesanan',
+        icon: Icons.inbox_outlined,
+        title: 'member_inbox_title'.tr(),
+        subtitle: 'member_inbox_subtitle'.tr(),
         onTap: () => _open(const MemberNotificationsPage()),
+        badge: MemberInboxUnread.instance.count,
       ),
       _MenuItem(
         icon: Icons.menu_book_outlined,
@@ -145,7 +235,7 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
         title: 'Kehilangan kacamata',
         subtitle: 'Bukan tanggung jawab toko',
         onTap: () => _open(
-          const MemberBaseFeaturePage(
+          MemberBaseFeaturePage(
             title: 'Kehilangan kacamata',
             eyebrow: 'Penting',
             icon: Icons.info_outline_rounded,
@@ -153,10 +243,13 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
                 'Kehilangan kacamata bukan tanggung jawab Optik B. Riski. '
                 'Gunakan riwayat nota/resep di app untuk membantu pesan ulang di toko — tanpa janji ganti rugi.',
             bullets: [
-              'Buka Riwayat / Resep & pesan ulang',
+              if (showResep) 'Buka Resep & pesan ulang dari menu ini',
               'Hubungi cabang terdekat via WA',
               'Kehilangan di luar kebijakan garansi standar',
             ],
+            actionLabel: showResep ? 'Buka Resep & pesan ulang' : null,
+            onAction:
+                showResep ? () => _open(const MemberReorderPage()) : null,
           ),
         ),
       ),
@@ -250,6 +343,7 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
                     title: item.title,
                     subtitle: item.subtitle,
                     onTap: item.onTap,
+                    badge: item.badge > 0 ? '${item.badge}' : null,
                   ),
                   SizedBox(height: m.isTablet ? 12 : 10),
                 ],
@@ -1175,12 +1269,14 @@ class _MenuItem {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.badge = 0,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final int badge;
 }
 
 class _ProfileHero extends StatelessWidget {
@@ -1298,7 +1394,19 @@ class _MenuTile extends StatelessWidget {
         horizontal: metrics.isTablet ? 16 : 14,
         vertical: metrics.isTablet ? 6 : 4,
       ),
-      leading: Icon(item.icon, color: OptikMemberTokens.blue, size: metrics.iconSize),
+      leading: Badge(
+        isLabelVisible: item.badge > 0,
+        label: Text(
+          item.badge > 99 ? '99+' : '${item.badge}',
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+        ),
+        backgroundColor: OptikMemberTokens.blue,
+        child: Icon(
+          item.icon,
+          color: OptikMemberTokens.blue,
+          size: metrics.iconSize,
+        ),
+      ),
       title: Text(
         item.title,
         style: TextStyle(
@@ -1342,17 +1450,28 @@ class _MenuGridCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: OptikMemberTokens.blueSoft,
-                  borderRadius: BorderRadius.circular(12),
+              Badge(
+                isLabelVisible: item.badge > 0,
+                label: Text(
+                  item.badge > 99 ? '99+' : '${item.badge}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                child: Icon(
-                  item.icon,
-                  color: OptikMemberTokens.blue,
-                  size: metrics.iconSize,
+                backgroundColor: OptikMemberTokens.blue,
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: OptikMemberTokens.blueSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    item.icon,
+                    color: OptikMemberTokens.blue,
+                    size: metrics.iconSize,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

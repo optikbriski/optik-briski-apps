@@ -8,7 +8,9 @@ import '../invoice/invoice_hub_service.dart';
 import '../invoice/invoice_settings_service.dart';
 import '../maps/osm_address_search.dart';
 import '../whatsapp_launcher.dart';
+import 'member_catalog_kategori.dart';
 import 'member_points_grade.dart';
+import 'member_resep_helpers.dart';
 import 'member_session.dart';
 
 /// Hasil paralel load Beranda Member.
@@ -325,9 +327,14 @@ class MemberRepository {
 
   Future<List<Map<String, dynamic>>> listSales(String phone) async {
     try {
-      final res = await _db.rpc('list_member_sales', params: {
+      dynamic res = await _db.rpc('list_member_sales', params: {
         'p_phone': phone,
       });
+      if (res is String && res.isNotEmpty) {
+        try {
+          res = jsonDecode(res);
+        } catch (_) {}
+      }
       if (res is List) {
         return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
@@ -364,15 +371,144 @@ class MemberRepository {
   }
 
   Future<List<Map<String, dynamic>>> listGaransi(String phone) async {
+    if (phone.trim().isEmpty) return const [];
+    dynamic res = await _db.rpc('list_member_garansi', params: {
+      'p_phone': phone,
+    });
+    if (res is String && res.isNotEmpty) {
+      try {
+        res = jsonDecode(res);
+      } catch (_) {}
+    }
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
+  }
+
+  /// Riwayat resep dari item nota (phone-scoped).
+  Future<List<Map<String, dynamic>>> listResep(String phone) async {
+    if (phone.trim().isEmpty) return const [];
     try {
-      final res = await _db.rpc('list_member_garansi', params: {
+      dynamic res = await _db.rpc('list_member_resep', params: {
         'p_phone': phone,
       });
+      if (res is String && res.isNotEmpty) {
+        try {
+          res = jsonDecode(res);
+        } catch (_) {}
+      }
+      if (res is List) {
+        return res
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((m) => MemberResepHelpers.isMeaningfulResep(
+                  m['detail_resep']?.toString(),
+                ))
+            .toList();
+      }
+    } catch (_) {
+      // Fallback: sales + hub (lebih lambat; RPC belum di-deploy).
+    }
+    final sales = await listSales(phone);
+    final out = <Map<String, dynamic>>[];
+    for (final s in sales.take(40)) {
+      final inv = (s['no_invoice'] ?? '').toString().trim();
+      if (inv.isEmpty) continue;
+      Map<String, dynamic>? hub;
+      try {
+        hub = await InvoiceHubService(client: _db)
+            .loadByInvoice(inv, phone: phone);
+      } catch (_) {}
+      final items = (hub?['items'] as List?) ?? const [];
+      for (final raw in items) {
+        final it = Map<String, dynamic>.from(raw as Map);
+        final resep = it['detail_resep']?.toString();
+        if (!MemberResepHelpers.isMeaningfulResep(resep)) continue;
+        out.add({
+          'item_id': it['id'],
+          'sale_id': hub?['sale_id'] ?? s['id'],
+          'no_invoice': inv,
+          'toko_id': s['toko_id'] ?? hub?['toko_id'],
+          'created_at': s['created_at'] ?? hub?['created_at'],
+          'foto_hasil_url': s['foto_hasil_url'] ?? hub?['foto_hasil_url'],
+          'nama_produk': it['nama_produk'],
+          'tipe_produk': it['tipe_produk'],
+          'qty': it['qty'],
+          'detail_resep': resep,
+        });
+      }
+    }
+    return out;
+  }
+
+  /// Nota + status rating kasir/pembuat (phone-scoped).
+  Future<List<Map<String, dynamic>>> listRatings(String phone) async {
+    if (phone.trim().isEmpty) return const [];
+    try {
+      dynamic res = await _db.rpc('list_member_ratings', params: {
+        'p_phone': phone,
+      });
+      if (res is String && res.isNotEmpty) {
+        try {
+          res = jsonDecode(res);
+        } catch (_) {}
+      }
       if (res is List) {
         return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-    } catch (_) {}
-    return const [];
+      return const [];
+    } catch (_) {
+      // Fallback: derive dari list_member_sales + get_invoice_hub (lebih lambat).
+      final sales = await listSales(phone);
+      final out = <Map<String, dynamic>>[];
+      for (final s in sales.take(40)) {
+        final inv = (s['no_invoice'] ?? '').toString().trim();
+        if (inv.isEmpty) continue;
+        Map<String, dynamic>? hub;
+        try {
+          hub = await InvoiceHubService(client: _db)
+              .loadByInvoice(inv, phone: phone);
+        } catch (_) {}
+        final ratings = (hub?['ratings'] as List?) ?? const [];
+        Map<String, dynamic>? kasir;
+        Map<String, dynamic>? pembuat;
+        for (final raw in ratings) {
+          final m = Map<String, dynamic>.from(raw as Map);
+          final peran = m['peran']?.toString();
+          if (peran == 'kasir') kasir = m;
+          if (peran == 'pembuat') pembuat = m;
+        }
+        out.add({
+          ...s,
+          'sale_id': hub?['sale_id'] ?? s['id'],
+          'nama_kasir': hub?['nama_kasir'] ?? s['nama_kasir'],
+          'nama_pembuat_kacamata':
+              hub?['nama_pembuat_kacamata'] ?? s['nama_pembuat_kacamata'],
+          'bisa_rating': hub?['bisa_rating'] == true ||
+              s['diambil_at'] != null ||
+              (s['tracking_status']?.toString().toUpperCase() == 'DIAMBIL'),
+          'rating_kasir': kasir,
+          'rating_pembuat': pembuat,
+          'has_rating_kasir': kasir != null,
+          'has_rating_pembuat': pembuat != null,
+          'kasir_assigned':
+              ((hub?['nama_kasir'] ?? s['nama_kasir'] ?? '')
+                      .toString()
+                      .trim()
+                      .isNotEmpty) ||
+                  (hub?['kasir_karyawan_id'] != null),
+          'pembuat_assigned':
+              ((hub?['nama_pembuat_kacamata'] ??
+                          s['nama_pembuat_kacamata'] ??
+                          '')
+                      .toString()
+                      .trim()
+                      .isNotEmpty) ||
+                  (hub?['pembuat_kacamata_id'] != null),
+        });
+      }
+      return out;
+    }
   }
 
   /// Konten beranda Member (CMS Admin Pusat). Null = pakai default hardcode.
@@ -610,10 +746,9 @@ class MemberRepository {
   }) async {
     try {
       final toko = (tokoId ?? '').trim().toUpperCase();
+      // Frame/Lensa/Lainnya → server p_kategori (Lainnya = not Frame/Lensa).
       final res = await _db.rpc('list_member_catalog', params: {
-        'p_kategori': (kategori == null || kategori.trim().isEmpty)
-            ? null
-            : kategori.trim(),
+        'p_kategori': memberCatalogServerKategoriParam(kategori),
         'p_q': (search == null || search.trim().isEmpty) ? null : search.trim(),
         'p_limit': limit,
         if (toko.isNotEmpty && toko != 'PUSAT') 'p_toko': toko,
@@ -642,8 +777,15 @@ class MemberRepository {
             'stock, reserved_qty',
           )
           .eq('toko_id', 'PUSAT');
-      if (kategori != null && kategori.trim().isNotEmpty) {
-        filter = filter.eq('kategori', kategori.trim());
+      // Case-insensitive exact match (RPC uses lower(trim(...))).
+      // Lainnya: exclude Frame/Lensa at query level when possible.
+      final wantKat = memberCatalogServerKategoriParam(kategori);
+      if (wantKat == 'Lainnya') {
+        filter = filter
+            .not('kategori', 'ilike', 'Frame')
+            .not('kategori', 'ilike', 'Lensa');
+      } else if (wantKat != null) {
+        filter = filter.ilike('kategori', wantKat);
       }
       if (search != null && search.trim().isNotEmpty) {
         final s = search.trim();
@@ -665,6 +807,9 @@ class MemberRepository {
         final reserved = int.tryParse('${m['reserved_qty'] ?? 0}') ?? 0;
         m['available_qty'] = stock > reserved ? stock - reserved : 0;
         return m;
+      }).where((m) {
+        if (wantKat == null) return true;
+        return memberCatalogMatchesKategori(m['kategori'], wantKat);
       }).toList();
     } catch (_) {
       return const [];
@@ -676,6 +821,15 @@ class MemberRepository {
     return snap.rewardPoints;
   }
 
+  static int _asPointsInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = '$v'.trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? double.tryParse(s)?.toInt() ?? 0;
+  }
+
   /// Saldo tukar + Status Poin (untuk grade).
   Future<MemberPointsSnapshot> pointsSummary(String memberId) async {
     try {
@@ -683,10 +837,16 @@ class MemberRepository {
         'get_member_points_summary',
         params: {'p_member_id': memberId},
       );
+      Map? map;
       if (res is Map) {
+        map = res;
+      } else if (res is List && res.isNotEmpty && res.first is Map) {
+        map = res.first as Map;
+      }
+      if (map != null) {
         return MemberPointsSnapshot(
-          rewardPoints: int.tryParse('${res['reward_points'] ?? 0}') ?? 0,
-          statusPoints: int.tryParse('${res['status_points'] ?? 0}') ?? 0,
+          rewardPoints: _asPointsInt(map['reward_points']),
+          statusPoints: _asPointsInt(map['status_points']),
         );
       }
     } catch (_) {
@@ -700,7 +860,7 @@ class MemberRepository {
       var reward = 0;
       var status = 0;
       for (final r in (rows as List)) {
-        final d = int.tryParse('${r['delta'] ?? 0}') ?? 0;
+        final d = _asPointsInt(r['delta']);
         reward += d;
         if (d > 0) status += d;
       }
@@ -807,32 +967,37 @@ class MemberRepository {
     String? memberId,
     String? fotoUrl,
   }) async {
-    await _db.from('garansi_klaim_request').insert({
-      'phone_e164': normalizeWaNumber(phone),
-      'member_id': memberId,
-      'kartu_id': kartuId,
-      'sale_id': saleId,
-      'toko_id': tokoId,
-      'alasan': alasan,
-      'foto_url': fotoUrl,
-      'jadwal_kunjungan': jadwalKunjungan.toUtc().toIso8601String(),
-      'status': 'diajukan',
+    // Wajib lewat RPC: window 7 hari Jakarta, ownership, maks 1×, reject open request.
+    // Jangan fallback insert langsung — itu bypass enforcement server.
+    await _db.rpc('submit_member_garansi_klaim', params: {
+      'p_phone': phone,
+      'p_kartu_id': kartuId,
+      'p_toko_id': tokoId,
+      'p_alasan': alasan,
+      'p_jadwal_kunjungan': jadwalKunjungan.toUtc().toIso8601String(),
+      'p_sale_id': saleId,
+      'p_member_id': memberId,
+      'p_foto_url': fotoUrl,
     });
   }
 
+  /// Riwayat / pengajuan klaim Member (phone-scoped).
+  /// Lempar error jika RPC gagal — caller wajib fail-closed untuk tombol Klaim
+  /// (jangan anggap "tidak ada pengajuan" saat status tidak diketahui).
   Future<List<Map<String, dynamic>>> listClaimRequests(String phone) async {
-    try {
-      final rows = await _db
-          .from('garansi_klaim_request')
-          .select()
-          .eq('phone_e164', normalizeWaNumber(phone))
-          .order('created_at', ascending: false);
-      return (rows as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-    } catch (_) {
-      return const [];
+    if (phone.trim().isEmpty) return const [];
+    dynamic res = await _db.rpc('list_member_claim_requests', params: {
+      'p_phone': phone,
+    });
+    if (res is String && res.isNotEmpty) {
+      try {
+        res = jsonDecode(res);
+      } catch (_) {}
     }
+    if (res is List) {
+      return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return const [];
   }
 
   Future<void> submitSurvey({
@@ -1789,9 +1954,14 @@ class MemberRepository {
   /// Daftar `online_orders` Member (termasuk pending bayar). RPC expire 15m dulu.
   Future<List<Map<String, dynamic>>> listOnlineOrders(String phone) async {
     try {
-      final res = await _db.rpc('list_member_online_orders', params: {
+      dynamic res = await _db.rpc('list_member_online_orders', params: {
         'p_phone': phone.trim(),
       });
+      if (res is String && res.isNotEmpty) {
+        try {
+          res = jsonDecode(res);
+        } catch (_) {}
+      }
       if (res is List) {
         return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }

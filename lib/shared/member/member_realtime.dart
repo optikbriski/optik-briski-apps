@@ -26,6 +26,7 @@ class MemberRealtime {
     String? title,
     String? body,
     String? kind,
+    String? onlineOrderId,
   }) async {
     final topic = topicForPhone(phone);
     if (!topic.startsWith('obr-member-') || topic.length < 16) return;
@@ -45,6 +46,7 @@ class MemberRealtime {
         }
       });
       await ready.future.timeout(const Duration(seconds: 8));
+      final oid = (onlineOrderId ?? '').trim();
       await channel.sendBroadcastMessage(
         event: eventOrderUpdate,
         payload: {
@@ -52,6 +54,7 @@ class MemberRealtime {
           if (title != null) 'title': title,
           if (body != null) 'body': body,
           if (kind != null) 'kind': kind,
+          if (oid.isNotEmpty) 'online_order_id': oid,
           'ts': DateTime.now().toUtc().toIso8601String(),
         },
       );

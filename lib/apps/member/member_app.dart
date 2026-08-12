@@ -1,12 +1,16 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/member/member_notification_payload.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/theme.dart';
 import 'login_member_page.dart';
 import 'member_shell.dart';
 import 'member_update_coordinator.dart';
+import 'pages/member_invoice_hub_page.dart';
+import 'pages/member_online_order_page.dart';
+import 'pages/member_orders_list_page.dart';
 
 class MemberApp extends StatefulWidget {
   const MemberApp({super.key});
@@ -23,7 +27,51 @@ class _MemberAppState extends State<MemberApp> {
   @override
   void initState() {
     super.initState();
+    MemberStatusWatch.instance.onNotificationOpen = _openNotificationPayload;
     _boot();
+  }
+
+  @override
+  void dispose() {
+    if (identical(
+      MemberStatusWatch.instance.onNotificationOpen,
+      _openNotificationPayload,
+    )) {
+      MemberStatusWatch.instance.onNotificationOpen = null;
+    }
+    super.dispose();
+  }
+
+  void _openNotificationPayload(String payload) {
+    final nav = _navKey.currentState;
+    if (nav == null) return;
+    final parsed = MemberNotificationPayload.parse(payload);
+    if ((parsed.invoice ?? '').isNotEmpty) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => MemberInvoiceHubPage(noInvoice: parsed.invoice!),
+        ),
+      );
+      return;
+    }
+    if ((parsed.onlineOrderId ?? '').isNotEmpty) {
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) =>
+              MemberOnlineOrderPage(onlineOrderId: parsed.onlineOrderId!),
+        ),
+      );
+      return;
+    }
+    // Fallback status-relevant: tab Status (bukan Riwayat penuh).
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => const MemberOrdersListPage(
+          title: 'Status pesanan',
+          onlyActive: true,
+        ),
+      ),
+    );
   }
 
   Future<void> _boot() async {

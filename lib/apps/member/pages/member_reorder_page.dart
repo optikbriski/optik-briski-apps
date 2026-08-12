@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../shared/invoice/invoice_hub_service.dart';
+import '../../../shared/invoice/invoice_document_builder.dart';
 import '../../../shared/member/member_repository.dart';
+import '../../../shared/member/member_resep_helpers.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../../../shared/whatsapp_launcher.dart';
 import '../member_widgets.dart';
 import 'member_invoice_hub_page.dart';
 
-/// Fitur 9 — riwayat resep / pesan ulang via WA toko.
+/// Fitur 9 — riwayat resep dari nota / pesan ulang via WA toko.
+/// Read-only: tidak ada add/edit/delete resep di Member (sumber = POS invoice).
 class MemberReorderPage extends StatefulWidget {
   const MemberReorderPage({super.key});
 
@@ -19,8 +21,8 @@ class MemberReorderPage extends StatefulWidget {
 
 class _MemberReorderPageState extends State<MemberReorderPage> {
   final _repo = MemberRepository();
-  final _hub = InvoiceHubService();
   bool _loading = true;
+  String? _error;
   final List<Map<String, dynamic>> _rows = [];
 
   @override
@@ -31,35 +33,34 @@ class _MemberReorderPageState extends State<MemberReorderPage> {
 
   Future<void> _load() async {
     final phone = MemberSession.instance.phoneForQuery;
-    if (phone.isEmpty) {
-      setState(() => _loading = false);
+    if (!MemberSession.instance.isLoggedIn || phone.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'login';
+        _rows.clear();
+      });
       return;
     }
-    setState(() => _loading = true);
-    final sales = await _repo.listSales(phone);
-    final out = <Map<String, dynamic>>[];
-    for (final s in sales.take(15)) {
-      final inv = s['no_invoice']?.toString();
-      if (inv == null || inv.isEmpty) continue;
-      final hub = await _hub.loadByInvoice(inv);
-      final items = (hub?['items'] as List?) ?? const [];
-      for (final raw in items) {
-        final it = Map<String, dynamic>.from(raw as Map);
-        out.add({
-          'no_invoice': inv,
-          'toko_id': s['toko_id'],
-          'nama_produk': it['nama_produk'],
-          'detail_resep': it['detail_resep'],
-        });
-      }
-    }
-    if (!mounted) return;
     setState(() {
-      _rows
-        ..clear()
-        ..addAll(out);
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final list = await _repo.listResep(phone);
+      if (!mounted) return;
+      setState(() {
+        _rows
+          ..clear()
+          ..addAll(list);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '$e';
+      });
+    }
   }
 
   Future<void> _waReorder(Map<String, dynamic> row) async {
@@ -79,100 +80,181 @@ class _MemberReorderPageState extends State<MemberReorderPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Widget _resepBody(Map<String, dynamic> r) {
+    final resep = (r['detail_resep'] ?? '').toString();
+    if (MemberResepHelpers.isStructuredResep(resep)) {
+      return InvoiceDocumentBuilder.lensTableUi(resep);
+    }
+    return Text(
+      resep,
+      style: const TextStyle(
+        color: OptikMemberTokens.inkSecondary,
+        height: 1.35,
+        fontSize: 13,
+      ),
+    );
+  }
+
+  Widget _fotoHasil(Map<String, dynamic> r) {
+    final url = (r['foto_hasil_url'] ?? '').toString().trim();
+    if (url.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: OptikMemberTokens.blueSoft,
+              alignment: Alignment.center,
+              child: const Text(
+                'Foto hasil tidak bisa dimuat',
+                style: TextStyle(
+                  color: OptikMemberTokens.inkMuted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final loggedIn = MemberSession.instance.isLoggedIn;
     return MemberPremiumScaffold(
       title: 'Resep & pesan ulang',
-      body: !loggedIn
-          ? MemberEmptyState(
-              icon: Icons.lock_outline_rounded,
-              title: 'Login dulu',
-              message: 'Riwayat resep terikat nomor HP belanja.',
-              actionLabel: 'Ke login',
-              onAction: () =>
-                  Navigator.of(context).pushReplacementNamed('/login'),
-            )
-          : _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _rows.isEmpty
-                  ? const MemberEmptyState(
-                      icon: Icons.history_edu_outlined,
-                      title: 'Belum ada resep',
-                      message:
-                          'Item dari transaksi sebelumnya akan muncul di sini.',
+      actions: [
+        if (MemberSession.instance.isLoggedIn)
+          IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Muat ulang',
+          ),
+      ],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error == 'login'
+              ? MemberEmptyState(
+                  icon: Icons.lock_outline_rounded,
+                  title: 'Login dulu',
+                  message: 'Riwayat resep terikat nomor HP belanja.',
+                  actionLabel: 'Ke login',
+                  onAction: () =>
+                      Navigator.of(context).pushReplacementNamed('/login'),
+                )
+              : _error != null
+                  ? MemberEmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      title: 'Gagal memuat',
+                      message: _error!,
+                      actionLabel: 'Coba lagi',
+                      onAction: _load,
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: _rows.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final r = _rows[i];
-                        return Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: OptikMemberTokens.white,
-                            borderRadius: BorderRadius.circular(
-                                OptikMemberTokens.radiusMd),
-                            border:
-                                Border.all(color: OptikMemberTokens.lineSoft),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('${r['nama_produk']}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      color: OptikMemberTokens.blueDeep)),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Nota ${r['no_invoice']} · ${r['toko_id']}',
-                                style: const TextStyle(
-                                    color: OptikMemberTokens.inkMuted),
-                              ),
-                              if ((r['detail_resep'] ?? '')
-                                  .toString()
-                                  .isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text('${r['detail_resep']}',
-                                    style: const TextStyle(
-                                        color: OptikMemberTokens.inkSecondary,
-                                        height: 1.35)),
-                              ],
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                          minimumSize: const Size(0, 42)),
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => MemberInvoiceHubPage(
-                                            noInvoice: '${r['no_invoice']}',
+                  : _rows.isEmpty
+                      ? MemberEmptyState(
+                          icon: Icons.history_edu_outlined,
+                          title: 'Belum ada resep',
+                          message:
+                              'Resep muncul setelah ada item lensa di nota belanja.',
+                          actionLabel: 'Muat ulang',
+                          onAction: _load,
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                            itemCount: _rows.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) {
+                              final r = _rows[i];
+                              final nama =
+                                  (r['nama_produk'] ?? 'Produk').toString();
+                              final inv =
+                                  (r['no_invoice'] ?? '').toString();
+                              final toko =
+                                  (r['toko_id'] ?? '').toString();
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: OptikMemberTokens.white,
+                                  borderRadius: BorderRadius.circular(
+                                      OptikMemberTokens.radiusMd),
+                                  border: Border.all(
+                                      color: OptikMemberTokens.lineSoft),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      nama,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: OptikMemberTokens.blueDeep,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Nota $inv · $toko',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: OptikMemberTokens.inkMuted,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _resepBody(r),
+                                    _fotoHasil(r),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(0, 42),
+                                            ),
+                                            onPressed: inv.isEmpty
+                                                ? null
+                                                : () => Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            MemberInvoiceHubPage(
+                                                          noInvoice: inv,
+                                                        ),
+                                                      ),
+                                                    ),
+                                            child: const Text('Nota'),
                                           ),
                                         ),
-                                      ),
-                                      child: const Text('Nota'),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              minimumSize: const Size(0, 42),
+                                            ),
+                                            onPressed: () => _waReorder(r),
+                                            child:
+                                                const Text('WA pesan ulang'),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: FilledButton(
-                                      style: FilledButton.styleFrom(
-                                          minimumSize: const Size(0, 42)),
-                                      onPressed: () => _waReorder(r),
-                                      child: const Text('WA pesan ulang'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                  ],
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
+                        ),
     );
   }
 }

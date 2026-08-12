@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Design tokens — Admin **Frozen Lake** on white canvas
 /// Canvas: snow/white · accents: ice `#ADD8E6` · slate · navy
@@ -297,96 +298,156 @@ ThemeData buildAdminTheme() {
   );
 }
 
-/// Design tokens for Karyawan APK (navy–gold premium, login/register language).
+/// Design tokens — Karyawan **Charming Seaside** on white canvas
+/// (same concept as Admin Frozen Lake).
+///
+/// | Admin Frozen Lake | Karyawan Charming Seaside |
+/// |-------------------|---------------------------|
+/// | snow canvas       | snow / white canvas       |
+/// | ice `#ADD8E6`     | cyan `#85D1DB` (dominant) |
+/// | navy (text/CTA)   | ink (text)                |
+/// | slate (muted)     | muted                     |
+///
+/// Palette: `#B3EBF2` · `#85D1DB` · `#B6F2D1` · `#C9FDF2`
+///
+/// Fungsi warna:
+/// - **ink** → judul, nilai data, teks primer
+/// - **muted** → label, meta, hint
+/// - **cyan / accent** → aksen UI dominan (border, badge, CTA, wash)
+/// - **pale** → soft wash / border sekunder
+/// - **mint / aqua** → aksen sangat ringan saja (bukan fill besar)
+/// - **snow** → kanvas & kartu
 abstract final class OptikKaryawanTokens {
-  static const Color navyDeep = Color(0xFF0A1628);
-  static const Color navyMid = Color(0xFF1E3C72);
-  static const Color navySoft = Color(0xFF132F4C);
-  static const Color gold = Color(0xFFD4AF37);
-  static const Color goldSoft = Color(0xFFC4A35A);
-  static const Color goldLite = Color(0xFFE8C872);
-  static const Color scaffold = Color(0xFFF4F7FB);
-  static const Color surface = Colors.white;
-  static const Color surfaceMuted = Color(0xFFF7FAFC);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color ink = Color(0xFF0B1220);
-  static const Color muted = Color(0xFF64748B);
-  static const Color success = Color(0xFF16A34A);
-  static const Color danger = Color(0xFFF87171);
-  static const Color warning = Color(0xFFFBBF24);
+  // Core palette (Charming Seaside) — exact hex
+  static const Color pale = Color(0xFFB3EBF2);
+  static const Color cyan = Color(0xFF85D1DB);
+  static const Color mint = Color(0xFFB6F2D1);
+  static const Color aqua = Color(0xFFC9FDF2);
 
-  /// Dark surfaces (absensi / OTP / camera-heavy).
-  static const Color darkBg = Color(0xFF0A1628);
-  static const Color darkCard = Color(0xFF132F4C);
-  static const Color darkLine = Color(0x24FFFFFF);
+  static const Color snow = Color(0xFFFFFFFF);
+  static const Color ink = Color(0xFF0E4A56);
+  static const Color muted = Color(0xFF5B7C84);
 
-  static const double radiusSm = 14;
+  /// Kanvas putih — cyan hanya aksen (seperti ice di Admin).
+  static const Color bg = snow;
+  static const Color bgMid = Color(0xFFF5FBFC);
+  static const Color panel = snow;
+  static const Color card = snow;
+  static const Color cardElevated = Color(0xFFF3FAFC);
+  static const Color line = Color(0x3385D1DB);
+  static const Color lineStrong = Color(0x6685D1DB);
+  static const Color textPrimary = ink;
+  static const Color textSecondary = Color(0xFF2A4A52);
+  static const Color textMuted = muted;
+  static const Color accent = cyan;
+  static const Color accentDeep = Color(0xFF6FCBD6);
+  static const Color accentSoft = pale;
+
+  static const Color success = Color(0xFF3D8F7A);
+  static const Color danger = Color(0xFFE57373);
+  static const Color warning = Color(0xFFE6C35C);
+
+  // —— Legacy aliases (kode lama karyawan) ——
+  static const Color seasidePale = pale;
+  static const Color seasideMid = cyan;
+  static const Color seasideMint = mint;
+  static const Color seasideIce = aqua;
+  static const Color seasideWash = bgMid;
+  static const Color seasideWashDeep = Color(0xFFE0F3F7);
+  static const Color navyDeep = ink;
+  static const Color navyMid = cyan;
+  static const Color navySoft = pale;
+  static const Color gold = cyan;
+  static const Color goldSoft = pale;
+  static const Color goldLite = bgMid;
+  static const Color scaffold = bg;
+  static const Color surface = card;
+  static const Color surfaceMuted = bgMid;
+  static const Color border = pale;
+  static const Color darkBg = bgMid;
+  static const Color darkCard = card;
+  static const Color darkLine = lineStrong;
+
+  static const double radiusSm = 12;
   static const double radiusMd = 16;
   static const double radiusLg = 20;
-  static const double radiusXl = 22;
+  static const double radiusXl = 24;
   static const double radiusGlass = 24;
 
-  static LinearGradient get navyGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [navyMid, navyDeep],
-      );
+  static const double spaceXs = 6;
+  static const double spaceSm = 10;
+  static const double spaceMd = 14;
+  static const double spaceLg = 20;
+  static const double spaceXl = 28;
 
-  static LinearGradient get goldGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [goldLite, gold, goldSoft],
-      );
-
-  static LinearGradient get authBgGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF071018),
-          navyDeep,
-          navySoft,
-          Color(0xFF1A3A5C),
-        ],
-      );
-
-  static LinearGradient get registerBgGradient => const LinearGradient(
+  /// Soft white canvas wash — paralel Admin `bgGradient`.
+  static LinearGradient get bgGradient => const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0xFF0F2744),
-          Color(0xFF163A5F),
-          Color(0xFFE8EEF5),
-          scaffold,
+          Color(0xFFFFFFFF),
+          Color(0xFFF5FBFC),
+          Color(0xFFFFFFFF),
         ],
-        stops: [0.0, 0.28, 0.55, 1.0],
+        stops: [0.0, 0.5, 1.0],
       );
+
+  /// Auth / login — soft cyan wash di atas putih (paralel Admin ice wash).
+  static const LinearGradient authBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0x3885D1DB), // cyan @ ~22%
+      bg,
+      bgMid,
+    ],
+    stops: [0.0, 0.42, 1.0],
+  );
+
+  static LinearGradient get registerBgGradient => authBgGradient;
+
+  /// Hero / header — cyan dominant.
+  static LinearGradient get navyGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [accentSoft, cyan, accentDeep],
+      );
+
+  /// CTA — solid cyan family (role = Admin accentGradient, tapi cyan).
+  static LinearGradient get goldGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFA8DDE5), cyan, accentDeep],
+      );
+
+  static LinearGradient get accentGradient => goldGradient;
 
   static List<BoxShadow> get cardShadow => [
         BoxShadow(
-          color: navyDeep.withOpacity(0.07),
-          blurRadius: 24,
-          offset: const Offset(0, 10),
+          color: ink.withOpacity(0.04),
+          blurRadius: 32,
+          spreadRadius: -4,
+          offset: const Offset(0, 16),
+        ),
+        BoxShadow(
+          color: cyan.withOpacity(0.10),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
         ),
       ];
 
   static BoxDecoration get premiumCard => BoxDecoration(
-        color: surface,
+        color: card,
         borderRadius: BorderRadius.circular(radiusXl),
-        border: Border.all(color: border),
+        border: Border.all(color: cyan.withOpacity(0.45)),
         boxShadow: cardShadow,
       );
 
   static BoxDecoration get glassCard => BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
+        color: snow.withOpacity(0.92),
         borderRadius: BorderRadius.circular(radiusGlass),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.28),
-            blurRadius: 40,
-            offset: const Offset(0, 18),
-          ),
-        ],
+        border: Border.all(color: cyan.withOpacity(0.50)),
+        boxShadow: cardShadow,
       );
 }
 
@@ -471,7 +532,7 @@ class KaryawanPremiumScaffold extends StatelessWidget {
   }
 }
 
-/// Dark brand shell for camera / OTP / absensi flows.
+/// Seaside light shell for camera / OTP / absensi flows (white canvas).
 class KaryawanDarkScaffold extends StatelessWidget {
   const KaryawanDarkScaffold({
     super.key,
@@ -500,19 +561,23 @@ class KaryawanDarkScaffold extends StatelessWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: centerTitle,
-        backgroundColor: OptikKaryawanTokens.darkBg,
-        foregroundColor: Colors.white,
+        backgroundColor: OptikKaryawanTokens.surface,
+        foregroundColor: OptikKaryawanTokens.ink,
         leading: leading,
         title: Text(
           title,
           style: const TextStyle(
-            color: Colors.white,
+            color: OptikKaryawanTokens.ink,
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
           ),
         ),
         actions: actions,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: OptikKaryawanTokens.border),
+        ),
       ),
       body: body,
       floatingActionButton: floatingActionButton,
@@ -541,58 +606,195 @@ class KaryawanSectionTitle extends StatelessWidget {
   }
 }
 
+/// Karyawan Charming Seaside — light, cyan-dominant (paralel Admin ice-dominant).
+/// Tipografi: Plus Jakarta Sans (UI) + Fraunces (display/judul besar).
 ThemeData buildKaryawanTheme() {
-  return ThemeData(
+  final ink = OptikKaryawanTokens.ink;
+  final muted = OptikKaryawanTokens.muted;
+  final secondary = OptikKaryawanTokens.textSecondary;
+
+  final body = GoogleFonts.plusJakartaSansTextTheme().apply(
+    bodyColor: ink,
+    displayColor: ink,
+  );
+
+  final textTheme = body.copyWith(
+    displayLarge: GoogleFonts.fraunces(
+      color: ink,
+      fontSize: 40,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -1.2,
+      height: 1.05,
+    ),
+    displayMedium: GoogleFonts.fraunces(
+      color: ink,
+      fontSize: 34,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -1.0,
+      height: 1.05,
+    ),
+    displaySmall: GoogleFonts.fraunces(
+      color: ink,
+      fontSize: 28,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.8,
+      height: 1.1,
+    ),
+    headlineLarge: GoogleFonts.fraunces(
+      color: ink,
+      fontSize: 26,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.6,
+      height: 1.12,
+    ),
+    headlineMedium: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 22,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.4,
+    ),
+    headlineSmall: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 18,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.2,
+    ),
+    titleLarge: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 16,
+      fontWeight: FontWeight.w800,
+    ),
+    titleMedium: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 14.5,
+      fontWeight: FontWeight.w700,
+    ),
+    titleSmall: GoogleFonts.plusJakartaSans(
+      color: secondary,
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.2,
+    ),
+    bodyLarge: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      height: 1.4,
+    ),
+    bodyMedium: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w500,
+      height: 1.4,
+    ),
+    bodySmall: GoogleFonts.plusJakartaSans(
+      color: muted,
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      height: 1.35,
+    ),
+    labelLarge: GoogleFonts.plusJakartaSans(
+      color: ink,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.2,
+    ),
+    labelMedium: GoogleFonts.plusJakartaSans(
+      color: secondary,
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.3,
+    ),
+    labelSmall: GoogleFonts.plusJakartaSans(
+      color: muted,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
+    ),
+  );
+
+  final base = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
-    scaffoldBackgroundColor: OptikKaryawanTokens.scaffold,
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+    textTheme: textTheme,
+    primaryTextTheme: textTheme,
+  );
+
+  return base.copyWith(
+    scaffoldBackgroundColor: OptikKaryawanTokens.bg,
     colorScheme: const ColorScheme.light(
-      primary: OptikKaryawanTokens.navyMid,
-      secondary: OptikKaryawanTokens.goldSoft,
-      surface: OptikKaryawanTokens.surface,
-      onPrimary: Colors.white,
-      onSecondary: OptikKaryawanTokens.navyDeep,
+      primary: OptikKaryawanTokens.cyan,
+      secondary: OptikKaryawanTokens.pale,
+      surface: OptikKaryawanTokens.card,
       error: OptikKaryawanTokens.danger,
+      onPrimary: OptikKaryawanTokens.ink,
+      onSecondary: OptikKaryawanTokens.ink,
+      onSurface: OptikKaryawanTokens.ink,
+      onError: OptikKaryawanTokens.snow,
     ),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
+      backgroundColor: OptikKaryawanTokens.snow,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: true,
-      backgroundColor: OptikKaryawanTokens.surface,
-      foregroundColor: OptikKaryawanTokens.navyDeep,
-      titleTextStyle: TextStyle(
-        color: OptikKaryawanTokens.navyDeep,
-        fontSize: 17,
+      foregroundColor: OptikKaryawanTokens.ink,
+      iconTheme: const IconThemeData(color: OptikKaryawanTokens.ink),
+      titleTextStyle: GoogleFonts.plusJakartaSans(
+        color: OptikKaryawanTokens.ink,
+        fontSize: 15,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.3,
+        letterSpacing: 0.4,
       ),
-      iconTheme: IconThemeData(color: OptikKaryawanTokens.navyDeep),
     ),
     cardTheme: CardThemeData(
-      color: OptikKaryawanTokens.surface,
+      color: OptikKaryawanTokens.snow,
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusLg),
+        side: const BorderSide(color: OptikKaryawanTokens.line, width: 1),
+      ),
+    ),
+    dividerTheme: const DividerThemeData(
+      color: OptikKaryawanTokens.line,
+      thickness: 1,
+      space: 1,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: OptikKaryawanTokens.snow,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusXl),
-        side: const BorderSide(color: OptikKaryawanTokens.border),
+        side: const BorderSide(color: OptikKaryawanTokens.lineStrong),
+      ),
+      titleTextStyle: const TextStyle(
+        color: OptikKaryawanTokens.ink,
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+      ),
+      contentTextStyle: const TextStyle(
+        color: OptikKaryawanTokens.textSecondary,
+        fontSize: 14,
+        height: 1.4,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: OptikKaryawanTokens.surfaceMuted,
+      fillColor: OptikKaryawanTokens.bgMid,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikKaryawanTokens.border),
+        borderSide: const BorderSide(color: OptikKaryawanTokens.lineStrong),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikKaryawanTokens.border),
+        borderSide: const BorderSide(color: OptikKaryawanTokens.lineStrong),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
         borderSide: const BorderSide(
-          color: OptikKaryawanTokens.navyMid,
+          color: OptikKaryawanTokens.cyan,
           width: 1.6,
         ),
       ),
@@ -604,79 +806,109 @@ ThemeData buildKaryawanTheme() {
         color: OptikKaryawanTokens.muted.withOpacity(0.75),
         fontSize: 13,
       ),
+      prefixIconColor: OptikKaryawanTokens.cyan,
+      suffixIconColor: OptikKaryawanTokens.muted,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: OptikKaryawanTokens.navyMid,
-        foregroundColor: Colors.white,
+        backgroundColor: OptikKaryawanTokens.cyan,
+        foregroundColor: OptikKaryawanTokens.ink,
         elevation: 0,
-        minimumSize: const Size(double.infinity, 50),
+        // Jangan pakai width infinity — pecah dialog cropper / ButtonBar (web).
+        minimumSize: const Size(64, 48),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
         ),
-        textStyle: const TextStyle(
+        textStyle: GoogleFonts.plusJakartaSans(
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.4,
+          letterSpacing: 0.3,
           fontSize: 14,
         ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: OptikKaryawanTokens.navyMid,
-        side: const BorderSide(color: OptikKaryawanTokens.border),
+        foregroundColor: OptikKaryawanTokens.ink,
+        side: const BorderSide(color: OptikKaryawanTokens.cyan),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
         ),
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: OptikKaryawanTokens.navyMid,
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        foregroundColor: OptikKaryawanTokens.cyan,
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
       ),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: OptikKaryawanTokens.navyMid,
-      foregroundColor: Colors.white,
+      backgroundColor: OptikKaryawanTokens.cyan,
+      foregroundColor: OptikKaryawanTokens.ink,
     ),
     bottomAppBarTheme: const BottomAppBarThemeData(
-      color: OptikKaryawanTokens.surface,
+      color: OptikKaryawanTokens.snow,
       elevation: 12,
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: OptikKaryawanTokens.gold,
+      color: OptikKaryawanTokens.cyan,
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
+      backgroundColor: OptikKaryawanTokens.ink,
+      contentTextStyle: GoogleFonts.plusJakartaSans(
+        color: OptikKaryawanTokens.snow,
+        fontWeight: FontWeight.w600,
+      ),
+      actionTextColor: OptikKaryawanTokens.cyan,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusMd),
       ),
     ),
-    listTileTheme: const ListTileThemeData(
-      iconColor: OptikKaryawanTokens.navyMid,
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: OptikKaryawanTokens.cyan,
+        foregroundColor: OptikKaryawanTokens.ink,
+        textStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w800,
+          fontSize: 14,
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: OptikKaryawanTokens.cyan,
       textColor: OptikKaryawanTokens.ink,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      titleTextStyle: GoogleFonts.plusJakartaSans(
+        color: OptikKaryawanTokens.ink,
+        fontWeight: FontWeight.w700,
+        fontSize: 14.5,
+      ),
+      subtitleTextStyle: GoogleFonts.plusJakartaSans(
+        color: OptikKaryawanTokens.muted,
+        fontWeight: FontWeight.w500,
+        fontSize: 12.5,
+      ),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return OptikKaryawanTokens.gold;
+          return OptikKaryawanTokens.cyan;
         }
         return OptikKaryawanTokens.muted;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return OptikKaryawanTokens.goldSoft.withOpacity(0.45);
+          return OptikKaryawanTokens.cyan.withOpacity(0.35);
         }
-        return OptikKaryawanTokens.border;
+        return OptikKaryawanTokens.line;
       }),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: OptikKaryawanTokens.surfaceMuted,
-      selectedColor: OptikKaryawanTokens.goldSoft.withOpacity(0.28),
-      labelStyle: const TextStyle(
+      backgroundColor: OptikKaryawanTokens.bgMid,
+      selectedColor: OptikKaryawanTokens.cyan.withOpacity(0.28),
+      labelStyle: GoogleFonts.plusJakartaSans(
         color: OptikKaryawanTokens.ink,
         fontSize: 12,
         fontWeight: FontWeight.w600,
@@ -684,9 +916,9 @@ ThemeData buildKaryawanTheme() {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
-        side: const BorderSide(color: OptikKaryawanTokens.border),
+        side: const BorderSide(color: OptikKaryawanTokens.lineStrong),
       ),
-      side: const BorderSide(color: OptikKaryawanTokens.border),
+      side: const BorderSide(color: OptikKaryawanTokens.lineStrong),
     ),
   );
 }

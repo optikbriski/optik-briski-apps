@@ -1,7 +1,9 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../admin/admin_code_login_service.dart';
+import '../attendance/pos_duty_gate.dart';
 import '../qr/obr_codes.dart';
 import '../qr/qr_route.dart';
 import '../qr/universal_qr_scan_page.dart';
@@ -9,6 +11,8 @@ import '../theme.dart';
 
 /// Gate aksi sensitif: scan **barcode karyawan yang sama dipakai POS** (NIK),
 /// atau QR OBRKARY dari APK — harus cocok dengan "via siapa" login kode Admin.
+///
+/// Juga wajib sedang bertugas: aktif, bukan libur, shift OPEN (sudah absen masuk).
 abstract final class StockActorGate {
   /// true = boleh lanjut. false = ditolak / batal.
   static Future<bool> requireMatchingViaKaryawanQr({
@@ -33,6 +37,21 @@ abstract final class StockActorGate {
     final viaId = via.karyawanId!.trim();
     final viaNama = (via.nama ?? '').trim();
     final viaNik = await _lookupNikForId(viaId);
+
+    // Via login juga harus sedang bertugas (belom pulang / bukan libur).
+    final viaDuty = await PosDutyGate.blockReason(
+      karyawanId: viaId,
+      nik: viaNik,
+    );
+    if (viaDuty != null) {
+      if (!context.mounted) return false;
+      await _alert(
+        context,
+        title: 'Tidak bisa $actionLabel',
+        message: viaDuty.tr(),
+      );
+      return false;
+    }
 
     if (!context.mounted) return false;
     final scanned = await _promptKaryawanScan(
@@ -160,7 +179,21 @@ abstract final class StockActorGate {
               if (!resolved.active) {
                 setLocal(() {
                   busy = false;
-                  error = 'Karyawan tidak aktif.';
+                  error = 'pos_terlibat_not_aktif'.tr();
+                  ctrl.clear();
+                });
+                focus.requestFocus();
+                return;
+              }
+              final dutyBlock = await PosDutyGate.blockReason(
+                karyawanId: resolved.id,
+                nik: resolved.nik,
+              );
+              if (!ctx.mounted) return;
+              if (dutyBlock != null) {
+                setLocal(() {
+                  busy = false;
+                  error = dutyBlock.tr();
                   ctrl.clear();
                 });
                 focus.requestFocus();

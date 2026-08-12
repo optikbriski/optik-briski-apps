@@ -131,6 +131,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       data = await _enrichItemFulfillment(data);
       data = await _healGaransiIfDiambil(data);
       data = await _healClaimQrIfNeeded(data);
+      data = await _svc.enrichLabJob(data);
 
       // Aksi mengikuti payload QR yang di-scan (OBRINV + token), bukan flag UI.
       String? phase;
@@ -186,19 +187,11 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           )
           .eq('sale_id', saleId);
       final list = rows as List;
-      final today = DateTime(
-        DateTime.now().year,
-        DateTime.now().month,
-        DateTime.now().day,
+      final claimable = list.any(
+        (raw) => GaransiService.kartuBisaDiklaim(
+          Map<String, dynamic>.from(raw as Map),
+        ),
       );
-      final claimable = list.any((raw) {
-        final g = Map<String, dynamic>.from(raw as Map);
-        if (g['status']?.toString() != 'aktif') return false;
-        if (g['klaim_digunakan'] == true) return false;
-        final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
-        if (akhir == null) return false;
-        return !DateTime(akhir.year, akhir.month, akhir.day).isBefore(today);
-      });
       return {...data, 'garansi': rows, 'garansi_claimable': claimable};
     } catch (_) {
       return data;
@@ -2251,7 +2244,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       const SizedBox(height: 8),
       Text(
         'invoice_hub_assign_pembuat'.tr(),
-        style: TextStyle(
+        style: const TextStyle(
           color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
@@ -2261,7 +2254,17 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         h['nama_pembuat_kacamata'] != null
             ? '${'invoice_hub_pembuat_current'.tr()}: ${h['nama_pembuat_kacamata']}'
             : 'invoice_hub_pembuat_empty'.tr(),
-        style: TextStyle(color: OptikAdminTokens.slate.withOpacity(0.55), fontSize: 12.5),
+        style: TextStyle(
+            color: OptikAdminTokens.slate.withOpacity(0.55), fontSize: 12.5),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        _labJobStatusLabel(h),
+        style: TextStyle(
+          color: OptikAdminTokens.slate.withOpacity(0.7),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       const SizedBox(height: 8),
       _actionBtn(
@@ -2272,6 +2275,25 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       const SizedBox(height: 8),
       ..._ratingSummary(h),
     ];
+  }
+
+  String _labJobStatusLabel(Map<String, dynamic> h) {
+    final st = (h['lab_job_status'] ?? '').toString().toUpperCase();
+    final nama = h['lab_job_claimed_nama']?.toString() ??
+        h['nama_pembuat_kacamata']?.toString();
+    if (st.isEmpty && h['lab_job'] == null) {
+      return '${'invoice_hub_lab_status'.tr()}: ${'invoice_hub_lab_none'.tr()}';
+    }
+    switch (st) {
+      case 'OPEN':
+        return '${'invoice_hub_lab_status'.tr()}: ${'invoice_hub_lab_open'.tr()}';
+      case 'CLAIMED':
+        return '${'invoice_hub_lab_status'.tr()}: ${'invoice_hub_lab_claimed'.tr(args: [nama ?? '-'])}';
+      case 'DONE':
+        return '${'invoice_hub_lab_status'.tr()}: ${'invoice_hub_lab_done'.tr()}';
+      default:
+        return '${'invoice_hub_lab_status'.tr()}: ${st.isEmpty ? '-' : st}';
+    }
   }
 
   Future<void> _pickPembuat(Map<String, dynamic> h) async {

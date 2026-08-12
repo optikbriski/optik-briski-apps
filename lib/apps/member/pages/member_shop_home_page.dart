@@ -11,7 +11,62 @@ import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_shop_address.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
+import 'member_product_detail_sheet.dart';
 import 'member_shop_address_picker_page.dart';
+
+/// Parsed `available_qty`; null = unknown (treat like in-stock for rank/badge).
+@visibleForTesting
+int? memberShopAvailableQty(Map<String, dynamic> product) =>
+    int.tryParse('${product['available_qty'] ?? ''}');
+
+/// True when qty is known and ≤ 0 (Pre-order). Missing qty ≠ OOS.
+@visibleForTesting
+bool memberShopIsOutOfStock(Map<String, dynamic> product) {
+  final avail = memberShopAvailableQty(product);
+  return avail != null && avail <= 0;
+}
+
+/// Rekomendasi beranda shop: bisa dibeli online (bukan lensa custom), harga > 0.
+/// Stok 0 tetap masuk (pre-order); prioritas in-stock, lalu diskon terbesar.
+/// SKU kosong dibuang; SKU duplikat di-dedupe (pertahankan ranking terbaik).
+@visibleForTesting
+List<Map<String, dynamic>> pickMemberShopRecommended(
+  List<Map<String, dynamic>> products, {
+  int limit = 8,
+}) {
+  final buyable = products.where((p) {
+    final sku = (p['sku'] ?? '').toString().trim();
+    if (sku.isEmpty) return false;
+    if (MemberCart.isOnlineBlocked(p)) return false;
+    final harga = int.tryParse('${p['harga'] ?? 0}') ?? 0;
+    return harga > 0;
+  }).toList();
+  buyable.sort((a, b) {
+    // Missing available_qty → in-stock rank (matches Pre-order badge / detail).
+    final inStockA = memberShopIsOutOfStock(a) ? 0 : 1;
+    final inStockB = memberShopIsOutOfStock(b) ? 0 : 1;
+    final byStock = inStockB.compareTo(inStockA);
+    if (byStock != 0) return byStock;
+
+    final da = int.tryParse('${a['harga_asli'] ?? 0}') ?? 0;
+    final ha = int.tryParse('${a['harga'] ?? 0}') ?? 0;
+    final db = int.tryParse('${b['harga_asli'] ?? 0}') ?? 0;
+    final hb = int.tryParse('${b['harga'] ?? 0}') ?? 0;
+    final discA = da > ha ? da - ha : 0;
+    final discB = db > hb ? db - hb : 0;
+    return discB.compareTo(discA);
+  });
+
+  final seen = <String>{};
+  final out = <Map<String, dynamic>>[];
+  for (final p in buyable) {
+    final sku = (p['sku'] ?? '').toString().trim().toUpperCase();
+    if (!seen.add(sku)) continue;
+    out.add(p);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
 
 /// Beranda di dalam Belanja Online — putih–biru premium, ala GrabMart.
 class MemberShopHomePage extends StatefulWidget {
@@ -19,12 +74,15 @@ class MemberShopHomePage extends StatefulWidget {
     super.key,
     required this.onBrowseAll,
     required this.onOpenCategory,
-    required this.onOpenProductCatalog,
+    this.onOpenSearch,
+    this.onOpenCart,
   });
 
   final VoidCallback onBrowseAll;
   final ValueChanged<String> onOpenCategory;
-  final VoidCallback onOpenProductCatalog;
+  /// Opens catalog with search field focused (filter cleared).
+  final VoidCallback? onOpenSearch;
+  final VoidCallback? onOpenCart;
 
   @override
   State<MemberShopHomePage> createState() => _MemberShopHomePageState();
@@ -141,16 +199,25 @@ class _MemberShopHomePageState extends State<MemberShopHomePage> {
         tokoId: _stockTokoId,
       );
       if (!mounted) return;
+      // listCatalog often returns [] on RPC/network failure (errors swallowed).
+      // Never wipe a warm cache with an empty payload.
+      if (list.isEmpty && _products.isNotEmpty) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _products = list;
         _loading = false;
-        if (list.isEmpty) _error = 'empty';
+        _error = list.isEmpty ? 'empty' : null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '$e';
+        // Keep prior catalog on refresh failure; only surface error if empty.
+        if (_products.isEmpty) {
+          _error = '$e';
+        }
       });
     }
   }
@@ -161,25 +228,8 @@ class _MemberShopHomePageState extends State<MemberShopHomePage> {
     );
   }
 
-  List<Map<String, dynamic>> get _recommended {
-    final buyable = _products.where((p) {
-      if (MemberCart.isOnlineBlocked(p)) return false;
-      final avail = int.tryParse('${p['available_qty'] ?? ''}');
-      if (avail != null && avail <= 0) return false;
-      final harga = int.tryParse('${p['harga'] ?? 0}') ?? 0;
-      return harga > 0;
-    }).toList();
-    buyable.sort((a, b) {
-      final da = int.tryParse('${a['harga_asli'] ?? 0}') ?? 0;
-      final ha = int.tryParse('${a['harga'] ?? 0}') ?? 0;
-      final db = int.tryParse('${b['harga_asli'] ?? 0}') ?? 0;
-      final hb = int.tryParse('${b['harga'] ?? 0}') ?? 0;
-      final discA = da > ha ? da - ha : 0;
-      final discB = db > hb ? db - hb : 0;
-      return discB.compareTo(discA);
-    });
-    return buyable.take(8).toList();
-  }
+  List<Map<String, dynamic>> get _recommended =>
+      pickMemberShopRecommended(_products);
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +241,7 @@ class _MemberShopHomePageState extends State<MemberShopHomePage> {
       color: OptikMemberTokens.blue,
       onRefresh: _load,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(pad, 4, pad, 28),
         children: [
           _LocationHeader(
@@ -206,8 +257,8 @@ class _MemberShopHomePageState extends State<MemberShopHomePage> {
           const SizedBox(height: 12),
           _SearchBar(
             controller: _search,
-            onSubmit: (_) => widget.onBrowseAll(),
-            onTapBrowse: widget.onBrowseAll,
+            onSubmit: (_) => (widget.onOpenSearch ?? widget.onBrowseAll)(),
+            onTapBrowse: widget.onOpenSearch ?? widget.onBrowseAll,
           ),
           const SizedBox(height: 16),
           _PromoStrip(onShop: widget.onBrowseAll),
@@ -313,7 +364,19 @@ class _MemberShopHomePageState extends State<MemberShopHomePage> {
                   return _RecoCard(
                     product: p,
                     money: _money.format,
-                    onTap: widget.onOpenProductCatalog,
+                    onTap: () {
+                      final sku =
+                          (p['sku'] ?? '').toString().trim().toUpperCase();
+                      if (sku.isEmpty) return;
+                      unawaited(
+                        showMemberProductDetailSheet(
+                          context,
+                          product: p,
+                          browseOnly: false,
+                          onOpenCart: widget.onOpenCart,
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -674,6 +737,8 @@ class _RecoCard extends StatelessWidget {
     final img = (product['image_url'] ?? '').toString().trim();
     final harga = int.tryParse('${product['harga'] ?? 0}') ?? 0;
     final asli = int.tryParse('${product['harga_asli'] ?? ''}');
+    final outOfStock = memberShopIsOutOfStock(product);
+    final hasDisc = asli != null && asli > harga;
 
     return SizedBox(
       width: 148,
@@ -694,21 +759,46 @@ class _RecoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: ColoredBox(
-                    color: OptikMemberTokens.blueMist,
-                    child: img.isEmpty
-                        ? const Icon(
-                            Icons.visibility_outlined,
-                            color: OptikMemberTokens.inkMuted,
-                          )
-                        : Image.network(
-                            img,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.visibility_outlined,
-                              color: OptikMemberTokens.inkMuted,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ColoredBox(
+                        color: OptikMemberTokens.blueMist,
+                        child: img.isEmpty
+                            ? const Icon(
+                                Icons.visibility_outlined,
+                                color: OptikMemberTokens.inkMuted,
+                              )
+                            : Image.network(
+                                img,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.visibility_outlined,
+                                  color: OptikMemberTokens.inkMuted,
+                                ),
+                              ),
+                      ),
+                      if (outOfStock)
+                        Positioned(
+                          left: 6,
+                          bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
+                            color: Colors.black.withValues(alpha: 0.65),
+                            child: const Text(
+                              'Pre-order',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                        ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -732,7 +822,7 @@ class _RecoCard extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
-                          color: (asli != null && asli > harga)
+                          color: hasDisc
                               ? const Color(0xFFC45C4A)
                               : OptikMemberTokens.blueDeep,
                         ),

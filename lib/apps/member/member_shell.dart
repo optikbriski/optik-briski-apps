@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/member/member_home_controller.dart';
+import '../../shared/member/member_inbox_unread.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -38,6 +39,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     if (MemberSession.instance.isLoggedIn) {
       MemberStatusWatch.instance.start();
+      MemberInboxUnread.instance.refresh();
     }
     MemberSession.instance.addListener(_onSession);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -97,6 +99,7 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     if (mounted) setState(() {});
     if (MemberSession.instance.isLoggedIn) {
       MemberStatusWatch.instance.start();
+      MemberInboxUnread.instance.refresh();
     } else {
       MemberStatusWatch.instance.stop();
     }

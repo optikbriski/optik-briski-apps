@@ -2,8 +2,10 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/member/member_notification_payload.dart';
 import '../../../shared/theme.dart';
 import 'member_invoice_hub_page.dart';
+import 'member_online_order_page.dart';
 import 'member_points_page.dart';
 
 /// Detail pesan / promo Inbox — hero + judul + tanggal + isi (putih–biru premium).
@@ -19,6 +21,7 @@ class MemberInboxDetailPage extends StatelessWidget {
     this.validUntil,
     this.terms,
     this.noInvoice,
+    this.onlineOrderId,
     this.kind,
   });
 
@@ -31,6 +34,7 @@ class MemberInboxDetailPage extends StatelessWidget {
   final String? validUntil;
   final String? terms;
   final String? noInvoice;
+  final String? onlineOrderId;
   final String? kind;
 
   List<String> get _termLines {
@@ -69,6 +73,12 @@ class MemberInboxDetailPage extends StatelessWidget {
     final tagLabel = isPromo
         ? 'member_inbox_tag_promo'.tr()
         : 'member_inbox_tag_alert'.tr();
+    final orderLink = isPromo
+        ? null
+        : MemberNotificationPayload.resolve(
+            invoice: noInvoice,
+            onlineOrderId: onlineOrderId,
+          );
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -342,14 +352,27 @@ class MemberInboxDetailPage extends StatelessWidget {
                       );
                     },
                   )
-                else if ((noInvoice ?? '').trim().isNotEmpty)
+                else if ((orderLink?.invoice ?? '').trim().isNotEmpty)
                   _PrimaryCta(
                     label: 'member_inbox_open_invoice'.tr(),
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => MemberInvoiceHubPage(
-                            noInvoice: noInvoice!.trim(),
+                            noInvoice: orderLink!.invoice!.trim(),
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                else if ((orderLink?.onlineOrderId ?? '').trim().isNotEmpty)
+                  _PrimaryCta(
+                    label: 'member_inbox_open_invoice'.tr(),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MemberOnlineOrderPage(
+                            onlineOrderId: orderLink!.onlineOrderId!.trim(),
                           ),
                         ),
                       );

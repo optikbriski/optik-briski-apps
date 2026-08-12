@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'training_curriculum.dart';
 import 'training_http_client.dart';
@@ -137,6 +138,9 @@ class TrainingMode extends ChangeNotifier {
     // Also remove any leftover training_* dirs (crash / partial wipe).
     await wipeOrphanSessions();
 
+    // Capture before clearing fields — needed to scrub live POS prefs.
+    final exitTokoId = _tokoId;
+
     // Only after wipe: allow live network mutations again.
     _isActive = false;
     _sessionId = null;
@@ -149,7 +153,31 @@ class TrainingMode extends ChangeNotifier {
     } catch (e) {
       debugPrint('[TrainingMode] clear recovery flag: $e');
     }
+
+    // Clear live POS session prefs that training may have written under the
+    // same keys (is_store_open_*, drafts). Otherwise live POS restores an
+    // "open" store with training kasir ids like tr_kasir_1.
+    try {
+      await _clearLivePosSessionPrefs(exitTokoId);
+    } catch (e) {
+      debugPrint('[TrainingMode] clear POS prefs: $e');
+    }
+
     notifyListeners();
+  }
+
+  /// Wipe store-open / POS draft prefs for [tokoId] (and common pusat aliases).
+  static Future<void> _clearLivePosSessionPrefs(String? tokoId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = <String>{
+      if (tokoId != null && tokoId.trim().isNotEmpty) tokoId.trim(),
+      'PUSAT',
+    };
+    for (final tid in ids) {
+      await prefs.setBool('is_store_open_$tid', false);
+      await prefs.remove('last_open_time_$tid');
+      await prefs.remove('pos_draft_transaksi_$tid');
+    }
   }
 
   /// On app start: if recovery flag or orphan `training_*` dirs exist, wipe them.

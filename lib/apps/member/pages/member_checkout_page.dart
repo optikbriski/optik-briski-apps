@@ -187,7 +187,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
       });
       return;
     }
-    if (_cart.isEmpty) {
+    if (!_cart.hasSelection) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -871,11 +871,11 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
   }
 
   Future<void> _refreshPreorderFlags({bool fromRealtime = false}) async {
-    if (_tokoId == null || _cart.isEmpty) {
+    if (_tokoId == null || !_cart.hasSelection) {
       setState(() => _preorderSkus = const []);
       return;
     }
-    final skus = _cart.items.map((e) => e.sku).toList();
+    final skus = _cart.selectedItems.map((e) => e.sku).toList();
     final sellable = await _repo.listBranchSellable(
       tokoId: _tokoId!,
       skus: skus,
@@ -887,7 +887,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     }
     final need = <String>[];
     final newlyShort = <MemberCartItem>[];
-    for (final it in _cart.items) {
+    for (final it in _cart.selectedItems) {
       final avail = bySku[it.sku.toUpperCase()] ?? 0;
       if (avail < it.qty) {
         need.add(it.sku);
@@ -968,7 +968,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
         _acceptedPreorderSkus.remove(it.sku.toUpperCase());
       }
       if (!mounted) return;
-      if (_cart.isEmpty) {
+      if (!_cart.hasSelection) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Item dihapus. Silakan cari produk lain.'),
@@ -1023,7 +1023,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
   int get _productPromoDiscount {
     final d = widget.presetProductPromoDiscount ?? 0;
     if (d <= 0) return 0;
-    return d > _cart.subtotal ? _cart.subtotal : d;
+    return d > _cart.selectedSubtotal ? _cart.selectedSubtotal : d;
   }
 
   int get _shippingFeePayable {
@@ -1032,7 +1032,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
   }
 
   int get _total {
-    final goods = _cart.subtotal - _productPromoDiscount;
+    final goods = _cart.selectedSubtotal - _productPromoDiscount;
     final base = goods < 0 ? 0 : goods;
     final ship = _fulfillment == 'delivery' ? _shippingFeePayable : 0;
     return base + ship;
@@ -1042,6 +1042,22 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     final session = MemberSession.instance;
     if (!session.isLoggedIn) {
       Navigator.of(context).pushNamed('/login');
+      return;
+    }
+    if (!_cart.hasSelection) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih minimal 1 produk di keranjang untuk bayar.'),
+        ),
+      );
+      return;
+    }
+    final blockedErr = _cart.onlineBlockedSelectionError;
+    if (blockedErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedErr)),
+      );
+      await _cart.purgeOnlineBlocked();
       return;
     }
     // Pengiriman: alamat Maps wajib. Pickup: cukup cabang terpilih.
@@ -1127,7 +1143,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     }
 
     if (_preorderSkus.isNotEmpty) {
-      final lines = _cart.items
+      final lines = _cart.selectedItems
           .where((it) => _preorderSkus.contains(it.sku))
           .map((it) => '• ${it.nama} (x${it.qty})')
           .join('\n');
@@ -1260,7 +1276,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
           final paid = await _repo.mockPayOnlineOrder(midOrderId);
           if (!mounted) return;
           if (paid['ok'] == true) {
-            await _cart.clear();
+            await _cart.removeSelected();
             await _showSuccess(onlineId, hasPreorder: hasPre);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1293,7 +1309,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
       );
       if (!mounted) return;
       if (paid == true) {
-        await _cart.clear();
+        await _cart.removeSelected();
         await _showSuccess(onlineId, hasPreorder: hasPre);
       }
     } finally {
@@ -1382,7 +1398,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
                 const SizedBox(height: 4),
                 Text(
                   addr.isConfirmed
-                      ? addr.fullAddress
+                      ? addr.displayWithDetail
                       : (_fulfillment == 'pickup'
                           ? 'Cabang ambil sudah dipilih di langkah sebelumnya.'
                           : 'Kembali ke detail pesanan untuk memilih alamat.'),
@@ -1473,7 +1489,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
           const SizedBox(height: 8),
-          ..._cart.items.map(
+          ..._cart.selectedItems.map(
             (it) {
               final pre = _preorderSkus.contains(it.sku);
               return Padding(
@@ -1493,7 +1509,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
             },
           ),
           const Divider(height: 24),
-          _sumRow('Subtotal', _cart.subtotal),
+          _sumRow('Subtotal', _cart.selectedSubtotal),
           if (_productPromoDiscount > 0)
             _sumRow(
               widget.presetProductPromoCode != null &&
@@ -2058,7 +2074,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
           const SizedBox(height: 8),
-          ..._cart.items.map(
+          ..._cart.selectedItems.map(
             (it) {
               final pre = _preorderSkus.contains(it.sku);
               return Padding(
@@ -2078,7 +2094,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
             },
           ),
           const Divider(height: 24),
-          _sumRow('Subtotal', _cart.subtotal),
+          _sumRow('Subtotal', _cart.selectedSubtotal),
           if (_productPromoDiscount > 0)
             _sumRow(
               widget.presetProductPromoCode != null &&

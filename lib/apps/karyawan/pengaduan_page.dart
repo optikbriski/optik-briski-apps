@@ -104,7 +104,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("pengaduan_msg_sukses".tr()),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikKaryawanTokens.seasideMid,
         ),
       );
       Navigator.pop(context);
@@ -124,7 +124,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
   @override
   Widget build(BuildContext context) {
     return KaryawanPremiumScaffold(
-      title: "pengaduan title".tr(),
+      title: "pengaduan_title".tr(),
       eyebrow: 'OPTIK B. RISKI',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -165,7 +165,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
                     .toList(),
                 onChanged: (v) => setState(() => kategoriPilihan = v),
                 validator: (v) =>
-                    v == null ? "pengaduan err kategori".tr() : null,
+                    v == null ? "pengaduan_err_kategori".tr() : null,
               ),
               const SizedBox(height: 20),
               Text("pengaduan_label_penjelasan".tr(),
@@ -225,8 +225,8 @@ class _PengaduanPageState extends State<PengaduanPage> {
                 height: 55,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: OptikKaryawanTokens.navyMid,
-                    foregroundColor: Colors.white,
+                    backgroundColor: OptikKaryawanTokens.seasideMid,
+                    foregroundColor: OptikKaryawanTokens.ink,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(
                             OptikKaryawanTokens.radiusSm)),
@@ -237,14 +237,16 @@ class _PengaduanPageState extends State<PengaduanPage> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.send_rounded, color: Colors.white),
+                              color: OptikKaryawanTokens.ink, strokeWidth: 2))
+                      : const Icon(Icons.send_rounded,
+                          color: OptikKaryawanTokens.ink),
                   label: Text(
                     isSubmitting
                         ? "pengaduan_btn_mengirim".tr()
                         : "pengaduan_btn_kirim".tr(),
                     style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
+                        color: OptikKaryawanTokens.ink,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ),

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -27,6 +30,14 @@ class _MemberCartPageState extends State<MemberCartPage> {
   @override
   void initState() {
     super.initState();
+    // Standalone push (bukan tab shell): pastikan snackbar "Ditambah…" hilang.
+    // Tab shell sudah hide di MemberShopShell._goTab(2).
+    if (!widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      });
+    }
     _cart.ensureLoaded().then((_) {
       if (mounted) setState(() {});
     });
@@ -43,14 +54,36 @@ class _MemberCartPageState extends State<MemberCartPage> {
     if (mounted) setState(() {});
   }
 
+  void _continueToOrderDetail() {
+    if (!_cart.hasSelection) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('member_cart_none_selected'.tr())),
+      );
+      return;
+    }
+    final blockedErr = _cart.onlineBlockedSelectionError;
+    if (blockedErr != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedErr)),
+      );
+      unawaited(_cart.purgeOnlineBlocked());
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const MemberShopOrderDetailPage(),
+      ),
+    );
+  }
+
   Widget get _empty {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Text(
-          'Keranjang masih kosong.\nTambah produk dari tab Belanja.',
+          'member_cart_empty'.tr(),
           textAlign: TextAlign.center,
-          style: TextStyle(color: OptikMemberTokens.inkMuted, height: 1.4),
+          style: const TextStyle(color: OptikMemberTokens.inkMuted, height: 1.4),
         ),
       ),
     );
@@ -58,15 +91,58 @@ class _MemberCartPageState extends State<MemberCartPage> {
 
   Widget get _content {
     if (_cart.isEmpty) return _empty;
+    final canContinue = _cart.hasSelection;
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  // null = sebagian tercentang (indeterminate).
+                  value: _cart.allSelected
+                      ? true
+                      : (_cart.hasSelection ? null : false),
+                  tristate: true,
+                  activeColor: OptikMemberTokens.blueDeep,
+                  side: const BorderSide(
+                    color: OptikMemberTokens.inkMuted,
+                    width: 1.4,
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (_) =>
+                      _cart.setAllSelected(!_cart.allSelected),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _cart.setAllSelected(!_cart.allSelected),
+                  child: Text(
+                    'member_cart_select_all'.tr(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: OptikMemberTokens.inkSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
             itemCount: _cart.items.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final it = _cart.items[i];
+              final checked = _cart.isSelected(it.sku);
               return Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -76,7 +152,29 @@ class _MemberCartPageState extends State<MemberCartPage> {
                   border: Border.all(color: OptikMemberTokens.lineSoft),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: checked,
+                          activeColor: OptikMemberTokens.blueDeep,
+                          side: const BorderSide(
+                            color: OptikMemberTokens.inkMuted,
+                            width: 1.4,
+                          ),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (v) =>
+                              _cart.setSelected(it.sku, v ?? false),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: SizedBox(
@@ -110,16 +208,20 @@ class _MemberCartPageState extends State<MemberCartPage> {
                             it.nama,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              color: OptikMemberTokens.ink,
+                              color: checked
+                                  ? OptikMemberTokens.ink
+                                  : OptikMemberTokens.inkMuted,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             _money.format(it.harga),
-                            style: const TextStyle(
-                              color: OptikMemberTokens.blue,
+                            style: TextStyle(
+                              color: checked
+                                  ? OptikMemberTokens.blue
+                                  : OptikMemberTokens.inkMuted,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -128,7 +230,7 @@ class _MemberCartPageState extends State<MemberCartPage> {
                             children: [
                               _qtyBtn(
                                 Icons.remove_rounded,
-                                () => _cart.setQty(it.sku, it.qty - 1),
+                                () => _cart.adjustQty(it.sku, -1),
                               ),
                               Padding(
                                 padding:
@@ -141,7 +243,9 @@ class _MemberCartPageState extends State<MemberCartPage> {
                               ),
                               _qtyBtn(
                                 Icons.add_rounded,
-                                () => _cart.setQty(it.sku, it.qty + 1),
+                                it.qty >= kMemberCartMaxQtyPerLine
+                                    ? null
+                                    : () => _cart.adjustQty(it.sku, 1),
                               ),
                               const Spacer(),
                               IconButton(
@@ -183,13 +287,13 @@ class _MemberCartPageState extends State<MemberCartPage> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Subtotal',
-                    style: TextStyle(color: OptikMemberTokens.inkMuted),
+                  Text(
+                    'member_cart_subtotal'.tr(),
+                    style: const TextStyle(color: OptikMemberTokens.inkMuted),
                   ),
                   const Spacer(),
                   Text(
-                    _money.format(_cart.subtotal),
+                    _money.format(_cart.selectedSubtotal),
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 18,
@@ -198,27 +302,36 @@ class _MemberCartPageState extends State<MemberCartPage> {
                   ),
                 ],
               ),
+              if (!canContinue) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'member_cart_none_selected'.tr(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: OptikMemberTokens.inkMuted,
+                    fontSize: 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: OptikMemberTokens.blueDeep,
+                    disabledBackgroundColor:
+                        OptikMemberTokens.blueDeep.withOpacity(0.35),
+                    disabledForegroundColor: OptikMemberTokens.white,
                     minimumSize: const Size(double.infinity, 50),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const MemberShopOrderDetailPage(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Lanjut detail pesanan',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  onPressed: canContinue ? _continueToOrderDetail : null,
+                  child: Text(
+                    'member_cart_continue'.tr(),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
               ),
@@ -238,12 +351,13 @@ class _MemberCartPageState extends State<MemberCartPage> {
       );
     }
     return MemberPremiumScaffold(
-      title: 'Keranjang',
+      title: 'member_shop_tab_cart'.tr(),
       body: _content,
     );
   }
 
-  Widget _qtyBtn(IconData icon, VoidCallback onTap) {
+  Widget _qtyBtn(IconData icon, VoidCallback? onTap) {
+    final enabled = onTap != null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -251,10 +365,17 @@ class _MemberCartPageState extends State<MemberCartPage> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: OptikMemberTokens.blueMist,
+          color: OptikMemberTokens.blueMist
+              .withOpacity(enabled ? 1 : 0.45),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 18, color: OptikMemberTokens.blueDeep),
+        child: Icon(
+          icon,
+          size: 18,
+          color: enabled
+              ? OptikMemberTokens.blueDeep
+              : OptikMemberTokens.inkMuted,
+        ),
       ),
     );
   }

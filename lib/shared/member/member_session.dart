@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../whatsapp_launcher.dart';
+import 'member_shop_address.dart';
 
 /// Sesi Member lokal (HP terverifikasi OTP).
 class MemberSession extends ChangeNotifier {
@@ -32,6 +33,17 @@ class MemberSession extends ChangeNotifier {
   String get phoneForQuery =>
       phoneE164 ?? normalizeWaNumber(phoneRaw ?? '');
 
+  /// Kunci bucket alamat Belanja Online (anti-bocor antar akun).
+  String get shopAddressOwnerKey {
+    final id = (memberId ?? '').trim();
+    if (id.isNotEmpty) return 'm_$id';
+    final e164 = (phoneE164 ?? '').trim();
+    if (e164.isNotEmpty) return 'p_$e164';
+    final raw = (phoneRaw ?? '').trim();
+    if (raw.isNotEmpty) return 'r_$raw';
+    return 'guest';
+  }
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
@@ -51,6 +63,8 @@ class MemberSession extends ChangeNotifier {
       } catch (_) {}
     }
     loaded = true;
+    // Alamat dulu, baru notify — UI jangan sempat baca bucket akun lama.
+    await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
     notifyListeners();
   }
 
@@ -66,6 +80,7 @@ class MemberSession extends ChangeNotifier {
     fontScale = double.tryParse('${member['font_scale'] ?? fontScale}') ?? 1.0;
     locale = member['locale']?.toString() ?? locale;
     await _persist();
+    await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
     notifyListeners();
   }
 
@@ -112,6 +127,7 @@ class MemberSession extends ChangeNotifier {
     locale = 'id';
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
+    await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
     notifyListeners();
   }
 

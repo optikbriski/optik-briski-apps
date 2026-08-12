@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/member/member_online_order_labels.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
+import '../../../shared/whatsapp_launcher.dart';
 import '../member_widgets.dart';
 import 'member_invoice_hub_page.dart';
 import 'member_midtrans_pay_page.dart';
@@ -227,15 +229,65 @@ class _MemberOnlineOrderPageState extends State<MemberOnlineOrderPage> {
     await _afterPaid(invoice: (res['no_invoice'] ?? '').toString());
   }
 
+  Future<String> _resolveInvoiceNo() async {
+    final fromOrder = (_order?['no_invoice'] ?? '').toString().trim();
+    if (fromOrder.isNotEmpty) return fromOrder;
+    final phone = MemberSession.instance.phoneForQuery;
+    if (phone.isEmpty) return '';
+    final saleId = (_order?['sale_id'] ?? '').toString().trim();
+    final oid = widget.onlineOrderId.trim();
+    try {
+      final sales = await _repo.listSales(phone);
+      for (final s in sales) {
+        final matchOid =
+            oid.isNotEmpty && (s['online_order_id'] ?? '').toString() == oid;
+        final matchSale =
+            saleId.isNotEmpty && (s['id'] ?? '').toString() == saleId;
+        if (matchOid || matchSale) {
+          return (s['no_invoice'] ?? '').toString().trim();
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  Future<void> _openNota(String inv) async {
+    if (inv.isEmpty || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MemberInvoiceHubPage(noInvoice: inv),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<void> _waToko() async {
+    final toko = (_order?['toko_id'] ?? 'PUSAT').toString();
+    final settings = await _repo.storeSettings(toko);
+    final phone = (settings?['phone'] ?? '').toString();
+    final mid = (_order?['midtrans_order_id'] ?? '').toString();
+    final ref = mid.isNotEmpty
+        ? mid
+        : (widget.onlineOrderId.length >= 8
+            ? widget.onlineOrderId.substring(0, 8)
+            : widget.onlineOrderId);
+    final msg =
+        'Halo Optik B. Riski, saya cek status pesanan online $ref (cabang $toko).';
+    if (phone.isEmpty) {
+      await openAdminWhatsApp(message: msg);
+      return;
+    }
+    final uri = Uri.parse(
+      'https://wa.me/${normalizeWaNumber(phone)}?text=${Uri.encodeComponent(msg)}',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _afterPaid({String? invoice}) async {
     var inv = (invoice ?? '').trim();
     if (inv.isEmpty) {
       await _load();
-      // Coba ambil nota dari sale_id bila ada.
-      final saleId = (_order?['sale_id'] ?? '').toString();
-      if (saleId.isNotEmpty) {
-        // Reload order after pay — getOnlineOrder includes sale linkage fields.
-      }
+      inv = await _resolveInvoiceNo();
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -452,6 +504,51 @@ class _MemberOnlineOrderPageState extends State<MemberOnlineOrderPage> {
                             child: const Text('Batalkan pesanan'),
                           ),
                         ],
+                        if (!pending &&
+                            ((_order?['sale_id'] ?? '').toString().isNotEmpty ||
+                                status == 'fulfilled' ||
+                                status == 'paid' ||
+                                status == 'packing' ||
+                                status == 'ready' ||
+                                status == 'shipped')) ...[
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _paying
+                                ? null
+                                : () async {
+                                    final messenger =
+                                        ScaffoldMessenger.of(context);
+                                    final inv = await _resolveInvoiceNo();
+                                    if (!mounted) return;
+                                    if (inv.isEmpty) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Nota belum tersedia. Coba muat ulang sebentar lagi.',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    await _openNota(inv);
+                                  },
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: const Text('Lihat nota'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(46),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _paying ? null : _waToko,
+                          icon: const Icon(Icons.chat_rounded),
+                          label: const Text('Hubungi toko (WA)'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                            backgroundColor: OptikMemberTokens.blueDeep,
+                          ),
+                        ),
                       ],
                     ),
     );

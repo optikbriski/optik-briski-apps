@@ -5,12 +5,15 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/logistics/stock_realtime.dart';
 import '../../../shared/member/member_cart.dart';
+import '../../../shared/member/member_catalog_kategori.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
 import 'member_cart_page.dart';
+import 'member_cart_snackbar.dart';
 import 'member_option_picker.dart';
+import 'member_product_detail_sheet.dart';
 
 enum _CatalogSort { namaAsc, hargaAsc, hargaDesc }
 
@@ -21,6 +24,7 @@ class MemberCatalogPage extends StatefulWidget {
     this.browseOnly = true,
     this.embeddedInShop = false,
     this.initialKategori,
+    this.initialShowSearch = false,
     this.onOpenCart,
   });
 
@@ -31,6 +35,9 @@ class MemberCatalogPage extends StatefulWidget {
   final bool embeddedInShop;
 
   final String? initialKategori;
+
+  /// true = buka dengan field cari terlihat + fokus (dari search bar shop home).
+  final bool initialShowSearch;
 
   /// Dipanggil saat user ingin buka keranjang (tab shell), bukan push route.
   final VoidCallback? onOpenCart;
@@ -55,8 +62,10 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   List<Map<String, dynamic>> _all = const [];
   StockRealtimeSubscription? _stockRt;
   Timer? _stockRtDebounce;
+  /// Drop stale `_load` responses when kategori/toko reloads overlap.
+  int _loadGen = 0;
 
-  static const _mainCats = ['Semua', 'Frame', 'Lensa', 'Lainnya'];
+  static const _mainCats = ['Semua', ...kMemberCatalogCats];
 
   int get _activeFilterCount {
     var n = 0;
@@ -69,18 +78,43 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   bool get _hasActiveFilter => _activeFilterCount > 0;
 
   void _clearFilters() {
+    final hadServerScope = memberCatalogServerKategoriParam(_kategori) != null;
     _kategori = null;
     _subKategori = null;
     _harga = null;
+    if (hadServerScope) {
+      // Drop scoped rows so a true empty Semua response is accepted, and
+      // avoid flashing the old Frame/Lensa-only list under "Semua".
+      _all = const [];
+      _error = null;
+      _loading = true;
+      unawaited(_load());
+    }
+  }
+
+  /// Apply kategori chip (canonical Frame/Lensa/Lainnya or null=Semua).
+  void _setKategoriFilter(String? next) {
+    final canon = canonicalizeMemberCatalogKategori(next);
+    final prevServer = memberCatalogServerKategoriParam(_kategori);
+    final nextServer = memberCatalogServerKategoriParam(canon);
+    _kategori = canon;
+    _subKategori = null;
+    _harga = null;
+    if (prevServer != nextServer) {
+      // Clear before reload: (1) show spinner instead of stale/empty flash,
+      // (2) allow a genuine empty server bucket to replace warm cache.
+      _all = const [];
+      _error = null;
+      _loading = true;
+      unawaited(_load());
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    final initKat = (widget.initialKategori ?? '').trim();
-    if (initKat.isNotEmpty && initKat.toLowerCase() != 'semua') {
-      _kategori = initKat;
-    }
+    _kategori = canonicalizeMemberCatalogKategori(widget.initialKategori);
+    _showSearch = widget.initialShowSearch;
     if (!widget.browseOnly) {
       MemberCart.instance.ensureLoaded().then((_) {
         if (mounted) setState(() {});
@@ -90,6 +124,11 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
     }
     _load();
     _startStockRealtime();
+    if (_showSearch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
   }
 
   void _onCart() {
@@ -158,6 +197,7 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   }
 
   Future<void> _load({bool silent = false}) async {
+    final gen = ++_loadGen;
     if (!silent) {
       setState(() {
         _loading = true;
@@ -167,31 +207,41 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
     try {
       final list = await _repo.listCatalog(
         limit: 300,
+        kategori: memberCatalogServerKategoriParam(_kategori),
         tokoId: widget.browseOnly ? null : _stockTokoId,
       );
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
+      // listCatalog swallows RPC/network errors as []. Never wipe a warm
+      // cache with an empty payload (preferred-toko / realtime silent refresh,
+      // pull-to-refresh blip). Callers that must accept a true empty result
+      // clear `_all` first (server-scope kategori change).
+      if (list.isEmpty && _all.isNotEmpty) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _all = list;
         _loading = false;
-        if (list.isEmpty) _error = 'empty';
+        // "empty" = katalog pusat benar-benar kosong (tanpa filter kategori
+        // server). Filter Frame/Lensa/Lainnya kosong → pesan filter, bukan RPC.
+        final serverScoped =
+            memberCatalogServerKategoriParam(_kategori) != null;
+        _error = list.isEmpty && !serverScoped ? 'empty' : null;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _loading = false;
-        _error = '$e';
+        // Keep prior catalog on silent refresh failure.
+        if (!silent || _all.isEmpty) {
+          _error = '$e';
+        }
       });
     }
   }
 
-  bool _matchKategori(Map<String, dynamic> p) {
-    final k = (p['kategori'] ?? '').toString().trim().toLowerCase();
-    if (_kategori == null) return true;
-    if (_kategori == 'Lainnya') {
-      return k != 'frame' && k != 'lensa' && k.isNotEmpty;
-    }
-    return k == _kategori!.toLowerCase();
-  }
+  bool _matchKategori(Map<String, dynamic> p) =>
+      memberCatalogMatchesKategori(p['kategori'], _kategori);
 
   int _priceOf(Map<String, dynamic> p) =>
       int.tryParse('${p['harga'] ?? 0}') ?? 0;
@@ -333,13 +383,20 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
 
   int _countForCat(String cat) {
     if (cat == 'Semua') return _all.length;
-    return _all.where((p) {
-      final k = (p['kategori'] ?? '').toString().trim().toLowerCase();
-      if (cat == 'Lainnya') {
-        return k != 'frame' && k != 'lensa' && k.isNotEmpty;
-      }
-      return k == cat.toLowerCase();
-    }).length;
+    return _all
+        .where((p) => memberCatalogMatchesKategori(p['kategori'], cat))
+        .length;
+  }
+
+  /// Chip label: hide misleading 0-counts for buckets not in the current
+  /// server-scoped `_all` payload.
+  String _kategoriChipLabel(String c) {
+    final scoped = memberCatalogServerKategoriParam(_kategori) != null;
+    if (c == 'Semua') {
+      return scoped ? 'Semua' : 'Semua · ${_countForCat(c)}';
+    }
+    if (scoped && _kategori != c) return c;
+    return '$c · ${_countForCat(c)}';
   }
 
   String _money(dynamic v) {
@@ -479,16 +536,14 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
                             children: [
                               for (final c in _mainCats)
                                 _premiumChip(
-                                  label: c == 'Semua'
-                                      ? 'Semua · ${_countForCat(c)}'
-                                      : '$c · ${_countForCat(c)}',
+                                  label: _kategoriChipLabel(c),
                                   selected:
                                       (c == 'Semua' && _kategori == null) ||
                                           _kategori == c,
                                   onTap: () => apply(() {
-                                    _kategori = c == 'Semua' ? null : c;
-                                    _subKategori = null;
-                                    _harga = null;
+                                    _setKategoriFilter(
+                                      c == 'Semua' ? null : c,
+                                    );
                                   }),
                                 ),
                             ],
@@ -576,6 +631,7 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
   }
 
   void _openCart(BuildContext context) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     if (widget.onOpenCart != null) {
       widget.onOpenCart!();
       return;
@@ -621,11 +677,20 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
           IconButton(
             tooltip: 'Cari',
             onPressed: () {
-              setState(() => _showSearch = !_showSearch);
+              setState(() {
+                _showSearch = !_showSearch;
+                // Closing the field must also clear the query — otherwise the
+                // hidden TextField keeps filtering the grid with no way out.
+                if (!_showSearch && _search.text.isNotEmpty) {
+                  _search.clear();
+                }
+              });
               if (_showSearch) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) _searchFocus.requestFocus();
                 });
+              } else {
+                _searchFocus.unfocus();
               }
             },
             icon: Icon(
@@ -794,14 +859,28 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
       ];
     }
     if (items.isEmpty) {
+      final kat = _kategori;
+      final emptyMsg = kat == 'Lensa'
+          ? 'Belum ada produk Lensa di katalog, atau tidak cocok dengan pencarian/filter.'
+          : kat == 'Frame'
+              ? 'Belum ada produk Frame di katalog, atau tidak cocok dengan pencarian/filter.'
+              : kat == 'Lainnya'
+                  ? 'Belum ada produk Lainnya di katalog, atau tidak cocok dengan pencarian/filter.'
+                  : 'Tidak ada produk untuk filter ini.';
       return [
-        const SliverFillRemaining(
+        SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
-            child: Text(
-              'Tidak ada produk untuk filter ini.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: OptikMemberTokens.inkMuted),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                emptyMsg,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: OptikMemberTokens.inkMuted,
+                  height: 1.4,
+                ),
+              ),
             ),
           ),
         ),
@@ -930,7 +1009,7 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (!browseOnly && _outOfStock)
+                if (!browseOnly && !blocked && _outOfStock)
                   Positioned(
                     left: 8,
                     bottom: 8,
@@ -965,7 +1044,7 @@ class _ProductCard extends StatelessWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
-                                  'Lensa custom tidak dijual online.',
+                                  kMemberOnlineBlockedLensaMessage,
                                 ),
                               ),
                             );
@@ -1071,259 +1150,21 @@ class _ProductCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _outOfStock ? 'Ditambah (pre-order)' : 'Ditambah ke keranjang',
-        ),
-        action: SnackBarAction(
-          label: 'Lihat',
-          onPressed: () {
-            if (onOpenCart != null) {
-              onOpenCart!();
-            } else {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MemberCartPage()),
-              );
-            }
-          },
-        ),
-      ),
+    showMemberAddedToCartSnackBar(
+      context,
+      preOrder: _outOfStock,
+      onOpenCart: onOpenCart,
     );
   }
 
   void _showDetail(BuildContext context) {
-    final nama = (product['nama'] ?? '-').toString();
-    final kat = (product['kategori'] ?? '-').toString();
-    final sub = (product['sub_kategori'] ?? '').toString();
-    final warna = (product['warna'] ?? '-').toString();
-    final sku = (product['sku'] ?? '-').toString();
-    final barcode = (product['barcode'] ?? '-').toString();
-    final lensa = (product['jenis_lensa'] ?? '').toString();
-    final img = (product['image_url'] ?? '').toString().trim();
-    final asli = _hargaAsli;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: OptikMemberTokens.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            20 + MediaQuery.paddingOf(ctx).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: OptikMemberTokens.lineSoft,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (img.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: AspectRatio(
-                    aspectRatio: 4 / 5,
-                    child: Image.network(img, fit: BoxFit.cover),
-                  ),
-                )
-              else
-                Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F3F3),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.visibility_outlined,
-                      size: 48, color: OptikMemberTokens.inkMuted),
-                ),
-              const SizedBox(height: 14),
-              Text(
-                nama,
-                style: const TextStyle(
-                  color: OptikMemberTokens.ink,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                children: [
-                  if (asli != null)
-                    Text(
-                      money(asli),
-                      style: const TextStyle(
-                        color: OptikMemberTokens.inkMuted,
-                        fontSize: 14,
-                        decoration: TextDecoration.lineThrough,
-                      ),
-                    ),
-                  Text(
-                    money(_harga),
-                    style: TextStyle(
-                      color: asli != null
-                          ? const Color(0xFFC45C4A)
-                          : OptikMemberTokens.ink,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _kv('Kategori', sub.isEmpty ? kat : '$kat · $sub'),
-              _kv('Warna', warna),
-              if (lensa.isNotEmpty) _kv('Jenis lensa', lensa),
-              _kv('SKU', sku),
-              _kv('Barcode', barcode),
-              const SizedBox(height: 8),
-              if (_availableQty != null)
-                _kv(
-                  'Stok',
-                  _outOfStock
-                      ? 'Habis — bisa pre-order'
-                      : 'Tersedia ($_availableQty)',
-                ),
-              Text(
-                browseOnly
-                    ? 'Harga referensi dari katalog pusat (master data). '
-                        'Untuk membeli, buka Belanja Online.'
-                    : 'Harga & stok dari master data pusat. '
-                        'Stok cabang dicek ulang saat checkout. '
-                        'Lensa custom tidak dijual online.',
-                style: const TextStyle(
-                  color: OptikMemberTokens.inkMuted,
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (browseOnly)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Tutup'),
-                  ),
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Tutup'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton.icon(
-                        onPressed: MemberCart.isOnlineBlocked(product)
-                            ? null
-                            : () async {
-                                if (_outOfStock) {
-                                  final yes = await _confirmPreOrder(ctx);
-                                  if (!yes || !ctx.mounted) return;
-                                }
-                                final err = await MemberCart.instance
-                                    .addProduct(product);
-                                if (!ctx.mounted) return;
-                                if (err != null) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    SnackBar(content: Text(err)),
-                                  );
-                                  return;
-                                }
-                                Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      _outOfStock
-                                          ? 'Ditambah (pre-order)'
-                                          : 'Ditambah ke keranjang',
-                                    ),
-                                    action: SnackBarAction(
-                                      label: 'Lihat',
-                                      onPressed: () {
-                                        if (onOpenCart != null) {
-                                          onOpenCart!();
-                                        } else {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const MemberCartPage(),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
-                        icon: const Icon(Icons.shopping_bag_outlined),
-                        label: Text(
-                          MemberCart.isOnlineBlocked(product)
-                              ? 'Tidak bisa online'
-                              : _outOfStock
-                                  ? 'Pre-order'
-                                  : 'Ke keranjang',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 96,
-            child: Text(
-              k,
-              style: const TextStyle(
-                color: OptikMemberTokens.inkMuted,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              v,
-              style: const TextStyle(
-                color: OptikMemberTokens.ink,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
+    // Shared scrollable sheet (same as Rekomendasi / OBRA) — avoids
+    // AspectRatio 4:5 + non-scroll Column overflow on tall product images.
+    showMemberProductDetailSheet(
+      context,
+      product: product,
+      browseOnly: browseOnly,
+      onOpenCart: onOpenCart,
     );
   }
 }

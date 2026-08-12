@@ -199,7 +199,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           : 'absensi_hp_lokasi_ok_ke_admin'.tr();
       if (!mounted) return;
       setState(() => _lastUnlockMsg = msg);
-      _snack(msg, Colors.green);
+      _snack(msg, OptikKaryawanTokens.seasideMid);
       // Pantau Admin menyelesaikan masuk (face) atau pulang (auto).
       _armShiftWatchAfterUnlock();
     } catch (e) {
@@ -307,7 +307,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
         _snack(geo.message, Colors.redAccent);
         return;
       }
-      _snack(geo.message, Colors.green);
+      _snack(geo.message, OptikKaryawanTokens.seasideMid);
 
       String? qrTokenId;
       if (action == 'MASUK') {
@@ -340,7 +340,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           return;
         }
         qrTokenId = validated.tokenId;
-        _snack('attendance_qr_ok'.tr(), Colors.green);
+        _snack('attendance_qr_ok'.tr(), OptikKaryawanTokens.seasideMid);
       }
 
       if (!mounted) return;
@@ -364,7 +364,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           liveness: liveness,
           geo: geo,
         );
-        _snack('Wajah berhasil didaftarkan.', Colors.green);
+        _snack('Wajah berhasil didaftarkan.', OptikKaryawanTokens.seasideMid);
       } else if (action == 'MASUK') {
         final late = await _service.clockIn(
           karyawan: _karyawan!,
@@ -387,7 +387,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
         _snack(
           'Absen masuk berhasil. Shift dimulai — lokasi dipantau '
           '(termasuk di background jika izin selalu diberikan).$lateNote',
-          late.isLate ? Colors.orange : Colors.green,
+          late.isLate ? Colors.orange : OptikKaryawanTokens.seasideMid,
         );
       } else if (action == 'PULANG') {
         await _service.clockOut(
@@ -396,7 +396,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           geo: geo,
         );
         GeofenceExitMonitor.instance.stop();
-        _snack('Absen pulang berhasil. Shift ditutup.', Colors.green);
+        _snack('Absen pulang berhasil. Shift ditutup.', OptikKaryawanTokens.seasideMid);
       }
 
       await _refresh();
@@ -473,7 +473,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: OptikKaryawanTokens.ink,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
@@ -483,7 +483,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                             '${_karyawan?['jabatan'] ?? '-'} • ${_karyawan?['toko_id'] ?? '-'}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white70),
+                            style: const TextStyle(color: OptikKaryawanTokens.muted),
                           ),
                           const SizedBox(height: 12),
                           Wrap(
@@ -495,7 +495,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                                     ? 'Wajah terdaftar'
                                     : 'Wajah belum didaftarkan',
                                 _faceEnrolled
-                                    ? Colors.greenAccent
+                                    ? OptikKaryawanTokens.seasideMid
                                     : Colors.orange,
                               ),
                               _statusChip(
@@ -519,8 +519,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
                             : (AttendanceConfig.useAwsFaceLiveness
                                 ? 'absensi_syarat_aws'.tr()
                                 : 'absensi_syarat_local'.tr()),
-                        style:
-                            const TextStyle(color: Colors.white70, height: 1.5),
+                        style: const TextStyle(
+                            color: OptikKaryawanTokens.muted, height: 1.5),
                       ),
                     ),
                     if (_lastUnlockMsg != null) ...[
@@ -529,7 +529,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                         child: Text(
                           _lastUnlockMsg!,
                           style: const TextStyle(
-                            color: Colors.greenAccent,
+                            color: OptikKaryawanTokens.seasideMid,
                             height: 1.45,
                           ),
                         ),
@@ -558,7 +558,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                           child: Text(
                             'absensi_hp_monitor_active_note'.tr(),
                             style: const TextStyle(
-                              color: Colors.white60,
+                              color: OptikKaryawanTokens.muted,
                               height: 1.45,
                               fontSize: 12.5,
                             ),
@@ -575,7 +575,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       if (_faceEnrolled && _openShift == null) ...[
                         _actionButton(
                           label: 'Absen masuk',
-                          color: Colors.green,
+                          color: OptikKaryawanTokens.seasideMid,
                           onTap:
                               _busy ? null : () => _runFlow(action: 'MASUK'),
                         ),
@@ -585,7 +585,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                           child: Text(
                             'absensi_hp_monitor_active_note'.tr(),
                             style: const TextStyle(
-                              color: Colors.white60,
+                              color: OptikKaryawanTokens.muted,
                               height: 1.45,
                               fontSize: 12.5,
                             ),
@@ -614,7 +614,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                           : () => _runFlow(action: 'ENROLL'),
                       child: const Text(
                         'Daftar ulang wajah',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: OptikKaryawanTokens.muted),
                       ),
                     ),
                   ],
@@ -654,10 +654,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     required Color color,
     required VoidCallback? onTap,
   }) {
-    final onGold = color == OptikKaryawanTokens.gold ||
-        color == OptikKaryawanTokens.goldSoft ||
-        color == OptikKaryawanTokens.goldLite;
-    final fg = onGold ? OptikKaryawanTokens.navyDeep : Colors.white;
+    final fg = OptikKaryawanTokens.ink;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(

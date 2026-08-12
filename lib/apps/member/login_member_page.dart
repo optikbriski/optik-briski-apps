@@ -56,7 +56,8 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
         await MemberStatusWatch.instance.start();
       } catch (_) {}
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
+      // Clear stack — jangan tumpuk MemberShell di atas guest shell dari Beranda.
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -71,7 +72,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   }
 
   void _guest() {
-    Navigator.of(context).pushReplacementNamed('/home');
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
   InputDecoration _fieldDec({
@@ -206,7 +207,8 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                                 const SizedBox(height: 12),
                                 FilledButton(
                                   onPressed: () => Navigator.of(context)
-                                      .pushReplacementNamed('/home'),
+                                      .pushNamedAndRemoveUntil(
+                                          '/home', (_) => false),
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size.fromHeight(48),
                                     shape: RoundedRectangleBorder(
@@ -217,8 +219,9 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                                 ),
                                 TextButton(
                                   onPressed: () async {
+                                    await MemberStatusWatch.instance
+                                        .clearLocalState();
                                     await MemberSession.instance.logout();
-                                    MemberStatusWatch.instance.stop();
                                     setState(() {});
                                   },
                                   child: const Text('Ganti akun'),

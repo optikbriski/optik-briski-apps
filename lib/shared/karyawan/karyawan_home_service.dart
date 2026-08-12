@@ -1,7 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'kpi_fire_service.dart';
+import 'streak_fire_level.dart';
 
 class KaryawanHomeSnapshot {
   KaryawanHomeSnapshot({
@@ -10,26 +14,68 @@ class KaryawanHomeSnapshot {
     required this.sopTasks,
     required this.totalPoinBulan,
     required this.streakHari,
+    required this.streakHariBulanIni,
+    required this.daysInMonth,
+    required this.fireHistory,
+    required this.kpiYearHistory,
     required this.sudahKlaimHariIni,
     required this.riwayat30Hari,
     required this.securityScore,
+    required this.kpiFire,
+    this.jadwalHariIni,
+    this.absenStatus = 'belum_masuk',
+    this.absenMasukAt,
+    this.absenPulangAt,
+    this.hasOpenShift = false,
+    this.pengajuanTerbaru = const [],
+    this.pengumuman = const [],
   });
 
   final Map<String, dynamic> karyawan;
   final List<Map<String, String>> jadwalMinggu;
   final List<Map<String, dynamic>> sopTasks;
   final int totalPoinBulan;
+
+  /// Streak beruntun lintas bulan (bonus SOP legacy).
   final int streakHari;
+
+  /// Legacy streak hari bulan (diganti [kpiFire] untuk warna api).
+  final int streakHariBulanIni;
+
+  /// Panjang bulan berjalan (28–31).
+  final int daysInMonth;
+
+  /// Riwayat api per bulan (legacy streak hari), terbaru dulu.
+  final List<StreakFireMonthRecord> fireHistory;
+
+  /// Riwayat Api KPI 12 bulan dari poin (terbaru dulu).
+  final List<KpiMonthHistoryRecord> kpiYearHistory;
   final bool sudahKlaimHariIni;
   final List<int> riwayat30Hari;
   final double securityScore;
+
+  /// Api KPI: 40% tetap (absen+SOP) + 60% fair share toko.
+  final KpiFireSnapshot kpiFire;
+
+  /// Kartu jadwal untuk hari ini (dari [jadwalMinggu]).
+  final Map<String, String>? jadwalHariIni;
+
+  /// `belum_masuk` | `sedang_bekerja` | `selesai` | `libur`
+  final String absenStatus;
+  final DateTime? absenMasukAt;
+  final DateTime? absenPulangAt;
+  final bool hasOpenShift;
+  final List<Map<String, dynamic>> pengajuanTerbaru;
+  final List<Map<String, dynamic>> pengumuman;
 }
 
 class KaryawanHomeService {
   KaryawanHomeService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+      : _client = client ?? Supabase.instance.client,
+        _kpiFire = KpiFireService(client: client ?? Supabase.instance.client);
 
   final SupabaseClient _client;
+  final KpiFireService _kpiFire;
 
   static final _dayFmt = DateFormat('d MMM', 'id_ID');
   static final _dateKey = DateFormat('yyyy-MM-dd');
@@ -124,21 +170,210 @@ class KaryawanHomeService {
         p['tanggal']?.toString() == today &&
         (p['ref_id']?.toString().startsWith('daily-') ?? false));
 
-    final streak = await _computeStreak(karyawanId);
+    final masukDays = await _loadMasukDays(karyawanId, monthsBack: 12);
+    final now = DateTime.now();
+    final streak = _streakFromDays(masukDays, now);
+    final streakBulan = _streakInCalendarMonth(masukDays, now);
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final fireHistory = _buildFireHistory(masukDays, now, months: 12);
     final riwayat = await _riwayat30Hari(karyawanId);
     final security = _securityScore(karyawan);
+
+    final jadwalHariIni = jadwalMinggu.cast<Map<String, String>?>().firstWhere(
+          (j) => j?['date_key'] == today,
+          orElse: () => null,
+        );
+
+    final tokoId = (karyawan['toko_id'] ?? '').toString();
+    final homeExtras = await _loadHomeExtras(
+      karyawanId: karyawanId,
+      tokoId: tokoId,
+      jadwalHariIni: jadwalHariIni,
+    );
+
+    final totalPoinClamped = totalPoin.clamp(-100000, 100000);
+    KpiFireSnapshot kpiFire;
+    try {
+      kpiFire = await _kpiFire.computeMonth(
+        karyawanId: karyawanId,
+        tokoId: tokoId,
+        jabatan: jabatan,
+        totalPoinBulan: totalPoinClamped,
+        now: now,
+      );
+    } catch (e) {
+      debugPrint('kpi fire: $e');
+      kpiFire = KpiFireSnapshot.empty().syncedWithPoints(totalPoinClamped);
+    }
+
+    List<KpiMonthHistoryRecord> kpiYearHistory;
+    try {
+      kpiYearHistory = await _kpiFire.loadYearHistory(
+        karyawanId: karyawanId,
+        now: now,
+      );
+      // Bulan ini: pakai total/target yang sama dengan snapshot hidup.
+      if (kpiYearHistory.isNotEmpty) {
+        final cur = kpiYearHistory.first;
+        kpiYearHistory = [
+          KpiMonthHistoryRecord(
+            year: cur.year,
+            month: cur.month,
+            totalPoin: totalPoinClamped,
+            pointTarget: kpiFire.pointTarget,
+            workDays: cur.workDays,
+            progress: kpiFire.progress,
+            fire: kpiFire.fire,
+          ),
+          ...kpiYearHistory.skip(1),
+        ];
+      }
+    } catch (e) {
+      debugPrint('kpi year history: $e');
+      kpiYearHistory = const [];
+    }
 
     return KaryawanHomeSnapshot(
       karyawan: karyawan,
       jadwalMinggu: jadwalMinggu,
       sopTasks: sopTasks,
       // Biarkan negatif (penalti curang) tampil di APK.
-      totalPoinBulan: totalPoin.clamp(-100000, 100000),
+      totalPoinBulan: totalPoinClamped,
       streakHari: streak,
+      streakHariBulanIni: streakBulan,
+      daysInMonth: daysInMonth,
+      fireHistory: fireHistory,
+      kpiYearHistory: kpiYearHistory,
       sudahKlaimHariIni: sudahKlaim,
       riwayat30Hari: riwayat,
       securityScore: security,
+      kpiFire: kpiFire,
+      jadwalHariIni: jadwalHariIni,
+      absenStatus: homeExtras.absenStatus,
+      absenMasukAt: homeExtras.absenMasukAt,
+      absenPulangAt: homeExtras.absenPulangAt,
+      hasOpenShift: homeExtras.hasOpenShift,
+      pengajuanTerbaru: homeExtras.pengajuan,
+      pengumuman: homeExtras.pengumuman,
     );
+  }
+
+  Future<
+      ({
+        String absenStatus,
+        DateTime? absenMasukAt,
+        DateTime? absenPulangAt,
+        bool hasOpenShift,
+        List<Map<String, dynamic>> pengajuan,
+        List<Map<String, dynamic>> pengumuman,
+      })> _loadHomeExtras({
+    required String karyawanId,
+    required String tokoId,
+    required Map<String, String>? jadwalHariIni,
+  }) async {
+    DateTime? masukAt;
+    DateTime? pulangAt;
+    var hasOpen = false;
+    var status = 'belum_masuk';
+    var pengajuan = <Map<String, dynamic>>[];
+    var pengumuman = <Map<String, dynamic>>[];
+
+    try {
+      final open = await _client
+          .from('attendance_shifts')
+          .select('id, status, masuk_at, pulang_at')
+          .eq('karyawan_id', karyawanId)
+          .eq('status', 'OPEN')
+          .order('masuk_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      hasOpen = open != null;
+      if (open != null) {
+        masukAt = DateTime.tryParse((open['masuk_at'] ?? '').toString());
+      }
+    } catch (e) {
+      debugPrint('home open shift: $e');
+    }
+
+    try {
+      final start = _jakartaDayStartUtc();
+      final end = start.add(const Duration(days: 1));
+      final logs = await _client
+          .from('attendance_logs')
+          .select('tipe, created_at')
+          .eq('karyawan_id', karyawanId)
+          .gte('created_at', start.toIso8601String())
+          .lt('created_at', end.toIso8601String())
+          .order('created_at');
+      for (final raw in logs) {
+        final row = Map<String, dynamic>.from(raw as Map);
+        final tipe = (row['tipe'] ?? '').toString().toUpperCase();
+        final at = DateTime.tryParse((row['created_at'] ?? '').toString());
+        if (tipe == 'MASUK' && at != null) masukAt ??= at;
+        if (tipe == 'PULANG' && at != null) pulangAt = at;
+      }
+    } catch (e) {
+      debugPrint('home attendance logs: $e');
+    }
+
+    final shiftText = (jadwalHariIni?['shift'] ?? '').toLowerCase();
+    final isLibur = shiftText.contains('libur');
+    if (isLibur && masukAt == null && !hasOpen) {
+      status = 'libur';
+    } else if (pulangAt != null && !hasOpen) {
+      status = 'selesai';
+    } else if (hasOpen || masukAt != null) {
+      status = 'sedang_bekerja';
+    } else {
+      status = 'belum_masuk';
+    }
+
+    try {
+      final rows = await _client
+          .from('jadwal_pengajuan')
+          .select('id, tipe, tanggal, status, alasan, created_at')
+          .eq('karyawan_id', karyawanId)
+          .order('created_at', ascending: false)
+          .limit(5);
+      pengajuan = List<Map<String, dynamic>>.from(rows);
+    } catch (e) {
+      debugPrint('home pengajuan: $e');
+    }
+
+    try {
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      final tokoFilter = tokoId.isEmpty
+          ? 'toko_id.is.null,toko_id.eq.PUSAT'
+          : 'toko_id.is.null,toko_id.eq.PUSAT,toko_id.eq.$tokoId';
+      final rows = await _client
+          .from('pengumuman_cabang')
+          .select('id, judul, isi, created_at, toko_id')
+          .eq('aktif', true)
+          .or('tampil_sampai.is.null,tampil_sampai.gte.$nowIso')
+          .or(tokoFilter)
+          .order('created_at', ascending: false)
+          .limit(3);
+      pengumuman = List<Map<String, dynamic>>.from(rows);
+    } catch (e) {
+      // Tabel belum dimigrasi → diam, kartu disembunyikan.
+      debugPrint('home pengumuman: $e');
+    }
+
+    return (
+      absenStatus: status,
+      absenMasukAt: masukAt,
+      absenPulangAt: pulangAt,
+      hasOpenShift: hasOpen,
+      pengajuan: pengajuan,
+      pengumuman: pengumuman,
+    );
+  }
+
+  DateTime _jakartaDayStartUtc([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    return DateTime.utc(jkt.year, jkt.month, jkt.day)
+        .subtract(const Duration(hours: 7));
   }
 
   /// Backfill `poin_logs` dari verifikasi aman/curang + penalti telat di logs.
@@ -361,7 +596,33 @@ class KaryawanHomeService {
     return total;
   }
 
+  /// Serialize reminder upserts so concurrent home refreshes don't twin-insert.
+  static Future<void>? _ensureRemindersInFlight;
+
   Future<void> ensureTodayReminders({
+    required String karyawanId,
+    required List<Map<String, String>> jadwalMinggu,
+    required List<Map<String, dynamic>> sopTasks,
+  }) {
+    final prev = _ensureRemindersInFlight;
+    late final Future<void> run;
+    run = () async {
+      if (prev != null) {
+        try {
+          await prev;
+        } catch (_) {}
+      }
+      await _ensureTodayRemindersBody(
+        karyawanId: karyawanId,
+        jadwalMinggu: jadwalMinggu,
+        sopTasks: sopTasks,
+      );
+    }();
+    _ensureRemindersInFlight = run;
+    return run;
+  }
+
+  Future<void> _ensureTodayRemindersBody({
     required String karyawanId,
     required List<Map<String, String>> jadwalMinggu,
     required List<Map<String, dynamic>> sopTasks,
@@ -380,18 +641,38 @@ class KaryawanHomeService {
 
     final existing = await _client
         .from('notifikasi')
-        .select('id, tipe, judul')
+        .select('id, tipe, judul, created_at')
         .eq('user_id', uid)
         .gte(
             'created_at',
             DateTime.now()
                 .toUtc()
                 .subtract(const Duration(hours: 20))
-                .toIso8601String());
+                .toIso8601String())
+        .order('created_at', ascending: false);
 
-    final titles = {
-      for (final n in existing) '${n['tipe']}|${n['judul']}',
+    const dailyKeys = {
+      'SOP|SOP belum selesai',
+      'SHIFT|Jadwal hari ini',
     };
+    final titles = <String>{};
+    final dupIds = <String>[];
+    for (final n in existing) {
+      final key = '${n['tipe']}|${n['judul']}';
+      if (!titles.add(key) && dailyKeys.contains(key)) {
+        final id = n['id']?.toString();
+        if (id != null && id.isNotEmpty) dupIds.add(id);
+      }
+    }
+
+    // Clean twin daily reminders left by earlier race inserts.
+    if (dupIds.isNotEmpty) {
+      try {
+        await _client.from('notifikasi').delete().inFilter('id', dupIds);
+      } catch (e) {
+        debugPrint('ensureTodayReminders dedupe: $e');
+      }
+    }
 
     final unfinished = sopTasks.where((t) => t['selesai'] != true).length;
     if (unfinished > 0) {
@@ -403,6 +684,7 @@ class KaryawanHomeService {
           'isi': 'Masih ada $unfinished tugas SOP hari ini.',
           'tipe': 'SOP',
         });
+        titles.add(key);
       }
     }
 
@@ -416,6 +698,7 @@ class KaryawanHomeService {
           'isi': 'Shift: $shift',
           'tipe': 'SHIFT',
         });
+        titles.add(key);
       }
     }
   }
@@ -527,14 +810,21 @@ class KaryawanHomeService {
     }
   }
 
-  Future<int> _computeStreak(String karyawanId) async {
+  /// Set tanggal `yyyy-MM-dd` yang punya absen MASUK (lokal).
+  Future<Set<String>> _loadMasukDays(
+    String karyawanId, {
+    int monthsBack = 12,
+  }) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month - monthsBack, 1);
     final rows = await _client
         .from('attendance_logs')
         .select('created_at')
         .eq('karyawan_id', karyawanId)
         .eq('tipe', 'MASUK')
+        .gte('created_at', from.toUtc().toIso8601String())
         .order('created_at', ascending: false)
-        .limit(60);
+        .limit(400);
 
     final days = <String>{};
     for (final r in rows) {
@@ -543,9 +833,12 @@ class KaryawanHomeService {
         days.add(_dateKey.format(dt.toLocal()));
       }
     }
+    return days;
+  }
 
+  int _streakFromDays(Set<String> days, DateTime now) {
     var streak = 0;
-    var cursor = DateTime.now();
+    var cursor = DateTime(now.year, now.month, now.day);
     // Jika hari ini belum absen, mulai dari kemarin
     if (!days.contains(_dateKey.format(cursor))) {
       cursor = cursor.subtract(const Duration(days: 1));
@@ -555,6 +848,72 @@ class KaryawanHomeService {
       cursor = cursor.subtract(const Duration(days: 1));
     }
     return streak;
+  }
+
+  /// Streak beruntun yang masih berada di bulan kalender [now].
+  /// Bulan baru → hitungan api mulai dari 0 lagi.
+  int _streakInCalendarMonth(Set<String> days, DateTime now) {
+    final monthStart = DateTime(now.year, now.month, 1);
+    var streak = 0;
+    var cursor = DateTime(now.year, now.month, now.day);
+    if (!days.contains(_dateKey.format(cursor))) {
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    while (
+        !cursor.isBefore(monthStart) && days.contains(_dateKey.format(cursor))) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
+  /// Peak streak beruntun di dalam bulan [year]/[month].
+  int _peakStreakInMonth(Set<String> days, int year, int month) {
+    final dim = DateTime(year, month + 1, 0).day;
+    var peak = 0;
+    var run = 0;
+    for (var d = 1; d <= dim; d++) {
+      final key = _dateKey.format(DateTime(year, month, d));
+      if (days.contains(key)) {
+        run++;
+        if (run > peak) peak = run;
+      } else {
+        run = 0;
+      }
+    }
+    return peak;
+  }
+
+  List<StreakFireMonthRecord> _buildFireHistory(
+    Set<String> days,
+    DateTime now, {
+    int months = 12,
+  }) {
+    final out = <StreakFireMonthRecord>[];
+    for (var i = 0; i < months; i++) {
+      final cursor = DateTime(now.year, now.month - i, 1);
+      final y = cursor.year;
+      final m = cursor.month;
+      final dim = DateTime(y, m + 1, 0).day;
+      final achieved = i == 0
+          ? _streakInCalendarMonth(days, now)
+          : _peakStreakInMonth(days, y, m);
+      // Lewati bulan lama yang benar-benar kosong (kecuali bulan ini).
+      if (i > 0 && achieved <= 0) continue;
+      out.add(
+        StreakFireMonthRecord(
+          year: y,
+          month: m,
+          daysInMonth: dim,
+          daysAchieved: achieved,
+          fire: StreakFireLevel.forMonth(
+            daysInMonthProgress: achieved,
+            daysInMonth: dim,
+          ),
+        ),
+      );
+    }
+    return out;
   }
 
   Future<List<int>> _riwayat30Hari(String karyawanId) async {

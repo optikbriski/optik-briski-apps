@@ -931,7 +931,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
   Widget build(BuildContext context) {
     final k = widget.kartu;
     final menunggu = k['status']?.toString() == 'menunggu_ambil';
-    final bisa = widget.service.kartuBisaDiklaim(k) && !widget.isPusat;
+    final bisa = GaransiService.kartuBisaDiklaim(k) && !widget.isPusat;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final jenis = k['jenis_garansi']?.toString() ?? '';
 

@@ -112,11 +112,15 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
       sourcePath: pickedFile.path,
       aspectRatio: const CropAspectRatio(ratioX: 3, ratioY: 4),
       uiSettings: [
-        WebUiSettings(context: context),
+        WebUiSettings(
+          context: context,
+          presentStyle: WebPresentStyle.dialog,
+          barrierColor: Colors.black54,
+        ),
         AndroidUiSettings(
           toolbarTitle: 'Paskan Wajah di Tengah (3x4)',
-          toolbarColor: OptikKaryawanTokens.navyDeep,
-          toolbarWidgetColor: Colors.white,
+          toolbarColor: OptikKaryawanTokens.seasideMid,
+          toolbarWidgetColor: OptikKaryawanTokens.ink,
           initAspectRatio: CropAspectRatioPreset.ratio3x2,
           lockAspectRatio: true,
           hideBottomControls: true,
@@ -158,7 +162,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("profil_sukses_foto".tr()),
-            backgroundColor: Colors.green,
+            backgroundColor: OptikKaryawanTokens.seasideMid,
           ),
         );
       }
@@ -356,11 +360,12 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
               height: 50,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: OptikKaryawanTokens.navyDeep,
+                  backgroundColor: OptikKaryawanTokens.seasideMid,
+                  foregroundColor: OptikKaryawanTokens.ink,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15)),
-                  elevation: 5,
-                  shadowColor: Colors.black26,
+                  elevation: 2,
+                  shadowColor: OptikKaryawanTokens.seasideMid.withOpacity(0.35),
                 ),
                 onPressed: () async {
                   final messenger = ScaffoldMessenger.of(context);
@@ -379,11 +384,11 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                   }
                 },
                 icon: const Icon(Icons.edit_document,
-                    color: Colors.white, size: 20),
+                    color: OptikKaryawanTokens.ink, size: 20),
                 label: Text(
                   'profil_btn_ubah_data'.tr(),
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikKaryawanTokens.ink,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
                   ),
@@ -405,7 +410,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white),
+              color: OptikKaryawanTokens.ink),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -434,7 +439,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                 'profil_pin_title'.tr(),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikKaryawanTokens.ink,
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
                 ),
@@ -444,7 +449,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                 'profil_pin_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.65),
+                  color: OptikKaryawanTokens.muted.withOpacity(0.95),
                   fontSize: 13.5,
                   height: 1.4,
                 ),
@@ -457,7 +462,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                 maxLength: 6,
                 autofocus: true,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: OptikKaryawanTokens.ink,
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 8,
@@ -467,12 +472,13 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                 decoration: InputDecoration(
                   counterText: '',
                   hintText: '••••••',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+                  hintStyle: TextStyle(
+                      color: OptikKaryawanTokens.muted.withOpacity(0.45)),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
+                  fillColor: OptikKaryawanTokens.surface,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
+                    borderSide: const BorderSide(color: OptikKaryawanTokens.border),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -526,7 +532,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
                 'profil_pin_hint'.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.4),
+                  color: OptikKaryawanTokens.muted.withOpacity(0.85),
                   fontSize: 11.5,
                   height: 1.35,
                 ),
@@ -603,7 +609,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
               ),
               if (_isUploading)
                 const Positioned.fill(
-                  child: CircularProgressIndicator(color: Colors.white),
+                  child: CircularProgressIndicator(color: OptikKaryawanTokens.ink),
                 ),
             ],
           ),
@@ -611,7 +617,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
           Text(
             nama,
             style: const TextStyle(
-                color: Colors.white,
+                color: OptikKaryawanTokens.ink,
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.5),
@@ -620,13 +626,14 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: OptikKaryawanTokens.gold.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.65),
               borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: OptikKaryawanTokens.border),
             ),
             child: Text(
               jabatan.toUpperCase(),
               style: const TextStyle(
-                  color: OptikKaryawanTokens.gold,
+                  color: OptikKaryawanTokens.seasideMid,
                   fontSize: 12,
                   fontWeight: FontWeight.w600),
             ),
@@ -635,18 +642,18 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
           Text(
             'profil_lanyard_subtitle'.tr(),
             style: const TextStyle(
-                color: Colors.white54, fontSize: 11, letterSpacing: 2),
+                color: OptikKaryawanTokens.muted, fontSize: 11, letterSpacing: 2),
           ),
           const SizedBox(height: 15),
           TextButton.icon(
             onPressed: _isUploading ? null : _pilihDanUploadFoto,
-            icon: const Icon(Icons.camera_alt, color: Colors.white70, size: 16),
+            icon: const Icon(Icons.camera_alt, color: OptikKaryawanTokens.ink, size: 16),
             label: Text(
               'profil_btn_ubah_foto'.tr(),
-              style: const TextStyle(color: Colors.white70),
+              style: const TextStyle(color: OptikKaryawanTokens.ink),
             ),
             style: TextButton.styleFrom(
-              backgroundColor: Colors.white.withOpacity(0.1),
+              backgroundColor: Colors.white.withOpacity(0.65),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),

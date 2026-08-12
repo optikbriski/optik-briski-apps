@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../apps/karyawan/absensi_page.dart';
 import '../../apps/member/pages/member_invoice_hub_page.dart';
+import '../../apps/member/pages/member_product_detail_sheet.dart';
 import '../invoice/invoice_qr_opener.dart';
+import '../member/member_session.dart';
 import '../scanner_penerimaan_page.dart';
 import 'qr_route.dart';
 import 'universal_qr_scan_page.dart';
@@ -30,6 +32,9 @@ class UniversalQrNav {
     final result = await UniversalQrScanPage.scanRouted(
       context,
       allowedTypes: allowedTypes,
+      hintKey: callerRole == UniversalQrCallerRole.member
+          ? 'member_scan_qr_sub'
+          : 'universal_qr_scan_hint',
     );
     if (result == null || !context.mounted) return;
     final toko = (cabangKaryawan ?? profile?['toko_id'] ?? '')
@@ -61,7 +66,12 @@ class UniversalQrNav {
   }) {
     switch (result.type) {
       case QrPayloadType.invoice:
-        return (result.invoiceNo ?? '').trim().isNotEmpty;
+        if ((result.invoiceNo ?? '').trim().isEmpty) return false;
+        // Guest Member → snack + login route, bukan push hub.
+        if (callerRole == UniversalQrCallerRole.member) {
+          return MemberSession.instance.isLoggedIn;
+        }
+        return true;
       case QrPayloadType.attendance:
         return callerRole == UniversalQrCallerRole.karyawan;
       case QrPayloadType.receiveStock:
@@ -71,6 +81,8 @@ class UniversalQrNav {
         }
         return (cabangKaryawan ?? '').trim().isNotEmpty;
       case QrPayloadType.product:
+        return callerRole == UniversalQrCallerRole.member &&
+            (result.productSku ?? '').trim().isNotEmpty;
       case QrPayloadType.customer:
       case QrPayloadType.karyawan:
       case QrPayloadType.unknown:
@@ -103,6 +115,14 @@ class UniversalQrNav {
           return;
         }
         if (callerRole == UniversalQrCallerRole.member) {
+          if (!MemberSession.instance.isLoggedIn) {
+            snack(
+              'universal_qr_login_for_invoice'.tr(),
+              color: OptikAdminTokens.navy,
+            );
+            await Navigator.of(context).pushNamed('/login');
+            return;
+          }
           await Navigator.push(
             context,
             MaterialPageRoute(
@@ -180,19 +200,32 @@ class UniversalQrNav {
         return;
 
       case QrPayloadType.product:
-        snack('Scan produk di POS / cek stok inventori.', color: OptikAdminTokens.navy);
+        if (callerRole == UniversalQrCallerRole.member) {
+          final sku = (result.productSku ?? '').trim();
+          if (sku.isEmpty) {
+            snack('universal_qr_unknown'.tr(), color: OptikAdminTokens.warning);
+            return;
+          }
+          await openMemberProductDetailBySku(context, sku: sku);
+          return;
+        }
+        snack('universal_qr_product_staff'.tr(), color: OptikAdminTokens.navy);
         return;
 
       case QrPayloadType.customer:
-        snack('Scan QR pelanggan di layar POS untuk mengisi data.',
-            color: OptikAdminTokens.navy);
+        if (callerRole == UniversalQrCallerRole.member) {
+          snack('universal_qr_customer_member'.tr(), color: OptikAdminTokens.navy);
+          return;
+        }
+        snack('universal_qr_customer_staff'.tr(), color: OptikAdminTokens.navy);
         return;
 
       case QrPayloadType.karyawan:
-        snack(
-          'QR karyawan untuk otorisasi revisi stok (Inventory).',
-          color: OptikAdminTokens.navy,
-        );
+        if (callerRole == UniversalQrCallerRole.member) {
+          snack('universal_qr_karyawan_member'.tr(), color: OptikAdminTokens.navy);
+          return;
+        }
+        snack('universal_qr_karyawan_staff'.tr(), color: OptikAdminTokens.navy);
         return;
 
       case QrPayloadType.unknown:

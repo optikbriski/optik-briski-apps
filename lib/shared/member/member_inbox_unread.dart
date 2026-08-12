@@ -57,7 +57,7 @@ class MemberInboxUnread extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Hitung ulang badge dari daftar id yang sedang ditampilkan (termasuk demo).
+  /// Hitung ulang badge dari daftar id yang sedang ditampilkan.
   void syncFromAlertIds(Iterable<String> ids) {
     var n = 0;
     for (final id in ids) {
@@ -67,5 +67,14 @@ class MemberInboxUnread extends ChangeNotifier {
       _count = n;
       notifyListeners();
     }
+  }
+
+  /// Logout / ganti akun — kosongkan baca lokal.
+  Future<void> clear() async {
+    _read = {};
+    _count = 0;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_readKey);
+    notifyListeners();
   }
 }

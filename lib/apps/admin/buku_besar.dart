@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'coa_approval_page.dart';
 import 'enterprise_gl_page.dart';
+import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/training/training_approval_simulator.dart';
@@ -698,7 +699,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               orElse: () => _coaStatusOptions.first)
           .label;
 
-  void _showAddTransactionDialog() {
+  Future<void> _showAddTransactionDialog() async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'catat keuangan manual',
+    );
+    if (!allowed || !mounted) return;
+
     TextEditingController nominalCtrl = TextEditingController();
     TextEditingController dibayarCtrl = TextEditingController();
     TextEditingController kategoriCtrl = TextEditingController();
@@ -1066,7 +1074,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             'nominal': yangDibayar,
                             'status_pembayaran': selectedStatus,
                             'metode_pembayaran': selectedMetode,
-                            'nama_kasir': widget.profile['nama'] ??
+                            'nama_kasir': widget.profile[
+                                    'login_via_karyawan_nama'] ??
+                                widget.profile['nama'] ??
                                 widget.profile['nama_kasir'] ??
                                 'Staff Optik',
                             'status_konfirmasi': statusAwalKonfirmasi,
@@ -1077,7 +1087,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             try {
                               await GlPostingService().postManualFinance(
                                 ft: Map<String, dynamic>.from(inserted),
-                                createdBy: widget.profile['nama']?.toString(),
+                                createdBy: (widget.profile[
+                                            'login_via_karyawan_nama'] ??
+                                        widget.profile['nama'])
+                                    ?.toString(),
                               );
                             } catch (_) {}
                           }
@@ -1171,6 +1184,20 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     );
     if (sel == null || sel.isClear) return;
 
+    final actionLabel = sel.value == 'approve'
+        ? 'setujui transaksi kas'
+        : 'hapus rekaman kas';
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: actionLabel,
+    );
+    if (!allowed || !mounted) return;
+
+    final actorNama = (widget.profile['login_via_karyawan_nama'] ??
+            widget.profile['nama'])
+        ?.toString();
+
     if (sel.value == 'approve') {
       setState(() => isLoading = true);
       try {
@@ -1182,7 +1209,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         try {
           await GlPostingService().postManualFinance(
             ft: approved,
-            createdBy: widget.profile['nama']?.toString(),
+            createdBy: actorNama,
           );
         } catch (_) {}
         _fetchTransaksiPerCabang(selectedTokoId ?? 'PUSAT');
@@ -1229,7 +1256,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         // Void GL terkait (DB trigger BEFORE DELETE juga menutup CLOSE/SETTLE/MANUAL).
         try {
           final gl = GlPostingService();
-          final by = widget.profile['nama']?.toString();
+          final by = actorNama;
           final ref = (item['referensi_id'] ?? '').toString();
           final refU = ref.toUpperCase();
           final kat = (item['kategori'] ?? '').toString().toUpperCase();

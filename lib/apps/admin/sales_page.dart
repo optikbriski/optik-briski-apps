@@ -1,4 +1,5 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use, prefer_const_constructors, prefer_const_literals_to_create_immutables
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -50,6 +51,7 @@ import 'garansi_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/member/member_repository.dart';
+import '../../shared/attendance/pos_duty_gate.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -209,6 +211,10 @@ class _SalesPageState extends State<SalesPage> {
   // Letakkan di bawah variabel isLoading lo
   CameraController? _silentCameraController;
   bool isScanningLocal = true;
+  /// Debounce scan NIK di gerbang unlock (kamera sering fire berulang).
+  bool _unlockScanBusy = false;
+  String? _lastUnlockNik;
+  DateTime? _lastUnlockScanAt;
   final MobileScannerController kameraLoginCtrl =
       MobileScannerController(facing: CameraFacing.front);
 
@@ -225,6 +231,8 @@ class _SalesPageState extends State<SalesPage> {
   static bool isPosUnlocked = false;
   static String namaKasir = "";
   static Map<String, dynamic>? activeCashier;
+  /// Karyawan terlibat di transaksi aktif (tanpa peran). Kasir unlock selalu ikut.
+  static List<Map<String, dynamic>> karyawanTerlibat = [];
   static List<Map<String, dynamic>> cartItems = [];
   bool isScanning = true;
 
@@ -303,6 +311,7 @@ class _SalesPageState extends State<SalesPage> {
   bool isProcessing = false;
   String noInvoice = "";
   final TextEditingController kasirCtrl = TextEditingController();
+  final TextEditingController _unlockNikManualCtrl = TextEditingController();
   bool _leavingPos = false;
 
   /// Hold stok mode bayar (POS_HOLD) — sync reserved_qty ke Master/Member/POS lain.
@@ -432,6 +441,7 @@ class _SalesPageState extends State<SalesPage> {
     voucherCtrl.dispose();
     paidCtrl.dispose();
     kasirCtrl.dispose();
+    _unlockNikManualCtrl.dispose();
     super.dispose();
   }
 
@@ -917,7 +927,13 @@ class _SalesPageState extends State<SalesPage> {
     if (mounted) {
       setState(() {
         isStoreOpen = storeOpen;
-        isPosUnlocked = true;
+        // Store-open restore must NOT unlock POS — cashier NIK scan required.
+        // (Previously always true, which skipped unlock after reload / training leak.)
+        if (!storeOpen) {
+          isPosUnlocked = false;
+          activeCashier = null;
+          namaKasir = '';
+        }
       });
     }
   }
@@ -1056,11 +1072,10 @@ class _SalesPageState extends State<SalesPage> {
 
                 setState(() {
                   isStoreOpen = false;
-                  isPosUnlocked = false;
-                  activeCashier = null;
                   modalAwal = 0;
                   storeOpenTime = null;
                 });
+                await _lockPosSession(restartScanner: false);
 
                 modalAwalCtrl.clear();
                 uangFisikCloseCtrl.clear();
@@ -1174,38 +1189,33 @@ class _SalesPageState extends State<SalesPage> {
 // 2. Silent Open Store (Triggered by Enter) - AUTO PHOTO -> AUTO OPEN SCANNER NIK
   Future<void> _startSilentOpenStore() async {
     setState(() => isLoading = true);
-    XFile? image;
 
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isNotEmpty) {
-        final frontCam = cameras.firstWhere(
-          (cam) => cam.lensDirection == CameraLensDirection.front,
-          orElse: () => cameras.first,
-        );
-
-        _silentCameraController = CameraController(
-          frontCam,
-          ResolutionPreset.medium,
-          enableAudio: false,
-        );
-
-        await _silentCameraController!.initialize();
-        if (mounted) setState(() {});
-        await Future.delayed(const Duration(milliseconds: 500));
-        image = await _silentCameraController!.takePicture();
+    // Mode latihan: no camera / physical NIK — open + unlock with TRAINING01.
+    if (TrainingMode.instance.isActive) {
+      try {
+        await _openStoreTrainingFastPath();
+      } catch (e) {
+        _showSnack("❌ Error Open Store: $e", OptikAdminTokens.danger);
+      } finally {
+        if (mounted) setState(() => isLoading = false);
       }
-    } catch (e) {
-      debugPrint("Gagal inisialisasi hardware auto-capture: $e");
-    } finally {
-      if (_silentCameraController != null) {
-        await _silentCameraController!.dispose();
-        _silentCameraController = null;
-      }
+      return;
     }
 
-    if (image == null) {
-      setState(() => isLoading = false);
+    XFile? image;
+    try {
+      image = await _captureSilentOpenStorePhoto()
+          .timeout(const Duration(seconds: 10));
+    } on TimeoutException catch (e) {
+      debugPrint("Timeout auto-capture open store: $e");
+    } catch (e) {
+      debugPrint("Gagal inisialisasi hardware auto-capture: $e");
+    }
+
+    // Web often has no usable camera — continue with placeholder photo so the
+    // unlock screen (HID / manual NIK) can still open the session.
+    if (image == null && !kIsWeb) {
+      if (mounted) setState(() => isLoading = false);
       _showSnack(
           "❌ Gagal menjepret foto otomatis. Pastikan izin kamera browser aktif!",
           OptikAdminTokens.danger);
@@ -1216,18 +1226,58 @@ class _SalesPageState extends State<SalesPage> {
       final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
 
       String photoUrl = "";
-      try {
-        final bytes = await image.readAsBytes();
-        final path =
-            "$tokoId/session_${DateTime.now().millisecondsSinceEpoch}.jpg";
-        await supabase.storage.from('session_photos').uploadBinary(path, bytes);
-        photoUrl = supabase.storage.from('session_photos').getPublicUrl(path);
-      } catch (storageError) {
-        debugPrint("Storage tertunda, gunakan fallback: $storageError");
+      if (image != null) {
+        try {
+          final bytes = await image.readAsBytes();
+          final path =
+              "$tokoId/session_${DateTime.now().millisecondsSinceEpoch}.jpg";
+          await supabase.storage.from('session_photos').uploadBinary(path, bytes);
+          photoUrl = supabase.storage.from('session_photos').getPublicUrl(path);
+        } catch (storageError) {
+          debugPrint("Storage tertunda, gunakan fallback: $storageError");
+          photoUrl = "https://placeholder.co/600x400?text=No+Photo+Absen";
+        }
+      } else {
         photoUrl = "https://placeholder.co/600x400?text=No+Photo+Absen";
       }
 
-      // 🎯 SINKRONISASI TOTAL: Langsung loncat ke scan barcode kamera depan untuk ID karyawan!
+      // Web Chrome: skip in-flow camera NIK dialog — open store then unlock UI.
+      if (kIsWeb) {
+        try {
+          await supabase.from('session_logs').insert({
+            'toko_id': tokoId,
+            'karyawan_id': 'PENDING_UNLOCK',
+            'photo_url': photoUrl,
+            'timestamp_open': DateTime.now().toIso8601String(),
+            'status': 'OPEN',
+          });
+        } catch (e) {
+          debugPrint('session_logs web open: $e');
+        }
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_store_open_$tokoId', true);
+        await prefs.setString(
+          'last_open_time_$tokoId',
+          DateTime.now().toIso8601String(),
+        );
+        storeOpenTime = DateTime.now();
+        if (mounted) {
+          setState(() {
+            isStoreOpen = true;
+            isPosUnlocked = false;
+            activeCashier = null;
+            namaKasir = '';
+            karyawanTerlibat = [];
+          });
+        }
+        _showSnack(
+          "Toko dibuka — ketik/scan NIK kasir untuk unlock.",
+          OptikAdminTokens.success,
+        );
+        return;
+      }
+
+      // 🎯 SINKRONISASI TOTAL: Loncat ke scan barcode kamera depan untuk ID karyawan!
       final String? nikKaryawan =
           await _scanBarcode(facing: CameraFacing.front);
 
@@ -1236,18 +1286,29 @@ class _SalesPageState extends State<SalesPage> {
         return;
       }
 
-      final res = await supabase
-          .from('karyawan')
-          .select()
-          .eq('nik', nikKaryawan)
-          .maybeSingle();
+      final res = await _lookupKaryawanByNik(
+        nikKaryawan,
+        requireOnDuty: true,
+      );
       if (res == null) {
-        _showSnack("❌ Karyawan tidak terdaftar!", OptikAdminTokens.danger);
+        final errKey = _lastKaryawanLookupErrorKey;
+        final any = await _lookupKaryawanByNik(
+          nikKaryawan,
+          requireAktif: false,
+          requireOnDuty: false,
+        );
+        _showSnack(
+          any == null
+              ? '❌ Karyawan tidak terdaftar!'
+              : (errKey ?? 'pos_terlibat_not_aktif').tr(),
+          OptikAdminTokens.danger,
+        );
         return;
       }
 
       await supabase.from('session_logs').insert({
         'toko_id': tokoId,
+        // Kolom historis: text NIK (bukan uuid karyawan.id).
         'karyawan_id': nikKaryawan,
         'photo_url': photoUrl,
         'timestamp_open': DateTime.now().toIso8601String(),
@@ -1264,6 +1325,8 @@ class _SalesPageState extends State<SalesPage> {
         isStoreOpen = true;
         activeCashier = res;
         namaKasir = res['nama'];
+        // Terlibat final diisi ulang saat scan unlock POS (fleksibel).
+        karyawanTerlibat = [];
       });
       _showSnack("✅ Toko Opened by: ${res['nama']}", OptikAdminTokens.success);
     } catch (e) {
@@ -1273,6 +1336,495 @@ class _SalesPageState extends State<SalesPage> {
       // 🎯 FIX: Ini status loading diturunkan biar aplikasi ga nge-hang
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  Future<XFile?> _captureSilentOpenStorePhoto() async {
+    XFile? image;
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) return null;
+
+      final frontCam = cameras.firstWhere(
+        (cam) => cam.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      _silentCameraController = CameraController(
+        frontCam,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+
+      await _silentCameraController!.initialize();
+      if (mounted) setState(() {});
+      await Future.delayed(const Duration(milliseconds: 500));
+      image = await _silentCameraController!.takePicture();
+    } finally {
+      if (_silentCameraController != null) {
+        await _silentCameraController!.dispose();
+        _silentCameraController = null;
+      }
+    }
+    return image;
+  }
+
+  /// Training Mode: open store + unlock POS without camera / physical NIK scan.
+  Future<void> _openStoreTrainingFastPath() async {
+    final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+    final res = await _lookupKaryawanByNik(
+      'TRAINING01',
+      requireAktif: false,
+      requireOnDuty: false,
+    );
+    if (res == null) {
+      _showSnack('pos_err_barcode'.tr(), OptikAdminTokens.danger);
+      return;
+    }
+
+    try {
+      await supabase.from('session_logs').insert({
+        'toko_id': tokoId,
+        'karyawan_id': 'TRAINING01',
+        'photo_url': 'https://placeholder.co/600x400?text=Training+Session',
+        'timestamp_open': DateTime.now().toIso8601String(),
+        'status': 'OPEN',
+      });
+    } catch (e) {
+      debugPrint('[Training] session_logs insert skipped/failed: $e');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_store_open_$tokoId', true);
+    await prefs.setString(
+      'last_open_time_$tokoId',
+      DateTime.now().toIso8601String(),
+    );
+
+    storeOpenTime = DateTime.now();
+    setState(() {
+      isStoreOpen = true;
+      isPosUnlocked = true;
+      activeCashier = res;
+      namaKasir = res['nama']?.toString() ?? 'Kasir Latihan';
+      kasirCtrl.text = namaKasir;
+      karyawanTerlibat = [];
+      _addKaryawanTerlibatSilent(res);
+    });
+    _showSnack("✅ Toko Opened by: $namaKasir", OptikAdminTokens.success);
+  }
+
+  /// Tambah karyawan ke daftar terlibat (dedupe). Return true jika baru ditambah.
+  bool _addKaryawanTerlibatSilent(Map<String, dynamic> karyawan) {
+    final id = karyawan['id']?.toString();
+    if (id == null || id.isEmpty) return false;
+    if (karyawanTerlibat.any((k) => k['id']?.toString() == id)) return false;
+    karyawanTerlibat = [
+      ...karyawanTerlibat,
+      Map<String, dynamic>.from(karyawan),
+    ];
+    return true;
+  }
+
+  /// Error i18n terakhir dari lookup/duty gate (untuk snack yang spesifik).
+  String? _lastKaryawanLookupErrorKey;
+
+  Future<Map<String, dynamic>?> _lookupKaryawanByNik(
+    String nik, {
+    bool requireAktif = true,
+    bool requireOnDuty = false,
+  }) async {
+    _lastKaryawanLookupErrorKey = null;
+    final key = nik.trim();
+    if (key.isEmpty) return null;
+    try {
+      final res = await supabase
+          .from('karyawan')
+          .select()
+          .eq('nik', key)
+          .maybeSingle();
+      if (res == null) return null;
+      final map = Map<String, dynamic>.from(res);
+      if (requireAktif) {
+        final status =
+            (map['status_approval'] ?? '').toString().trim().toLowerCase();
+        if (status.isNotEmpty && status != 'aktif') {
+          _lastKaryawanLookupErrorKey = 'pos_terlibat_not_aktif';
+          return null;
+        }
+      }
+      if (requireOnDuty) {
+        final id = map['id']?.toString() ?? '';
+        if (id.isEmpty) return null;
+        final dutyBlock = await PosDutyGate.blockReason(
+          karyawanId: id,
+          nik: key,
+        );
+        if (dutyBlock != null) {
+          _lastKaryawanLookupErrorKey = dutyBlock;
+          return null;
+        }
+      }
+      return map;
+    } catch (e) {
+      debugPrint('Lookup karyawan NIK gagal: $e');
+      return null;
+    }
+  }
+
+  bool _isLikelyKaryawanNik(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return false;
+    // Jangan rebut payload produk/QR bertanda khusus.
+    if (s.contains('|') || s.contains('{') || s.contains(':')) return false;
+    if (ProductCode.looksLike(s)) return false;
+    final routed = QrRouter.classify(s);
+    if (routed.isKnown) return false;
+    // NIK karyawan di sistem biasanya numerik / alfanumerik pendek.
+    return RegExp(r'^[A-Za-z0-9_-]{4,32}$').hasMatch(s);
+  }
+
+  /// Scan pertama di gerbang POS: langsung masuk halaman kasir + daftar terlibat.
+  Future<void> _restartUnlockScanner() async {
+    try {
+      await kameraLoginCtrl.start();
+    } catch (e) {
+      debugPrint('Restart kamera unlock POS: $e');
+    }
+  }
+
+  Future<void> _lockPosSession({bool restartScanner = true}) async {
+    if (!mounted) return;
+    setState(() {
+      isPosUnlocked = false;
+      activeCashier = null;
+      namaKasir = '';
+      kasirCtrl.clear();
+      karyawanTerlibat = [];
+      isScanningLocal = true;
+      _unlockScanBusy = false;
+      _lastUnlockNik = null;
+      _lastUnlockScanAt = null;
+    });
+    if (restartScanner && mounted) {
+      await _restartUnlockScanner();
+    }
+  }
+
+  Future<void> _onUnlockKaryawanBarcode(String rawNik) async {
+    final nik = rawNik.trim();
+    if (nik.isEmpty || _unlockScanBusy || isPosUnlocked) return;
+
+    final now = DateTime.now();
+    if (_lastUnlockNik == nik &&
+        _lastUnlockScanAt != null &&
+        now.difference(_lastUnlockScanAt!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastUnlockNik = nik;
+    _lastUnlockScanAt = now;
+    _unlockScanBusy = true;
+
+    try {
+      final isTrainingNik = nik.toUpperCase() == 'TRAINING01';
+      final res = await _lookupKaryawanByNik(
+        nik,
+        requireAktif: !isTrainingNik,
+        requireOnDuty: !isTrainingNik,
+      );
+      if (res == null) {
+        final errKey = _lastKaryawanLookupErrorKey;
+        final any = await _lookupKaryawanByNik(
+          nik,
+          requireAktif: false,
+          requireOnDuty: false,
+        );
+        _showSnack(
+          any == null
+              ? 'pos_err_barcode'.tr()
+              : (errKey ?? 'pos_terlibat_not_aktif').tr(),
+          OptikAdminTokens.danger,
+        );
+        // Izinkan scan ulang NIK yang sama setelah gagal.
+        _lastUnlockNik = null;
+        _lastUnlockScanAt = null;
+        return;
+      }
+
+      try {
+        await kameraLoginCtrl.stop();
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() {
+        karyawanTerlibat = [];
+        _addKaryawanTerlibatSilent(res);
+        activeCashier = res;
+        namaKasir = res['nama']?.toString() ?? '';
+        kasirCtrl.text = namaKasir;
+        isPosUnlocked = true;
+        isScanningLocal = false;
+      });
+      _showSnack(
+        'pos_terlibat_scan_ok'
+            .tr()
+            .replaceAll('{}', res['nama']?.toString() ?? ''),
+        OptikAdminTokens.success,
+      );
+    } finally {
+      _unlockScanBusy = false;
+    }
+  }
+
+  void _removeKaryawanTerlibat(String karyawanId) {
+    final cashierId = activeCashier?['id']?.toString();
+    // Kasir yang unlock POS wajib tetap di daftar.
+    if (cashierId != null && cashierId == karyawanId) {
+      _showSnack('pos_terlibat_keep_kasir'.tr(), OptikAdminTokens.warning);
+      return;
+    }
+    setState(() {
+      karyawanTerlibat = karyawanTerlibat
+          .where((k) => k['id']?.toString() != karyawanId)
+          .toList();
+    });
+  }
+
+  Future<void> _pickTambahKaryawanTerlibat() async {
+    final tokoId = _tokoId;
+    List<Map<String, dynamic>> list;
+    try {
+      final rows = await supabase
+          .from('karyawan')
+          .select('id, nama, jabatan, toko_id, face_url, nik')
+          .eq('toko_id', tokoId)
+          .eq('status_approval', 'Aktif')
+          .order('nama');
+      list = (rows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final onDutyIds = await PosDutyGate.openShiftIdsForToko(tokoId);
+      if (onDutyIds != null) {
+        list = list
+            .where((k) => onDutyIds.contains(k['id']?.toString()))
+            .toList();
+      }
+    } catch (e) {
+      _showSnack('${'pos_terlibat_load_err'.tr()}$e', OptikAdminTokens.danger);
+      return;
+    }
+    if (!mounted) return;
+    if (list.isEmpty) {
+      _showSnack('pos_duty_picker_empty'.tr(), OptikAdminTokens.warning);
+      return;
+    }
+    final existing = karyawanTerlibat
+        .map((k) => k['id']?.toString())
+        .whereType<String>()
+        .toSet();
+    final options = list
+        .where((k) => !existing.contains(k['id']?.toString()))
+        .map(
+          (k) => AdminPickerOption<String>(
+            value: k['id'].toString(),
+            label: k['nama']?.toString() ?? '-',
+            subtitle: k['jabatan']?.toString(),
+            icon: Icons.person_add_alt_1_rounded,
+          ),
+        )
+        .toList();
+    if (options.isEmpty) {
+      _showSnack('pos_terlibat_all_added'.tr(), OptikAdminTokens.ice);
+      return;
+    }
+    final sel = await showAdminPicker<String>(
+      context: context,
+      title: 'pos_terlibat_pick'.tr(),
+      options: options,
+      searchable: options.length > 6,
+    );
+    if (sel == null || sel.value == null) return;
+    final picked = list.firstWhere(
+      (k) => k['id']?.toString() == sel.value,
+      orElse: () => <String, dynamic>{},
+    );
+    if (picked.isEmpty) return;
+    setState(() => _addKaryawanTerlibatSilent(picked));
+    _showSnack(
+      'pos_terlibat_added'
+          .tr()
+          .replaceAll('{}', picked['nama']?.toString() ?? ''),
+      OptikAdminTokens.success,
+    );
+  }
+
+  List<String> _terlibatIdsForCheckout() {
+    final ids = <String>{};
+    for (final k in karyawanTerlibat) {
+      final id = k['id']?.toString();
+      if (id != null && id.isNotEmpty) ids.add(id);
+    }
+    final cashierId = activeCashier?['id']?.toString();
+    if (cashierId != null && cashierId.isNotEmpty) ids.add(cashierId);
+    return ids.toList();
+  }
+
+  Future<void> _persistKaryawanTerlibat(
+    String saleId,
+    List<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    await supabase.from('sales_karyawan_terlibat').upsert(
+          ids
+              .map((id) => {
+                    'sale_id': saleId,
+                    'karyawan_id': id,
+                  })
+              .toList(),
+          onConflict: 'sale_id,karyawan_id',
+        );
+  }
+
+  Future<void> _awardPoinInvoiceTerlibat(
+    String saleId,
+    List<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    for (final id in ids) {
+      try {
+        await supabase.from('poin_logs').insert({
+          'karyawan_id': id,
+          'tanggal': today,
+          'poin': 5,
+          'sumber': 'INVOICE',
+          'ref_id': saleId,
+        });
+      } catch (e) {
+        debugPrint('Poin INVOICE gagal untuk $id: $e');
+      }
+    }
+  }
+
+  Future<void> _rollbackPoinInvoiceTerlibat(String saleId) async {
+    try {
+      await supabase
+          .from('poin_logs')
+          .delete()
+          .eq('sumber', 'INVOICE')
+          .eq('ref_id', saleId);
+    } catch (e) {
+      debugPrint('Rollback poin INVOICE gagal: $e');
+    }
+  }
+
+  Widget _buildKaryawanTerlibatBar() {
+    final chips = karyawanTerlibat.map((k) {
+      final id = k['id']?.toString() ?? '';
+      final nama = (k['nama']?.toString() ?? 'Staff').trim();
+      final short =
+          nama.isEmpty ? 'Staff' : nama.split(' ').first.toUpperCase();
+      final isCashier = activeCashier?['id']?.toString() == id;
+      return InputChip(
+        avatar: CircleAvatar(
+          backgroundImage: k['face_url'] != null
+              ? NetworkImage(k['face_url'].toString())
+              : null,
+          child: k['face_url'] == null
+              ? const Icon(Icons.person, size: 14)
+              : null,
+        ),
+        label: Text(
+          short,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+        onDeleted: (isCashier || isProcessing)
+            ? null
+            : () => _removeKaryawanTerlibat(id),
+        deleteIconColor: OptikAdminTokens.danger,
+        backgroundColor: OptikAdminTokens.bgMid,
+        side: BorderSide(color: OptikAdminTokens.lineStrong),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      );
+    }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: OptikAdminTokens.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.75)),
+          boxShadow: OptikAdminTokens.cardShadow,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.groups_rounded,
+                    size: 18, color: OptikAdminTokens.navy),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'pos_terlibat_title'.tr(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: OptikAdminTokens.navy,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed:
+                      isProcessing ? null : _pickTambahKaryawanTerlibat,
+                  style: TextButton.styleFrom(
+                    foregroundColor: OptikAdminTokens.navy,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: Text(
+                    'pos_terlibat_tambah'.tr(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'pos_terlibat_hint'.tr(),
+              style: TextStyle(
+                fontSize: 10.5,
+                color: OptikAdminTokens.navy.withOpacity(0.65),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ...chips,
+                if (chips.isEmpty)
+                  Text(
+                    'pos_terlibat_none'.tr(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: OptikAdminTokens.navy.withOpacity(0.55),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _applyObrCustomer(QrRouteResult routed) {
@@ -1347,7 +1899,7 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
-  /// Scan dari kolom SKU (kamera / HID / Enter): routing QR dulu, lalu SKU.
+  /// Scan bebas urutan: apa yang di-scan → itu yang diterima (produk/karyawan/QR).
   Future<void> _onPosScanSubmitted(String value) async {
     final raw = value.trim();
     if (raw.isEmpty) return;
@@ -1355,7 +1907,7 @@ class _SalesPageState extends State<SalesPage> {
 
     final routed = QrRouter.classify(raw);
 
-    // Produk / pelanggan: dikonsumsi di POS (tidak leave ke halaman lain).
+    // 1) Payload yang sudah dikenali formatnya.
     if (routed.type == QrPayloadType.product || ProductCode.looksLike(raw)) {
       await _cariProdukBySKU(raw);
       return;
@@ -1364,7 +1916,6 @@ class _SalesPageState extends State<SalesPage> {
       _applyObrCustomer(routed);
       return;
     }
-
     if (routed.isKnown) {
       final proceed = await _guardPosLeaveForKnownQr(routed);
       if (!proceed || !mounted) return;
@@ -1373,11 +1924,45 @@ class _SalesPageState extends State<SalesPage> {
         routed,
         profile: widget.profile,
         callerRole: UniversalQrCallerRole.admin,
-        // POS cabang (kamera/HID lokal): QR pelanggan harus bisa pelunasan/ambil.
         fromAdminHidScanner: routed.invoiceCustomerLifecycle,
       );
       return;
     }
+
+    // 2) Deteksi isi: NIK karyawan aktif + sedang bertugas → terlibat.
+    if (!isProcessing && _isLikelyKaryawanNik(raw)) {
+      final asKaryawan = await _lookupKaryawanByNik(raw, requireOnDuty: true);
+      if (asKaryawan != null) {
+        final added = _addKaryawanTerlibatSilent(asKaryawan);
+        if (mounted) setState(() {});
+        _showSnack(
+          added
+              ? 'pos_terlibat_added'
+                  .tr()
+                  .replaceAll('{}', asKaryawan['nama']?.toString() ?? '')
+              : 'pos_terlibat_already'
+                  .tr()
+                  .replaceAll('{}', asKaryawan['nama']?.toString() ?? ''),
+          added ? OptikAdminTokens.success : OptikAdminTokens.ice,
+        );
+        return;
+      }
+      final errKey = _lastKaryawanLookupErrorKey;
+      final any = await _lookupKaryawanByNik(
+        raw,
+        requireAktif: false,
+        requireOnDuty: false,
+      );
+      if (any != null) {
+        _showSnack(
+          (errKey ?? 'pos_terlibat_not_aktif').tr(),
+          OptikAdminTokens.danger,
+        );
+        return;
+      }
+    }
+
+    // 3) Selain itu anggap SKU/barcode produk.
     await _cariProdukBySKU(raw);
   }
 
@@ -1405,13 +1990,7 @@ class _SalesPageState extends State<SalesPage> {
           await _releasePosHold();
           await _clearPosDraft();
           _resetForm();
-          setState(() {
-            isPosUnlocked = false;
-            activeCashier = null;
-            namaKasir = '';
-            kasirCtrl.clear();
-            isScanningLocal = true;
-          });
+          await _lockPosSession(restartScanner: false);
         }
         return true;
       case LeavePageAction.leaveSave:
@@ -3221,6 +3800,21 @@ class _SalesPageState extends State<SalesPage> {
       _showSnack("pos_err_nama_pelanggan".tr(), OptikAdminTokens.danger);
       return;
     }
+    // Kasir penanggung jawab harus masih bertugas (belom pulang / bukan libur).
+    final cashierId = activeCashier?['id']?.toString();
+    final cashierNik = activeCashier?['nik']?.toString();
+    if (cashierId != null &&
+        cashierId.isNotEmpty &&
+        (cashierNik ?? '').toUpperCase() != 'TRAINING01') {
+      final dutyBlock = await PosDutyGate.blockReason(
+        karyawanId: cashierId,
+        nik: cashierNik,
+      );
+      if (dutyBlock != null) {
+        _showSnack(dutyBlock.tr(), OptikAdminTokens.danger);
+        return;
+      }
+    }
     try {
       setState(() => isProcessing = true);
 
@@ -3360,6 +3954,38 @@ class _SalesPageState extends State<SalesPage> {
           .single();
 
       final saleId = saleRes['id'];
+      // Snapshot sebelum proses lanjut — daftar tidak boleh berubah di tengah checkout.
+      final terlibatIds = _terlibatIdsForCheckout();
+      if (terlibatIds.isEmpty) {
+        debugPrint('POS checkout tanpa karyawan terlibat — fallback kasir profil');
+      }
+
+      // Karyawan terlibat (tanpa peran) — cascade delete jika sale di-rollback.
+      try {
+        await _persistKaryawanTerlibat(saleId.toString(), terlibatIds);
+      } catch (e) {
+        debugPrint('Simpan karyawan terlibat gagal (retry 1x): $e');
+        try {
+          await Future.delayed(const Duration(milliseconds: 250));
+          await _persistKaryawanTerlibat(saleId.toString(), terlibatIds);
+        } catch (e2) {
+          debugPrint('Simpan karyawan terlibat gagal permanen: $e2');
+          // Jangan biarkan nota tanpa jejak terlibat bila ada ID.
+          if (terlibatIds.isNotEmpty) {
+            try {
+              await supabase.from('sales').delete().eq('id', saleId);
+            } catch (_) {}
+            if (mounted) {
+              setState(() => isProcessing = false);
+              _showSnack(
+                '${'pos_terlibat_save_err'.tr()}$e2',
+                OptikAdminTokens.danger,
+              );
+            }
+            return;
+          }
+        }
+      }
 
       // Redeem voucher dulu (sebelum potong stok). Gagal → batalkan nota.
       if (voucherCode.isNotEmpty) {
@@ -3601,8 +4227,16 @@ class _SalesPageState extends State<SalesPage> {
 
       // 4. Kirim nota (+ QR hanya bila stok ready / bukan DP·pending)
       try {
+        final terlibatNames = karyawanTerlibat
+            .map((k) => (k['nama'] ?? '').toString().trim())
+            .where((n) => n.isNotEmpty)
+            .toList();
+        final saleForPdf = Map<String, dynamic>.from(saleRes);
+        if (terlibatNames.isNotEmpty) {
+          saleForPdf['nama_kasir'] = terlibatNames.join(', ');
+        }
         await _generateAndSharePDF(
-          Map<String, dynamic>.from(saleRes),
+          saleForPdf,
           cartItems,
           paymentConfirmOnly: paymentConfirmOnly,
         );
@@ -3612,29 +4246,45 @@ class _SalesPageState extends State<SalesPage> {
 
       if (!mounted) return;
 
-      // 5. Lempar ke Halaman Struk Nota Akhir
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => InvoiceDetailPage(saleId: saleId.toString()),
-        ),
-      ).then((_) async {
-        await _clearPosDraft();
-        _resetForm();
-        setState(() {
-          isPosUnlocked = false;
-          activeCashier = null;
-          namaKasir = "";
-          kasirCtrl.clear();
-          isScanningLocal = true;
-        });
-      });
+      // Poin +5 per karyawan unik yang terlibat (uncapped KPI transaksi).
+      final saleIdStr = saleId.toString();
+      await _awardPoinInvoiceTerlibat(saleIdStr, terlibatIds);
+
+      // 5. Lempar ke Halaman Struk Nota Akhir (nota sudah aman di DB).
+      try {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => InvoiceDetailPage(saleId: saleIdStr),
+          ),
+        );
+      } catch (navErr) {
+        debugPrint('Navigasi nota gagal setelah checkout: $navErr');
+        if (mounted) {
+          _showSnack(
+            'pos_terlibat_nota_ok_nav_fail'.tr(),
+            OptikAdminTokens.warning,
+          );
+        }
+      }
+      await _clearPosDraft();
+      _resetForm();
+      await _lockPosSession();
     } catch (e) {
       debugPrint("Checkout Engine Error: $e");
       // Jika nota sempat tersimpan tapi stok/consume gagal — batalkan nota.
       final inv = noInvoice.trim();
       if (inv.isNotEmpty) {
         try {
+          final orphan = await supabase
+              .from('sales')
+              .select('id')
+              .eq('no_invoice', inv)
+              .maybeSingle();
+          final orphanId = orphan?['id']?.toString();
+          if (orphanId != null && orphanId.isNotEmpty) {
+            await _rollbackPoinInvoiceTerlibat(orphanId);
+          }
           await supabase.from('sales').delete().eq('no_invoice', inv);
         } catch (delErr) {
           debugPrint('Rollback sale setelah gagal checkout: $delErr');
@@ -3954,8 +4604,9 @@ class _SalesPageState extends State<SalesPage> {
           }
           return false;
         },
+        // Unknown bisa NIK karyawan ATAU SKU biasa — satu jalur dengan kolom scan.
         onUnknown: (raw) async {
-          await _cariProdukBySKU(raw);
+          await _onPosScanSubmitted(raw);
           return true;
         },
         onBeforeNavigate: _guardPosLeaveForKnownQr,
@@ -4101,174 +4752,130 @@ class _SalesPageState extends State<SalesPage> {
   Widget _buildBarcodeScannerLayar() {
     // ❌ BARIS "bool isScanningLocal = true;" SUDAH DIHAPUS DARI SINI AGAR TIDAK LOOPING REBUILD!
 
-    return PremiumScaffold(
-      appBar: PremiumAppBar(
-        title: "pos_otorisasi_kasir".tr(),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          tooltip: "Kembali ke Dashboard",
-          onPressed: () async {
-            await kameraLoginCtrl.stop();
-            await _requestLeavePos();
-          },
+    // HID wedge / keyboard barcode must hit HidScanIntake — camera-only unlock
+    // left Chrome/desktop unable to type NIK.
+    return HidScanIntake(
+      onUnknown: (raw) async {
+        await _onUnlockKaryawanBarcode(raw);
+        return true;
+      },
+      child: PremiumScaffold(
+        appBar: PremiumAppBar(
+          title: "pos_otorisasi_kasir".tr(),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            tooltip: "Kembali ke Dashboard",
+            onPressed: () async {
+              await kameraLoginCtrl.stop();
+              await _requestLeavePos();
+            },
+          ),
         ),
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: PremiumPanel(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-              borderRadius: 24,
-              borderColor: OptikAdminTokens.ice.withOpacity(0.4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const PremiumIconBadge(
-                    icon: Icons.qr_code_scanner_rounded,
-                    color: OptikAdminTokens.navy,
-                    size: 56,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "pos_otorisasi_kasir".tr(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: PremiumPanel(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+                borderRadius: 24,
+                borderColor: OptikAdminTokens.ice.withOpacity(0.4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const PremiumIconBadge(
+                      icon: Icons.qr_code_scanner_rounded,
                       color: OptikAdminTokens.navy,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      height: 1.2,
+                      size: 56,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "pos_msg_scan_kasir".tr(),
-                    style: TextStyle(
-                      color: OptikAdminTokens.navy.withOpacity(0.7),
-                      fontSize: 13,
-                      height: 1.4,
+                    const SizedBox(height: 16),
+                    Text(
+                      "pos_otorisasi_kasir".tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.navy,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: 280,
-                    height: 280,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: MobileScanner(
-                    fit: BoxFit.cover,
-                    controller:
-                        kameraLoginCtrl, // ✅ Gunakan controller kelas agar beneran bisa dimatikan
-                    onDetect: (capture) async {
-                      if (!isScanningLocal) return;
-
-                      final barcodes = capture.barcodes;
-                      if (barcodes.isNotEmpty &&
-                          barcodes.first.rawValue != null) {
-                        final String scannedNik = barcodes.first.rawValue!;
-
-                        setState(() {
-                          isScanningLocal = false; // Kunci kamera instan
-                        });
-
-                        debugPrint(
-                            "--- 🚨 LOG OPTIK: MENGECEK NIK DI SUPABASE = $scannedNik ---");
-
-                        try {
-                          final res = await supabase
-                              .from('karyawan')
-                              .select()
-                              .eq('nik', scannedNik)
-                              .maybeSingle();
-
-                          if (res != null) {
-                            debugPrint(
-                                "--- ✅ LOG OPTIK: KARYAWAN DITEMUKAN = ${res['nama']} ---");
-
-                            // ✅ KUNCI UTAMA: Matikan aliran video kamera laptop Bos biar gak melotot terus!
-                            await kameraLoginCtrl.stop();
-
-                            setState(() {
-                              activeCashier = res;
-                              namaKasir = res['nama'] ?? "";
-                              kasirCtrl.text = namaKasir;
-                              isPosUnlocked = true; // Gerbang POS Kasir terbuka
-                            });
-                          } else {
-                            debugPrint(
-                                "--- ❌ LOG OPTIK: NIK TIDAK TERDAFTAR ---");
-                            _showSnack("Gagal Otorisasi: NIK tidak ditemukan!",
-                                OptikAdminTokens.danger);
-
-                            // Beri jeda 3 detik sebelum kasir bisa nyecan ulang (biar gak spam loop)
-                            await Future.delayed(const Duration(seconds: 3));
-                            setState(() {
-                              isScanningLocal = true; // Buka kunci kembali
-                            });
-                          }
-                        } catch (e) {
-                          debugPrint(
-                              "--- 💥 LOG OPTIK: DATABASE EXCEPTION = $e ---");
-                          _showSnack("Error Koneksi Database", OptikAdminTokens.danger);
-
-                          // Beri jeda 3 detik jika database error
-                          await Future.delayed(const Duration(seconds: 3));
-                          setState(() {
-                            isScanningLocal = true; // Buka kunci kembali
-                          });
-                        }
-                      }
-                    },
-                  ),
-                ), // Penutup ClipRRect
-              ), // Penutup SizedBox
-              if (TrainingMode.instance.isActive) ...[
-                const SizedBox(height: 20),
-                PremiumPrimaryButton(
-                  label: 'training_pos_unlock_cashier'.tr(),
-                  icon: Icons.school_rounded,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      OptikAdminTokens.trainingSoft,
-                      OptikAdminTokens.training,
+                    const SizedBox(height: 8),
+                    Text(
+                      "pos_msg_scan_kasir_multi".tr(),
+                      style: TextStyle(
+                        color: OptikAdminTokens.navy.withOpacity(0.7),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: 280,
+                      height: 280,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: MobileScanner(
+                          fit: BoxFit.cover,
+                          controller: kameraLoginCtrl,
+                          onDetect: (capture) async {
+                            if (!isScanningLocal || isPosUnlocked) return;
+                            final barcodes = capture.barcodes;
+                            if (barcodes.isEmpty ||
+                                barcodes.first.rawValue == null) {
+                              return;
+                            }
+                            await _onUnlockKaryawanBarcode(
+                                barcodes.first.rawValue!);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _unlockNikManualCtrl,
+                      textInputAction: TextInputAction.done,
+                      decoration: InputDecoration(
+                        labelText: 'NIK karyawan (ketik / HID)',
+                        hintText: 'Scan wedge atau ketik lalu Enter',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: 'Unlock',
+                          icon: const Icon(Icons.login_rounded),
+                          onPressed: () {
+                            final nik = _unlockNikManualCtrl.text.trim();
+                            if (nik.isNotEmpty) {
+                              _onUnlockKaryawanBarcode(nik);
+                            }
+                          },
+                        ),
+                      ),
+                      onSubmitted: (v) {
+                        final nik = v.trim();
+                        if (nik.isNotEmpty) _onUnlockKaryawanBarcode(nik);
+                      },
+                    ),
+                    if (TrainingMode.instance.isActive) ...[
+                      const SizedBox(height: 16),
+                      PremiumPrimaryButton(
+                        label: 'training_pos_unlock_cashier'.tr(),
+                        icon: Icons.school_rounded,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            OptikAdminTokens.trainingSoft,
+                            OptikAdminTokens.training,
+                          ],
+                        ),
+                        onPressed: () =>
+                            _onUnlockKaryawanBarcode('TRAINING01'),
+                      ),
                     ],
-                  ),
-                  onPressed: () async {
-                    try {
-                      final res = await supabase
-                          .from('karyawan')
-                          .select()
-                          .eq('nik', 'TRAINING01')
-                          .maybeSingle();
-                      if (res == null) {
-                        _showSnack(
-                          'training_pos_unlock_missing'.tr(),
-                          OptikAdminTokens.danger,
-                        );
-                        return;
-                      }
-                      await kameraLoginCtrl.stop();
-                      setState(() {
-                        activeCashier = res;
-                        namaKasir = res['nama']?.toString() ?? 'Kasir Latihan';
-                        kasirCtrl.text = namaKasir;
-                        isPosUnlocked = true;
-                        isScanningLocal = false;
-                      });
-                    } catch (e) {
-                      _showSnack(
-                        'training_msg_error'.tr().replaceAll('{}', '$e'),
-                        OptikAdminTokens.danger,
-                      );
-                    }
-                  },
+                  ],
                 ),
-              ],
-            ],
               ),
             ),
           ),
@@ -4416,13 +5023,7 @@ class _SalesPageState extends State<SalesPage> {
                     break;
                   case 'lock':
                     _resetForm();
-                    setState(() {
-                      isPosUnlocked = false;
-                      activeCashier = null;
-                      namaKasir = "";
-                      kasirCtrl.clear();
-                      isScanningLocal = true;
-                    });
+                    await _lockPosSession();
                     _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
                         OptikAdminTokens.warning);
                     break;
@@ -4473,15 +5074,9 @@ class _SalesPageState extends State<SalesPage> {
                   icon: const Icon(Icons.lock_outline_rounded,
                       color: OptikAdminTokens.warning),
                   tooltip: "Lock & Switch Cashier",
-                  onPressed: () {
+                  onPressed: () async {
                     _resetForm();
-                    setState(() {
-                      isPosUnlocked = false;
-                      activeCashier = null;
-                      namaKasir = "";
-                      kasirCtrl.clear();
-                      isScanningLocal = true;
-                    });
+                    await _lockPosSession();
                     _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
                         OptikAdminTokens.warning);
                   },
@@ -4614,6 +5209,8 @@ class _SalesPageState extends State<SalesPage> {
                 ),
               ),
             ),
+
+            _buildKaryawanTerlibatBar(),
 
             // Area Scrollable Utama
             Flexible(

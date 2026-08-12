@@ -4,10 +4,12 @@ class FrameSuggestion {
   const FrameSuggestion({
     required this.title,
     required this.why,
+    this.isAvoid = false,
   });
 
   final String title;
   final String why;
+  final bool isAvoid;
 }
 
 /// Referensi bentuk wajah + rekomendasi frame (panduan optik klasik).
@@ -41,18 +43,24 @@ abstract final class FaceShapeFrameGuide {
     }
   }
 
+  /// Saran frame (termasuk item "hindari").
   static List<FrameSuggestion> forShape(FaceShapeType shape) {
     switch (shape) {
       case FaceShapeType.oval:
         return const [
           FrameSuggestion(
-            title: 'Hampir semua gaya',
+            title: 'Rectangle / wayfarer',
             why:
                 'Proporsi seimbang — rectangle, wayfarer, round, dan cat-eye umumnya aman.',
           ),
           FrameSuggestion(
+            title: 'Round',
+            why: 'Lengkungan tetap nyaman pada wajah oval tanpa menutupi proporsi.',
+          ),
+          FrameSuggestion(
             title: 'Hindari oversize ekstrem',
             why: 'Frame terlalu besar bisa menutupi proporsi alami wajah.',
+            isAvoid: true,
           ),
         ];
       case FaceShapeType.round:
@@ -68,6 +76,7 @@ abstract final class FaceShapeFrameGuide {
           FrameSuggestion(
             title: 'Hindari round kecil',
             why: 'Bisa membuat wajah terlihat lebih bulat.',
+            isAvoid: true,
           ),
         ];
       case FaceShapeType.square:
@@ -83,6 +92,7 @@ abstract final class FaceShapeFrameGuide {
           FrameSuggestion(
             title: 'Hindari square boxy',
             why: 'Bisa memperkuat kesan sudut berlebih.',
+            isAvoid: true,
           ),
         ];
       case FaceShapeType.heart:
@@ -98,6 +108,7 @@ abstract final class FaceShapeFrameGuide {
           FrameSuggestion(
             title: 'Hindari top-heavy tebal',
             why: 'Bisa membuat dahi terlihat lebih dominan.',
+            isAvoid: true,
           ),
         ];
       case FaceShapeType.diamond:
@@ -113,6 +124,7 @@ abstract final class FaceShapeFrameGuide {
           FrameSuggestion(
             title: 'Hindari sempit di tengah',
             why: 'Bisa menekankan lebar pipi.',
+            isAvoid: true,
           ),
         ];
       case FaceShapeType.oblong:
@@ -128,8 +140,13 @@ abstract final class FaceShapeFrameGuide {
           FrameSuggestion(
             title: 'Hindari narrow tinggi',
             why: 'Bisa membuat wajah terlihat lebih panjang.',
+            isAvoid: true,
           ),
         ];
     }
   }
+
+  /// Hanya saran positif (untuk carousel ilustrasi frame).
+  static List<FrameSuggestion> recommendedFor(FaceShapeType shape) =>
+      forShape(shape).where((f) => !f.isAvoid).toList(growable: false);
 }

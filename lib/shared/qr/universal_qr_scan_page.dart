@@ -73,6 +73,7 @@ class UniversalQrScanPage extends StatefulWidget {
 
 class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
   bool _done = false;
+  final TextEditingController _manualQrCtrl = TextEditingController();
   final MobileScannerController _controller = MobileScannerController(
     facing: CameraFacing.back,
     torchEnabled: false,
@@ -80,6 +81,7 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
 
   @override
   void dispose() {
+    _manualQrCtrl.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -116,8 +118,11 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
       return;
     }
 
+    // Kunci sync sebelum await agar rapid detect tidak double-pop.
     _done = true;
-    await _controller.stop();
+    try {
+      await _controller.stop();
+    } catch (_) {}
     if (!mounted) return;
 
     if (widget.returnRawOnly) {
@@ -142,12 +147,52 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
       child: PremiumScaffold(
         appBar: AppBar(
           title: Text(widget.titleKey.tr()),
+          actions: [
+            IconButton(
+              tooltip: 'universal_qr_torch'.tr(),
+              icon: const Icon(Icons.flashlight_on_rounded),
+              onPressed: () async {
+                try {
+                  await _controller.toggleTorch();
+                } catch (_) {}
+              },
+            ),
+          ],
         ),
         body: Stack(
           alignment: Alignment.center,
           children: [
             MobileScanner(
               controller: _controller,
+              // Package pauses/resumes camera with app lifecycle by default.
+              useAppLifecycleState: true,
+              errorBuilder: (context, error) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.videocam_off_rounded,
+                          color: OptikAdminTokens.danger,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'universal_qr_camera_denied'.tr(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: OptikAdminTokens.slate,
+                            height: 1.4,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
               onDetect: (capture) {
                 if (_done) return;
                 final barcodes = capture.barcodes;
@@ -166,13 +211,53 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
               ),
             ),
             Positioned(
-              bottom: 48,
+              bottom: 24,
               left: 24,
               right: 24,
-              child: Text(
-                widget.hintKey.tr(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.hintKey.tr(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.slate,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Web/desktop often has no camera / HID — paste or type payload.
+                    Material(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(12),
+                      child: TextField(
+                        controller: _manualQrCtrl,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          hintText: 'Tempel / ketik kode QR lalu Enter',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                          suffixIcon: IconButton(
+                            tooltip: 'Proses',
+                            icon: const Icon(Icons.arrow_forward_rounded),
+                            onPressed: () {
+                              final raw = _manualQrCtrl.text.trim();
+                              if (raw.isNotEmpty) _onRaw(raw);
+                            },
+                          ),
+                        ),
+                        onSubmitted: (v) {
+                          final raw = v.trim();
+                          if (raw.isNotEmpty) _onRaw(raw);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

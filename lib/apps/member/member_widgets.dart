@@ -362,6 +362,8 @@ class MemberBaseFeaturePage extends StatelessWidget {
     required this.bullets,
     this.icon = Icons.auto_awesome_outlined,
     this.footerNote,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String title;
@@ -370,6 +372,8 @@ class MemberBaseFeaturePage extends StatelessWidget {
   final List<String> bullets;
   final IconData icon;
   final String? footerNote;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -472,6 +476,16 @@ class MemberBaseFeaturePage extends StatelessWidget {
                 color: OptikMemberTokens.inkMuted,
                 fontSize: 12,
                 height: 1.4,
+              ),
+            ),
+          ],
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onAction,
+                child: Text(actionLabel!),
               ),
             ),
           ],

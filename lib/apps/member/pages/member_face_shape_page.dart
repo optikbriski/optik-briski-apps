@@ -13,7 +13,7 @@ class MemberFaceShapePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = MemberLayout.of(context);
     return MemberPremiumScaffold(
-      title: 'Bentuk Wajah',
+      title: 'Bentuk',
       body: MemberLayout.constrain(
         context,
         ListView(
@@ -153,11 +153,10 @@ class _ShapeCardState extends State<_ShapeCard> {
 
   FaceShapeType get shape => widget.shape;
 
-  /// Slide 0 = siluet saja; 1..n = pakai frame rekomendasi.
+  /// Slide 0 = model saja; 1..n = frame rekomendasi (tanpa item "hindari").
   int get _slideCount {
-    final frames = FaceShapeFrameGuide.forShape(shape);
-    // maksimal 2 ilustrasi frame + 1 siluet
-    final frameSlides = frames.length.clamp(1, 2);
+    final frames = FaceShapeFrameGuide.recommendedFor(shape);
+    final frameSlides = frames.isEmpty ? 0 : frames.length.clamp(1, 2);
     return 1 + frameSlides;
   }
 
@@ -176,6 +175,7 @@ class _ShapeCardState extends State<_ShapeCard> {
   @override
   Widget build(BuildContext context) {
     final frames = FaceShapeFrameGuide.forShape(shape);
+    final recommended = FaceShapeFrameGuide.recommendedFor(shape);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -230,7 +230,9 @@ class _ShapeCardState extends State<_ShapeCard> {
                       if (index == 0) {
                         return _SlidePane(
                           caption: 'Model bentuk ${shape.labelId}',
-                          hint: 'Geser untuk lihat frame rekomendasi →',
+                          hint: recommended.isEmpty
+                              ? 'Bandingkan dengan foto / cermin Anda'
+                              : 'Geser untuk lihat frame rekomendasi →',
                           child: FaceShapePhoto(
                             shape: shape,
                             size: 168,
@@ -239,13 +241,10 @@ class _ShapeCardState extends State<_ShapeCard> {
                         );
                       }
                       final variant = index - 1;
-                      final title = faceShapeFrameLabel(shape, variant: variant);
-                      final why = frames.length > variant
-                          ? frames[variant].why
-                          : frames.first.why;
+                      final suggestion = recommended[variant];
                       return _SlidePane(
-                        caption: title,
-                        hint: why,
+                        caption: suggestion.title,
+                        hint: suggestion.why,
                         child: FaceShapePhoto(
                           shape: shape,
                           size: 168,
@@ -321,13 +320,20 @@ class _ShapeCardState extends State<_ShapeCard> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: OptikMemberTokens.blue.withOpacity(0.12),
+                      color: (f.isAvoid
+                              ? OptikMemberTokens.danger
+                              : OptikMemberTokens.blue)
+                          .withOpacity(0.12),
                       borderRadius: BorderRadius.circular(99),
                     ),
-                    child: const Icon(
-                      Icons.visibility_outlined,
+                    child: Icon(
+                      f.isAvoid
+                          ? Icons.block_outlined
+                          : Icons.visibility_outlined,
                       size: 14,
-                      color: OptikMemberTokens.blue,
+                      color: f.isAvoid
+                          ? OptikMemberTokens.danger
+                          : OptikMemberTokens.blue,
                     ),
                   ),
                   const SizedBox(width: 10),

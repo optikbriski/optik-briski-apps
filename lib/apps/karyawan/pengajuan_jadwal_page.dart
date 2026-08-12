@@ -128,7 +128,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Pengajuan terkirim. Menunggu approval admin.'),
-          backgroundColor: Colors.green,
+          backgroundColor: OptikKaryawanTokens.seasideMid,
         ),
       );
       if (!mounted) return;
@@ -150,26 +150,34 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
   Color _statusColor(String? s) {
     switch ((s ?? '').toUpperCase()) {
       case 'APPROVED':
-        return Colors.greenAccent;
+        return OptikKaryawanTokens.success;
       case 'REJECTED':
-        return Colors.redAccent;
+        return OptikKaryawanTokens.danger;
       case 'CANCELLED':
-        return Colors.white38;
+        return OptikKaryawanTokens.muted;
       default:
-        return Colors.orangeAccent;
+        return OptikKaryawanTokens.warning;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: OptikKaryawanTokens.darkBg,
+      backgroundColor: OptikKaryawanTokens.scaffold,
       appBar: AppBar(
-        backgroundColor: OptikKaryawanTokens.darkBg,
-        title: const Text('Pengajuan Jadwal', style: TextStyle(fontSize: 16)),
+        backgroundColor: OptikKaryawanTokens.surface,
+        foregroundColor: OptikKaryawanTokens.ink,
+        title: const Text(
+          'Pengajuan Jadwal',
+          style: TextStyle(fontSize: 16, color: OptikKaryawanTokens.ink),
+        ),
         actions: [
           IconButton(onPressed: _bootstrap, icon: const Icon(Icons.refresh)),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: OptikKaryawanTokens.border),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -189,27 +197,31 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                       'Ajukan ijin, cuti, atau tukar jadwal. '
                       'Admin cabang / pusat yang menyetujui.',
                       style: TextStyle(
-                          color: Colors.white54, fontSize: 12, height: 1.35),
+                          color: OptikKaryawanTokens.muted,
+                          fontSize: 12,
+                          height: 1.35),
                     ),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: OptikKaryawanTokens.navyDeep,
+                        color: OptikKaryawanTokens.surface,
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: OptikKaryawanTokens.border),
+                        boxShadow: OptikKaryawanTokens.cardShadow,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Form pengajuan',
                               style: TextStyle(
-                                  color: Colors.white,
+                                  color: OptikKaryawanTokens.ink,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             value: _tipe,
-                            dropdownColor: OptikKaryawanTokens.navyDeep,
-                            style: const TextStyle(color: Colors.white),
+                            dropdownColor: OptikKaryawanTokens.surface,
+                            style: const TextStyle(color: OptikKaryawanTokens.ink),
                             decoration: _fieldDeco('Jenis'),
                             items: const [
                               DropdownMenuItem(
@@ -235,8 +247,9 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
                               value: _partnerId,
-                              dropdownColor: OptikKaryawanTokens.navyDeep,
-                              style: const TextStyle(color: Colors.white),
+                              dropdownColor: OptikKaryawanTokens.surface,
+                              style: const TextStyle(
+                                  color: OptikKaryawanTokens.ink),
                               decoration: _fieldDeco('Tukar dengan'),
                               items: _coworkers
                                   .map(
@@ -262,7 +275,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                           const SizedBox(height: 12),
                           TextField(
                             controller: _alasanCtrl,
-                            style: const TextStyle(color: Colors.white),
+                            style: const TextStyle(color: OptikKaryawanTokens.ink),
                             maxLines: 3,
                             decoration: _fieldDeco('Alasan'),
                           ),
@@ -272,8 +285,8 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                             child: ElevatedButton(
                               onPressed: _submitting ? null : _submit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: OptikKaryawanTokens.gold,
-                                foregroundColor: OptikKaryawanTokens.navyDeep,
+                                backgroundColor: OptikKaryawanTokens.seasideMid,
+                                foregroundColor: OptikKaryawanTokens.ink,
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
                               ),
@@ -281,7 +294,7 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                                 _submitting ? 'Mengirim…' : 'Kirim pengajuan',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: OptikKaryawanTokens.navyDeep),
+                                    color: OptikKaryawanTokens.ink),
                               ),
                             ),
                           ),
@@ -291,13 +304,13 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                     const SizedBox(height: 22),
                     const Text('Riwayat saya',
                         style: TextStyle(
-                            color: Colors.white,
+                            color: OptikKaryawanTokens.ink,
                             fontWeight: FontWeight.bold,
                             fontSize: 15)),
                     const SizedBox(height: 10),
                     if (_mine.isEmpty)
                       const Text('Belum ada pengajuan.',
-                          style: TextStyle(color: Colors.white38))
+                          style: TextStyle(color: OptikKaryawanTokens.muted))
                     else
                       ..._mine.map(_historyCard),
                   ],
@@ -308,15 +321,22 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
   InputDecoration _fieldDeco(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white54),
+      labelStyle: const TextStyle(color: OptikKaryawanTokens.muted),
       filled: true,
-      fillColor: OptikKaryawanTokens.darkBg,
+      fillColor: OptikKaryawanTokens.surfaceMuted,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Colors.white24),
+        borderSide: const BorderSide(color: OptikKaryawanTokens.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(
+          color: OptikKaryawanTokens.seasideMid,
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -334,7 +354,9 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
         child: Text(
           value == null ? 'Pilih tanggal' : _dayFmt.format(value),
           style: TextStyle(
-            color: value == null ? Colors.white38 : Colors.white,
+            color: value == null
+                ? OptikKaryawanTokens.muted
+                : OptikKaryawanTokens.ink,
           ),
         ),
       ),
@@ -353,8 +375,9 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: OptikKaryawanTokens.navyDeep,
+        color: OptikKaryawanTokens.surface,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OptikKaryawanTokens.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,7 +387,8 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
               Expanded(
                 child: Text(tipe,
                     style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold)),
+                        color: OptikKaryawanTokens.ink,
+                        fontWeight: FontWeight.bold)),
               ),
               Text(status,
                   style: TextStyle(
@@ -376,20 +400,25 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
           const SizedBox(height: 6),
           Text(
             item['tanggal']?.toString().substring(0, 10) ?? '-',
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: const TextStyle(
+                color: OptikKaryawanTokens.muted, fontSize: 13),
           ),
           if (tipe == 'TUKAR' && partnerNama != null)
             Text('dengan $partnerNama',
-                style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                style: const TextStyle(
+                    color: OptikKaryawanTokens.muted, fontSize: 12)),
           const SizedBox(height: 4),
           Text(item['alasan']?.toString() ?? '-',
-              style: const TextStyle(color: Colors.white38, fontSize: 12)),
+              style: TextStyle(
+                  color: OptikKaryawanTokens.muted.withOpacity(0.85),
+                  fontSize: 12)),
           if ((item['reviewer_note']?.toString() ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Catatan: ${item['reviewer_note']}',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: const TextStyle(
+                    color: OptikKaryawanTokens.muted, fontSize: 12),
               ),
             ),
           if (status == 'PENDING') ...[

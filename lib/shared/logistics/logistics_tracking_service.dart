@@ -1,4 +1,7 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../attendance/pos_duty_gate.dart';
 
 /// Status surat jalan yang masih “di jalan” (bisa dilacak di peta gratis).
 const kLogisticsOpenStatuses = ['PREPARING', 'WAITING', 'TRANSIT', 'PENDING'];
@@ -89,6 +92,7 @@ class LogisticsTrackingService {
   Future<List<Map<String, dynamic>>> listKaryawanAktif({
     String? tokoId,
     bool pusatOnly = false,
+    bool requireOnDuty = true,
   }) async {
     final filterToko = pusatOnly
         ? 'PUSAT'
@@ -104,9 +108,19 @@ class LogisticsTrackingService {
     }
 
     final rows = await q.order('nama');
-    return (rows as List)
+    var list = (rows as List)
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
+
+    if (requireOnDuty) {
+      final onDuty = await PosDutyGate.openShiftIdsForToko(filterToko ?? '');
+      if (onDuty != null) {
+        list = list
+            .where((k) => onDuty.contains(k['id']?.toString()))
+            .toList();
+      }
+    }
+    return list;
   }
 
   Future<void> assignKurir({
@@ -119,6 +133,11 @@ class LogisticsTrackingService {
     final kid = karyawanId.trim();
     final nm = nama.trim();
     if (kid.isEmpty || nm.isEmpty) throw 'Data kurir tidak lengkap.';
+
+    final dutyBlock = await PosDutyGate.blockReason(karyawanId: kid);
+    if (dutyBlock != null) {
+      throw dutyBlock.tr();
+    }
 
     final row = await _db
         .from('stock_move_history')

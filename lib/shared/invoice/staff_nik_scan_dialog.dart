@@ -1,9 +1,11 @@
 // ignore_for_file: use_build_context_synchronously
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/pos_duty_gate.dart';
 import '../qr/hid_scan_intake.dart';
 import '../theme.dart';
 import '../widgets/admin/admin_premium.dart';
@@ -109,12 +111,30 @@ class _StaffNikScanPageState extends State<_StaffNikScanPage> {
         setState(() {
           _busy = false;
           _locked = false;
-          _error = 'Karyawan tidak aktif.';
+          _error = 'pos_terlibat_not_aktif'.tr();
         });
         try {
           await _camera?.start();
         } catch (_) {}
         return;
+      }
+      final kid = res['id']?.toString() ?? '';
+      if (kid.isNotEmpty) {
+        final dutyBlock = await PosDutyGate.blockReason(
+          karyawanId: kid,
+          nik: nik,
+        );
+        if (dutyBlock != null) {
+          setState(() {
+            _busy = false;
+            _locked = false;
+            _error = dutyBlock.tr();
+          });
+          try {
+            await _camera?.start();
+          } catch (_) {}
+          return;
+        }
       }
       Navigator.pop(context, Map<String, dynamic>.from(res));
     } catch (e) {

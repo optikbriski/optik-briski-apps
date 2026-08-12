@@ -107,13 +107,28 @@ class _MemberShopAddressMapPageState extends State<MemberShopAddressMapPage> {
   }
 
   Future<void> _choose() async {
+    final display = (_display.isEmpty ? _label : _display).trim();
+    if (display.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alamat belum terbaca. Geser peta lalu coba lagi.')),
+      );
+      return;
+    }
     final entry = MemberShopAddressEntry.fromCoords(
-      displayName: _display.isEmpty ? _label : _display,
+      displayName: display,
       lat: _lat,
       lng: _lng,
-      label: _label,
+      label: _label.trim().isEmpty ? null : _label.trim(),
       kind: widget.saveAsKind ?? ShopAddressKind.custom,
     );
+    if (!MemberShopAddressEntry.isValidForShipping(entry)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Titik lokasi tidak valid')),
+      );
+      return;
+    }
     if (widget.saveAsKind == ShopAddressKind.home ||
         widget.saveAsKind == ShopAddressKind.work ||
         widget.saveAsKind == ShopAddressKind.favorite) {

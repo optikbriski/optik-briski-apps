@@ -1,4 +1,5 @@
 // ignore_for_file: use_build_context_synchronously
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -38,9 +39,7 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
           ),
         ),
         content: Text(
-          pusatOnly
-              ? 'Tidak ada karyawan aktif di Pusat.'
-              : 'Tidak ada karyawan aktif di toko ini.',
+          'pos_duty_picker_empty'.tr(),
           style: const TextStyle(color: OptikAdminTokens.slate),
         ),
         actions: [
@@ -61,7 +60,7 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
   final sel = await showAdminPicker<Map<String, dynamic>>(
     context: context,
     title: title,
-    subtitle: 'Karyawan aktif sebagai kurir pengiriman',
+    subtitle: 'Karyawan yang sedang bertugas (sudah absen masuk)',
     headerIcon: Icons.delivery_dining_rounded,
     searchHint: 'Cari nama / NIK…',
     clearLabel: allowSkip ? 'Hapus / lewati kurir' : null,

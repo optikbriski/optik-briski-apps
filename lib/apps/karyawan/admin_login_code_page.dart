@@ -21,10 +21,12 @@ class AdminLoginCodePage extends StatefulWidget {
 
 class _AdminLoginCodePageState extends State<AdminLoginCodePage>
     with TickerProviderStateMixin {
-  static const _bgDeep = Color(0xFF070B14);
-  static const _accent = OptikKaryawanTokens.gold;
-  static const _accentWarm = Color(0xFFFBBF24);
-  static const _card = OptikKaryawanTokens.darkCard;
+  static const _bg = OptikKaryawanTokens.scaffold;
+  static const _accent = OptikKaryawanTokens.seasideMid;
+  static const _accentWarm = Color(0xFFE6C35C);
+  static const _card = OptikKaryawanTokens.surface;
+  static const _ink = OptikKaryawanTokens.ink;
+  static const _muted = OptikKaryawanTokens.muted;
 
   String? _code;
   String? _karyawanId;
@@ -123,12 +125,18 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: _card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: OptikKaryawanTokens.border),
+        ),
         content: const Row(
           children: [
             Icon(Icons.check_circle_rounded, color: _accent, size: 20),
             SizedBox(width: 10),
-            Text('Kode disalin — siap tempel di web Admin'),
+            Text(
+              'Kode disalin — siap tempel di web Admin',
+              style: TextStyle(color: _ink),
+            ),
           ],
         ),
       ),
@@ -157,15 +165,19 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
     final urgent = _expiresIn <= 3;
 
     return Scaffold(
-      backgroundColor: _bgDeep,
+      backgroundColor: _bg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: OptikKaryawanTokens.surface,
         elevation: 0,
-        foregroundColor: Colors.white,
+        foregroundColor: _ink,
         title: const Text(
           'Kode Login Admin',
-          style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.2),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+            color: _ink,
+          ),
         ),
         actions: [
           IconButton(
@@ -179,6 +191,10 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: OptikKaryawanTokens.border),
+        ),
       ),
       body: Stack(
         children: [
@@ -213,7 +229,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                               'Jangan bagikan kecuali Anda sedang login web Admin.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.42),
+                                color: _muted.withOpacity(0.9),
                                 fontSize: 12,
                                 height: 1.4,
                               ),
@@ -236,15 +252,16 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-        color: Colors.white.withOpacity(0.04),
+        border: Border.all(color: OptikKaryawanTokens.border),
+        color: OptikKaryawanTokens.surface,
+        boxShadow: OptikKaryawanTokens.cardShadow,
       ),
       child: Column(
         children: [
           const Text(
             'QR Identitas (otorisasi stok)',
             style: TextStyle(
-              color: Colors.white,
+              color: _ink,
               fontWeight: FontWeight.w800,
               fontSize: 14,
             ),
@@ -255,7 +272,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             'Harus sama dengan akun via login.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.55),
+              color: _muted.withOpacity(0.95),
               fontSize: 12,
               height: 1.35,
             ),
@@ -266,6 +283,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: OptikKaryawanTokens.border),
             ),
             child: QrImageView(
               data: payload,
@@ -273,11 +291,11 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
               backgroundColor: Colors.white,
               eyeStyle: const QrEyeStyle(
                 eyeShape: QrEyeShape.square,
-                color: OptikKaryawanTokens.darkBg,
+                color: _ink,
               ),
               dataModuleStyle: const QrDataModuleStyle(
                 dataModuleShape: QrDataModuleShape.square,
-                color: OptikKaryawanTokens.darkBg,
+                color: _ink,
               ),
             ),
           ),
@@ -307,15 +325,9 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withOpacity(0.08),
-                Colors.white.withOpacity(0.02),
-              ],
-            ),
+            border: Border.all(color: OptikKaryawanTokens.border),
+            color: OptikKaryawanTokens.surface.withOpacity(0.92),
+            boxShadow: OptikKaryawanTokens.cardShadow,
           ),
           child: Row(
             children: [
@@ -324,12 +336,10 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 height: 48,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF14B8A6), OptikKaryawanTokens.navyMid],
-                  ),
+                  gradient: OptikKaryawanTokens.goldGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: _accent.withOpacity(0.35),
+                      color: _accent.withOpacity(0.28),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -337,7 +347,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 ),
                 child: const Icon(
                   Icons.shield_rounded,
-                  color: Colors.white,
+                  color: _ink,
                   size: 26,
                 ),
               ),
@@ -351,7 +361,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: _ink,
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                         height: 1.2,
@@ -363,8 +373,8 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                         _roleLabel,
                         if (toko.isNotEmpty) toko,
                       ].join(' · '),
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.55),
+                      style: const TextStyle(
+                        color: _muted,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                       ),
@@ -377,13 +387,13 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
-                  color: _accent.withOpacity(0.12),
-                  border: Border.all(color: _accent.withOpacity(0.35)),
+                  color: OptikKaryawanTokens.seasideWash,
+                  border: Border.all(color: _accent.withOpacity(0.45)),
                 ),
                 child: Text(
                   'LIVE',
                   style: TextStyle(
-                    color: _accent.withOpacity(0.95),
+                    color: _ink.withOpacity(0.95),
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
@@ -403,16 +413,16 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) {
-        final glow = 0.18 + (_pulse.value * 0.12);
+        final glow = 0.12 + (_pulse.value * 0.1);
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
                 color: (urgent ? _accentWarm : _accent).withOpacity(glow),
-                blurRadius: 36,
+                blurRadius: 28,
                 spreadRadius: 0,
-                offset: const Offset(0, 12),
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -428,16 +438,16 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: Colors.white.withOpacity(0.12),
+                color: OptikKaryawanTokens.border,
                 width: 1.2,
               ),
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  OptikKaryawanTokens.navyDeep.withOpacity(0.92),
-                  OptikKaryawanTokens.darkBg.withOpacity(0.96),
-                  const Color(0xFF134E4A).withOpacity(0.55),
+                  OptikKaryawanTokens.seasideWash,
+                  OptikKaryawanTokens.seasidePale,
+                  OptikKaryawanTokens.seasideMid,
                 ],
               ),
             ),
@@ -446,7 +456,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 Text(
                   'ONE-TIME ACCESS',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
+                    color: _muted.withOpacity(0.85),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 2.4,
@@ -455,8 +465,8 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 const SizedBox(height: 6),
                 Text(
                   _prefixHint,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                  style: const TextStyle(
+                    color: _ink,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -485,7 +495,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                     painter: _CountdownRingPainter(
                       progress: progress,
                       urgent: urgent,
-                      trackColor: Colors.white.withOpacity(0.08),
+                      trackColor: OptikKaryawanTokens.seasidePale.withOpacity(0.65),
                       activeColor: urgent ? _accentWarm : _accent,
                     ),
                     child: Center(
@@ -495,7 +505,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                           Text(
                             '$_expiresIn',
                             style: TextStyle(
-                              color: urgent ? _accentWarm : Colors.white,
+                              color: urgent ? _accentWarm : _ink,
                               fontSize: 28,
                               fontWeight: FontWeight.w800,
                               height: 1,
@@ -508,7 +518,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                           Text(
                             'detik',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.45),
+                              color: _muted.withOpacity(0.9),
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -523,8 +533,8 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                   urgent ? 'Segera ganti…' : 'Berlaku sampai countdown habis',
                   style: TextStyle(
                     color: urgent
-                        ? _accentWarm.withOpacity(0.9)
-                        : Colors.white.withOpacity(0.5),
+                        ? _accentWarm.withOpacity(0.95)
+                        : _muted,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -565,17 +575,17 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
               gradient: LinearGradient(
                 colors: _copied
                     ? const [
-                        OptikKaryawanTokens.navyMid,
-                        OptikKaryawanTokens.navyDeep,
+                        OptikKaryawanTokens.seasidePale,
+                        OptikKaryawanTokens.seasideMid,
                       ]
                     : const [
-                        OptikKaryawanTokens.goldLite,
-                        OptikKaryawanTokens.gold,
+                        OptikKaryawanTokens.seasideWash,
+                        OptikKaryawanTokens.seasideMid,
                       ],
               ),
               boxShadow: [
                 BoxShadow(
-                  color: _accent.withOpacity(0.35),
+                  color: _accent.withOpacity(0.28),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -588,14 +598,14 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 children: [
                   Icon(
                     _copied ? Icons.done_rounded : Icons.copy_all_rounded,
-                    color: Colors.white,
+                    color: _ink,
                     size: 22,
                   ),
                   const SizedBox(width: 10),
                   Text(
                     _copied ? 'Tersalin' : 'Salin kode',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: _ink,
                       fontWeight: FontWeight.w800,
                       fontSize: 15.5,
                       letterSpacing: 0.2,
@@ -621,22 +631,25 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
-              color: _card.withOpacity(0.9),
-              border: Border.all(color: Colors.orangeAccent.withOpacity(0.35)),
+              color: _card,
+              border: Border.all(
+                color: OptikKaryawanTokens.warning.withOpacity(0.45),
+              ),
+              boxShadow: OptikKaryawanTokens.cardShadow,
             ),
             child: Column(
               children: [
                 Icon(
                   Icons.lock_person_rounded,
-                  color: Colors.orangeAccent.withOpacity(0.95),
+                  color: OptikKaryawanTokens.warning.withOpacity(0.95),
                   size: 52,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.88),
+                  style: const TextStyle(
+                    color: _ink,
                     fontSize: 15,
                     height: 1.45,
                   ),
@@ -645,7 +658,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                 FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: _accent,
-                    foregroundColor: _bgDeep,
+                    foregroundColor: _ink,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 22,
                       vertical: 12,
@@ -684,10 +697,10 @@ class _AtmosphereBackground extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF070B14),
-            OptikKaryawanTokens.darkBg,
-            Color(0xFF0B2E2A),
-            Color(0xFF070B14),
+            Color(0xFFFFFFFF),
+            OptikKaryawanTokens.seasideWash,
+            OptikKaryawanTokens.seasidePale,
+            Color(0xFFFFFFFF),
           ],
           stops: [0.0, 0.35, 0.72, 1.0],
         ),
@@ -697,12 +710,12 @@ class _AtmosphereBackground extends StatelessWidget {
           Positioned(
             top: -80,
             right: -40,
-            child: _GlowBlob(color: Color(0x33D4AF37), size: 220),
+            child: _GlowBlob(color: Color(0x4485D1DB), size: 220),
           ),
           Positioned(
             bottom: 80,
             left: -60,
-            child: _GlowBlob(color: Color(0x22FBBF24), size: 200),
+            child: _GlowBlob(color: Color(0x4485D1DB), size: 200),
           ),
         ],
       ),
@@ -747,8 +760,8 @@ class _DigitTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = isPrefix
-        ? (urgent ? const Color(0xFFFBBF24) : OptikKaryawanTokens.gold)
-        : Colors.white.withOpacity(0.12);
+        ? (urgent ? const Color(0xFFE6C35C) : OptikKaryawanTokens.seasideMid)
+        : OptikKaryawanTokens.border;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
@@ -775,20 +788,20 @@ class _DigitTile extends StatelessWidget {
             end: Alignment.bottomCenter,
             colors: isPrefix
                 ? [
-                    const Color(0xFF134E4A).withOpacity(0.95),
-                    OptikKaryawanTokens.darkBg.withOpacity(0.98),
+                    OptikKaryawanTokens.seasidePale.withOpacity(0.95),
+                    OptikKaryawanTokens.seasideWash,
                   ]
                 : [
-                    Colors.white.withOpacity(0.1),
-                    Colors.white.withOpacity(0.04),
+                    Colors.white,
+                    OptikKaryawanTokens.surfaceMuted,
                   ],
           ),
           boxShadow: isPrefix
               ? [
                   BoxShadow(
                     color: (urgent
-                            ? const Color(0xFFFBBF24)
-                            : OptikKaryawanTokens.gold)
+                            ? const Color(0xFFE6C35C)
+                            : OptikKaryawanTokens.seasideMid)
                         .withOpacity(0.22),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
@@ -800,8 +813,10 @@ class _DigitTile extends StatelessWidget {
           digit,
           style: TextStyle(
             color: isPrefix
-                ? (urgent ? const Color(0xFFFBBF24) : const Color(0xFF5EEAD4))
-                : Colors.white,
+                ? (urgent
+                    ? const Color(0xFFB8860B)
+                    : OptikKaryawanTokens.ink)
+                : OptikKaryawanTokens.ink,
             fontSize: 28,
             fontWeight: FontWeight.w800,
             height: 1,
@@ -825,8 +840,8 @@ class _LegendPill extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: Colors.white.withOpacity(0.05),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        color: OptikKaryawanTokens.surface,
+        border: Border.all(color: OptikKaryawanTokens.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -837,12 +852,12 @@ class _LegendPill extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              color: OptikKaryawanTokens.gold.withOpacity(0.18),
+              color: OptikKaryawanTokens.seasideWash,
             ),
             child: Text(
               digit,
               style: const TextStyle(
-                color: Color(0xFF5EEAD4),
+                color: OptikKaryawanTokens.ink,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
               ),
@@ -852,7 +867,7 @@ class _LegendPill extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.65),
+              color: OptikKaryawanTokens.muted.withOpacity(0.95),
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
             ),

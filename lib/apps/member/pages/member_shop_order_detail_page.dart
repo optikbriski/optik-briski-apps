@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,7 @@ import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_shipping_voucher.dart';
 import '../../../shared/member/member_shop_address.dart';
+import '../../../shared/member/member_shop_order_detail_logic.dart';
 import '../../../shared/theme.dart';
 import 'member_checkout_page.dart';
 import 'member_option_picker.dart';
@@ -48,6 +51,9 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
   Map<String, dynamic>? _selectedRate;
   bool _useShippingVoucher = false;
   Map<String, dynamic>? _productPromo;
+  /// Serialisasi quote ongkir — respon lama diabaikan.
+  int _rateGen = 0;
+  Timer? _cartRateDebounce;
 
   @override
   void initState() {
@@ -59,24 +65,72 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
 
   @override
   void dispose() {
+    _cartRateDebounce?.cancel();
     _addr.removeListener(_onAddr);
     _cart.removeListener(_onCart);
     super.dispose();
   }
 
   void _onAddr() {
+    if (!mounted) return;
     if (!_storeOverride) {
-      _suggestNearest();
+      unawaited(_suggestNearest());
+      return;
     }
-    if (mounted) setState(() {});
+    // Cabang manual tetap — tetap hitung ulang ongkir ke alamat baru.
+    setState(() {});
+    unawaited(_refreshShipping());
   }
 
   void _onCart() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _syncVoucherWithCurrentRate();
+    setState(() {});
+    _cartRateDebounce?.cancel();
+    _cartRateDebounce = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      if (_fulfillment == 'delivery' &&
+          _tokoId != null &&
+          _addr.isConfirmed) {
+        unawaited(_refreshShipping());
+      }
+    });
   }
+
+  void _syncVoucherWithCurrentRate() {
+    if (!_useShippingVoucher) return;
+    final r = _selectedRate;
+    final ok = _shipTier.canApply(
+      isObr: r?['is_obr'] == true,
+      category: r?['category']?.toString(),
+      shippingFee: _shippingFee,
+    );
+    if (!ok) _useShippingVoucher = false;
+  }
+
+  Map<String, dynamic>? _storeById(String? id) {
+    final tid = (id ?? '').trim();
+    if (tid.isEmpty) return null;
+    for (final s in _stores) {
+      if ((s['toko_id'] ?? '').toString() == tid) return s;
+    }
+    return null;
+  }
+
+  bool get _payBlocked => memberShopOrderDetailPayBlocked(
+        hasSelection: _cart.hasSelection,
+        isDelivery: _fulfillment == 'delivery',
+        addressConfirmed: _addr.isConfirmed,
+        loadingRates: _loadingRates,
+        hasSelectedRate: _selectedRate != null,
+        hasRateGroups: _rateGroups.isNotEmpty,
+        hasRateError: _rateError != null && _rateError!.trim().isNotEmpty,
+      );
 
   Future<void> _boot() async {
     await _cart.ensureLoaded();
+    // Lensa tidak boleh ikut detail / checkout online.
+    await _cart.purgeOnlineBlocked();
     await _addr.ensureLoaded();
     List<Map<String, dynamic>> stores = const [];
     try {
@@ -147,13 +201,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
   }
 
   ({double? oLat, double? oLng, double? dLat, double? dLng}) _geoPair() {
-    Map<String, dynamic>? store;
-    for (final s in _stores) {
-      if ((s['toko_id'] ?? '').toString() == _tokoId) {
-        store = s;
-        break;
-      }
-    }
+    final store = _storeById(_tokoId);
     return (
       oLat: (store?['latitude'] as num?)?.toDouble(),
       oLng: (store?['longitude'] as num?)?.toDouble(),
@@ -228,21 +276,33 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
       );
       return;
     }
-    final options = _stores
+    final pickupStores =
+        _stores.where((s) => storeAllowsPickup(s)).toList(growable: false);
+    if (pickupStores.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Belum ada cabang yang menerima ambil di toko'),
+        ),
+      );
+      return;
+    }
+    final options = pickupStores
         .map(
           (s) => MemberPickerOption(
             value: (s['toko_id'] ?? '').toString(),
             label: (s['label'] ?? s['toko_id'] ?? '-').toString(),
-            subtitle: s['pickup_enabled'] == false
-                ? 'Pickup nonaktif'
-                : 'Ambil di toko',
+            subtitle: 'Ambil di toko',
             icon: Icons.storefront_outlined,
           ),
         )
         .where((o) => o.value.isNotEmpty)
         .toList();
     final pref = MemberSession.instance.preferredTokoId?.trim();
-    final preselect = (_tokoId != null && _tokoId!.isNotEmpty)
+    final currentOk = _tokoId != null &&
+        _tokoId!.isNotEmpty &&
+        storeAllowsPickup(_storeById(_tokoId));
+    final preselect = currentOk
         ? _tokoId
         : (pref != null &&
                 pref.isNotEmpty &&
@@ -442,7 +502,14 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
       ],
     );
     if (v == null || !mounted) return;
-    setState(() => _fulfillment = v);
+    setState(() {
+      _fulfillment = v;
+      if (v == 'pickup' && !storeAllowsPickup(_storeById(_tokoId))) {
+        _tokoId = null;
+        _storeOverride = false;
+        _storeHint = 'Pilih cabang untuk ambil di toko';
+      }
+    });
     await _refreshShipping();
   }
 
@@ -451,7 +518,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
     final fee = int.tryParse('${rate['price'] ?? 0}') ?? 0;
     final isObr = rate['is_obr'] == true;
     final cat = rate['category']?.toString();
-    final tier = ObrShippingVoucherTier.resolve(_cart.subtotal);
+    final tier = ObrShippingVoucherTier.resolve(_cart.selectedSubtotal);
     final shipOk = tier.canApply(
       isObr: isObr,
       category: cat,
@@ -467,7 +534,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
   }
 
   ObrShippingVoucherTier get _shipTier =>
-      ObrShippingVoucherTier.resolve(_cart.subtotal);
+      ObrShippingVoucherTier.resolve(_cart.selectedSubtotal);
 
   bool get _shipVoucherActive {
     if (!_useShippingVoucher || _fulfillment != 'delivery') return false;
@@ -490,7 +557,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
   int get _productDiscount {
     final p = _productPromo;
     if (p == null) return 0;
-    return productPromoDiscountRp(p, _cart.subtotal);
+    return productPromoDiscountRp(p, _cart.selectedSubtotal);
   }
 
   Future<void> _pickVoucher() async {
@@ -498,7 +565,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
     final picked = await Navigator.of(context).push<MemberVoucherSelection>(
       MaterialPageRoute(
         builder: (_) => MemberVoucherPickerPage(
-          subtotal: _cart.subtotal,
+          subtotal: _cart.selectedSubtotal,
           shippingFee: _shippingFee,
           isObr: r?['is_obr'] == true,
           shippingCategory: r?['category']?.toString(),
@@ -511,10 +578,15 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
       ),
     );
     if (picked == null || !mounted) return;
+    final prevDisc = _productDiscount;
     setState(() {
       _useShippingVoucher = picked.useShippingVoucher;
       _productPromo = picked.productPromo;
     });
+    // Diskon produk mengubah orderValue / jangkauan OBR → quote ulang.
+    if (_fulfillment == 'delivery' && prevDisc != _productDiscount) {
+      await _refreshShipping();
+    }
   }
 
   String get _voucherSubtitle {
@@ -573,8 +645,10 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
   }
 
   Future<void> _refreshShipping() async {
+    final gen = ++_rateGen;
+
     if (_fulfillment != 'delivery' || _tokoId == null) {
-      if (!mounted) return;
+      if (!mounted || gen != _rateGen) return;
       setState(() {
         _shippingFee = 0;
         _rateGroups = const [];
@@ -583,6 +657,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         _rateError = null;
         _obrHint = null;
         _loadingRates = false;
+        _useShippingVoucher = false;
       });
       return;
     }
@@ -598,7 +673,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         dLat == null ||
         dLng == null ||
         (oLat == 0 && oLng == 0)) {
-      if (!mounted) return;
+      if (!mounted || gen != _rateGen) return;
       setState(() {
         _shippingFee = 0;
         _rateGroups = const [];
@@ -608,27 +683,22 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
             'Butuh koordinat cabang + alamat untuk tarif Biteship.';
         _obrHint = null;
         _loadingRates = false;
+        _useShippingVoucher = false;
       });
       return;
     }
 
     final distanceM = Geolocator.distanceBetween(oLat, oLng, dLat, dLng);
-    final orderValue = _cart.subtotal - _productDiscount;
+    final orderValue = _cart.selectedSubtotal - _productDiscount;
     final goodsValue = orderValue < 0 ? 0 : orderValue;
 
-    if (!mounted) return;
+    if (!mounted || gen != _rateGen) return;
     setState(() {
       _loadingRates = true;
       _rateError = null;
     });
 
-    Map<String, dynamic>? store;
-    for (final s in _stores) {
-      if ((s['toko_id'] ?? '').toString() == _tokoId) {
-        store = s;
-        break;
-      }
-    }
+    final store = _storeById(_tokoId);
 
     final q = await _repo.quoteCourierFeeTable(
       originLat: oLat,
@@ -640,7 +710,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
       obrEnabledCategories: MemberRepository.obrCategoriesFromStore(store),
     );
 
-    if (!mounted) return;
+    if (!mounted || gen != _rateGen) return;
 
     final groups = <Map<String, dynamic>>[];
     final rawGroups = q['groups'];
@@ -650,49 +720,10 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
       }
     }
 
-    Map<String, dynamic>? selected = _selectedRate;
-    final keepId = _selectedRateId;
-    if (keepId != null) {
-      Map<String, dynamic>? found;
-      for (final g in groups) {
-        final opts = g['options'];
-        if (opts is! List) continue;
-        for (final o in opts) {
-          if (o is Map && o['id']?.toString() == keepId) {
-            found = Map<String, dynamic>.from(o);
-            break;
-          }
-        }
-        if (found != null) break;
-      }
-      selected = found;
-    }
-
-    // Default: OBR termurah (instant→sameday→nextday), else opsi termurah.
-    if (selected == null) {
-      Map<String, dynamic>? bestObr;
-      Map<String, dynamic>? bestAny;
-      for (final g in groups) {
-        final opts = g['options'];
-        if (opts is! List) continue;
-        for (final o in opts) {
-          if (o is! Map) continue;
-          final m = Map<String, dynamic>.from(o);
-          final p = int.tryParse('${m['price']}') ?? 0;
-          if (bestAny == null ||
-              p < (int.tryParse('${bestAny['price']}') ?? 1 << 30)) {
-            bestAny = m;
-          }
-          if (m['is_obr'] == true) {
-            if (bestObr == null ||
-                p < (int.tryParse('${bestObr['price']}') ?? 1 << 30)) {
-              bestObr = m;
-            }
-          }
-        }
-      }
-      selected = bestObr ?? bestAny;
-    }
+    final selected = pickDefaultShippingRate(
+      groups,
+      keepId: _selectedRateId,
+    );
 
     final obrOk = q['obr_eligible'] == true;
     final obrMaxKm =
@@ -736,29 +767,49 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         _selectedRateId = null;
         _shippingFee = 0;
       }
+      _syncVoucherWithCurrentRate();
     });
   }
 
   String? get _cabangLabel {
-    for (final s in _stores) {
-      if ((s['toko_id'] ?? '').toString() == _tokoId) {
-        return (s['label'] ?? s['toko_id']).toString();
-      }
-    }
-    return _tokoId;
+    final s = _storeById(_tokoId);
+    if (s == null) return _tokoId;
+    return (s['label'] ?? s['toko_id']).toString();
   }
 
   int get _total {
-    final goods = _cart.subtotal - _productDiscount;
+    final goods = _cart.selectedSubtotal - _productDiscount;
     final base = goods < 0 ? 0 : goods;
     final ship = _fulfillment == 'delivery' ? _shippingFeePayable : 0;
     return base + ship;
   }
 
   Future<void> _reviewOrder() async {
-    if (!MemberSession.instance.isLoggedIn) {
-      Navigator.of(context).pushNamed('/login');
+    if (!_cart.hasSelection) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _cart.isEmpty
+                ? 'Keranjang kosong'
+                : 'Pilih minimal 1 produk di keranjang untuk lanjut.',
+          ),
+        ),
+      );
       return;
+    }
+    final blockedErr = _cart.onlineBlockedSelectionError;
+    if (blockedErr != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(blockedErr)),
+      );
+      await _cart.purgeOnlineBlocked();
+      return;
+    }
+    if (!MemberSession.instance.isLoggedIn) {
+      await Navigator.of(context).pushNamed('/login');
+      if (!mounted || !MemberSession.instance.isLoggedIn) return;
     }
     if (_fulfillment == 'delivery') {
       if (!_addr.isConfirmed) {
@@ -772,10 +823,24 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         );
         return;
       }
+      if (_rateGroups.isEmpty || _selectedRate == null) {
+        await _refreshShipping();
+        if (!mounted) return;
+        if (_loadingRates) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tunggu tarif kurir selesai dimuat')),
+          );
+          return;
+        }
+      }
       if (_selectedRate == null || (_courier).trim().isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pilih kurir pengiriman dulu')),
+          SnackBar(
+            content: Text(
+              _rateError ?? 'Pilih kurir pengiriman dulu',
+            ),
+          ),
         );
         return;
       }
@@ -791,10 +856,17 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         return;
       }
     } else {
-      // Pickup: wajib pilih cabang (tidak ada default diam-diam).
-      if (_tokoId == null || _tokoId!.isEmpty) {
+      // Pickup: wajib pilih cabang yang terima ambil di toko.
+      if (_tokoId == null ||
+          _tokoId!.isEmpty ||
+          !storeAllowsPickup(_storeById(_tokoId))) {
         await _pickStoreForPickup();
-        if (!mounted || _tokoId == null || _tokoId!.isEmpty) return;
+        if (!mounted ||
+            _tokoId == null ||
+            _tokoId!.isEmpty ||
+            !storeAllowsPickup(_storeById(_tokoId))) {
+          return;
+        }
       }
     }
     if (_tokoId == null || _tokoId!.isEmpty) {
@@ -803,13 +875,6 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
         const SnackBar(
           content: Text('Pilih cabang dulu — pesanan masuk ke cabang itu'),
         ),
-      );
-      return;
-    }
-    if (_cart.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keranjang kosong')),
       );
       return;
     }
@@ -829,7 +894,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
           geo.dLat!,
           geo.dLng!,
         );
-        final goods = _cart.subtotal - _productDiscount;
+        final goods = _cart.selectedSubtotal - _productDiscount;
         final goodsValue = goods < 0 ? 0 : goods;
         if (!MemberRepository.isObrDistanceEligible(
           distanceMeters: dm,
@@ -1024,7 +1089,7 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
                                 ? 'Alamat (opsional)'
                                 : 'Alamat pengiriman'),
                         subtitle: _addr.isConfirmed
-                            ? _addr.fullAddress
+                            ? _addr.displayWithDetail
                             : (_fulfillment == 'pickup'
                                 ? 'Opsional — untuk saran cabang terdekat'
                                 : 'Wajib pilih & konfirmasi alamat Maps'),
@@ -1066,6 +1131,13 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
                                   ? (_rateError ??
                                       'Tarif belum tersedia — cek koordinat')
                                   : _courierDetailLine),
+                          trailing: (!_loadingRates &&
+                                  _rateGroups.isEmpty &&
+                                  _rateError != null)
+                              ? _linkChip('Coba lagi', () {
+                                  unawaited(_refreshShipping());
+                                })
+                              : null,
                           onTap: _loadingRates ? null : _pickCourier,
                         ),
                         if (_obrHint != null) ...[
@@ -1120,82 +1192,98 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
                 ),
                 const SizedBox(height: 8),
                 _Card(
-                  child: _cart.items.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(18),
+                  child: !_cart.hasSelection
+                      ? Padding(
+                          padding: const EdgeInsets.all(18),
                           child: Text(
-                            'Keranjang kosong',
-                            style: TextStyle(color: OptikMemberTokens.inkMuted),
+                            _cart.isEmpty
+                                ? 'Keranjang kosong'
+                                : 'Tidak ada item terpilih. '
+                                    'Centang produk di keranjang dulu.',
+                            style: const TextStyle(
+                              color: OptikMemberTokens.inkMuted,
+                            ),
                           ),
                         )
-                      : Column(
-                          children: [
-                            for (var i = 0; i < _cart.items.length; i++) ...[
-                              if (i > 0)
-                                const Divider(
-                                  height: 1,
-                                  color: OptikMemberTokens.lineSoft,
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  12,
-                                  14,
-                                  12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: OptikMemberTokens.blueMist,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: const Icon(
-                                        Icons.visibility_outlined,
-                                        color: OptikMemberTokens.blueDeep,
-                                        size: 20,
-                                      ),
+                      : Builder(
+                          builder: (context) {
+                            final lines = _cart.selectedItems;
+                            return Column(
+                              children: [
+                                for (var i = 0; i < lines.length; i++) ...[
+                                  if (i > 0)
+                                    const Divider(
+                                      height: 1,
+                                      color: OptikMemberTokens.lineSoft,
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _cart.items[i].nama,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 14,
-                                              color: OptikMemberTokens.ink,
-                                            ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      14,
+                                      12,
+                                      14,
+                                      12,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: OptikMemberTokens.blueMist,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '×${_cart.items[i].qty}',
-                                            style: const TextStyle(
-                                              fontSize: 12.5,
-                                              color: OptikMemberTokens.inkMuted,
-                                            ),
+                                          child: const Icon(
+                                            Icons.visibility_outlined,
+                                            color: OptikMemberTokens.blueDeep,
+                                            size: 20,
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                lines[i].nama,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 14,
+                                                  color: OptikMemberTokens.ink,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${_money.format(lines[i].harga)} · ×${lines[i].qty}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12.5,
+                                                  color:
+                                                      OptikMemberTokens.inkMuted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          _money.format(lines[i].lineTotal),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                            color: OptikMemberTokens.blueDeep,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      _money.format(_cart.items[i].lineTotal),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                        color: OptikMemberTokens.blueDeep,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
                         ),
                 ),
               ],
@@ -1277,12 +1365,8 @@ class _MemberShopOrderDetailPageState extends State<MemberShopOrderDetailPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: (_fulfillment == 'delivery' &&
-                            (_loadingRates ||
-                                _selectedRate == null ||
-                                _rateGroups.isEmpty))
-                        ? null
-                        : _reviewOrder,
+                    // Tanpa alamat / error tarif: aktif → picker atau retry di _reviewOrder.
+                    onPressed: _payBlocked ? null : _reviewOrder,
                     child: Text(
                       _loadingRates && _fulfillment == 'delivery'
                           ? 'Memuat tarif…'
@@ -1378,6 +1462,8 @@ class _RowTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 14.5,
@@ -1387,6 +1473,8 @@ class _RowTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12.5,
                       height: 1.35,

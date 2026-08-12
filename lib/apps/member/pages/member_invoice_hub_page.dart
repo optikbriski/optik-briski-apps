@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -5,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'dart:async';
 
+import '../../../shared/garansi/garansi_service.dart';
 import '../../../shared/invoice/invoice_document_builder.dart';
 import '../../../shared/invoice/invoice_hub_service.dart';
 import '../../../shared/invoice/invoice_link.dart';
@@ -16,6 +18,7 @@ import '../../../shared/theme.dart';
 import '../../../shared/whatsapp_launcher.dart';
 import '../member_rating_page.dart';
 import '../member_widgets.dart';
+import 'member_claim_terms_gate.dart';
 import 'member_survey_page.dart';
 
 /// Detail nota + status + QR fase + foto + review + garansi (fitur 1,2,11,16,17).
@@ -36,6 +39,9 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
   InvoiceDocumentModel? _doc;
   bool _loading = true;
   String? _error;
+  Set<String> _openRequestKartuIds = const {};
+  /// False = status pengajuan tidak diketahui → Klaim dinonaktifkan.
+  bool _openRequestsKnown = true;
   StreamSubscription<void>? _watchSub;
 
   @override
@@ -57,18 +63,39 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _hub = null;
+      _doc = null;
     });
+    final phone = MemberSession.instance.phoneForQuery;
+    if (!MemberSession.instance.isLoggedIn || phone.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'login';
+      });
+      return;
+    }
     try {
       final hub = await _hubSvc.loadByInvoice(
         widget.noInvoice,
-        phone: MemberSession.instance.phoneForQuery,
+        phone: phone,
       );
       if (!mounted) return;
       if (hub == null) {
         setState(() {
           _loading = false;
-          _error = 'Nota tidak ditemukan';
+          _error = 'not_found';
           _doc = null;
+        });
+        return;
+      }
+      // Wajib milik nomor HP akun yang login (selaras rating / resep).
+      if (hub['qr_owner_verified'] != true) {
+        setState(() {
+          _loading = false;
+          _error = 'not_owner';
+          _doc = null;
+          _hub = null;
         });
         return;
       }
@@ -78,10 +105,30 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
         sale: Map<String, dynamic>.from(hub),
         items: items,
       );
+
+      var openKnown = true;
+      var openIds = <String>{};
+      try {
+        final reqs = await _repo.listClaimRequests(phone);
+        for (final r in reqs) {
+          if (!GaransiService.isOpenClaimRequestStatus(
+              r['status']?.toString())) {
+            continue;
+          }
+          final kid = r['kartu_id']?.toString();
+          if (kid != null && kid.isNotEmpty) openIds.add(kid);
+        }
+      } catch (_) {
+        openKnown = false;
+        openIds = {};
+      }
+
       if (!mounted) return;
       setState(() {
         _hub = hub;
         _doc = doc;
+        _openRequestKartuIds = openIds;
+        _openRequestsKnown = openKnown;
         _loading = false;
       });
     } catch (e) {
@@ -91,6 +138,11 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
         _error = '$e';
       });
     }
+  }
+
+  bool _hasOpenRequest(String? kartuId) {
+    if (kartuId == null || kartuId.isEmpty) return false;
+    return _openRequestKartuIds.contains(kartuId);
   }
 
 
@@ -135,11 +187,35 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? MemberEmptyState(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Gagal memuat',
-                  message: _error!,
-                  actionLabel: 'Coba lagi',
-                  onAction: _load,
+                  icon: _error == 'login'
+                      ? Icons.lock_outline_rounded
+                      : Icons.receipt_long_outlined,
+                  title: _error == 'login'
+                      ? 'member_invoice_login_title'.tr()
+                      : _error == 'not_found'
+                          ? 'invoice_hub_not_found'.tr()
+                          : _error == 'not_owner'
+                              ? 'member_invoice_not_owner_title'.tr()
+                              : 'Gagal memuat',
+                  message: _error == 'login'
+                      ? 'member_invoice_login_msg'.tr()
+                      : _error == 'not_found'
+                          ? 'Nota mungkin sudah dihapus atau nomor salah. '
+                              'Cek lagi dari daftar Pesanan.'
+                          : _error == 'not_owner'
+                              ? 'member_rating_not_owner'.tr()
+                              : _error!,
+                  actionLabel: _error == 'login'
+                      ? 'member_invoice_go_login'.tr()
+                      : (_error == 'not_found' || _error == 'not_owner')
+                          ? 'Kembali'
+                          : 'Coba lagi',
+                  onAction: _error == 'login'
+                      ? () => Navigator.of(context)
+                          .pushReplacementNamed('/login')
+                      : (_error == 'not_found' || _error == 'not_owner')
+                          ? () => Navigator.of(context).maybePop()
+                          : _load,
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
@@ -190,11 +266,21 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
     String phase;
     String tip;
     if (dpWaiting) {
-      phase = 'DP · menunggu barang ready';
-      tip =
-          'Pembayaran DP dikonfirmasi (nota tanpa QR). '
-          'QR pelunasan dikirim ke email, WA, dan di sini setelah admin '
-          'menandai barang ready.';
+      // Selaras label Pesanan / Beranda — jangan bilang "menunggu ready"
+      // kalau tracking sudah SIAP_DIAMBIL / CLEAR.
+      phase = InvoiceHubService.statusLabel(h);
+      if (tracking == 'SIAP_DIAMBIL' ||
+          tracking == 'CLEAR' ||
+          tracking == 'SIAP_PELUNASAN') {
+        tip =
+            'Barang ready / siap pelunasan. Lunasi sisa tagihan di kasir '
+            'sebelum ambil. Tunjukkan nota ini ke staf.';
+      } else {
+        tip =
+            'Pembayaran DP dikonfirmasi (nota tanpa QR). '
+            'QR pelunasan dikirim ke email, WA, dan di sini setelah admin '
+            'menandai barang ready.';
+      }
     } else if (phaseKey == 'DP' || InvoiceHubService.isDpOpen(h)) {
       phase = 'QR fase DP · pelunasan';
       tip =
@@ -396,14 +482,51 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
           else
             ...list.map((raw) {
               final g = Map<String, dynamic>.from(raw as Map);
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${g['jenis_garansi']} · ${g['nama_produk']}',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text(
-                  'Status: ${g['status']}\n'
-                  '${g['tanggal_mulai'] ?? '-'} → ${g['tanggal_akhir'] ?? '-'}',
-                ),
+              // Hub RPC kadang tanpa no_invoice — isi dari nota ini.
+              g.putIfAbsent('no_invoice', () => widget.noInvoice);
+              g.putIfAbsent('sale_id', () => h['sale_id'] ?? h['id']);
+              g.putIfAbsent('toko_id', () => h['toko_id']);
+              final openReq = _hasOpenRequest(g['id']?.toString());
+              final claimable = _openRequestsKnown &&
+                  GaransiService.kartuBisaDiklaim(g) &&
+                  !openReq;
+              final blocked = !_openRequestsKnown
+                  ? 'Tidak bisa cek pengajuan. Refresh halaman.'
+                  : openReq
+                      ? 'Pengajuan untuk kartu ini masih terbuka.'
+                      : GaransiService.alasanTidakBisaKlaim(g);
+              final mulai = GaransiService.tanggalMulaiKartu(g);
+              final akhir = GaransiService.tanggalAkhirKartu(g);
+              final range =
+                  '${mulai != null ? GaransiService.formatDate(mulai) : (g['tanggal_mulai'] ?? '-')}'
+                  ' → '
+                  '${akhir != null ? GaransiService.formatDate(akhir) : (g['tanggal_akhir'] ?? '-')}';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${g['jenis_garansi']} · ${g['nama_produk']}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                      'Status: ${GaransiService.statusLabel(g)}\n'
+                      '$range'
+                      '${blocked == null || claimable ? '' : '\n$blocked'}',
+                    ),
+                  ),
+                  if (claimable)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => openMemberClaimPage(
+                          context,
+                          initialKartu: g,
+                        ),
+                        icon: const Icon(Icons.storefront_outlined, size: 18),
+                        label: const Text('Ajukan klaim'),
+                      ),
+                    ),
+                ],
               );
             }),
         ],
@@ -438,7 +561,7 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
             ),
           ),
           icon: const Icon(Icons.star_rate_rounded),
-          label: const Text('Rating karyawan'),
+          label: Text('member_rating_cta'.tr()),
         ),
         if (diambil) ...[
           const SizedBox(height: 8),

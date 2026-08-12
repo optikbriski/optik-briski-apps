@@ -202,21 +202,43 @@ abstract final class InvoiceDocumentBuilder {
   }
 
   static String parseResep(String raw, String eye, String param) {
-    if (raw.isEmpty || raw == 'Normal') {
+    if (raw.isEmpty || raw.toLowerCase() == 'normal') {
       return param == 'PD' ? '-' : '0.00';
     }
     try {
-      final parts = raw.split('|');
+      final parts = raw.split('|').map((e) => e.trim()).toList();
       if (param == 'PD') {
+        for (final part in parts) {
+          if (part.toUpperCase().contains('PD PASIEN:')) {
+            final split = part.split(RegExp(r'PD Pasien:\s*', caseSensitive: false));
+            if (split.length > 1) return split.last.trim();
+          }
+        }
         if (raw.contains('PD Pasien:')) {
           return raw.split('PD Pasien:')[1].trim();
         }
         return '-';
       }
-      final sideStr = (eye == 'OD' || eye == 'R')
-          ? parts[0]
-          : (parts.length > 1 ? parts[1] : '');
-      final match = RegExp('$param\\s+([^/|\\s°]+)').firstMatch(sideStr);
+      final wantR = eye == 'OD' || eye == 'R';
+      var sideStr = '';
+      for (final part in parts) {
+        final u = part.toUpperCase();
+        if (wantR && (u.startsWith('R:') || u.startsWith('OD'))) {
+          sideStr = part;
+          break;
+        }
+        if (!wantR && (u.startsWith('L:') || u.startsWith('OS'))) {
+          sideStr = part;
+          break;
+        }
+      }
+      if (sideStr.isEmpty) {
+        sideStr = wantR
+            ? (parts.isNotEmpty ? parts[0] : '')
+            : (parts.length > 1 ? parts[1] : '');
+      }
+      final match =
+          RegExp('$param\\s+([^/|\\s°]+)', caseSensitive: false).firstMatch(sideStr);
       return match?.group(1) ?? '0.00';
     } catch (_) {
       return param == 'PD' ? '-' : '0.00';

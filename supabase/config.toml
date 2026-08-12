@@ -36,3 +36,9 @@ entrypoint = "./functions/member-send-channel-otp/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/member-send-register-otp/index.ts"
+
+# Member OBRA help bot: anon + custom session (not Supabase Auth JWT)
+[functions.member-help-bot]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/member-help-bot/index.ts"

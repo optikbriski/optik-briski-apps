@@ -8,6 +8,7 @@ enum MemberHomeReminderKind {
   dp,
   processing,
   onlinePending,
+  rating,
 }
 
 /// Reminder actionable di Beranda (data saja — navigasi di UI).
@@ -39,6 +40,8 @@ class MemberHomeReminder {
         return OptikMemberTokens.warning;
       case MemberHomeReminderKind.processing:
         return OptikMemberTokens.blue;
+      case MemberHomeReminderKind.rating:
+        return const Color(0xFFD97706);
     }
   }
 
@@ -48,12 +51,14 @@ class MemberHomeReminder {
         return 0;
       case MemberHomeReminderKind.ready:
         return 1;
-      case MemberHomeReminderKind.booking:
+      case MemberHomeReminderKind.rating:
         return 2;
-      case MemberHomeReminderKind.dp:
+      case MemberHomeReminderKind.booking:
         return 3;
-      case MemberHomeReminderKind.processing:
+      case MemberHomeReminderKind.dp:
         return 4;
+      case MemberHomeReminderKind.processing:
+        return 5;
     }
   }
 }

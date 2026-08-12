@@ -132,7 +132,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
       // Verifikasi sandi lama dulu — baru boleh ganti.
       await client.auth.signInWithPassword(email: email, password: oldPass);
       await client.auth.updateUser(UserAttributes(password: newPass));
-      _snack('Sandi berhasil diubah.', Colors.green);
+      _snack('Sandi berhasil diubah.', OptikKaryawanTokens.seasideMid);
     } on AuthException catch (e) {
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid') ||
@@ -267,7 +267,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
       await Supabase.instance.client
           .from('karyawan')
           .update({'pin_absensi': newPin}).eq('id', karyawan['id']);
-      _snack('PIN berhasil diubah.', Colors.green);
+      _snack('PIN berhasil diubah.', OptikKaryawanTokens.seasideMid);
     } catch (e) {
       _snack('Gagal ubah PIN: $e', Colors.redAccent);
     } finally {
@@ -288,7 +288,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
             Expanded(child: Text("pengaturan_reset_bio_title".tr())),
           ],
         ),
-        content: Text("pengaturan reset bio desc".tr(),
+        content: Text("pengaturan_reset_bio_desc".tr(),
             style: const TextStyle(fontSize: 14)),
         actions: [
           TextButton(
@@ -297,10 +297,13 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
                 style: const TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: OptikKaryawanTokens.seasideMid,
+              foregroundColor: OptikKaryawanTokens.ink,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: Text("pengaturan_btn_ya_reset".tr(),
-                style: const TextStyle(color: Colors.white)),
+                style: const TextStyle(color: OptikKaryawanTokens.ink)),
           ),
         ],
       ),
@@ -330,7 +333,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
           'match_score': 0,
         });
       }
-      _snack("pengaturan_msg_reset_sukses".tr(), Colors.green);
+      _snack("pengaturan_msg_reset_sukses".tr(), OptikKaryawanTokens.seasideMid);
     } catch (e) {
       _snack('Gagal reset wajah: $e', Colors.redAccent);
     } finally {
@@ -394,7 +397,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
   @override
   Widget build(BuildContext context) {
     return KaryawanPremiumScaffold(
-      title: "pengaturan title".tr(),
+      title: "pengaturan_title".tr(),
       eyebrow: 'OPTIK B. RISKI',
       body: Stack(
         children: [

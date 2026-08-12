@@ -2,10 +2,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../shared/finance/gl_posting_service.dart';
+import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
-import '../../shared/finance/gl_posting_service.dart';
 
 class CoaApprovalPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -65,6 +66,17 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
   }
 
   Future<void> _approveTransaksi(Map<String, dynamic> item) async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'setujui transaksi kas',
+    );
+    if (!allowed || !mounted) return;
+
+    final actorNama = (widget.profile['login_via_karyawan_nama'] ??
+            widget.profile['nama'])
+        ?.toString();
+
     setState(() => isLoading = true);
     try {
       await supabase
@@ -76,7 +88,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
       try {
         await GlPostingService().postManualFinance(
           ft: approved,
-          createdBy: widget.profile['nama']?.toString(),
+          createdBy: actorNama,
         );
       } catch (e) {
         debugPrint('GL posting approve gagal: $e');
@@ -91,6 +103,17 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
   }
 
   Future<void> _rejectTransaksi(Map<String, dynamic> item) async {
+    final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
+      context: context,
+      profile: widget.profile,
+      actionLabel: 'tolak transaksi kas',
+    );
+    if (!allowed || !mounted) return;
+
+    final actorNama = (widget.profile['login_via_karyawan_nama'] ??
+            widget.profile['nama'])
+        ?.toString();
+
     setState(() => isLoading = true);
     try {
       // Void jurnal GL terkait (jika sempat ter-post) sebelum hapus FT.
@@ -106,7 +129,7 @@ class _CoaApprovalPageState extends State<CoaApprovalPage> {
         if (je != null && je['id'] != null) {
           await GlPostingService().voidEntry(
             je['id'].toString(),
-            createdBy: widget.profile['nama']?.toString(),
+            createdBy: actorNama,
           );
         }
       } catch (_) {}

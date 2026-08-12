@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/garansi/garansi_service.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
+import 'member_warranty_list_page.dart';
 
 class MemberCarePage extends StatelessWidget {
   const MemberCarePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final hari = GaransiService.garansiHari;
     final sections = <(String, List<String>)>[
       (
         'Membersihkan',
@@ -25,6 +28,16 @@ class MemberCarePage extends StatelessWidget {
         ],
       ),
       (
+        'Masa & cara klaim garansi',
+        [
+          'Garansi aktif $hari hari sejak barang diambil di toko (hari diambil sampai hari ke-$hari).',
+          'Lebih dari $hari hari sejak diambil → garansi mati, tidak bisa klaim.',
+          'Klaim wajib datang ke toko membawa barang + nota/QR CLAIM.',
+          'App hanya mengajukan niat; keputusan setelah petugas cek fisik.',
+          'Maksimal 1× klaim per transaksi pembelian.',
+        ],
+      ),
+      (
         'Yang bisa membatalkan garansi',
         [
           'Kerusakan karena benturan / terjatuh / disengaja.',
@@ -39,6 +52,16 @@ class MemberCarePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const MemberWarrantyListPage(),
+              ),
+            ),
+            icon: const Icon(Icons.verified_user_outlined),
+            label: const Text('Lihat kartu garansi'),
+          ),
+          const SizedBox(height: 16),
           for (final s in sections) ...[
             MemberSectionLabel(s.$1),
             ...s.$2.map(

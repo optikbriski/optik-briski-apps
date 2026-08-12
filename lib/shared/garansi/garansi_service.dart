@@ -6,8 +6,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../invoice/sale_fulfillment_service.dart';
 
 /// Garansi frame + lensa:
-/// - Kartu dibuat saat jual (status menunggu_ambil)
-/// - Aktif 7 hari sejak kasir scan barcode invoice + foto hasil (customer ambil)
+/// - Kartu dibuat saat jual (status menunggu_ambil) — belum bisa klaim
+/// - Clock mulai hari kalender **Asia/Jakarta** saat diambil (scan + foto)
+/// - Window klaim: hari 0 … hari 7 inklusif (`tanggal_akhir = mulai + 7`)
+/// - Hari ke-8+ → mati / tidak bisa klaim
 /// - Klaim maksimal 1x per transaksi (sale)
 class GaransiService {
   GaransiService({SupabaseClient? client})
@@ -17,6 +19,9 @@ class GaransiService {
 
   static const int garansiHari = 7;
   static const String bucketFoto = 'garansi-photos';
+
+  /// Offset tetap WIB (UTC+7). Sama sumber kebenaran dengan RPC SQL.
+  static const Duration jakartaOffset = Duration(hours: 7);
 
   static bool isGaransiEligible(String? tipeProduk, String? namaProduk) {
     return jenisFromItem(tipeProduk, namaProduk) != null;
@@ -38,6 +43,42 @@ class GaransiService {
   }
 
   static DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Hari kalender Asia/Jakarta dari [now] (default: wall clock saat ini).
+  static DateTime jakartaDateOnly([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(jakartaOffset);
+    return DateTime(jkt.year, jkt.month, jkt.day);
+  }
+
+  /// Parse kolom `date` / instant ke hari kalender.
+  /// - `YYYY-MM-DD` murni → komponen tanggal apa adanya (kolom `date`)
+  /// - Instant / ISO bermuatan waktu → hari kalender Asia/Jakarta
+  static DateTime? parseDateOnly(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) {
+      final jkt = raw.toUtc().add(jakartaOffset);
+      return DateTime(jkt.year, jkt.month, jkt.day);
+    }
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    final pureDate = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s);
+    if (pureDate != null) {
+      final y = int.tryParse(pureDate.group(1)!);
+      final mo = int.tryParse(pureDate.group(2)!);
+      final d = int.tryParse(pureDate.group(3)!);
+      if (y == null || mo == null || d == null) return null;
+      return DateTime(y, mo, d);
+    }
+    final dt = DateTime.tryParse(s);
+    if (dt == null) return null;
+    final jkt = dt.toUtc().add(jakartaOffset);
+    return DateTime(jkt.year, jkt.month, jkt.day);
+  }
+
+  /// Akhir window inklusif: hari diambil + [garansiHari] (hari ke-7 masih aktif).
+  static DateTime tanggalAkhirDariMulai(DateTime mulai) =>
+      dateOnly(mulai).add(const Duration(days: garansiHari));
 
   static String formatDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-'
@@ -259,15 +300,15 @@ class GaransiService {
     );
   }
 
-  Map<String, dynamic> _aktifPatch({String? fotoHasilUrl}) {
-    final now = DateTime.now();
-    final mulai = dateOnly(now);
-    final akhir = mulai.add(const Duration(days: garansiHari));
+  Map<String, dynamic> _aktifPatch({String? fotoHasilUrl, DateTime? now}) {
+    final at = now ?? DateTime.now();
+    final mulai = jakartaDateOnly(at);
+    final akhir = tanggalAkhirDariMulai(mulai);
     final patch = <String, dynamic>{
       'status': 'aktif',
       'tanggal_mulai': formatDate(mulai),
       'tanggal_akhir': formatDate(akhir),
-      'diambil_at': now.toUtc().toIso8601String(),
+      'diambil_at': at.toUtc().toIso8601String(),
     };
     final foto = (fotoHasilUrl ?? '').trim();
     if (foto.isNotEmpty) patch['foto_hasil_url'] = foto;
@@ -533,13 +574,78 @@ class GaransiService {
     };
   }
 
-  bool kartuBisaDiklaim(Map<String, dynamic> kartu) {
-    final status = kartu['status']?.toString() ?? '';
-    if (status != 'aktif') return false;
-    if (kartu['klaim_digunakan'] == true) return false;
-    final akhir = DateTime.tryParse(kartu['tanggal_akhir']?.toString() ?? '');
+  /// True jika kartu boleh diajukan klaim (aktif, belum dipakai, masih dalam 7 hari).
+  static bool kartuBisaDiklaim(
+    Map<String, dynamic> kartu, {
+    DateTime? now,
+  }) {
+    return alasanTidakBisaKlaim(kartu, now: now) == null;
+  }
+
+  /// Hari kalender mulai window (diambil), atau null jika belum dimulai.
+  static DateTime? tanggalMulaiKartu(Map<String, dynamic> kartu) {
+    final dariMulai = parseDateOnly(kartu['tanggal_mulai']);
+    if (dariMulai != null) return dariMulai;
+    return parseDateOnly(kartu['diambil_at']);
+  }
+
+  /// Akhir inklusif window klaim (hari ke-7). Null jika belum bisa dihitung.
+  /// Hard-cap `mulai + 7` meski `tanggal_akhir` di DB lebih panjang.
+  static DateTime? tanggalAkhirKartu(Map<String, dynamic> kartu) {
+    final mulai = tanggalMulaiKartu(kartu);
+    final akhir = parseDateOnly(kartu['tanggal_akhir']);
+    if (mulai != null) {
+      final hard = tanggalAkhirDariMulai(mulai);
+      if (akhir == null) return hard;
+      return akhir.isBefore(hard) ? akhir : hard;
+    }
+    return akhir;
+  }
+
+  /// True jika [todayJkt] sudah lewat hari ke-7 sejak diambil.
+  static bool isGaransiMati(
+    Map<String, dynamic> kartu, {
+    DateTime? now,
+  }) {
+    final today = jakartaDateOnly(now);
+    final mulai = tanggalMulaiKartu(kartu);
+    if (mulai != null && today.isAfter(tanggalAkhirDariMulai(mulai))) {
+      return true;
+    }
+    final akhir = tanggalAkhirKartu(kartu);
     if (akhir == null) return false;
-    return !dateOnly(DateTime.now()).isAfter(akhir);
+    return today.isAfter(akhir);
+  }
+
+  /// Null = boleh klaim. Selain itu = alasan singkat untuk UI Member/Admin.
+  static String? alasanTidakBisaKlaim(
+    Map<String, dynamic> kartu, {
+    DateTime? now,
+  }) {
+    final status = (kartu['status'] ?? '').toString().trim().toLowerCase();
+    if (status == 'menunggu_ambil') {
+      return 'Belum aktif — ambil barang di toko dulu.';
+    }
+    if (kartu['klaim_digunakan'] == true || status == 'diklaim') {
+      return 'Klaim untuk transaksi ini sudah dipakai (maks. 1×).';
+    }
+    if (status == 'habis' || status == 'mati') {
+      return 'Garansi mati — lebih dari 7 hari sejak diambil.';
+    }
+    if (status == 'batal') {
+      return 'Garansi dibatalkan — tidak bisa klaim.';
+    }
+    if (status != 'aktif') {
+      return 'Garansi tidak aktif.';
+    }
+    if (isGaransiMati(kartu, now: now)) {
+      return 'Garansi mati — lebih dari 7 hari sejak diambil.';
+    }
+    final akhir = tanggalAkhirKartu(kartu);
+    if (akhir == null) {
+      return 'Tanggal akhir garansi tidak valid.';
+    }
+    return null;
   }
 
   Future<bool> saleSudahPunyaKlaim(String saleId) async {
@@ -576,8 +682,9 @@ class GaransiService {
     final saleId = kartu['sale_id']?.toString();
     if (saleId == null) throw 'Kartu tidak terhubung ke transaksi.';
 
-    if (!kartuBisaDiklaim(kartu)) {
-      throw 'Garansi tidak aktif, sudah habis, belum diambil, atau klaim sudah dipakai.';
+    final blocked = alasanTidakBisaKlaim(kartu);
+    if (blocked != null) {
+      throw blocked;
     }
 
     if (await saleSudahPunyaKlaim(saleId)) {
@@ -673,11 +780,8 @@ class GaransiService {
 
     if (keputusan == 'ditolak') {
       // Tetap tandai klaim dipakai, tapi kartu bisa ditandai diklaim/habis
-      final akhir = DateTime.tryParse(kartu['tanggal_akhir']?.toString() ?? '');
-      final statusAkhir = (akhir != null &&
-              dateOnly(DateTime.now()).isAfter(akhir))
-          ? 'habis'
-          : 'diklaim';
+      final statusAkhir =
+          isGaransiMati(kartu) ? 'habis' : 'diklaim';
       await _db
           .from('garansi_kartu')
           .update({'status': statusAkhir, 'klaim_digunakan': true}).eq(
@@ -687,21 +791,71 @@ class GaransiService {
     return Map<String, dynamic>.from(row);
   }
 
-  static int sisaHari(Map<String, dynamic> kartu) {
-    final status = kartu['status']?.toString() ?? '';
+  static int sisaHari(Map<String, dynamic> kartu, {DateTime? now}) {
+    final status = (kartu['status'] ?? '').toString().trim().toLowerCase();
     if (status == 'menunggu_ambil') return -999; // sentinel: belum mulai
-    final akhir = DateTime.tryParse(kartu['tanggal_akhir']?.toString() ?? '');
+    final akhir = tanggalAkhirKartu(kartu);
     if (akhir == null) return 0;
-    return dateOnly(akhir).difference(dateOnly(DateTime.now())).inDays;
+    return akhir.difference(jakartaDateOnly(now)).inDays;
   }
 
-  static String statusLabel(Map<String, dynamic> kartu) {
-    final s = kartu['status']?.toString() ?? '-';
+  static String statusLabel(Map<String, dynamic> kartu, {DateTime? now}) {
+    final s = (kartu['status'] ?? '-').toString().trim().toLowerCase();
     if (s == 'menunggu_ambil') return 'Menunggu ambil';
-    if (s == 'aktif') {
-      final sisa = sisaHari(kartu);
-      return sisa >= 0 ? 'Aktif ($sisa hari lagi)' : 'Habis';
+    if (s == 'diklaim' || kartu['klaim_digunakan'] == true) {
+      return 'Sudah diklaim';
     }
+    if (s == 'batal') return 'Dibatalkan';
+    if (s == 'habis' || s == 'mati' || isGaransiMati(kartu, now: now)) {
+      return 'Mati';
+    }
+    if (s == 'aktif') {
+      final sisa = sisaHari(kartu, now: now);
+      return sisa >= 0 ? 'Aktif ($sisa hari lagi)' : 'Mati';
+    }
+    if (s.isEmpty || s == '-') return '-';
     return s;
+  }
+
+  /// Pengajuan masih terbuka (blok klaim baru untuk kartu yang sama).
+  static bool isOpenClaimRequestStatus(String? status) {
+    final st = (status ?? '').trim().toLowerCase();
+    return st == 'diajukan' || st == 'diproses_toko';
+  }
+
+  /// Label status pengajuan klaim dari Member app (`garansi_klaim_request`).
+  static String claimRequestStatusLabel(String? status) {
+    return switch ((status ?? '').trim().toLowerCase()) {
+      'diajukan' => 'Diajukan',
+      'diproses_toko' => 'Diproses toko',
+      'selesai' => 'Selesai',
+      'dibatalkan' => 'Dibatalkan',
+      '' => '-',
+      final s => s,
+    };
+  }
+
+  /// Kartu yang boleh dipilih di form klaim Member.
+  /// [openRequestsKnown]=false → fail-closed (kosong).
+  static List<Map<String, dynamic>> filterClaimableKartu({
+    required List<Map<String, dynamic>> kartu,
+    required Iterable<Map<String, dynamic>> requests,
+    required bool openRequestsKnown,
+    DateTime? now,
+  }) {
+    if (!openRequestsKnown) return const [];
+    final openIds = <String>{};
+    for (final r in requests) {
+      if (!isOpenClaimRequestStatus(r['status']?.toString())) continue;
+      final id = r['kartu_id']?.toString();
+      if (id != null && id.isNotEmpty) openIds.add(id);
+    }
+    return kartu
+        .where(
+          (g) =>
+              kartuBisaDiklaim(g, now: now) &&
+              !openIds.contains(g['id']?.toString() ?? ''),
+        )
+        .toList(growable: false);
   }
 }

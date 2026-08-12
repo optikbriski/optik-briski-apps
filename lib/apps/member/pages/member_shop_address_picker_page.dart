@@ -175,114 +175,124 @@ class _MemberShopAddressPickerPageState
     final labelCtrl = TextEditingController(text: base.label);
     final detailCtrl = TextEditingController(text: base.detail);
     final noteCtrl = TextEditingController(text: base.note);
-    var kind = ShopAddressKind.favorite;
+    var kind = base.kind == ShopAddressKind.home ||
+            base.kind == ShopAddressKind.work ||
+            base.kind == ShopAddressKind.favorite
+        ? base.kind
+        : ShopAddressKind.favorite;
 
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            16 + MediaQuery.paddingOf(ctx).bottom,
-          ),
-          child: StatefulBuilder(
-            builder: (context, setModal) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Simpan alamat',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 17,
-                      color: OptikMemberTokens.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Favorit'),
-                        selected: kind == ShopAddressKind.favorite,
-                        onSelected: (_) =>
-                            setModal(() => kind = ShopAddressKind.favorite),
+    try {
+      final ok = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        builder: (ctx) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.paddingOf(ctx).bottom,
+            ),
+            child: StatefulBuilder(
+              builder: (context, setModal) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Simpan alamat',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        color: OptikMemberTokens.ink,
                       ),
-                      ChoiceChip(
-                        label: const Text('Rumah'),
-                        selected: kind == ShopAddressKind.home,
-                        onSelected: (_) =>
-                            setModal(() => kind = ShopAddressKind.home),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Favorit'),
+                          selected: kind == ShopAddressKind.favorite,
+                          onSelected: (_) =>
+                              setModal(() => kind = ShopAddressKind.favorite),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Rumah'),
+                          selected: kind == ShopAddressKind.home,
+                          onSelected: (_) =>
+                              setModal(() => kind = ShopAddressKind.home),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Kantor'),
+                          selected: kind == ShopAddressKind.work,
+                          onSelected: (_) =>
+                              setModal(() => kind = ShopAddressKind.work),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: labelCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nama (contoh: Rumah / Apart)',
                       ),
-                      ChoiceChip(
-                        label: const Text('Kantor'),
-                        selected: kind == ShopAddressKind.work,
-                        onSelected: (_) =>
-                            setModal(() => kind = ShopAddressKind.work),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: detailCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Detail (lobby, unit, patokan)',
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: labelCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama (contoh: Rumah / Apart)',
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: detailCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Detail (lobby, unit, patokan)',
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Catatan kurir (opsional)',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: noteCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Catatan kurir (opsional)',
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Simpan'),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Simpan'),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
+                  ],
+                );
+              },
+            ),
+          );
+        },
+      );
 
-    if (ok != true) return;
-    final saved = base.copyWith(
-      kind: kind,
-      label: labelCtrl.text.trim().isEmpty
-          ? (kind == ShopAddressKind.home
-              ? 'Rumah'
-              : kind == ShopAddressKind.work
-                  ? 'Kantor'
-                  : base.label)
-          : labelCtrl.text.trim(),
-      detail: detailCtrl.text.trim(),
-      note: noteCtrl.text.trim(),
-      savedAt: DateTime.now(),
-    );
-    await _addr.savePlace(saved);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Alamat disimpan')),
-    );
+      if (ok != true) return;
+      final saved = base.copyWith(
+        kind: kind,
+        label: labelCtrl.text.trim().isEmpty
+            ? (kind == ShopAddressKind.home
+                ? 'Rumah'
+                : kind == ShopAddressKind.work
+                    ? 'Kantor'
+                    : base.label)
+            : labelCtrl.text.trim(),
+        detail: detailCtrl.text.trim(),
+        note: noteCtrl.text.trim(),
+        savedAt: DateTime.now(),
+      );
+      await _addr.savePlace(saved);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alamat disimpan')),
+      );
+    } finally {
+      labelCtrl.dispose();
+      detailCtrl.dispose();
+      noteCtrl.dispose();
+    }
   }
 
   @override

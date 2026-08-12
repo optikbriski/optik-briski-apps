@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../invoice/invoice_hub_service.dart';
 import 'member_home_models.dart';
+import 'member_orders_status.dart';
+import 'member_rating_helpers.dart';
 import 'member_repository.dart';
 import 'member_session.dart';
 import 'member_status_watch.dart';
@@ -23,6 +25,7 @@ class MemberHomeController extends ChangeNotifier {
   bool _bound = false;
   int _loadGen = 0;
   String? _sessionFingerprint;
+  Future<void>? _inFlight;
 
   /// Pendek agar Update CMS cepat terlihat setelah pull-to-refresh / balik tab.
   static const _staleAfter = Duration(seconds: 20);
@@ -67,21 +70,43 @@ class MemberHomeController extends ChangeNotifier {
   void _onSession() {
     final next = _fingerprint(MemberSession.instance);
     if (next == _sessionFingerprint) return;
+    final prev = _sessionFingerprint;
     _sessionFingerprint = next;
-    unawaited(refresh(force: true));
+    // Login/logout → hard refresh. Ubah toko/nama → soft biar stats tidak kedip "…".
+    final prevParts = prev?.split('|') ?? const <String>[];
+    final prevLogged = prevParts.isNotEmpty && prevParts.first == '1';
+    final prevPhone = prevParts.length > 1 ? prevParts[1] : '';
+    final nowLogged = MemberSession.instance.isLoggedIn;
+    final identityChanged =
+        prevLogged != nowLogged || prevPhone != MemberSession.instance.phoneForQuery;
+    unawaited(refresh(
+      force: true,
+      soft: hasData && !identityChanged,
+    ));
   }
 
   /// Muat jika belum ada / stale. [force] abaikan cache.
   Future<void> ensureLoaded({bool force = false}) async {
     bind();
     if (!force && hasData && !isStale && !loading) return;
-    await refresh(force: force);
+    // Tunggu refresh yang sedang jalan (mis. login → navigate ke Beranda).
+    if (!force && loading && _inFlight != null) {
+      await _inFlight;
+      return;
+    }
+    // Ada cache → soft agar pull/tab-switch tidak flash loading pada stats.
+    await refresh(force: force, soft: hasData && !force);
   }
 
   Future<void> refresh({bool force = false, bool soft = false}) async {
     bind();
-    if (loading && !force) return;
+    if (loading && !force) {
+      if (_inFlight != null) await _inFlight;
+      return;
+    }
     final gen = ++_loadGen;
+    final done = Completer<void>();
+    _inFlight = done.future;
 
     if (!soft || !hasData) {
       loading = true;
@@ -101,16 +126,26 @@ class MemberHomeController extends ChangeNotifier {
       );
       if (gen != _loadGen) return;
 
+      List<Map<String, dynamic>> ratingRows = const [];
+      if (session.isLoggedIn && session.phoneForQuery.isNotEmpty) {
+        try {
+          ratingRows = await _repo.listRatings(session.phoneForQuery);
+        } catch (_) {}
+      }
+      if (gen != _loadGen) return;
+
       final reminders = _buildReminders(
         sales: bundle.sales,
         bookings: bundle.bookings,
         onlineOrders: bundle.onlineOrders,
+        ratingRows: ratingRows,
       );
-      final pendingOnline = bundle.onlineOrders
-          .where((o) => (o['status'] ?? '') == 'pending_payment')
-          .length;
-      final active =
-          bundle.sales.where(_isActiveSale).length + pendingOnline;
+      // Samakan dengan membership tab Status pesanan (merge + filter).
+      final active = MemberOrdersStatus.merge(
+        sales: bundle.sales,
+        online: bundle.onlineOrders,
+        onlyActive: true,
+      ).length;
 
       String? toko = session.preferredTokoId?.trim();
       if (toko == null || toko.isEmpty) {
@@ -177,17 +212,16 @@ class MemberHomeController extends ChangeNotifier {
         loading = false;
         notifyListeners();
       }
+      if (!done.isCompleted) done.complete();
+      if (identical(_inFlight, done.future)) _inFlight = null;
     }
-  }
-
-  bool _isActiveSale(Map<String, dynamic> s) {
-    return !InvoiceHubService.sudahDiambil(s);
   }
 
   List<MemberHomeReminder> _buildReminders({
     required List<Map<String, dynamic>> sales,
     required List<Map<String, dynamic>> bookings,
     List<Map<String, dynamic>> onlineOrders = const [],
+    List<Map<String, dynamic>> ratingRows = const [],
   }) {
     final reminders = <MemberHomeReminder>[];
 
@@ -208,7 +242,8 @@ class MemberHomeController extends ChangeNotifier {
     }
 
     for (final s in sales) {
-      if (InvoiceHubService.sudahDiambil(s)) continue;
+      // Samakan filter dengan tab Status (bukan Riwayat).
+      if (!MemberOrdersStatus.isActiveSale(s)) continue;
 
       final label = InvoiceHubService.statusLabel({
         'tracking_status': s['tracking_status'],
@@ -221,20 +256,22 @@ class MemberHomeController extends ChangeNotifier {
       final st = (s['tracking_status'] ?? '').toString().toUpperCase();
       final sisa = int.tryParse('${s['sisa_tagihan'] ?? 0}') ?? 0;
 
-      if (st == 'SIAP_DIAMBIL' || st == 'CLEAR') {
+      // DP dulu — jangan tampil "Siap diambil" kalau masih ada sisa tagihan.
+      // Body pakai statusLabel yang sama dengan kartu Status pesanan.
+      if (sisa > 0 || InvoiceHubService.isDpOpen(s)) {
+        reminders.add(MemberHomeReminder(
+          kind: MemberHomeReminderKind.dp,
+          title: 'Masih DP',
+          body: '$inv · $label',
+          cta: 'Detail',
+          noInvoice: inv,
+        ));
+      } else if (st == 'SIAP_DIAMBIL' || st == 'CLEAR') {
         reminders.add(MemberHomeReminder(
           kind: MemberHomeReminderKind.ready,
           title: 'Siap diambil',
           body: '$inv · $label',
           cta: 'Lihat nota',
-          noInvoice: inv,
-        ));
-      } else if (sisa > 0 || InvoiceHubService.isDpOpen(s)) {
-        reminders.add(MemberHomeReminder(
-          kind: MemberHomeReminderKind.dp,
-          title: 'Masih DP',
-          body: '$inv · lunasi dulu sebelum ambil',
-          cta: 'Detail',
           noInvoice: inv,
         ));
       } else {
@@ -246,6 +283,23 @@ class MemberHomeController extends ChangeNotifier {
           noInvoice: inv,
         ));
       }
+    }
+
+    // Post-pickup: soft prompt rating (maks 2 agar tidak banjir).
+    var ratingPrompted = 0;
+    for (final r in ratingRows) {
+      if (ratingPrompted >= 2) break;
+      if (!MemberRatingHelpers.isPendingToRate(r)) continue;
+      final inv = (r['no_invoice'] ?? '').toString().trim();
+      if (inv.isEmpty) continue;
+      reminders.add(MemberHomeReminder(
+        kind: MemberHomeReminderKind.rating,
+        title: 'Beri rating',
+        body: '$inv · nilai kasir & pembuat',
+        cta: 'Rating',
+        noInvoice: inv,
+      ));
+      ratingPrompted++;
     }
 
     final now = DateTime.now();

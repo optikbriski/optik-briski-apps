@@ -41,11 +41,39 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   InvoiceSettings? invSettings;
   bool isPrinting = false;
   String currentTrackingStatus = "DIPROSES_DI_CABANG";
+  List<String> karyawanTerlibatNames = const [];
 
   @override
   void initState() {
     super.initState();
     _fetchNota();
+  }
+
+  Future<List<String>> _loadKaryawanTerlibatNames(String saleId) async {
+    try {
+      final rows = await supabase
+          .from('sales_karyawan_terlibat')
+          .select('karyawan_id, karyawan:karyawan_id(nama)')
+          .eq('sale_id', saleId);
+      final names = <String>[];
+      for (final raw in (rows as List)) {
+        final row = Map<String, dynamic>.from(raw as Map);
+        final nested = row['karyawan'];
+        String? nama;
+        if (nested is Map) {
+          nama = nested['nama']?.toString();
+        } else if (nested is List && nested.isNotEmpty && nested.first is Map) {
+          nama = (nested.first as Map)['nama']?.toString();
+        }
+        if (nama != null && nama.trim().isNotEmpty) {
+          names.add(nama.trim());
+        }
+      }
+      return names;
+    } catch (e) {
+      debugPrint('Muat karyawan terlibat gagal: $e');
+      return const [];
+    }
   }
 
   Future<void> _fetchNota() async {
@@ -60,6 +88,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           .from('sales_items')
           .select()
           .eq('sale_id', widget.saleId);
+      final terlibat = await _loadKaryawanTerlibatNames(widget.saleId);
 
       final cabangNota =
           resSale['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
@@ -74,6 +103,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
           configData = settings.toLegacyConfigMap();
           currentTrackingStatus =
               resSale['tracking_status'] ?? "DIPROSES_DI_CABANG";
+          karyawanTerlibatNames = terlibat;
           isLoading = false;
         });
       }
@@ -218,7 +248,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 whatsapp: sale['no_wa']?.toString(),
                 address: sale['alamat']?.toString(),
                 email: sale['email_pelanggan']?.toString(),
-                cashier: sale['nama_kasir']?.toString() ?? '-',
+                cashier: karyawanTerlibatNames.isNotEmpty
+                    ? karyawanTerlibatNames.join(', ')
+                    : (sale['nama_kasir']?.toString() ?? '-'),
                 dateLabel:
                     'Masuk: ${sale['created_at'].toString().split('T').first}',
                 createdAtLabel: InvoiceLayout.formatInvoiceCreatedAt(
@@ -418,7 +450,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                         ? sale['alamat'].toString()
                         : null,
                     email: sale['email_pelanggan']?.toString(),
-                    cashier: sale['nama_kasir']?.toString() ?? 'Staff',
+                    cashier: karyawanTerlibatNames.isNotEmpty
+                        ? karyawanTerlibatNames.join(', ')
+                        : (sale['nama_kasir']?.toString() ?? 'Staff'),
                     dateLabel:
                         'Masuk: ${sale['created_at'].toString().split('T').first}',
                     createdAtLabel: InvoiceLayout.formatInvoiceCreatedAt(

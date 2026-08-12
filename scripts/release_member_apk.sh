@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build APK Member (split per-ABI) — max 50 MB, tanpa potong fitur/kualitas.
-# Shrink hanya buang aset junk + model ML Kit yang tidak dipakai mode accurate;
-# kontur wajah TETAP (scan Bentuk Wajah).
+# Shrink hanya buang aset junk + model ML Kit yang tidak dipakai mode accurate.
+# Bentuk (referensi wajah/frame) memakai aset foto + overlay — tanpa scan kamera.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

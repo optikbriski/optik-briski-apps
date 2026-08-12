@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../shared/invoice/invoice_hub_service.dart';
 import '../../../shared/member/member_online_order_labels.dart';
+import '../../../shared/member/member_orders_status.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_status_watch.dart';
@@ -28,31 +29,11 @@ class MemberOrdersListPage extends StatefulWidget {
   State<MemberOrdersListPage> createState() => _MemberOrdersListPageState();
 }
 
-class _OrderRow {
-  _OrderRow.sale(Map<String, dynamic> data)
-      : sale = data,
-        online = null,
-        sortAt = DateTime.tryParse('${data['created_at']}') ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-
-  _OrderRow.online(Map<String, dynamic> data)
-      : online = data,
-        sale = null,
-        sortAt = DateTime.tryParse('${data['created_at']}') ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-
-  final Map<String, dynamic>? sale;
-  final Map<String, dynamic>? online;
-  final DateTime sortAt;
-
-  bool get isOnline => online != null;
-}
-
 class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
   final _repo = MemberRepository();
   bool _loading = true;
   String? _error;
-  List<_OrderRow> _rows = const [];
+  List<MemberOrderMergeRow> _rows = const [];
   StreamSubscription<void>? _watchSub;
 
   @override
@@ -76,11 +57,13 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
       setState(() {
         _loading = false;
         _error = 'login';
+        _rows = const [];
       });
       return;
     }
+    final showFullLoader = _rows.isEmpty;
     setState(() {
-      _loading = true;
+      if (showFullLoader) _loading = true;
       _error = null;
     });
     try {
@@ -91,37 +74,11 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
       final sales = results[0];
       final online = results[1];
 
-      final saleOnlineIds = <String>{};
-      for (final s in sales) {
-        final oid = (s['online_order_id'] ?? '').toString();
-        if (oid.isNotEmpty) saleOnlineIds.add(oid);
-      }
-
-      final rows = <_OrderRow>[];
-      for (final s in sales) {
-        final diambil = s['diambil_at'] != null ||
-            (s['tracking_status']?.toString().toUpperCase() == 'DIAMBIL');
-        if (widget.onlyActive && diambil) continue;
-        rows.add(_OrderRow.sale(s));
-      }
-
-      for (final o in online) {
-        final id = (o['id'] ?? '').toString();
-        final status = (o['status'] ?? '').toString();
-        final saleId = (o['sale_id'] ?? '').toString();
-        // Sudah punya nota / sale_id → tampil sebagai sales (hindari dobel).
-        if (id.isNotEmpty && saleOnlineIds.contains(id)) continue;
-        if (saleId.isNotEmpty) continue;
-        if (status == 'fulfilled' && widget.onlyActive) continue;
-        if (widget.onlyActive &&
-            (status == 'cancelled' || status == 'expired')) {
-          continue;
-        }
-        // Pending / tanpa sale: tampilkan kartu online.
-        rows.add(_OrderRow.online(o));
-      }
-
-      rows.sort((a, b) => b.sortAt.compareTo(a.sortAt));
+      final rows = MemberOrdersStatus.merge(
+        sales: sales,
+        online: online,
+        onlyActive: widget.onlyActive,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -144,7 +101,13 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
         .format(n);
   }
 
-  Future<void> _openRow(_OrderRow row) async {
+  String _fmtDate(dynamic raw) {
+    final d = DateTime.tryParse('$raw')?.toLocal();
+    if (d == null) return '';
+    return DateFormat('dd/MM/yyyy · HH:mm').format(d);
+  }
+
+  Future<void> _openRow(MemberOrderMergeRow row) async {
     if (row.isOnline) {
       final id = (row.online!['id'] ?? '').toString();
       if (id.isEmpty) return;
@@ -174,7 +137,7 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
       actions: [
         IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
       ],
-      body: _loading
+      body: _loading && _rows.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : _error == 'login'
               ? MemberEmptyState(
@@ -186,7 +149,7 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
                   onAction: () =>
                       Navigator.of(context).pushReplacementNamed('/login'),
                 )
-              : _error != null
+              : _error != null && _rows.isEmpty
                   ? MemberEmptyState(
                       icon: Icons.cloud_off_outlined,
                       title: 'Gagal memuat',
@@ -197,9 +160,12 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
                   : _rows.isEmpty
                       ? MemberEmptyState(
                           icon: Icons.receipt_long_outlined,
-                          title: 'Belum ada pesanan',
-                          message:
-                              'Belanja Online & nota dengan nomor HP yang sama muncul di sini.',
+                          title: widget.onlyActive
+                              ? 'Tidak ada pesanan aktif'
+                              : 'Belum ada riwayat',
+                          message: widget.onlyActive
+                              ? 'Pesanan yang belum diambil atau masih diproses muncul di sini.'
+                              : 'Semua transaksi (aktif & selesai) dengan nomor HP yang sama muncul di sini.',
                           actionLabel: 'Muat ulang',
                           onAction: _load,
                         )
@@ -228,18 +194,21 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
     final label = InvoiceHubService.statusLabel({
       'tracking_status': s['tracking_status'],
       'diambil_at': s['diambil_at'],
+      'sisa_tagihan': s['sisa_tagihan'],
+      'status_pembayaran': s['status_pembayaran'],
     });
-    final pay =
-        (int.tryParse('${s['sisa_tagihan'] ?? 0}') ?? 0) > 0 ? 'DP' : 'LUNAS';
-    final isOnline =
-        (s['channel'] ?? '').toString().toLowerCase() == 'member_online' ||
-            (s['online_order_id'] ?? '').toString().isNotEmpty;
+    final pay = MemberOrdersStatus.payBadge(s);
+    final channel = (s['channel'] ?? '').toString().toLowerCase();
+    final isOnline = channel == 'member_online' ||
+        channel == 'online' ||
+        (s['online_order_id'] ?? '').toString().isNotEmpty;
+    final when = _fmtDate(s['created_at']);
     return Material(
       color: OptikMemberTokens.white,
       borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
       child: InkWell(
         borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
-        onTap: () => _openRow(_OrderRow.sale(s)),
+        onTap: () => _openRow(MemberOrderMergeRow.sale(s)),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -255,6 +224,8 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
                   Expanded(
                     child: Text(
                       inv,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: OptikMemberTokens.blueDeep,
                         fontWeight: FontWeight.w800,
@@ -281,29 +252,46 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
                       ),
                     ),
                   ],
-                  Text(
-                    pay,
-                    style: const TextStyle(
-                      color: OptikMemberTokens.blue,
-                      fontWeight: FontWeight.w800,
+                  if (pay != null)
+                    Text(
+                      pay,
+                      style: const TextStyle(
+                        color: OptikMemberTokens.blue,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
                 '$label · ${s['toko_id'] ?? '-'}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: OptikMemberTokens.inkSecondary,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                _money(s['total_harga']),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: OptikMemberTokens.ink,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _money(s['total_harga']),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: OptikMemberTokens.ink,
+                      ),
+                    ),
+                  ),
+                  if (when.isNotEmpty)
+                    Text(
+                      when,
+                      style: const TextStyle(
+                        color: OptikMemberTokens.inkMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -318,6 +306,7 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
     final color = MemberOnlineOrderLabels.statusColor(status);
     final mid = (o['midtrans_order_id'] ?? '').toString();
     final id = (o['id'] ?? '').toString();
+    final when = _fmtDate(o['created_at']);
     final title = mid.isNotEmpty
         ? mid
         : (id.length >= 8 ? 'Online · ${id.substring(0, 8)}' : 'Pesanan online');
@@ -326,7 +315,7 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
       borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
       child: InkWell(
         borderRadius: BorderRadius.circular(OptikMemberTokens.radiusMd),
-        onTap: () => _openRow(_OrderRow.online(o)),
+        onTap: () => _openRow(MemberOrderMergeRow.online(o)),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -352,19 +341,40 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
                     ),
                   ),
                   Container(
+                    margin: const EdgeInsets.only(right: 8),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
+                      color: OptikMemberTokens.blueSoft,
                       borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: color.withOpacity(0.35)),
                     ),
-                    child: Text(
-                      label,
+                    child: const Text(
+                      'Online',
                       style: TextStyle(
-                        color: color,
+                        color: OptikMemberTokens.blueDeep,
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(color: color.withOpacity(0.35)),
+                      ),
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
@@ -374,17 +384,33 @@ class _MemberOrdersListPageState extends State<MemberOrdersListPage> {
               Text(
                 '${MemberOnlineOrderLabels.fulfillment(o['fulfillment']?.toString())}'
                 ' · ${o['toko_id'] ?? '-'}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: OptikMemberTokens.inkSecondary,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                _money(o['total']),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: OptikMemberTokens.ink,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _money(o['total']),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: OptikMemberTokens.ink,
+                      ),
+                    ),
+                  ),
+                  if (when.isNotEmpty)
+                    Text(
+                      when,
+                      style: const TextStyle(
+                        color: OptikMemberTokens.inkMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),

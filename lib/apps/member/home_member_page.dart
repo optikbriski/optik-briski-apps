@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../../shared/member/member_cart.dart';
 import '../../shared/member/member_home_controller.dart';
 import '../../shared/member/member_home_models.dart';
+import '../../shared/member/member_inbox_unread.dart';
+import '../../shared/member/member_points_grade.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
@@ -38,14 +40,19 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     super.initState();
     _home.addListener(_onHome);
     MemberCart.instance.addListener(_onCart);
+    MemberSession.instance.addListener(_onSession);
+    MemberInboxUnread.instance.addListener(_onInboxUnread);
     MemberCart.instance.ensureLoaded();
     _home.ensureLoaded();
+    MemberInboxUnread.instance.refresh();
   }
 
   @override
   void dispose() {
     _home.removeListener(_onHome);
     MemberCart.instance.removeListener(_onCart);
+    MemberSession.instance.removeListener(_onSession);
+    MemberInboxUnread.instance.removeListener(_onInboxUnread);
     super.dispose();
   }
 
@@ -57,8 +64,29 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     if (mounted) setState(() {});
   }
 
-  void _open(Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  void _onSession() {
+    if (mounted) setState(() {});
+    MemberInboxUnread.instance.refresh();
+  }
+
+  void _onInboxUnread() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _open(Widget page) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _openPoints() async {
+    if (!MemberSession.instance.isLoggedIn) {
+      await Navigator.of(context).pushNamed('/login');
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const MemberPointsPage()),
+    );
+    if (!mounted) return;
+    await _home.refresh(soft: true);
   }
 
   Future<void> _openShop({int tab = 0}) async {
@@ -83,15 +111,26 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
       _open(const MemberBookingPage());
       return;
     }
+    if (r.kind == MemberHomeReminderKind.rating) {
+      final inv = (r.noInvoice ?? '').trim();
+      _open(MemberRatingPage(
+        initialInvoice: inv.isEmpty ? null : inv,
+      ));
+      return;
+    }
     final oid = (r.onlineOrderId ?? '').trim();
     if (oid.isNotEmpty) {
       _open(MemberOnlineOrderPage(onlineOrderId: oid));
       return;
     }
-    final inv = r.noInvoice;
-    if (inv != null && inv.isNotEmpty) {
+    final inv = (r.noInvoice ?? '').trim();
+    if (inv.isNotEmpty) {
       _open(MemberInvoiceHubPage(noInvoice: inv));
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Detail pengingat tidak tersedia.')),
+    );
   }
 
   Future<void> _copyPromoCode(Map<String, dynamic> promo) async {
@@ -145,9 +184,11 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
         ];
     final top = MediaQuery.paddingOf(context).top;
     const overlap = 32.0;
-    final showHero = sections.any((s) => s['key'] == 'hero');
     final error = snap?.error ?? _home.lastError;
-    final highlightToko = snap?.highlightToko;
+    final preferredToko = session.preferredTokoId?.trim();
+    final highlightToko = (preferredToko != null && preferredToko.isNotEmpty)
+        ? preferredToko
+        : snap?.highlightToko;
     final promos = snap?.promos ?? const [];
     final reminders = snap?.reminders ?? const [];
     final totalReminders = snap?.totalReminders ?? 0;
@@ -156,6 +197,8 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     final garansiCount = snap?.garansiCount ?? 0;
 
     bool flag(String key) => snap?.flag(key) ?? true;
+    // Cart harus tetap ada meski CMS menyembunyikan hero.
+    final showCart = flag('katalog');
 
     Widget sectionGap() => const SizedBox(height: 14);
 
@@ -204,7 +247,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
           activeOrders: activeOrders,
           garansiCount: garansiCount,
           onLogin: () => Navigator.of(context).pushNamed('/login'),
-          onPoints: () => _open(const MemberPointsPage()),
+          onPoints: _openPoints,
           onOrders: () => _open(
             const MemberOrdersListPage(
               title: 'Status pesanan',
@@ -220,7 +263,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
           points: points,
           promos: promos,
           loggedIn: session.isLoggedIn,
-          onOpenPoints: () => _open(const MemberPointsPage()),
+          onOpenPoints: _openPoints,
           onPromoTap: _copyPromoCode,
           onLogin: () => Navigator.of(context).pushNamed('/login'),
         );
@@ -229,8 +272,12 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
           reminders: reminders,
           totalCount: totalReminders,
           loggedIn: session.isLoggedIn,
-          onSeeAll: () =>
-              _open(const MemberOrdersListPage(title: 'Pesanan saya')),
+          onSeeAll: () => _open(
+                const MemberOrdersListPage(
+                  title: 'Status pesanan',
+                  onlyActive: true,
+                ),
+              ),
           onLogin: () => Navigator.of(context).pushNamed('/login'),
           onReminder: _openReminder,
         );
@@ -299,13 +346,20 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             _GridItem(Icons.star_rate_rounded, 'Rating',
                 () => _open(const MemberRatingPage())),
           if (flag('notif'))
-            _GridItem(Icons.notifications_active_outlined, 'Notif',
-                () => _open(const MemberNotificationsPage())),
+            _GridItem(
+              Icons.notifications_active_outlined,
+              'Notif',
+              () async {
+                await _open(const MemberNotificationsPage());
+                await MemberInboxUnread.instance.refresh();
+              },
+              badge: MemberInboxUnread.instance.count,
+            ),
           if (flag('perawatan'))
             _GridItem(Icons.menu_book_outlined, 'Perawatan',
                 () => _open(const MemberCarePage())),
           if (flag('bentuk_wajah'))
-            _GridItem(Icons.face_retouching_natural_rounded, 'Bentuk\nWajah',
+            _GridItem(Icons.face_retouching_natural_rounded, 'Bentuk',
                 () => _open(const MemberFaceShapePage())),
         ];
         if (grid.isNotEmpty) {
@@ -396,12 +450,12 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     if (widget.embedded) {
       return ColoredBox(
         color: OptikMemberTokens.canvas,
-        child: Stack(children: [body, if (showHero) cartBtn]),
+        child: Stack(children: [body, if (showCart) cartBtn]),
       );
     }
     return Scaffold(
       backgroundColor: OptikMemberTokens.canvas,
-      body: Stack(children: [body, if (showHero) cartBtn]),
+      body: Stack(children: [body, if (showCart) cartBtn]),
     );
   }
 }
@@ -738,7 +792,7 @@ class _GreetingCard extends StatelessWidget {
                 child: _RoundStat(
                   icon: Icons.loyalty_rounded,
                   label: 'Poin',
-                  value: loading ? '…' : '$points',
+                  value: loading ? '…' : formatMemberPoints(points),
                   onTap: onPoints,
                 ),
               ),
@@ -809,6 +863,8 @@ class _RoundStat extends StatelessWidget {
             Text(
               value,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: OptikMemberTokens.blueDeep,
                 fontSize: 12,
@@ -874,7 +930,7 @@ class _PromoSection extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           loggedIn
-                              ? '$subtitle · $points poin'
+                              ? '$subtitle · ${formatMemberPoints(points)} poin'
                               : 'Login untuk lihat voucher & tukar poin',
                           style: const TextStyle(
                               color: OptikMemberTokens.inkMuted,
@@ -1092,14 +1148,22 @@ class _RemindersBlock extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 36),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        backgroundColor: r.accent,
+                    Flexible(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          backgroundColor: r.accent,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => onReminder(r),
+                        child: Text(
+                          r.cta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
-                      onPressed: () => onReminder(r),
-                      child: Text(r.cta, style: const TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
@@ -1236,10 +1300,11 @@ class _BigServiceButton extends StatelessWidget {
 }
 
 class _GridItem {
-  const _GridItem(this.icon, this.label, this.onTap);
+  const _GridItem(this.icon, this.label, this.onTap, {this.badge = 0});
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final int badge;
 }
 
 class _ServiceGrid extends StatelessWidget {
@@ -1285,16 +1350,50 @@ class _ServiceGridCell extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            SizedBox(
               width: 52,
               height: 52,
-              decoration: BoxDecoration(
-                color: OptikMemberTokens.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: OptikMemberTokens.lineSoft),
-                boxShadow: OptikMemberTokens.cardShadow,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: OptikMemberTokens.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: OptikMemberTokens.lineSoft),
+                      boxShadow: OptikMemberTokens.cardShadow,
+                    ),
+                    child: Icon(item.icon, color: OptikMemberTokens.blue),
+                  ),
+                  if (item.badge > 0)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 18),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: OptikMemberTokens.blue,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          item.badge > 99 ? '99+' : '${item.badge}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              child: Icon(item.icon, color: OptikMemberTokens.blue),
             ),
             const SizedBox(height: 6),
             Text(

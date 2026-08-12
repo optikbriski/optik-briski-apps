@@ -25,8 +25,7 @@ class MemberOnlineOrderLabels {
       case 'expired':
         return 'Kedaluwarsa';
       default:
-        final s = (raw ?? '').trim();
-        return s.isEmpty ? '—' : s;
+        return _humanizeRaw(raw);
     }
   }
 
@@ -37,8 +36,23 @@ class MemberOnlineOrderLabels {
       case 'delivery':
         return 'Kirim ke alamat';
       default:
-        return (raw ?? '—').toString();
+        return _humanizeRaw(raw);
     }
+  }
+
+  static String _humanizeRaw(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return '—';
+    final upper = s.toUpperCase();
+    if (RegExp(r'^[A-Z0-9_]+$').hasMatch(upper) && upper.contains('_')) {
+      return upper
+          .toLowerCase()
+          .split('_')
+          .where((p) => p.isNotEmpty)
+          .map((p) => '${p[0].toUpperCase()}${p.substring(1)}')
+          .join(' ');
+    }
+    return s;
   }
 
   static Color statusColor(String? raw) {
@@ -70,6 +84,7 @@ class MemberOnlineOrderLabels {
     if (t == 'SIAP_DIAMBIL') return 'Siap diambil';
     if (t == 'CLEAR') return 'CLEAR · siap diambil';
     if (t == 'DIAMBIL') return 'Selesai';
-    return t.isEmpty ? 'Dalam proses' : t;
+    if (t.isEmpty) return 'Dalam proses';
+    return _humanizeRaw(t);
   }
 }

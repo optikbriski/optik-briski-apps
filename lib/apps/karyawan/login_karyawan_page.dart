@@ -1,13 +1,15 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
+import 'dart:ui';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import 'main_karyawan.dart';
@@ -22,8 +24,12 @@ class LoginKaryawanPage extends StatefulWidget {
 
 class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     with SingleTickerProviderStateMixin {
+  final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+
   bool _isObscure = true;
   bool _isLoading = false;
 
@@ -34,10 +40,8 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
   late final Animation<double> _fade;
   late final Animation<Offset> _slide;
 
-  static const _navy = OptikKaryawanTokens.navyDeep;
-  static const _navyMid = OptikKaryawanTokens.navySoft;
-  static const _gold = OptikKaryawanTokens.gold;
-  static const _goldSoft = OptikKaryawanTokens.goldSoft;
+  static const _kSavedEmail = 'saved_email';
+  static const _kSavedPassword = 'saved_password';
 
   @override
   void initState() {
@@ -52,7 +56,16 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic));
     _anim.forward();
-    _cekBiometrikOtomatis();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _bootstrapExistingSession();
+      if (!mounted) return;
+      // Hanya tawarkan biometrik jika belum ada sesi aktif.
+      if (Supabase.instance.client.auth.currentSession == null) {
+        await _cekBiometrikOtomatis();
+      }
+    });
   }
 
   @override
@@ -60,451 +73,784 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     _anim.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _cekBiometrikOtomatis() async {
-    if (kIsWeb) return;
-    final emailTersimpan = await _secureStorage.read(key: 'saved_email');
-    final passwordTersimpan = await _secureStorage.read(key: 'saved_password');
-    if (emailTersimpan != null && passwordTersimpan != null) {
-      _loginDenganBiometrik();
+  String get _normalizedEmail => _emailCtrl.text.trim().toLowerCase();
+
+  void _snack(String message, {Color? color, Duration? duration}) {
+    if (!mounted) return;
+    final bg = color ?? OptikKaryawanTokens.ink;
+    // Cyan / pastel → ink text; gelap/merah/oranye → teks putih.
+    final onBg = (bg == OptikKaryawanTokens.cyan ||
+            bg == OptikKaryawanTokens.seasideMid ||
+            bg == OptikKaryawanTokens.pale)
+        ? OptikKaryawanTokens.ink
+        : OptikKaryawanTokens.snow;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            color: onBg,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        duration: duration ?? const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _bootstrapExistingSession() async {
+    if (_isLoading) return;
+    final session = Supabase.instance.client.auth.currentSession;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (session == null || user == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final email = (user.email ?? '').trim().toLowerCase();
+      if (email.isEmpty) {
+        await Supabase.instance.client.auth.signOut();
+        return;
+      }
+      final ok = await _assertKaryawanAktif(email);
+      if (!mounted) return;
+      if (ok) {
+        _goHome();
+        return;
+      }
+    } catch (e) {
+      debugPrint('bootstrap session login: $e');
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+    } finally {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<void> _loginDenganBiometrik() async {
+  /// Returns `true` if profile exists and status is Aktif.
+  /// Signs out and shows snackbar on failure.
+  Future<bool> _assertKaryawanAktif(String email) async {
+    Map<String, dynamic>? userData;
+    try {
+      userData = await Supabase.instance.client
+          .from('karyawan')
+          .select('status_approval')
+          .ilike('email', email)
+          .limit(1)
+          .maybeSingle();
+    } on PostgrestException catch (e) {
+      // Duplikat row / RLS / schema → anggap profil tidak bisa diverifikasi.
+      debugPrint('assert karyawan aktif: $e');
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return false;
+      _snack("profil_tidak_ditemukan".tr(), color: Colors.redAccent);
+      return false;
+    }
+
+    if (userData == null) {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return false;
+      _snack("profil_tidak_ditemukan".tr(), color: Colors.redAccent);
+      return false;
+    }
+
+    final status = (userData['status_approval'] ?? '').toString().trim();
+    if (status.toLowerCase() != 'aktif') {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return false;
+      final ditolak = status.toLowerCase().startsWith('ditolak');
+      _snack(
+        ditolak
+            ? "akun_ditolak".tr()
+            : 'Akun menunggu persetujuan Admin Pusat. Belum bisa dipakai.',
+        color: ditolak ? Colors.redAccent : Colors.orange,
+        duration: const Duration(seconds: 5),
+      );
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _persistCredentialsForBiometric({
+    required String email,
+    required String password,
+  }) async {
+    if (kIsWeb) return;
+    try {
+      await _secureStorage.write(key: _kSavedEmail, value: email);
+      await _secureStorage.write(key: _kSavedPassword, value: password);
+    } catch (e) {
+      debugPrint('secure storage write: $e');
+    }
+  }
+
+  Future<void> _cekBiometrikOtomatis() async {
+    if (kIsWeb || _isLoading) return;
+    try {
+      final emailTersimpan = await _secureStorage.read(key: _kSavedEmail);
+      final passwordTersimpan = await _secureStorage.read(key: _kSavedPassword);
+      if (emailTersimpan != null &&
+          passwordTersimpan != null &&
+          emailTersimpan.isNotEmpty &&
+          passwordTersimpan.isNotEmpty) {
+        await _loginDenganBiometrik(auto: true);
+      }
+    } catch (e) {
+      debugPrint('cek biometrik otomatis: $e');
+    }
+  }
+
+  Future<void> _loginDenganBiometrik({bool auto = false}) async {
+    if (_isLoading) return;
+
     if (kIsWeb) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            'Fitur Biometrik hanya tersedia di aplikasi HP (Android/iOS).'),
-        backgroundColor: Colors.orange,
-      ));
+      _snack(
+        'Fitur Biometrik hanya tersedia di aplikasi HP (Android/iOS).',
+        color: Colors.orange,
+      );
       return;
     }
 
     try {
-      final emailTersimpan = await _secureStorage.read(key: 'saved_email');
-      final passwordTersimpan =
-          await _secureStorage.read(key: 'saved_password');
+      final emailTersimpan = await _secureStorage.read(key: _kSavedEmail);
+      final passwordTersimpan = await _secureStorage.read(key: _kSavedPassword);
 
-      if (emailTersimpan == null || passwordTersimpan == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:
-              Text('Belum ada akun tersimpan. Silakan masuk manual dulu.'),
-          backgroundColor: Colors.orange,
-        ));
+      if (emailTersimpan == null ||
+          passwordTersimpan == null ||
+          emailTersimpan.isEmpty ||
+          passwordTersimpan.isEmpty) {
+        if (!auto) {
+          _snack(
+            'Belum ada akun tersimpan. Silakan masuk manual dulu.',
+            color: Colors.orange,
+          );
+        }
         return;
       }
 
-      final bool canAuthenticateWithBiometrics =
+      final canAuthenticateWithBiometrics =
           await _localAuth.canCheckBiometrics;
-      final bool canAuthenticate =
+      final canAuthenticate =
           canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
 
-      if (canAuthenticate) {
-        final bool didAuthenticate = await _localAuth.authenticate(
-          localizedReason:
-              'Pindai sidik jari / wajah Anda untuk masuk otomatis.',
-          options: const AuthenticationOptions(biometricOnly: true),
-        );
-
-        if (didAuthenticate) {
-          setState(() {
-            _emailCtrl.text = emailTersimpan;
-            _passwordCtrl.text = passwordTersimpan;
-          });
-          _loginKaryawan();
+      if (!canAuthenticate) {
+        if (!auto) {
+          _snack(
+            'Perangkat tidak mendukung biometrik.',
+            color: Colors.orange,
+          );
         }
+        return;
       }
+
+      final didAuthenticate = await _localAuth.authenticate(
+        localizedReason:
+            'Pindai sidik jari / wajah Anda untuk masuk otomatis.',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+
+      if (!didAuthenticate || !mounted) return;
+
+      _emailCtrl.text = emailTersimpan;
+      _passwordCtrl.text = passwordTersimpan;
+      await _loginKaryawan();
     } catch (e) {
       debugPrint('Gagal biometrik: $e');
+      if (!auto && mounted) {
+        _snack(
+          'Biometrik gagal. Masuk dengan surel & kata sandi.',
+          color: Colors.orange,
+        );
+      }
     }
   }
 
   Future<void> _loginKaryawan() async {
-    if (_emailCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Surel dan kata sandi wajib diisi.'),
-        backgroundColor: Colors.orange,
-      ));
+    if (_isLoading) return;
+
+    final formOk = _formKey.currentState?.validate() ?? false;
+    if (!formOk) {
+      // Biometric path fills fields; still validate emptiness.
+      if (_normalizedEmail.isEmpty || _passwordCtrl.text.isEmpty) {
+        _snack(
+          'Surel dan kata sandi wajib diisi.',
+          color: Colors.orange,
+        );
+      }
       return;
     }
 
+    FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
+
+    final email = _normalizedEmail;
+    final password = _passwordCtrl.text;
 
     try {
       final res = await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
+        email: email,
+        password: password,
       );
 
-      if (res.user == null) throw Exception('login gagal');
-
-      final userEmail = res.user!.email ?? _emailCtrl.text.trim();
-      final userData = await Supabase.instance.client
-          .from('karyawan')
-          .select('status_approval')
-          .eq('email', userEmail)
-          .maybeSingle();
-
-      if (userData == null) {
-        await Supabase.instance.client.auth.signOut();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("profil_tidak_ditemukan".tr()),
-          backgroundColor: Colors.redAccent,
-        ));
-        setState(() => _isLoading = false);
-        return;
+      if (res.user == null) {
+        throw const AuthException('Login gagal');
       }
 
-      final status = (userData['status_approval'] ?? '').toString();
-      if (status != 'Aktif') {
-        await Supabase.instance.client.auth.signOut();
-        if (!mounted) return;
-        final ditolak = status.startsWith('Ditolak');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            ditolak
-                ? "akun_ditolak".tr()
-                : 'Akun menunggu persetujuan Admin Pusat. Belum bisa dipakai.',
-          ),
-          backgroundColor: ditolak ? Colors.redAccent : Colors.orange,
-          duration: const Duration(seconds: 5),
-        ));
-        setState(() => _isLoading = false);
-        return;
-      }
+      final userEmail =
+          (res.user!.email ?? email).trim().toLowerCase();
+      final ok = await _assertKaryawanAktif(userEmail);
+      if (!ok || !mounted) return;
 
-      await _secureStorage.write(
-          key: 'saved_email', value: _emailCtrl.text.trim());
-      await _secureStorage.write(
-          key: 'saved_password', value: _passwordCtrl.text);
+      await _persistCredentialsForBiometric(
+        email: email,
+        password: password,
+      );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("masuk_berhasil".tr()),
-        backgroundColor: const Color(0xFF16A34A),
-      ));
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const KaryawanPage()),
-      );
+      _snack("masuk_berhasil".tr(), color: OptikKaryawanTokens.cyan);
+      _goHome();
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') ||
+          msg.contains('credentials') ||
+          msg.contains('password')) {
+        _snack("masuk_gagal".tr(), color: Colors.redAccent);
+      } else if (msg.contains('network') || msg.contains('fetch')) {
+        _snack(
+          'Koneksi gagal. Periksa internet lalu coba lagi.',
+          color: Colors.orange,
+        );
+      } else {
+        _snack(
+          e.message.isNotEmpty ? e.message : "masuk_gagal".tr(),
+          color: Colors.redAccent,
+        );
+      }
     } catch (e) {
+      debugPrint('login karyawan: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("masuk_gagal".tr()),
-        backgroundColor: Colors.redAccent,
-      ));
+      _snack("masuk_gagal".tr(), color: Colors.redAccent);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _goHome() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const KaryawanPage()),
+    );
+  }
+
+  String? _validateEmail(String? v) {
+    final email = (v ?? '').trim().toLowerCase();
+    if (email.isEmpty) return 'Surel wajib diisi';
+    if (!email.contains('@') || email.startsWith('@') || email.endsWith('@')) {
+      return 'Format surel tidak valid';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? v) {
+    if ((v ?? '').isEmpty) return 'Kata sandi wajib diisi';
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
 
     return Scaffold(
+      backgroundColor: OptikKaryawanTokens.bg,
       body: Stack(
         children: [
-          // Full-bleed brand plane
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF071018),
-                  _navy,
-                  _navyMid,
-                  Color(0xFF1A3A5C),
-                ],
-                stops: [0, 0.35, 0.72, 1],
-              ),
-            ),
-          ),
-          // Atmospheric light
-          Positioned(
-            top: -80,
-            right: -60,
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    _gold.withOpacity(0.18),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 120,
-            left: -80,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.white.withOpacity(0.06),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Fine line texture
           Positioned.fill(
-            child: CustomPaint(painter: _LuxuryGridPainter()),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: OptikKaryawanTokens.authBgGradient,
+              ),
+            ),
           ),
-
+          Positioned(
+            top: -100,
+            right: -70,
+            child: IgnorePointer(
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      OptikKaryawanTokens.cyan.withOpacity(0.34),
+                      OptikKaryawanTokens.cyan.withOpacity(0.08),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -80,
+            child: IgnorePointer(
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikKaryawanTokens.pale.withOpacity(0.35),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.sizeOf(context).height * 0.42,
+            left: -40,
+            child: IgnorePointer(
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.10),
+                ),
+              ),
+            ),
+          ),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
                 child: FadeTransition(
                   opacity: _fade,
                   child: SlideTransition(
                     position: _slide,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Column(
-                        children: [
-                          // Brand hero — must dominate first viewport
-                          const OptikBrandLogo.white(height: 48),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: 48,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  _gold.withOpacity(0.9),
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            "sub_judul_portal".tr(),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.72),
-                              fontSize: 13,
-                              letterSpacing: 1.4,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Portal Karyawan',
-                            style: TextStyle(
-                              color: _goldSoft.withOpacity(0.95),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 2.5,
-                            ),
-                          ),
-                          const SizedBox(height: 36),
-
-                          // Glass card
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(24),
-                              color: Colors.white.withOpacity(0.07),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.14),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.35),
-                                  blurRadius: 40,
-                                  offset: const Offset(0, 18),
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: AutofillGroup(
+                        child: Form(
+                        key: _formKey,
+                        autovalidateMode: AutovalidateMode.disabled,
+                        child: AbsorbPointer(
+                          absorbing: _isLoading,
+                          child: Column(
+                            children: [
+                              const OptikBrandLogo.color(height: 56),
+                              const SizedBox(height: 12),
+                              Text(
+                                "sub_judul_portal".tr().toUpperCase(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: OptikKaryawanTokens.muted
+                                      .withOpacity(0.95),
+                                  fontSize: 10.5,
+                                  letterSpacing: 2.4,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  "tombol_masuk_label".tr(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  color: OptikKaryawanTokens.cyan
+                                      .withOpacity(0.16),
+                                  border: Border.all(
+                                    color: OptikKaryawanTokens.cyan
+                                        .withOpacity(0.45),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Masuk dengan akun yang sudah disetujui Pusat',
+                                child: const Text(
+                                  'PORTAL KARYAWAN',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.55),
-                                    fontSize: 12.5,
+                                    color: OptikKaryawanTokens.ink,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.8,
                                   ),
                                 ),
-                                const SizedBox(height: 22),
-                                _buildField(
-                                  controller: _emailCtrl,
-                                  label: "isian_surel".tr(),
-                                  icon: Icons.mail_outline_rounded,
-                                  keyboardType: TextInputType.emailAddress,
-                                ),
-                                const SizedBox(height: 14),
-                                _buildField(
-                                  controller: _passwordCtrl,
-                                  label: "isian_kata_sandi".tr(),
-                                  icon: Icons.lock_outline_rounded,
-                                  isPassword: true,
-                                ),
-                                const SizedBox(height: 26),
-                                SizedBox(
-                                  height: 54,
-                                  child: DecoratedBox(
+                              ),
+                              const SizedBox(height: 28),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(
+                                    OptikKaryawanTokens.radiusXl),
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(
+                                      sigmaX: 18, sigmaY: 18),
+                                  child: Container(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      gradient: const LinearGradient(
+                                      borderRadius: BorderRadius.circular(
+                                          OptikKaryawanTokens.radiusXl),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
                                         colors: [
-                                          OptikKaryawanTokens.goldLite,
-                                          _gold,
-                                          _goldSoft,
+                                          OptikKaryawanTokens.card
+                                              .withOpacity(0.97),
+                                          OptikKaryawanTokens.bgMid
+                                              .withOpacity(0.94),
                                         ],
                                       ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: _gold.withOpacity(0.35),
-                                          blurRadius: 18,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                      ],
-                                    ),
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        shadowColor: Colors.transparent,
-                                        foregroundColor: _navy,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                        ),
+                                      border: Border.all(
+                                        color: OptikKaryawanTokens.cyan
+                                            .withOpacity(0.55),
+                                        width: 1.1,
                                       ),
-                                      onPressed:
-                                          _isLoading ? null : _loginKaryawan,
-                                      child: _isLoading
-                                          ? const SizedBox(
-                                              width: 22,
-                                              height: 22,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2.2,
-                                                color: _navy,
+                                      boxShadow:
+                                          OptikKaryawanTokens.cardShadow,
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          22, 22, 22, 20),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Container(
+                                                width: 48,
+                                                height: 48,
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          15),
+                                                  gradient: LinearGradient(
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment
+                                                        .bottomRight,
+                                                    colors: [
+                                                      OptikKaryawanTokens
+                                                          .cyan
+                                                          .withOpacity(0.35),
+                                                      OptikKaryawanTokens
+                                                          .pale
+                                                          .withOpacity(0.55),
+                                                    ],
+                                                  ),
+                                                  border: Border.all(
+                                                    color:
+                                                        OptikKaryawanTokens
+                                                            .cyan
+                                                            .withOpacity(
+                                                                0.85),
+                                                  ),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.badge_rounded,
+                                                  color: OptikKaryawanTokens
+                                                      .ink,
+                                                  size: 24,
+                                                ),
                                               ),
-                                            )
-                                          : Text(
-                                              "tombol_masuk_label".tr(),
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 1.2,
-                                                color: _navy,
+                                              const SizedBox(width: 14),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .start,
+                                                  children: [
+                                                    Text(
+                                                      'EMPLOYEE ACCESS',
+                                                      style: TextStyle(
+                                                        color:
+                                                            OptikKaryawanTokens
+                                                                .muted
+                                                                .withOpacity(
+                                                                    0.95),
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        letterSpacing: 1.6,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(
+                                                        height: 4),
+                                                    Text(
+                                                      "tombol_masuk_label"
+                                                          .tr(),
+                                                      style: const TextStyle(
+                                                        color:
+                                                            OptikKaryawanTokens
+                                                                .ink,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 22,
+                                                        height: 1.15,
+                                                        letterSpacing: -0.3,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(
+                                                        height: 5),
+                                                    Text(
+                                                      'Masuk dengan akun yang sudah disetujui Pusat',
+                                                      style: TextStyle(
+                                                        color:
+                                                            OptikKaryawanTokens
+                                                                .muted
+                                                                .withOpacity(
+                                                                    0.95),
+                                                        fontSize: 12.5,
+                                                        height: 1.35,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 22),
+                                          _buildField(
+                                            controller: _emailCtrl,
+                                            focusNode: _emailFocus,
+                                            label: "isian_surel".tr(),
+                                            icon: Icons.mail_outline_rounded,
+                                            keyboardType:
+                                                TextInputType.emailAddress,
+                                            textInputAction:
+                                                TextInputAction.next,
+                                            autofillHints: const [
+                                              AutofillHints.email,
+                                              AutofillHints.username,
+                                            ],
+                                            validator: _validateEmail,
+                                            onFieldSubmitted: (_) =>
+                                                _passwordFocus
+                                                    .requestFocus(),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildField(
+                                            controller: _passwordCtrl,
+                                            focusNode: _passwordFocus,
+                                            label: "isian_kata_sandi".tr(),
+                                            icon:
+                                                Icons.lock_outline_rounded,
+                                            isPassword: true,
+                                            textInputAction:
+                                                TextInputAction.done,
+                                            autofillHints: const [
+                                              AutofillHints.password,
+                                            ],
+                                            validator: _validatePassword,
+                                            onFieldSubmitted: (_) =>
+                                                _loginKaryawan(),
+                                          ),
+                                          const SizedBox(height: 20),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            height: 54,
+                                            child: DecoratedBox(
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        14),
+                                                gradient:
+                                                    OptikKaryawanTokens
+                                                        .accentGradient,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color:
+                                                        OptikKaryawanTokens
+                                                            .cyan
+                                                            .withOpacity(
+                                                                0.38),
+                                                    blurRadius: 18,
+                                                    offset:
+                                                        const Offset(0, 8),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: ElevatedButton(
+                                                style: ElevatedButton
+                                                    .styleFrom(
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  shadowColor:
+                                                      Colors.transparent,
+                                                  foregroundColor:
+                                                      OptikKaryawanTokens
+                                                          .ink,
+                                                  minimumSize:
+                                                      const Size.fromHeight(
+                                                          54),
+                                                  shape:
+                                                      RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius
+                                                            .circular(14),
+                                                  ),
+                                                ),
+                                                onPressed: _isLoading
+                                                    ? null
+                                                    : _loginKaryawan,
+                                                child: Text(
+                                                  "tombol_masuk_label".tr(),
+                                                  style: const TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                    letterSpacing: 1.3,
+                                                    color:
+                                                        OptikKaryawanTokens
+                                                            .ink,
+                                                  ),
+                                                ),
                                               ),
                                             ),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              onTap: _isLoading
+                                                  ? null
+                                                  : () =>
+                                                      _loginDenganBiometrik(),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              child: Container(
+                                                padding: const EdgeInsets
+                                                    .symmetric(
+                                                    horizontal: 14,
+                                                    vertical: 12),
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          14),
+                                                  color:
+                                                      OptikKaryawanTokens
+                                                          .cyan
+                                                          .withOpacity(0.12),
+                                                  border: Border.all(
+                                                    color:
+                                                        OptikKaryawanTokens
+                                                            .cyan
+                                                            .withOpacity(
+                                                                0.4),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .center,
+                                                  children: [
+                                                    Icon(
+                                                      Icons
+                                                          .fingerprint_rounded,
+                                                      size: 22,
+                                                      color:
+                                                          OptikKaryawanTokens
+                                                              .ink
+                                                              .withOpacity(
+                                                                  0.9),
+                                                    ),
+                                                    const SizedBox(
+                                                        width: 10),
+                                                    Text(
+                                                      kIsWeb
+                                                          ? 'Biometrik (HP saja)'
+                                                          : 'Masuk dengan Biometrik',
+                                                      style: TextStyle(
+                                                        color:
+                                                            OptikKaryawanTokens
+                                                                .ink
+                                                                .withOpacity(
+                                                                    0.88),
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 18),
+                                          Wrap(
+                                            alignment: WrapAlignment.center,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            children: [
+                                              Text(
+                                                "${'tanya_karyawan_baru'.tr()} ",
+                                                style: TextStyle(
+                                                  color: OptikKaryawanTokens
+                                                      .muted
+                                                      .withOpacity(0.95),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              GestureDetector(
+                                                onTap: _isLoading
+                                                    ? null
+                                                    : () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                const RegisterKaryawanPage(),
+                                                          ),
+                                                        );
+                                                      },
+                                                child: Text(
+                                                  "tautan_daftar".tr(),
+                                                  style: const TextStyle(
+                                                    color:
+                                                        OptikKaryawanTokens
+                                                            .cyan,
+                                                    fontWeight:
+                                                        FontWeight.w800,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 22),
-                                Center(
-                                  child: InkWell(
-                                    onTap: _loginDenganBiometrik,
-                                    borderRadius: BorderRadius.circular(40),
-                                    child: Column(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(14),
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: _gold.withOpacity(0.45),
-                                            ),
-                                            color: Colors.white.withOpacity(0.05),
-                                          ),
-                                          child: Icon(
-                                            Icons.fingerprint_rounded,
-                                            size: 28,
-                                            color: _gold.withOpacity(0.95),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Masuk dengan Biometrik',
-                                          style: TextStyle(
-                                            color:
-                                                Colors.white.withOpacity(0.7),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                              ),
+                              const SizedBox(height: 22),
+                              Text(
+                                'PRIVATE · SECURE · SEASIDE',
+                                style: TextStyle(
+                                  color: OptikKaryawanTokens.ink
+                                      .withOpacity(0.32),
+                                  fontSize: 10,
+                                  letterSpacing: 2.4,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                                const SizedBox(height: 22),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      "${'tanya_karyawan_baru'.tr()} ",
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.55),
-                                        fontSize: 13.5,
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                const RegisterKaryawanPage(),
-                                          ),
-                                        );
-                                      },
-                                      child: Text(
-                                        "tautan_daftar".tr(),
-                                        style: const TextStyle(
-                                          color: _gold,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 28),
-                          Text(
-                            'PRIVATE · SECURE · ENTERPRISE',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.35),
-                              fontSize: 10,
-                              letterSpacing: 2.2,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                        ),
+                        ),
                       ),
                     ),
                   ),
@@ -515,7 +861,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
           AppLoadingOverlay(
             visible: _isLoading,
             message: 'Masuk ke akun…',
-            subtitle: 'Memverifikasi kredensial',
+            subtitle: 'Memverifikasi kredensial & status akun',
           ),
         ],
       ),
@@ -526,73 +872,75 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     required TextEditingController controller,
     required String label,
     required IconData icon,
+    FocusNode? focusNode,
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
+    TextInputAction textInputAction = TextInputAction.next,
+    List<String>? autofillHints,
+    String? Function(String?)? validator,
+    ValueChanged<String>? onFieldSubmitted,
   }) {
     return TextFormField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: isPassword ? _isObscure : false,
       keyboardType: keyboardType,
+      textInputAction: textInputAction,
+      autofillHints: autofillHints,
+      validator: validator,
+      onFieldSubmitted: onFieldSubmitted,
+      enabled: !_isLoading,
       style: const TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
+        color: OptikKaryawanTokens.ink,
+        fontWeight: FontWeight.w600,
         fontSize: 14.5,
       ),
-      cursorColor: _gold,
+      cursorColor: OptikKaryawanTokens.cyan,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(
-          color: Colors.white.withOpacity(0.55),
+          color: OptikKaryawanTokens.muted.withOpacity(0.9),
           fontSize: 13,
+          fontWeight: FontWeight.w500,
         ),
-        prefixIcon: Icon(icon, color: _goldSoft.withOpacity(0.85), size: 20),
+        errorMaxLines: 2,
+        prefixIcon: Icon(icon, color: OptikKaryawanTokens.cyan, size: 20),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
                   _isObscure
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  color: Colors.white.withOpacity(0.45),
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  color: OptikKaryawanTokens.muted.withOpacity(0.75),
                   size: 20,
                 ),
-                onPressed: () => setState(() => _isObscure = !_isObscure),
+                onPressed: _isLoading
+                    ? null
+                    : () => setState(() => _isObscure = !_isObscure),
               )
             : null,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18),
+        fillColor: OptikKaryawanTokens.snow.withOpacity(0.72),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+          borderSide:
+              BorderSide(color: OptikKaryawanTokens.cyan.withOpacity(0.35)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+          borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+          borderSide:
+              BorderSide(color: OptikKaryawanTokens.cyan.withOpacity(0.4)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _gold.withOpacity(0.75), width: 1.4),
+          borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+          borderSide: const BorderSide(
+            color: OptikKaryawanTokens.cyan,
+            width: 1.6,
+          ),
         ),
       ),
     );
   }
-}
-
-class _LuxuryGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.03)
-      ..strokeWidth = 1;
-    const step = 42.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

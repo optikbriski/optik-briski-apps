@@ -48,14 +48,14 @@ class BantuanPage extends StatelessWidget {
                 Text(
                   "bantuan_header".tr(),
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: OptikKaryawanTokens.ink,
                       fontSize: 18,
                       fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   "bantuan_desc".tr(),
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: const TextStyle(color: OptikKaryawanTokens.muted, fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -103,16 +103,19 @@ class BantuanPage extends StatelessWidget {
               height: 50,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600, // Warna khas WhatsApp
+                  backgroundColor: OptikKaryawanTokens.seasideMid,
+                  foregroundColor: OptikKaryawanTokens.ink,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
                 onPressed: () => _openWa(context),
-                icon: const Icon(Icons.chat_rounded, color: Colors.white),
+                icon: const Icon(Icons.chat_rounded,
+                    color: OptikKaryawanTokens.ink),
                 label: Text(
                   "bantuan_btn_wa".tr(),
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
+                      color: OptikKaryawanTokens.ink,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ),

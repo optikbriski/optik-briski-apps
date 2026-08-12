@@ -1,13 +1,17 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../garansi/garansi_service.dart';
+import '../karyawan/lab_job_service.dart';
 import '../qr/obr_codes.dart';
 import 'invoice_link.dart';
 
 class InvoiceHubService {
   InvoiceHubService({SupabaseClient? client})
-      : _db = client ?? Supabase.instance.client;
+      : _db = client ?? Supabase.instance.client,
+        _lab = LabJobService(client: client ?? Supabase.instance.client);
 
   final SupabaseClient _db;
+  final LabJobService _lab;
 
   /// Resolve dari raw QR / URL / plain invoice.
   Future<Map<String, dynamic>?> loadFromScan(String raw) async {
@@ -87,19 +91,11 @@ class InvoiceHubService {
       'online_order_id': sale['online_order_id'],
       'items': items,
       'garansi': garansi,
-      'garansi_claimable': (garansi as List).any((raw) {
-        final g = Map<String, dynamic>.from(raw as Map);
-        if (g['status']?.toString() != 'aktif') return false;
-        if (g['klaim_digunakan'] == true) return false;
-        final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
-        if (akhir == null) return false;
-        final today = DateTime(
-          DateTime.now().year,
-          DateTime.now().month,
-          DateTime.now().day,
-        );
-        return !DateTime(akhir.year, akhir.month, akhir.day).isBefore(today);
-      }),
+      'garansi_claimable': (garansi as List).any(
+        (raw) => GaransiService.kartuBisaDiklaim(
+          Map<String, dynamic>.from(raw as Map),
+        ),
+      ),
       'qr_dp_ready':
           sale['qr_dp_token'] != null && sale['qr_dp_used_at'] == null,
       'qr_lunas_ready':
@@ -170,11 +166,7 @@ class InvoiceHubService {
       }
       final total = maps.length;
       if (total > 0 && diambil == total) {
-        // Board CLEAR — jangan "Sudah diambil" generik.
-        if (isCaseClosed(hub) || !isGaransiClaimable(hub)) {
-          return 'CLEAR · Garansi mati';
-        }
-        return 'CLEAR · Garansi aktif';
+        return _takenLabel(hub);
       }
       if (ready > 0 && pendingRo > 0) {
         return 'Partial · siap ambil ready ($ready) · RO $pendingRo';
@@ -186,22 +178,52 @@ class InvoiceHubService {
     }
     if (hub['diambil_at'] != null ||
         (hub['tracking_status']?.toString() ?? '').toUpperCase() == 'DIAMBIL') {
-      if (isCaseClosed(hub) || !isGaransiClaimable(hub)) {
-        return 'CLEAR · Garansi mati';
-      }
-      return 'CLEAR · Garansi aktif';
+      return _takenLabel(hub);
     }
     final t = (hub['tracking_status']?.toString() ?? '').trim().toUpperCase();
+    final pay =
+        (hub['status_pembayaran']?.toString() ?? '').trim().toUpperCase();
+    if (t == 'BATAL_VOUCHER' ||
+        t == 'BATAL' ||
+        t == 'CANCELLED' ||
+        pay == 'BATAL') {
+      return 'Dibatalkan';
+    }
+    // DP dulu (selaras Beranda pengingat) — jangan "Siap diambil" bila masih sisa.
+    if (isDpOpen(hub) && t == 'PENDING_PO') return 'DP · menunggu barang ready';
+    if (isDpOpen(hub) && t == 'SIAP_PELUNASAN') return 'Siap pelunasan';
+    if (isDpOpen(hub) && (t == 'SIAP_DIAMBIL' || t == 'CLEAR')) {
+      return 'Siap diambil · masih DP';
+    }
     if (t == 'SIAP_DIAMBIL') return 'Siap diambil';
     if (t == 'CLEAR') return 'CLEAR · siap diambil';
     if (t == 'SIAP_PELUNASAN') return 'Siap pelunasan';
-    if (isDpOpen(hub) && t == 'PENDING_PO') return 'DP · menunggu barang ready';
     if (t == 'PENDING_PO') return 'PENDING · menunggu barang ready';
     if (t == 'DIPROSES_DI_CABANG' || t == 'DIPROSES') {
       return 'Diproses di cabang';
     }
     if (t == 'DIKIRIM' || t == 'SHIPPED') return 'Dalam pengiriman';
-    return t.isEmpty ? 'Dalam proses' : t;
+    if (t.isEmpty) return 'Dalam proses';
+    // Jangan tampilkan raw SCREAMING_SNAKE ke Member.
+    if (RegExp(r'^[A-Z0-9_]+$').hasMatch(t)) {
+      return t
+          .toLowerCase()
+          .split('_')
+          .where((p) => p.isNotEmpty)
+          .map((p) => '${p[0].toUpperCase()}${p.substring(1)}')
+          .join(' ');
+    }
+    return t;
+  }
+
+  /// Label nota sudah diambil. Tanpa flag garansi (list RPC ringkas) →
+  /// "Sudah diambil", jangan klaim "Garansi mati".
+  static String _takenLabel(Map<String, dynamic> hub) {
+    if (hub['garansi_claimable'] == true) return 'CLEAR · Garansi aktif';
+    if (hub['garansi_claimable'] == false || hub['qr_claim_used'] == true) {
+      return 'CLEAR · Garansi mati';
+    }
+    return 'Sudah diambil';
   }
 
   static bool hasPendingRoLines(Map<String, dynamic> hub) {
@@ -267,6 +289,41 @@ class InvoiceHubService {
     );
   }
 
+  /// Lengkapi hub map dengan status `lab_jobs` (jika ada).
+  Future<Map<String, dynamic>> enrichLabJob(Map<String, dynamic> hub) async {
+    try {
+      final saleId = hub['sale_id']?.toString() ?? '';
+      final inv = hub['no_invoice']?.toString() ?? '';
+      Map<String, dynamic>? job;
+      if (saleId.isNotEmpty) {
+        job = await _lab.fetchBySaleId(saleId);
+      }
+      job ??= inv.isNotEmpty ? await _lab.fetchByInvoice(inv) : null;
+      if (job == null) {
+        return {...hub, 'lab_job': null};
+      }
+      String? claimedNama;
+      final claimedBy = job['claimed_by']?.toString();
+      if (claimedBy != null && claimedBy.isNotEmpty) {
+        final k = await _db
+            .from('karyawan')
+            .select('nama')
+            .eq('id', claimedBy)
+            .maybeSingle();
+        claimedNama = k?['nama']?.toString();
+      }
+      return {
+        ...hub,
+        'lab_job': job,
+        'lab_job_status': job['status']?.toString(),
+        'lab_job_claimed_nama': claimedNama,
+        'lab_job_unit_qty': job['unit_qty'],
+      };
+    } catch (_) {
+      return hub;
+    }
+  }
+
   /// Tandai pesanan online delivery sudah diserahkan ke kurir.
   Future<Map<String, dynamic>> markOnlineShipped({
     required String onlineOrderId,
@@ -311,16 +368,41 @@ class InvoiceHubService {
     required String peran,
     required int skor,
     String? komentar,
+    String? phone,
   }) async {
-    await _db.rpc(
-      'submit_invoice_rating',
-      params: {
-        'p_no_invoice': noInvoice,
-        'p_peran': peran,
-        'p_skor': skor,
-        'p_komentar': komentar,
-      },
-    );
+    final params = <String, dynamic>{
+      'p_no_invoice': noInvoice,
+      'p_peran': peran,
+      'p_skor': skor,
+      'p_komentar': komentar,
+    };
+    final p = phone?.trim();
+    if (p != null && p.isNotEmpty) {
+      params['p_phone'] = p;
+    }
+    try {
+      await _db.rpc('submit_invoice_rating', params: params);
+    } catch (e) {
+      // Fallback hanya jika overload p_phone belum di-deploy.
+      final msg = '$e'.toLowerCase();
+      final missingOverload = msg.contains('pgrst202') ||
+          msg.contains('could not find the function') ||
+          msg.contains('function public.submit_invoice_rating') ||
+          msg.contains('does not exist');
+      if (p != null && p.isNotEmpty && missingOverload) {
+        await _db.rpc(
+          'submit_invoice_rating',
+          params: {
+            'p_no_invoice': noInvoice,
+            'p_peran': peran,
+            'p_skor': skor,
+            'p_komentar': komentar,
+          },
+        );
+        return;
+      }
+      rethrow;
+    }
   }
 
   static Map<String, dynamic>? ratingFor(
@@ -340,19 +422,10 @@ class InvoiceHubService {
     final list = hub['garansi'];
     if (list is! List || list.isEmpty) return null;
     int? best;
-    final today = DateTime(
-      DateTime.now().year,
-      DateTime.now().month,
-      DateTime.now().day,
-    );
     for (final raw in list) {
       final g = Map<String, dynamic>.from(raw as Map);
-      if (g['status']?.toString() != 'aktif') continue;
-      final akhir = DateTime.tryParse(g['tanggal_akhir']?.toString() ?? '');
-      if (akhir == null) continue;
-      final sisa = DateTime(akhir.year, akhir.month, akhir.day)
-          .difference(today)
-          .inDays;
+      if (!GaransiService.kartuBisaDiklaim(g)) continue;
+      final sisa = GaransiService.sisaHari(g);
       if (best == null || sisa > best) best = sisa;
     }
     return best;

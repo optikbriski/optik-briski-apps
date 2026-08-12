@@ -69,7 +69,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     'rating': 'Rating',
     'notif': 'Inbox',
     'perawatan': 'Perawatan',
-    'bentuk_wajah': 'Bentuk wajah (scan)',
+    'bentuk_wajah': 'Bentuk (referensi frame)',
   };
 
   static const _sectionMeta = <String, ({IconData icon, String hint})>{

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'face_shape_type.dart';
 import '../theme.dart';
+import 'face_shape_frame_guide.dart';
+import 'face_shape_type.dart';
 
 /// Siluet bentuk wajah + contoh frame rekomendasi (ilustrasi).
 class FaceShapeVisual extends StatelessWidget {
@@ -422,20 +423,10 @@ class _FrameStyle {
 
 /// Label singkat gaya frame yang digambar.
 String faceShapeFrameLabel(FaceShapeType shape, {int variant = 0}) {
-  switch (shape) {
-    case FaceShapeType.oval:
-      return variant == 0 ? 'Rectangle / wayfarer' : 'Round';
-    case FaceShapeType.round:
-      return variant == 0 ? 'Rectangle / square' : 'Browline';
-    case FaceShapeType.square:
-      return variant == 0 ? 'Round / oval' : 'Cat-eye lembut';
-    case FaceShapeType.heart:
-      return variant == 0 ? 'Aviator' : 'Round ringan';
-    case FaceShapeType.diamond:
-      return variant == 0 ? 'Cat-eye / oval' : 'Thin round';
-    case FaceShapeType.oblong:
-      return variant == 0 ? 'Wide / oversize' : 'Square pendek';
-  }
+  final rec = FaceShapeFrameGuide.recommendedFor(shape);
+  if (rec.isEmpty) return shape.labelId;
+  final i = variant.clamp(0, rec.length - 1);
+  return rec[i].title;
 }
 
 /// Grid kecil untuk overview (wajah saja).

@@ -50,7 +50,7 @@ Output Flutter:
 
 `../../assets/models/face_shape_weights.json`
 
-App Member memuat file itu lewat `FaceShapeModelStore` dan mem-fuse dengan aturan geometri on-device (ML Kit contours).
+**Status app (2026-08):** Member **Bentuk** adalah referensi panduan (foto model + rekomendasi frame), **bukan** scan kamera on-device. `FaceShapeModelStore` / ML Kit contour untuk fitur ini **tidak di-wire** di app. File weights + tabel `member_face_shape_scans` tetap dipakai pipeline training / export koreksi admin bila scan dihidupkan lagi nanti.
 
 ## Export koreksi toko (Supabase)
 

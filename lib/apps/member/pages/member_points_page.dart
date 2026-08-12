@@ -17,9 +17,9 @@ class MemberPointsPage extends StatefulWidget {
 }
 
 class _MemberPointsPageState extends State<MemberPointsPage> {
-  /// PREVIEW: buka semua grade supaya konsep "wah" tiap level bisa dilihat.
-  /// Set `false` sebelum rilis produksi.
-  static const bool kPreviewUnlockAllGrades = true;
+  /// Dev-only: buka semua grade untuk review desain kartu.
+  /// Harus `false` di produksi agar grade mengikuti Status Poin nyata.
+  static const bool kPreviewUnlockAllGrades = false;
 
   final _repo = MemberRepository();
   PageController? _pageCtrl;
@@ -249,9 +249,10 @@ class _MemberPointsPageState extends State<MemberPointsPage> {
                             if (meta is Map) {
                               inv = (meta['no_invoice'] ?? '').toString();
                             }
-                            final title = reason == 'purchase_10pct'
-                                ? 'Invoice${inv.isEmpty ? '' : ' $inv'}'
-                                : reason;
+                            final title = memberPointsLedgerTitle(
+                              reason,
+                              invoice: inv,
+                            );
                             final at = (row['created_at'] ?? '').toString();
                             return Container(
                               padding: const EdgeInsets.all(14),
@@ -781,24 +782,25 @@ class _GradeTrackBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(99),
                 ),
               ),
-              FractionallySizedBox(
-                widthFactor: progress.clamp(0.04, 1.0),
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFFFFF), Color(0xFFB8D9FF)],
-                    ),
-                    borderRadius: BorderRadius.circular(99),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.55),
-                        blurRadius: 8,
+              if (progress > 0)
+                FractionallySizedBox(
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  child: Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFFFFF), Color(0xFFB8D9FF)],
                       ),
-                    ],
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.55),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],

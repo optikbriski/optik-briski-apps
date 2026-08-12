@@ -558,9 +558,10 @@ class InvoiceLifecycleService {
         .from('garansi_kartu')
         .select()
         .eq('sale_id', validated.sale['id']);
-    final garansi = GaransiService(client: _db);
     final anyClaimable = (cards as List).any(
-      (raw) => garansi.kartuBisaDiklaim(Map<String, dynamic>.from(raw as Map)),
+      (raw) => GaransiService.kartuBisaDiklaim(
+        Map<String, dynamic>.from(raw as Map),
+      ),
     );
     if (!anyClaimable) {
       throw 'Case closed: garansi habis masa / sudah diklaim / belum aktif.';

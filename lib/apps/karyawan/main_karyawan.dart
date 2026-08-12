@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,10 +20,16 @@ import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
+import '../../shared/karyawan/kpi_fire_service.dart';
+import '../../shared/karyawan/lab_job_service.dart';
+import '../../shared/karyawan/shift_auto_assign.dart';
+import '../../shared/karyawan/streak_fire_level.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../shared/theme.dart';
+import '../../shared/whatsapp_launcher.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_host.dart';
@@ -46,6 +53,7 @@ String? _fotoProfileUrl;
 class KaryawanPageState extends State<KaryawanPage>
     with WidgetsBindingObserver {
   final _homeService = KaryawanHomeService();
+  final _labService = LabJobService();
 
   // 1. WADAH DATA DINAMIS
   late String _namaKaryawan;
@@ -54,12 +62,22 @@ class KaryawanPageState extends State<KaryawanPage>
   String? _karyawanId;
   String? _tokoId;
   bool _isLoading = true;
+  List<Map<String, dynamic>> _labOpenJobs = [];
+  List<Map<String, dynamic>> _labMineJobs = [];
+  bool _labBusy = false;
 
   // 2. JADWAL MINGGUAN (dari Supabase)
   List<Map<String, String>> _jadwalMingguIni = [];
 
   // Wadah List SOP
   List<Map<String, dynamic>> _daftarSOPTugas = [];
+
+  Map<String, String>? _jadwalHariIni;
+  String _absenStatus = 'belum_masuk';
+  DateTime? _absenMasukAt;
+  DateTime? _absenPulangAt;
+  List<Map<String, dynamic>> _pengajuanTerbaru = [];
+  List<Map<String, dynamic>> _pengumuman = [];
 
   double _securityScore = 0;
 
@@ -149,7 +167,7 @@ class KaryawanPageState extends State<KaryawanPage>
         _showPremiumSnackbar(
           'Update berhasil',
           'Aplikasi sekarang versi ${outcome.localVersion}. Siap dipakai.',
-          Colors.green,
+          OptikKaryawanTokens.seasideMid,
         );
       }
     } catch (e) {
@@ -218,24 +236,27 @@ class KaryawanPageState extends State<KaryawanPage>
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: OptikKaryawanTokens.navyDeep,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: OptikKaryawanTokens.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: OptikKaryawanTokens.border),
+        ),
         title: const Text(
           'Penyimpanan kurang',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
         ),
         content: Text(
           'Storage internal HP tidak cukup untuk mengunduh update.\n\n'
           'Dibutuhkan sekitar $butuh (tersedia $sisa).\n\n'
           'Kosongkan foto, cache, atau file lain di penyimpanan internal, '
           'lalu buka lagi aplikasi — unduhan akan dilanjutkan otomatis.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Mengerti',
-                style: TextStyle(color: Colors.white54)),
+                style: TextStyle(color: OptikKaryawanTokens.muted)),
           ),
           FilledButton(
             onPressed: () {
@@ -267,26 +288,28 @@ class KaryawanPageState extends State<KaryawanPage>
       builder: (ctx) => PopScope(
         canPop: !hardForce,
         child: AlertDialog(
-          backgroundColor: OptikKaryawanTokens.navyDeep,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: OptikKaryawanTokens.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: OptikKaryawanTokens.border),
+          ),
           title: Text(
             hardForce ? 'Update wajib siap dipasang' : 'Update siap dipasang',
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
+                color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
           ),
           content: Text(
             'Versi ${info.serverVersion} sudah diunduh.\n'
             'Pasang sekarang? App lama tetap aman sampai instalasi selesai.\n\n'
             '${info.notes ?? ''}',
-            style: const TextStyle(color: Colors.white70, height: 1.4),
+            style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
           ),
           actions: [
             if (!hardForce)
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Nanti',
-                    style: TextStyle(color: Colors.white54)),
+                    style: TextStyle(color: OptikKaryawanTokens.muted)),
               ),
             FilledButton(
               onPressed: () async {
@@ -301,7 +324,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   _showPremiumSnackbar(
                     'Installer dibuka',
                     'Konfirmasi di layar sistem untuk memasang update.',
-                    Colors.green,
+                    OptikKaryawanTokens.seasideMid,
                   );
                 } catch (e) {
                   if (!mounted) return;
@@ -337,13 +360,15 @@ class KaryawanPageState extends State<KaryawanPage>
         return R.constrainedDialog(
           context: context,
           child: AlertDialog(
-          backgroundColor: OptikKaryawanTokens.navyDeep,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: OptikKaryawanTokens.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: OptikKaryawanTokens.border),
+          ),
           title: Text(
             "pilihan_bahasa_judul".tr(),
             style: const TextStyle(
-                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                color: OptikKaryawanTokens.ink, fontSize: 16, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           content: Column(
@@ -368,7 +393,7 @@ class KaryawanPageState extends State<KaryawanPage>
     return ListTile(
       title: Text(label,
           style: TextStyle(
-              color: isSelected ? OptikKaryawanTokens.goldLite : Colors.white70,
+              color: isSelected ? OptikKaryawanTokens.seasideMid : OptikKaryawanTokens.ink,
               fontSize: 14,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
       trailing: isSelected
@@ -378,7 +403,7 @@ class KaryawanPageState extends State<KaryawanPage>
         context.setLocale(locale);
         Navigator.pop(context);
         _showPremiumSnackbar("notif_sukses_judul".tr(),
-            "notif_bahasa_sukses".tr(), Colors.green);
+            "notif_bahasa_sukses".tr(), OptikKaryawanTokens.seasideMid);
       },
     );
   }
@@ -415,13 +440,15 @@ class KaryawanPageState extends State<KaryawanPage>
         builder: (ctx) => PopScope(
           canPop: !hardForce,
           child: AlertDialog(
-            backgroundColor: OptikKaryawanTokens.navyDeep,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: OptikKaryawanTokens.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: OptikKaryawanTokens.border),
+            ),
             title: Text(
               hardForce ? 'Update wajib' : 'Update tersedia',
               style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
+                  color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
             ),
             content: Text(
               'Versi baru ${info.serverVersion} siap '
@@ -429,14 +456,14 @@ class KaryawanPageState extends State<KaryawanPage>
               'Unduh bisa otomatis; pemasangan tetap butuh konfirmasi Anda.\n\n'
               '${!info.urlReachable ? '⚠️ Link unduhan belum siap. Anda tetap bisa pakai app.\n\n' : ''}'
               '${info.notes ?? ''}',
-              style: const TextStyle(color: Colors.white70, height: 1.4),
+              style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
             ),
             actions: [
               if (!hardForce)
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Nanti',
-                      style: TextStyle(color: Colors.white54)),
+                      style: TextStyle(color: OptikKaryawanTokens.muted)),
                 ),
               FilledButton(
                 onPressed: () {
@@ -486,11 +513,19 @@ class KaryawanPageState extends State<KaryawanPage>
         _fotoProfileUrl = snap.karyawan['foto_profile']?.toString();
         _jadwalMingguIni = snap.jadwalMinggu;
         _daftarSOPTugas = snap.sopTasks;
-        totalPoinBulanIni = snap.totalPoinBulan;
+        _jadwalHariIni = snap.jadwalHariIni;
+        _absenStatus = snap.absenStatus;
+        _absenMasukAt = snap.absenMasukAt;
+        _absenPulangAt = snap.absenPulangAt;
+        _pengajuanTerbaru = snap.pengajuanTerbaru;
+        _pengumuman = snap.pengumuman;
         currentStreakHari = snap.streakHari;
+        // Paksa 1 sumber: level/progres selalu dari total poin bulan.
+        _kpiFire = snap.kpiFire;
+        _kpiYearHistory = snap.kpiYearHistory;
+        _applyPoinBulan(snap.totalPoinBulan);
         isStreakBonusActive = snap.streakHari >= 3;
         _sudahKlaimPoinHariIni = snap.sudahKlaimHariIni;
-        _riwayat30HariCache = snap.riwayat30Hari;
         _securityScore = snap.securityScore;
         _isLoading = false;
       });
@@ -503,6 +538,7 @@ class KaryawanPageState extends State<KaryawanPage>
           sopTasks: _daftarSOPTugas,
         );
       }
+      unawaited(_loadLabQueue());
       unawaited(_syncGeofenceMonitorIfOpenShift(askPermissions: true));
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -510,11 +546,104 @@ class KaryawanPageState extends State<KaryawanPage>
     }
   }
 
+  bool get _showLabQueue =>
+      _labService.isBackOffice(_jabatanKaryawan) &&
+      (_absenStatus == 'sedang_bekerja' ||
+          _labOpenJobs.isNotEmpty ||
+          _labMineJobs.isNotEmpty);
+
+  Future<void> _loadLabQueue() async {
+    final kid = _karyawanId;
+    final toko = _tokoId;
+    if (kid == null ||
+        toko == null ||
+        !_labService.isBackOffice(_jabatanKaryawan)) {
+      if (mounted) {
+        setState(() {
+          _labOpenJobs = [];
+          _labMineJobs = [];
+        });
+      }
+      return;
+    }
+    try {
+      final q = await _labService.listHomeQueue(
+        tokoId: toko,
+        karyawanId: kid,
+      );
+      if (!mounted) return;
+      setState(() {
+        _labOpenJobs = q.open;
+        _labMineJobs = q.mine;
+      });
+    } catch (e) {
+      debugPrint('lab queue: $e');
+    }
+  }
+
+  Future<void> _claimLabJob(Map<String, dynamic> job) async {
+    final id = job['id']?.toString() ?? '';
+    if (id.isEmpty || _labBusy) return;
+    setState(() => _labBusy = true);
+    try {
+      final res = await _labService.claim(id);
+      if (!mounted) return;
+      final nama = res['nama']?.toString() ?? _namaKaryawan;
+      final inv = res['no_invoice']?.toString() ??
+          job['no_invoice']?.toString() ??
+          '-';
+      _showPremiumSnackbar(
+        'lab_claim_ok_judul'.tr(),
+        'lab_claim_ok_msg'.tr(args: [inv, nama]),
+        OptikKaryawanTokens.success,
+      );
+      await _loadLabQueue();
+    } catch (e) {
+      if (!mounted) return;
+      _showPremiumSnackbar(
+        'lab_claim_gagal_judul'.tr(),
+        '$e',
+        OptikKaryawanTokens.danger,
+      );
+      await _loadLabQueue();
+    } finally {
+      if (mounted) setState(() => _labBusy = false);
+    }
+  }
+
   int totalPoinBulanIni = 0;
   int currentStreakHari = 0;
+  KpiFireSnapshot _kpiFire = KpiFireSnapshot.empty();
+  List<KpiMonthHistoryRecord> _kpiYearHistory = const [];
   bool isStreakBonusActive = false;
+
   bool _sudahKlaimPoinHariIni = false;
-  List<int> _riwayat30HariCache = List<int>.filled(30, 0);
+
+  /// Satu pintu update poin bulan → level/progres api ikut sinkron.
+  void _applyPoinBulan(int poin) {
+    totalPoinBulanIni = poin;
+    _kpiFire = _kpiFire.syncedWithPoints(poin);
+    _syncCurrentMonthInYearHistory();
+  }
+
+  void _syncCurrentMonthInYearHistory() {
+    if (_kpiYearHistory.isEmpty) return;
+    final cur = _kpiYearHistory.first;
+    final now = DateTime.now();
+    if (cur.year != now.year || cur.month != now.month) return;
+    _kpiYearHistory = [
+      KpiMonthHistoryRecord(
+        year: cur.year,
+        month: cur.month,
+        totalPoin: _kpiFire.totalPoin,
+        pointTarget: _kpiFire.pointTarget,
+        workDays: cur.workDays,
+        progress: _kpiFire.progress,
+        fire: _kpiFire.fire,
+      ),
+      ..._kpiYearHistory.skip(1),
+    ];
+  }
 
   final ImagePicker picker = ImagePicker();
 
@@ -546,7 +675,7 @@ class KaryawanPageState extends State<KaryawanPage>
       );
       setState(() => _daftarSOPTugas[index]['selesai'] = true);
       _showPremiumSnackbar(
-          "sop_bukti_sah".tr(), "sop foto sukses".tr(), Colors.green);
+          "sop_bukti_sah".tr(), "sop_foto_sukses".tr(), OptikKaryawanTokens.seasideMid);
     } catch (e) {
       _showPremiumSnackbar("sop_error_judul".tr(), '$e', Colors.redAccent);
     }
@@ -644,7 +773,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   await _persistSopDone(index,
                       buktiText: inputController.text.trim());
                   _showPremiumSnackbar("sop_terkonfirmasi".tr(),
-                      "sop_aktual_tersimpan".tr(), Colors.green);
+                      "sop_aktual_tersimpan".tr(), OptikKaryawanTokens.seasideMid);
                 } else {
                   _showPremiumSnackbar("sop_error_judul".tr(),
                       "sop_error_kosong".tr(), Colors.red);
@@ -652,7 +781,7 @@ class KaryawanPageState extends State<KaryawanPage>
               },
               child: Text("sop_btn_konfirmasi".tr(),
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+                      color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold)),
             )
           ],
         ),
@@ -668,9 +797,10 @@ class KaryawanPageState extends State<KaryawanPage>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: OptikKaryawanTokens.navyDeep,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: OptikKaryawanTokens.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: OptikKaryawanTokens.border),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -678,22 +808,22 @@ class KaryawanPageState extends State<KaryawanPage>
           children: [
             Text('${jadwal['hari']} • ${jadwal['tanggal']}',
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: OptikKaryawanTokens.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Text('Shift: ${jadwal['shift']}',
-                style: const TextStyle(color: Colors.white70, fontSize: 15)),
+                style: const TextStyle(color: OptikKaryawanTokens.muted, fontSize: 15)),
             if (catatan != null && catatan.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text('Catatan: $catatan',
-                  style: const TextStyle(color: Colors.white54)),
+                  style: const TextStyle(color: OptikKaryawanTokens.muted)),
             ],
             const SizedBox(height: 16),
             const Text(
               'Butuh ijin / cuti / tukar jadwal? Ajukan lewat tombol di bawah. '
               'Admin cabang yang menyetujui.',
-              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.4),
+              style: TextStyle(color: OptikKaryawanTokens.muted, fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -723,132 +853,982 @@ class KaryawanPageState extends State<KaryawanPage>
     );
   }
 
-  // POP-UP RIWAYAT POIN 30 HARI
+  // POP-UP detail Api KPI (progres poin).
   void _tampilkanRiwayatPoin() {
-    final riwayat30Hari = _riwayat30HariCache.isEmpty
-        ? List<int>.filled(30, 0)
-        : List<int>.from(_riwayat30HariCache);
+    _showFireHistorySheet();
+  }
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.65,
-          padding: const EdgeInsets.all(25),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+  /// Wash solid halaman detail — ikut tier api (bukan putih polos / glass).
+  ({List<Color> wash, Color orb, Color band}) _kpiDetailPageAtmosphere(int lv) {
+    switch (lv.clamp(0, 5)) {
+      case 1:
+        return (
+          wash: const [
+            Color(0xFFFFF3EF),
+            Color(0xFFFFE4DC),
+            Color(0xFFF8FBFC),
+          ],
+          orb: const Color(0xFFFFC9BA),
+          band: const Color(0xFFFFD2C4),
+        );
+      case 2:
+        return (
+          wash: const [
+            Color(0xFFFFF0E0),
+            Color(0xFFFFD9A8),
+            Color(0xFFFFF8F0),
+          ],
+          orb: const Color(0xFFFFB74D),
+          band: const Color(0xFFFFCC80),
+        );
+      case 3:
+        return (
+          wash: const [
+            Color(0xFFFFF3C4),
+            Color(0xFFE8C45A),
+            Color(0xFFFFF8E8),
+          ],
+          orb: const Color(0xFFFFE082),
+          band: const Color(0xFFD4A017),
+        );
+      case 4:
+        return (
+          wash: const [
+            Color(0xFFFFE8F0),
+            Color(0xFFE8A0C0),
+            Color(0xFFFFF5F8),
+          ],
+          orb: const Color(0xFFFF80AB),
+          band: const Color(0xFFC2185B),
+        );
+      case 5:
+        return (
+          wash: const [
+            Color(0xFFEFE0FF),
+            Color(0xFFB48CFF),
+            Color(0xFFF7F2FF),
+          ],
+          orb: const Color(0xFFD2B4FF),
+          band: const Color(0xFF7E57C2),
+        );
+      default:
+        return (
+          wash: const [
+            Color(0xFFF4F8F9),
+            Color(0xFFE8EEF0),
+            Color(0xFFFAFCFD),
+          ],
+          orb: const Color(0xFFCFD8DC),
+          band: OptikKaryawanTokens.border,
+        );
+    }
+  }
+
+  Widget _buildKpiDetailPageShell({
+    required ScrollController? scrollController,
+    required List<Widget> children,
+  }) {
+    final lv = _kpiFire.fire.level.clamp(0, 5);
+    final atm = _kpiDetailPageAtmosphere(lv);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: atm.wash,
+          stops: const [0.0, 0.28, 1.0],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: OptikKaryawanTokens.ink.withOpacity(0.14),
+            blurRadius: 28,
+            offset: const Offset(0, -8),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Ornamen solid atas — depth premium
+          Positioned(
+            right: -48,
+            top: -56,
+            child: IgnorePointer(
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      atm.orb,
+                      Color.lerp(atm.orb, atm.wash.last, 0.85)!,
+                      atm.wash.last,
+                    ],
+                    stops: const [0.0, 0.45, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -70,
+            top: 120,
+            child: IgnorePointer(
+              child: Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color.lerp(atm.orb, atm.wash[1], 0.55)!,
+                ),
+              ),
+            ),
+          ),
+          // Pita aksen metal di atas
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 6,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color.lerp(atm.band, Colors.white, 0.35)!,
+                      atm.band,
+                      Color.lerp(atm.band, atm.wash[1], 0.4)!,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          ListView(
+            controller: scrollController,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 48),
             children: [
               Center(
-                  child: Container(
-                      width: 50,
-                      height: 5,
-                      decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(10)))),
-              const SizedBox(height: 25),
-              Text("poin_riwayat_judul".tr(),
-                  style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: OptikKaryawanTokens.navyDeep)),
-              const SizedBox(height: 5),
-              Text("poin_riwayat_desc".tr(),
-                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 25),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  _buildLegendItem(Colors.green, "poin sempurna".tr()),
-                  _buildLegendItem(Colors.amber, "poin_parsial".tr()),
-                  _buildLegendItem(Colors.redAccent, "poin_bolong".tr()),
-                ],
-              ),
-              const SizedBox(height: 25),
-              Expanded(
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12),
-                  itemCount: 30,
-                  itemBuilder: (context, index) {
-                    int status = riwayat30Hari[index];
-                    Color warnaCard;
-                    IconData iconCard;
-
-                    if (status == 2) {
-                      warnaCard = Colors.green;
-                      iconCard = Icons.check_circle_rounded;
-                    } else if (status == 1) {
-                      warnaCard = Colors.amber;
-                      iconCard = Icons.warning_rounded;
-                    } else if (status == 0) {
-                      warnaCard = Colors.redAccent;
-                      iconCard = Icons.cancel_rounded;
-                    } else if (status == -1) {
-                      warnaCard = Colors.deepOrange;
-                      iconCard = Icons.gavel_rounded;
-                    } else {
-                      warnaCard = Colors.grey.shade200;
-                      iconCard = Icons.hourglass_empty;
-                    }
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: status == 3
-                            ? Colors.grey.shade100
-                            : warnaCard.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: status == 3 ? Colors.transparent : warnaCard,
-                            width: 2),
-                      ),
-                      child: Center(
-                        child: status == 3
-                            ? Text("${index + 1}",
-                                style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12))
-                            : Icon(iconCard, color: warnaCard, size: 20),
-                      ),
-                    );
-                  },
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Color.lerp(atm.band, Colors.white, 0.45)!,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
-              )
+              ),
+              const SizedBox(height: 16),
+              ...children,
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildLegendItem(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(label,
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: OptikKaryawanTokens.navyDeep)),
+  /// Material tier hero detail — selaras banner (solid, bukan glass).
+  ({
+    List<Color> body,
+    Color border,
+    Color fillBar,
+    Color track,
+    bool lit,
+    String? badge,
+    List<Color>? badgeGrad,
+    Color badgeText,
+  }) _kpiDetailTier(int lv) {
+    switch (lv.clamp(0, 5)) {
+      case 1:
+        return (
+          body: const [Color(0xFFFFF1EE), Color(0xFFFFD2C8), Color(0xFFF2A89A)],
+          border: const Color(0xFFC62828),
+          fillBar: const Color(0xFFD32F2F),
+          track: const Color(0xFFFFF8F6),
+          lit: false,
+          badge: null,
+          badgeGrad: null,
+          badgeText: OptikKaryawanTokens.ink,
+        );
+      case 2:
+        return (
+          body: const [Color(0xFFFF9800), Color(0xFFEF6C00)],
+          border: const Color(0xFFFFCC80),
+          fillBar: const Color(0xFFFFE0B2),
+          track: const Color(0xFFBF360C),
+          lit: true,
+          badge: null,
+          badgeGrad: null,
+          badgeText: Colors.white,
+        );
+      case 3:
+        return (
+          body: const [Color(0xFFFFE082), Color(0xFFC9A227), Color(0xFF4A3608)],
+          border: const Color(0xFFFFE082),
+          fillBar: const Color(0xFFFFECB3),
+          track: const Color(0xFF3A2808),
+          lit: true,
+          badge: 'GOLD',
+          badgeGrad: const [
+            Color(0xFFFFF8E1),
+            Color(0xFFE0B43A),
+            Color(0xFF8A6410),
+          ],
+          badgeText: const Color(0xFF3A2808),
+        );
+      case 4:
+        return (
+          body: const [Color(0xFF9C1258), Color(0xFF5A0A36), Color(0xFF1A0612)],
+          border: const Color(0xFFF8BBD0),
+          fillBar: const Color(0xFFF8BBD0),
+          track: const Color(0xFF2A0618),
+          lit: true,
+          badge: 'ELITE',
+          badgeGrad: const [Color(0xFFFFE0EC), Color(0xFFFF80AB)],
+          badgeText: const Color(0xFF4A0A28),
+        );
+      case 5:
+        return (
+          body: const [Color(0xFF4A2080), Color(0xFF2A1058), Color(0xFF0E061C)],
+          border: const Color(0xFFE0C8FF),
+          fillBar: const Color(0xFFE8D4FF),
+          track: const Color(0xFF140828),
+          lit: true,
+          badge: 'MAX',
+          badgeGrad: const [Color(0xFFF0E0FF), Color(0xFFB48CFF)],
+          badgeText: const Color(0xFF2A1058),
+        );
+      default:
+        return (
+          body: const [Color(0xFFF5FAFB), Color(0xFFE8EEF0)],
+          border: OptikKaryawanTokens.border,
+          fillBar: OptikKaryawanTokens.muted,
+          track: const Color(0xFFE0E6E8),
+          lit: false,
+          badge: null,
+          badgeGrad: null,
+          badgeText: OptikKaryawanTokens.ink,
+        );
+    }
+  }
+
+  /// Konten detail Api KPI — dipakai sheet banner & riwayat.
+  List<Widget> _buildKpiDetailSections() {
+    final fire = _kpiFire.fire;
+    final pct = (_kpiFire.progress * 100).round();
+    final lv = fire.level.clamp(0, 5);
+    final tier = _kpiDetailTier(lv);
+    final nextLv = lv >= 5 ? 5 : (lv <= 0 ? 1 : lv + 1);
+    final needPts = _kpiFire.pointsToNextLevel();
+    final perLevel = KpiFireSnapshot.pointsPerLevel(_kpiFire.pointTarget);
+    final monthLabel = DateFormat.yMMMM(context.locale.toString())
+        .format(DateTime.now());
+    final titleC = tier.lit ? Colors.white : OptikKaryawanTokens.ink;
+    final metaC = tier.lit
+        ? Colors.white.withOpacity(0.78)
+        : OptikKaryawanTokens.ink.withOpacity(0.62);
+    final nextLine = lv >= 5
+        ? 'kpi_next_level_max'.tr()
+        : 'kpi_next_level_pts'.tr(args: ['$needPts', '$nextLv']);
+
+    return [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              'kpi_api_sheet_title'.tr(),
+              style: GoogleFonts.fraunces(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: OptikKaryawanTokens.ink,
+                letterSpacing: -0.5,
+                height: 1.1,
+              ),
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F5F6),
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(color: OptikKaryawanTokens.border),
+            ),
+            child: Text(
+              monthLabel.toUpperCase(),
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: OptikKaryawanTokens.muted,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Text(
+        'kpi_api_sheet_sub'.tr(args: ['${_kpiFire.pointTarget}']),
+        style: TextStyle(
+          color: OptikKaryawanTokens.muted,
+          fontSize: 13.5,
+          height: 1.45,
+          fontWeight: FontWeight.w500,
         ),
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _kpiFormulaChip(
+            '${_kpiFire.totalPoin}',
+            'kpi_banner_pts'.tr(),
+          ),
+          _kpiFormulaChip(
+            '${_kpiFire.pointTarget}',
+            'kpi_target_bulan'.tr(),
+          ),
+          _kpiFormulaChip(
+            '+$perLevel',
+            'kpi_per_level'.tr(),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: _showKpiYearHistorySheet,
+          icon: const Icon(Icons.calendar_month_rounded, size: 18),
+          label: Text(
+            'kpi_year_history_btn'.tr(),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: OptikKaryawanTokens.ink,
+            side: BorderSide(color: OptikKaryawanTokens.border),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      // HERO — material tier sama banner
+      Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: tier.body,
+          ),
+          border: Border.all(color: tier.border, width: lv >= 3 ? 1.6 : 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Color.lerp(
+                Colors.transparent,
+                tier.body.last,
+                lv >= 3 ? 0.45 : 0.22,
+              )!,
+              blurRadius: lv >= 3 ? 28 : 18,
+              offset: const Offset(0, 12),
+            ),
+            BoxShadow(
+              color: OptikKaryawanTokens.ink.withOpacity(0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            if (lv >= 3)
+              Positioned(
+                right: -36,
+                top: -40,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withOpacity(lv == 3 ? 0.38 : 0.22),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (lv >= 4)
+              Positioned(
+                left: -28,
+                bottom: -36,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Colors.white.withOpacity(0.12),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (tier.badge != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(99),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: tier.badgeGrad!,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.18),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            tier.badge!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                              color: tier.badgeText,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                      ] else
+                        const Spacer(),
+                      Text(
+                        'kpi_fire_level'.tr(args: ['${lv <= 0 ? 0 : lv}']),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: metaC,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(
+                            color: tier.border,
+                            width: 1.4,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.16),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: StreakFireFlame(
+                            fire: fire,
+                            size: 36,
+                            solid: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          fire.labelKey.tr(),
+                          style: GoogleFonts.fraunces(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: titleC,
+                            height: 1.1,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '$pct%',
+                            style: GoogleFonts.fraunces(
+                              fontSize: 40,
+                              fontWeight: FontWeight.w700,
+                              color: titleC,
+                              height: 1,
+                              letterSpacing: -1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'kpi_banner_pts'.tr().toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: metaC,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  StreakFireProgressBar(
+                    progress: _kpiFire.progress,
+                    height: 8,
+                    compact: true,
+                    trackColor: tier.track,
+                    fillColor: tier.fillBar,
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: tier.lit
+                          ? Color.lerp(tier.body.last, Colors.black, 0.28)!
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: tier.lit
+                            ? Color.lerp(tier.border, tier.body.last, 0.35)!
+                            : tier.border,
+                      ),
+                    ),
+                    child: Text(
+                      nextLine,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: titleC,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 28),
+      Text(
+        'kpi_detail_ringkas'.tr(),
+        style: GoogleFonts.fraunces(
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
+          color: OptikKaryawanTokens.ink,
+          letterSpacing: -0.3,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: _kpiStatTile(
+              label: 'kpi_breakdown_tetap'.tr(),
+              value: '${(_kpiFire.sTetap * 100).round()}%',
+              accent: const Color(0xFF1B6B6A),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _kpiStatTile(
+              label: 'kpi_breakdown_toko'.tr(),
+              value: '${(_kpiFire.sToko * 100).round()}%',
+              accent: const Color(0xFFC9A227),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: OptikKaryawanTokens.border),
+          boxShadow: [
+            BoxShadow(
+              color: OptikKaryawanTokens.ink.withOpacity(0.035),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            _kpiBreakdownTile(
+              'kpi_breakdown_fair'.tr(),
+              '${(_kpiFire.aktualPct * 100).round()}% / ${(_kpiFire.fairShare * 100).round()}%',
+              showDivider: true,
+            ),
+            _kpiBreakdownTile(
+              'kpi_breakdown_unit'.tr(),
+              '${_kpiFire.unitOrang} / ${_kpiFire.unitTim}',
+              showDivider: true,
+            ),
+            _kpiBreakdownTile(
+              'kpi_breakdown_hari'.tr(),
+              '${_kpiFire.hariValid}',
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 28),
+      Text(
+        'kpi_detail_peta'.tr(),
+        style: GoogleFonts.fraunces(
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
+          color: OptikKaryawanTokens.ink,
+          letterSpacing: -0.3,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'kpi_level_ladder_sub'.tr(args: ['${_kpiFire.pointTarget}']),
+        style: TextStyle(
+          fontSize: 13,
+          color: OptikKaryawanTokens.muted,
+          height: 1.4,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      const SizedBox(height: 14),
+      _buildKpiLevelLadder(),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  Widget _kpiFormulaChip(String weight, String label) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 7, 12, 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F7F8),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: OptikKaryawanTokens.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            weight,
+            style: GoogleFonts.fraunces(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: OptikKaryawanTokens.ink,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: OptikKaryawanTokens.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kpiStatTile({
+    required String label,
+    required String value,
+    required Color accent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: OptikKaryawanTokens.border),
+        boxShadow: [
+          BoxShadow(
+            color: OptikKaryawanTokens.ink.withOpacity(0.035),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 3,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: GoogleFonts.fraunces(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: OptikKaryawanTokens.ink,
+              height: 1,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+              color: OptikKaryawanTokens.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ladder 5 level — syarat naik dari rentang poin bulan ini.
+  Widget _buildKpiLevelLadder() {
+    final current = _kpiFire.fire.level.clamp(0, 5);
+    final target = _kpiFire.pointTarget;
+    return Column(
+      children: [
+        for (var level = 1; level <= 5; level++) ...[
+          if (level > 1) const SizedBox(height: 10),
+          Builder(
+            builder: (context) {
+              final reached = current >= level;
+              final active = current == level;
+              final band =
+                  KpiFireSnapshot.pointBandForLevel(level, target);
+              final pal = StreakFireFlame.levelPalette(level);
+              final fire = StreakFireLevel.previewLevel(level);
+              final statusColor = active
+                  ? tipColorForLevel(level)
+                  : (reached
+                      ? OptikKaryawanTokens.success
+                      : OptikKaryawanTokens.muted);
+              final statusLabel = active
+                  ? 'kpi_level_current'.tr()
+                  : (reached
+                      ? 'kpi_level_reached'.tr()
+                      : 'kpi_level_locked'.tr());
+              final tier = _kpiDetailTier(level);
+              final useDark = active && tier.lit;
+              final bg = active
+                  ? null
+                  : (reached
+                      ? Color.lerp(Colors.white, pal.bottom, 0.55)!
+                      : const Color(0xFFF5F8F9));
+              final border = active ? tier.border : OptikKaryawanTokens.border;
+              final ink = useDark ? Colors.white : OptikKaryawanTokens.ink;
+              final mute = useDark
+                  ? Colors.white.withOpacity(0.75)
+                  : OptikKaryawanTokens.muted;
+              return Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: bg,
+                  gradient: active
+                      ? LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: tier.body,
+                        )
+                      : null,
+                  border: Border.all(
+                    color: border,
+                    width: active ? 1.5 : 1.0,
+                  ),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: Color.lerp(
+                              Colors.transparent,
+                              tier.body.last,
+                              0.35,
+                            )!,
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      if (active)
+                        Container(
+                          width: 5,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 13),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white,
+                                  border: Border.all(
+                                    color: reached || active
+                                        ? Color.lerp(
+                                            pal.top, Colors.white, 0.35)!
+                                        : OptikKaryawanTokens.border,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: StreakFireFlame(
+                                    fire: fire,
+                                    size: 24,
+                                    solid: true,
+                                    muted: !reached && !active,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'kpi_fire_level'.tr(args: ['$level']),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14.5,
+                                        color: reached || active
+                                            ? ink
+                                            : OptikKaryawanTokens.muted,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      fire.labelKey.tr(),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: useDark
+                                            ? Colors.white.withOpacity(0.92)
+                                            : (reached
+                                                ? pal.top
+                                                : OptikKaryawanTokens.muted),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.2,
+                                        color: useDark
+                                            ? Colors.white.withOpacity(0.85)
+                                            : statusColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'kpi_level_band_pts'.tr(args: [
+                                      '${band.lo}',
+                                      '${band.hi}',
+                                    ]),
+                                    style: GoogleFonts.fraunces(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: reached || active
+                                          ? (useDark
+                                              ? Colors.white
+                                              : pal.top)
+                                          : mute,
+                                      letterSpacing: -0.4,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    'kpi_level_band'.tr(args: [
+                                      '${(level - 1) * 20}',
+                                      '${level * 20}',
+                                    ]),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: useDark
+                                          ? Colors.white.withOpacity(0.72)
+                                          : mute,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ],
     );
   }
+
+  Color tipColorForLevel(int level) =>
+      StreakFireFlame.levelPalette(level.clamp(1, 5)).top;
 
   void _showPremiumSnackbar(String title, String message, Color color) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -864,13 +1844,14 @@ class KaryawanPageState extends State<KaryawanPage>
             if (title.isNotEmpty) ...[
               Text(title,
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: OptikKaryawanTokens.ink,
                       fontWeight: FontWeight.bold,
                       fontSize: 14)),
               const SizedBox(height: 4),
             ],
             Text(message,
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                style: const TextStyle(
+                    color: OptikKaryawanTokens.ink, fontSize: 12)),
           ],
         ),
       ),
@@ -887,84 +1868,85 @@ class KaryawanPageState extends State<KaryawanPage>
 
     return Scaffold(
       extendBody: true,
-      backgroundColor: OptikKaryawanTokens.scaffold,
+      backgroundColor: OptikKaryawanTokens.bgMid,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
+        preferredSize: const Size.fromHeight(68),
         child: Container(
           decoration: BoxDecoration(
-            gradient: _currentIndex == 2
-                ? const LinearGradient(
-                    colors: [OptikKaryawanTokens.navyDeep, OptikKaryawanTokens.navySoft],
-                  )
-                : null,
-            color: _currentIndex == 2 ? null : Colors.white,
+            color: OptikKaryawanTokens.snow.withOpacity(0.96),
+            border: Border(
+              bottom: BorderSide(
+                color: OptikKaryawanTokens.cyan.withOpacity(0.22),
+              ),
+            ),
             boxShadow: [
               BoxShadow(
-                color: OptikKaryawanTokens.navyDeep.withOpacity(0.06),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              )
+                color: OptikKaryawanTokens.cyan.withOpacity(0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
             ],
           ),
           child: AppBar(
-            title: Column(
-              children: [
-                Text(
-                  _currentIndex == 0
-                      ? "halaman utama".tr()
-                      : _currentIndex == 1
-                          ? "daftar_tugas_sop".tr()
-                          : "pengaturan_akun_judul".tr(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    letterSpacing: 0.3,
-                    color: _currentIndex == 2
-                        ? Colors.white
-                        : OptikKaryawanTokens.navyDeep,
+            title: _currentIndex == 0
+                ? const OptikBrandLogo(
+                    tone: OptikLogoTone.color,
+                    height: 22,
+                  )
+                : Text(
+                    _currentIndex == 1
+                        ? "daftar_tugas_sop".tr()
+                        : "pengaturan_akun_judul".tr(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      letterSpacing: 0.2,
+                      color: OptikKaryawanTokens.ink,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                OptikBrandLogo(
-                  tone: _currentIndex == 2
-                      ? OptikLogoTone.white
-                      : OptikLogoTone.color,
-                  height: 16,
-                ),
-              ],
-            ),
             backgroundColor: Colors.transparent,
-            foregroundColor:
-                _currentIndex == 2 ? Colors.white : OptikKaryawanTokens.navyDeep,
+            foregroundColor: OptikKaryawanTokens.ink,
             elevation: 0,
             centerTitle: true,
             actions: [
-              IconButton(
-                icon: const Icon(Icons.logout_rounded),
-                onPressed: () => Navigator.pop(context),
-              )
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: IconButton(
+                  tooltip: 'Keluar',
+                  style: IconButton.styleFrom(
+                    backgroundColor:
+                        OptikKaryawanTokens.cyan.withOpacity(0.12),
+                  ),
+                  icon: const Icon(Icons.logout_rounded, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
             ],
           ),
         ),
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: OptikKaryawanTokens.navyMid))
+              child:
+                  CircularProgressIndicator(color: OptikKaryawanTokens.cyan))
           : pages[_currentIndex],
       floatingActionButton: Container(
+        width: 62,
+        height: 62,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            colors: [OptikKaryawanTokens.navyMid, OptikKaryawanTokens.navyDeep],
-          ),
+          gradient: OptikKaryawanTokens.accentGradient,
           boxShadow: [
             BoxShadow(
-              color: OptikKaryawanTokens.navyMid.withOpacity(0.4),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            )
+              color: OptikKaryawanTokens.cyan.withOpacity(0.42),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
           ],
-          border: Border.all(color: OptikKaryawanTokens.gold.withOpacity(0.55), width: 1.5),
+          border: Border.all(
+            color: OptikKaryawanTokens.snow.withOpacity(0.9),
+            width: 2.5,
+          ),
         ),
         child: FloatingActionButton(
           tooltip: 'scan_qr'.tr(),
@@ -986,7 +1968,7 @@ class KaryawanPageState extends State<KaryawanPage>
           backgroundColor: Colors.transparent,
           elevation: 0,
           child: const Icon(Icons.qr_code_scanner_rounded,
-              color: Colors.white, size: 28),
+              color: OptikKaryawanTokens.ink, size: 28),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -994,13 +1976,13 @@ class KaryawanPageState extends State<KaryawanPage>
         top: false,
         child: BottomAppBar(
           shape: const CircularNotchedRectangle(),
-          notchMargin: 8,
-          color: Colors.white,
-          elevation: 16,
-          shadowColor: OptikKaryawanTokens.navyDeep.withOpacity(0.12),
+          notchMargin: 9,
+          color: OptikKaryawanTokens.snow,
+          elevation: 18,
+          shadowColor: OptikKaryawanTokens.ink.withOpacity(0.10),
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
-            height: 70,
+            height: 72,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -1009,11 +1991,11 @@ class KaryawanPageState extends State<KaryawanPage>
                         Icons.home_rounded, "nav_beranda".tr(), 0)),
                 Expanded(
                     child: _buildNavItem(
-                        Icons.fact_check_rounded, "nav sop".tr(), 1)),
-                const SizedBox(width: 50),
+                        Icons.fact_check_rounded, "nav_sop".tr(), 1)),
+                const SizedBox(width: 54),
                 Expanded(
                     child: _buildNavItem(
-                        Icons.headset_mic_rounded, "nav bantuan".tr(), 3)),
+                        Icons.headset_mic_rounded, "nav_bantuan".tr(), 3)),
                 Expanded(
                     child: _buildNavItem(
                         Icons.person_rounded, "nav_profil".tr(), 2)),
@@ -1026,8 +2008,8 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildNavItem(IconData icon, String label, int index) {
-    int targetPage = index == 3 ? index : index;
-    bool isSelected = _currentIndex == targetPage && index != 3;
+    final targetPage = index == 3 ? index : index;
+    final isSelected = _currentIndex == targetPage && index != 3;
     return InkWell(
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
@@ -1040,25 +2022,32 @@ class KaryawanPageState extends State<KaryawanPage>
         setState(() => _currentIndex = targetPage);
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: isSelected
+              ? OptikKaryawanTokens.cyan.withOpacity(0.12)
+              : Colors.transparent,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Badge(
               isLabelVisible: _adaUpdateBaru && label == "nav_profil".tr(),
-              backgroundColor: Colors.redAccent,
+              backgroundColor: OptikKaryawanTokens.danger,
               smallSize: 10,
               child: Icon(
                 icon,
                 color: isSelected
-                    ? OptikKaryawanTokens.navyMid
-                    : Colors.grey.shade400,
-                size: isSelected ? 28 : 24,
+                    ? OptikKaryawanTokens.cyan
+                    : OptikKaryawanTokens.muted.withOpacity(0.55),
+                size: isSelected ? 26 : 22,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               label,
               maxLines: 1,
@@ -1066,10 +2055,11 @@ class KaryawanPageState extends State<KaryawanPage>
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isSelected
-                    ? OptikKaryawanTokens.navyMid
-                    : Colors.grey.shade400,
+                    ? OptikKaryawanTokens.ink
+                    : OptikKaryawanTokens.muted.withOpacity(0.55),
                 fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                letterSpacing: 0.1,
               ),
             )
           ],
@@ -1079,306 +2069,2425 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildDashboardTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: OptikKaryawanTokens.authBgGradient,
+      ),
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(25),
-            decoration: BoxDecoration(
-              gradient: OptikKaryawanTokens.navyGradient,
-              borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusGlass),
-              boxShadow: [
-                BoxShadow(
-                  color: OptikKaryawanTokens.navyDeep.withOpacity(0.28),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [
-                        OptikKaryawanTokens.gold,
-                        OptikKaryawanTokens.goldLite,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                          color: OptikKaryawanTokens.gold.withOpacity(0.3), blurRadius: 10)
+          Positioned(
+            top: -110,
+            right: -70,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      OptikKaryawanTokens.cyan.withOpacity(0.36),
+                      OptikKaryawanTokens.cyan.withOpacity(0.10),
+                      Colors.transparent,
                     ],
                   ),
-                  child: CircleAvatar(
-                    radius: 32,
-                    backgroundColor: OptikKaryawanTokens.navyDeep,
-                    // Jika URL foto dari database ada, pasang!
-                    backgroundImage: _fotoProfileUrl != null
-                        ? NetworkImage(_fotoProfileUrl!)
-                        : null,
-                    child: _fotoProfileUrl == null
-                        ? const Icon(Icons.person_rounded,
-                            size: 35, color: Colors.white70)
-                        : null,
-                  ),
                 ),
-                const SizedBox(width: 20),
-                Expanded(
+              ),
+            ),
+          ),
+          Positioned(
+            top: 260,
+            left: -90,
+            child: IgnorePointer(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikKaryawanTokens.pale.withOpacity(0.48),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 120,
+            right: -40,
+            child: IgnorePointer(
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.10),
+                ),
+              ),
+            ),
+          ),
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      20, 10, 20, 28 + _fabBottomPad(context)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("${'dash_halo'.tr().trim()} $_namaKaryawan",
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 4),
-                      Text(_jabatanKaryawan.tr(),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5)),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 520),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, t, child) => Opacity(
+                          opacity: t,
+                          child: Transform.translate(
+                            offset: Offset(0, 14 * (1 - t)),
+                            child: child,
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.storefront_rounded,
-                                color: OptikKaryawanTokens.gold, size: 14),
-                            const SizedBox(width: 6),
-                            Text(_cabangKaryawan,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600)),
-                          ],
+                        child: _buildHomeHero(),
+                      ),
+                      const SizedBox(height: 18),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 640),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, t, child) => Opacity(
+                          opacity: t,
+                          child: Transform.translate(
+                            offset: Offset(0, 18 * (1 - t)),
+                            child: child,
+                          ),
                         ),
+                        child: _buildTodayCommandPanel(),
                       ),
-                    ],
-                  ),
-                )
-              ],
-            ),
-          ),
-          const SizedBox(height: 25),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => _tampilkanRiwayatPoin(),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.orange.withOpacity(0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8))
+                      if (_pengumuman.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _buildPengumumanBanner(),
                       ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.stars_rounded,
-                            color: Colors.white, size: 28),
+                      const SizedBox(height: 22),
+                      _buildQuickShortcuts(),
+                      if (_showLabQueue) ...[
+                        const SizedBox(height: 22),
+                        _sectionLabel('lab_queue_judul'.tr()),
                         const SizedBox(height: 10),
-                        Text("poin_total_judul".tr(),
-                            style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600)),
-                        Text("$totalPoinBulanIni / 1000",
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold)),
+                        _buildLabQueueCard(),
                       ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF059669)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.green.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8))
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.local_fire_department_rounded,
-                          color: Colors.white, size: 28),
+                      const SizedBox(height: 22),
+                      _sectionLabel('home_sop_judul'.tr()),
                       const SizedBox(height: 10),
-                      Text("poin_streak_judul".tr(),
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                      Text("$currentStreakHari ${'poin hari'.tr()}",
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 35),
-          Row(
-            children: [
-              Expanded(
-                child: Text("jadwal_mingguan_judul".tr(),
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: OptikKaryawanTokens.navyDeep)),
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PengajuanJadwalPage(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                label: const Text('Ijin / Tukar',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 170,
-            child: ListView.builder(
-              clipBehavior: Clip.none,
-              scrollDirection: Axis.horizontal,
-              itemCount: _jadwalMingguIni.length,
-              itemBuilder: (context, index) {
-                final jadwal = _jadwalMingguIni[index];
-                final shift = jadwal['shift'] ?? '-';
-                final isLibur = shift.toLowerCase().contains('libur') ||
-                    shift.contains("shift_libur".tr());
-                final isEmpty = shift.contains('Belum');
-                return Container(
-                  width: 140,
-                  margin: const EdgeInsets.only(right: 15, bottom: 10),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isLibur ? const Color(0xFFFEF2F2) : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color:
-                          isLibur
-                              ? Colors.red.shade100
-                              : OptikKaryawanTokens.gold.withOpacity(0.12),
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(jadwal['hari']!,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: isLibur
-                                  ? Colors.red.shade700
-                                  : OptikKaryawanTokens.navyDeep)),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      _buildSopHariIniCard(),
+                      const SizedBox(height: 18),
+                      _sectionLabel('home_pengajuan_judul'.tr()),
+                      const SizedBox(height: 10),
+                      _buildPengajuanCard(),
+                      if (_showChecklistBukaTutup) ...[
+                        const SizedBox(height: 18),
+                        _sectionLabel('home_checklist_judul'.tr()),
+                        const SizedBox(height: 10),
+                        _buildChecklistBukaTutupCard(),
+                      ],
+                      const SizedBox(height: 22),
+                      _buildMetricTwinRow(),
+                      const SizedBox(height: 22),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(jadwal['tanggal']!,
-                              style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500)),
-                          GestureDetector(
-                            onTap: () => _tampilkanDetailJadwal(jadwal),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                  color: OptikKaryawanTokens.gold
-                                      .withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(6)),
-                              child: Icon(
-                                  isEmpty
-                                      ? Icons.info_outline_rounded
-                                      : Icons.event_note_rounded,
-                                  size: 14,
-                                  color: OptikKaryawanTokens.gold),
+                          _sectionLabel('jadwal_mingguan_judul'.tr()),
+                          const SizedBox(height: 2),
+                          Text(
+                            'home_shift_minggu_ini'.tr(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: OptikKaryawanTokens.muted
+                                  .withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isLibur
-                              ? Colors.red.shade100
-                              : const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 132,
+                        child: ListView.builder(
+                          clipBehavior: Clip.none,
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _jadwalMingguIni.length,
+                          itemBuilder: (context, index) {
+                            final jadwal = _jadwalMingguIni[index];
+                            final shift = jadwal['shift'] ?? '-';
+                            final isLibur =
+                                shift.toLowerCase().contains('libur') ||
+                                    shift.contains("shift_libur".tr());
+                            final isToday =
+                                jadwal['date_key'] ==
+                                    _jadwalHariIni?['date_key'];
+                            return GestureDetector(
+                              onTap: () => _tampilkanDetailJadwal(jadwal),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 220),
+                                width: 118,
+                                margin: const EdgeInsets.only(
+                                    right: 10, bottom: 4),
+                                padding: const EdgeInsets.all(
+                                    OptikKaryawanTokens.spaceMd),
+                                decoration: BoxDecoration(
+                                  color: isLibur
+                                      ? const Color(0xFFFFF5F5)
+                                      : isToday
+                                          ? OptikKaryawanTokens.cyan
+                                              .withOpacity(0.14)
+                                          : OptikKaryawanTokens.snow
+                                              .withOpacity(0.92),
+                                  borderRadius: BorderRadius.circular(
+                                      OptikKaryawanTokens.radiusLg),
+                                  border: Border.all(
+                                    color: isLibur
+                                        ? Colors.red.shade100
+                                        : isToday
+                                            ? OptikKaryawanTokens.cyan
+                                                .withOpacity(0.50)
+                                            : OptikKaryawanTokens.cyan
+                                                .withOpacity(0.18),
+                                    width: isToday ? 1.3 : 1,
+                                  ),
+                                  boxShadow: OptikKaryawanTokens.cardShadow,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      jadwal['hari']!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: isLibur
+                                            ? Colors.red.shade700
+                                            : OptikKaryawanTokens.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      jadwal['tanggal']!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: OptikKaryawanTokens.muted
+                                            .withOpacity(0.9),
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      jadwal['shift']!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isLibur
+                                            ? Colors.red.shade700
+                                            : OptikKaryawanTokens.ink,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                        child: Text(jadwal['shift']!,
-                            style: TextStyle(
-                                color: isLibur
-                                    ? Colors.red.shade700
-                                    : OptikKaryawanTokens.navyMid,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800)),
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===== Home HP helpers (fitur 1–7) — premium mobile layout =====
+
+  bool get _showChecklistBukaTutup {
+    final j = KaryawanJabatan.normalize(_jabatanKaryawan);
+    return j == 'frontliner' ||
+        j == 'backliner' ||
+        j == 'kepala toko' ||
+        j == 'kepala area' ||
+        j == 'kasir';
+  }
+
+  List<Map<String, dynamic>> get _checklistBukaTutup {
+    bool match(String judul) {
+      final t = judul.toLowerCase();
+      return t.contains('buka') ||
+          t.contains('tutup') ||
+          t.contains('pagi') ||
+          t.contains('malam') ||
+          t.contains('etalase') ||
+          t.contains('briefing');
+    }
+
+    final matched =
+        _daftarSOPTugas.where((e) => match('${e['tugas']}')).toList();
+    if (matched.isNotEmpty) return matched.take(4).toList();
+    return _daftarSOPTugas.take(4).toList();
+  }
+
+  Future<void> _bukaPengajuanJadwal() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PengajuanJadwalPage()),
+    );
+    if (mounted) unawaited(_tarikDataProfil());
+  }
+
+  Future<void> _bukaAbsensi() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AbsensiPage()),
+    );
+    if (mounted) unawaited(_tarikDataProfil());
+  }
+
+  Future<void> _bukaPengaduan() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PengaduanPage()),
+    );
+  }
+
+  Future<void> _bukaPengingat() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PengingatPage()),
+    );
+  }
+
+  Future<void> _bukaDetailPribadi() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DetailDataPribadiPage()),
+    );
+  }
+
+  Future<void> _hubungiPusat() async {
+    try {
+      await openAdminWhatsApp(
+        client: Supabase.instance.client,
+        message:
+            'Halo Admin Optik B. Riski, saya $_namaKaryawan ($_cabangKaryawan) butuh bantuan.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showPremiumSnackbar('WhatsApp', '$e', Colors.redAccent);
+    }
+  }
+
+  String _fmtJam(DateTime? dt) {
+    if (dt == null) return '--:--';
+    final local = dt.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String _labelAbsenStatus() {
+    switch (_absenStatus) {
+      case 'sedang_bekerja':
+        return 'home_absen_sedang'.tr();
+      case 'selesai':
+        return 'home_absen_selesai'.tr();
+      case 'libur':
+        return 'home_absen_libur'.tr();
+      default:
+        return 'home_absen_belum'.tr();
+    }
+  }
+
+  Color _warnaAbsenStatus() {
+    switch (_absenStatus) {
+      case 'sedang_bekerja':
+        return OptikKaryawanTokens.cyan;
+      case 'selesai':
+        return OptikKaryawanTokens.success;
+      case 'libur':
+        return Colors.orange.shade700;
+      default:
+        return OptikKaryawanTokens.ink;
+    }
+  }
+
+  String _labelPengajuanStatus(String raw) {
+    switch (raw.toUpperCase()) {
+      case 'APPROVED':
+        return 'home_pengajuan_ok'.tr();
+      case 'REJECTED':
+        return 'home_pengajuan_tolak'.tr();
+      case 'CANCELLED':
+        return 'home_pengajuan_batal'.tr();
+      default:
+        return 'home_pengajuan_tunggu'.tr();
+    }
+  }
+
+  String _shiftCountdownText() {
+    final shift = (_jadwalHariIni?['shift'] ?? '').trim();
+    if (shift.toLowerCase().contains('libur')) {
+      return 'home_absen_libur_desc'.tr();
+    }
+    if (shift.isEmpty || shift.contains('Belum')) {
+      return 'home_shift_kosong'.tr();
+    }
+    final parts = shift.split('-');
+    if (parts.length < 2) return shift;
+    final startParts = parts[0].split(':');
+    if (startParts.length < 2) return shift;
+    final now = DateTime.now();
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.tryParse(startParts[0]) ?? 0,
+      int.tryParse(startParts[1]) ?? 0,
+    );
+    final endParts = parts[1].split(':');
+    final end = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.tryParse(endParts.isNotEmpty ? endParts[0] : '0') ?? 0,
+      int.tryParse(endParts.length > 1 ? endParts[1] : '0') ?? 0,
+    );
+    if (_absenStatus == 'selesai' || now.isAfter(end)) {
+      return 'home_shift_selesai_hari'.tr();
+    }
+    if (now.isBefore(start)) {
+      final m = start.difference(now).inMinutes;
+      if (m >= 60) {
+        return 'home_shift_mulai_jam'.tr(args: ['${m ~/ 60}', '${m % 60}']);
+      }
+      return 'home_shift_mulai_menit'.tr(args: ['$m']);
+    }
+    return 'home_shift_berjalan'.tr();
+  }
+
+  Widget _sectionLabel(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: OptikKaryawanTokens.ink,
+        fontSize: 15,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.2,
+      ),
+    );
+  }
+
+  Widget _softSurface({
+    required Widget child,
+    EdgeInsets padding = const EdgeInsets.all(OptikKaryawanTokens.spaceMd),
+    VoidCallback? onTap,
+    bool emphasize = false,
+  }) {
+    final radius = BorderRadius.circular(
+      emphasize ? OptikKaryawanTokens.radiusXl : OptikKaryawanTokens.radiusLg,
+    );
+    final body = ClipRRect(
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          width: double.infinity,
+          padding: padding,
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                OptikKaryawanTokens.snow.withOpacity(emphasize ? 0.96 : 0.92),
+                OptikKaryawanTokens.cyan.withOpacity(emphasize ? 0.12 : 0.07),
+                OptikKaryawanTokens.snow.withOpacity(0.94),
+              ],
+              stops: const [0.0, 0.55, 1.0],
+            ),
+            border: Border.all(
+              color: OptikKaryawanTokens.cyan
+                  .withOpacity(emphasize ? 0.32 : 0.18),
+            ),
+            boxShadow: OptikKaryawanTokens.cardShadow,
+          ),
+          child: child,
+        ),
+      ),
+    );
+    if (onTap == null) return body;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: onTap,
+        child: body,
+      ),
+    );
+  }
+
+  Widget _buildHomeHero() {
+    final firstName = _namaKaryawan.split(' ').first;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(
+                    color: OptikKaryawanTokens.cyan.withOpacity(0.28),
+                  ),
+                ),
+                child: Text(
+                  'EMPLOYEE DESK',
+                  style: TextStyle(
+                    color: OptikKaryawanTokens.ink.withOpacity(0.78),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "${'dash_halo'.tr().trim()}, $firstName",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _jabatanKaryawan.tr(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.fraunces(
+                  color: OptikKaryawanTokens.ink,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.9,
+                  height: 1.05,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.storefront_rounded,
+                      size: 14,
+                      color: OptikKaryawanTokens.cyan.withOpacity(0.95)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _cabangKaryawan,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: OptikKaryawanTokens.ink.withOpacity(0.72),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: OptikKaryawanTokens.accentGradient,
+            boxShadow: [
+              BoxShadow(
+                color: OptikKaryawanTokens.cyan.withOpacity(0.34),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: 30,
+            backgroundColor: OptikKaryawanTokens.pale,
+            backgroundImage: _fotoProfileUrl != null
+                ? NetworkImage(_fotoProfileUrl!)
+                : null,
+            child: _fotoProfileUrl == null
+                ? const Icon(Icons.person_rounded,
+                    size: 30, color: OptikKaryawanTokens.ink)
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodayCommandPanel() {
+    final shift = _jadwalHariIni?['shift'] ?? 'home_shift_kosong'.tr();
+    final isLibur = shift.toLowerCase().contains('libur');
+    final hari = _jadwalHariIni?['hari'] ?? 'home_hari_ini'.tr();
+    final tgl = _jadwalHariIni?['tanggal'] ?? '';
+    final hasOpenAbsen = _absenStatus == 'sedang_bekerja';
+    final ctaLabel = isLibur && !hasOpenAbsen
+        ? 'home_cta_lihat_absen'.tr()
+        : _absenStatus == 'belum_masuk'
+            ? 'home_cta_absen_masuk'.tr()
+            : _absenStatus == 'sedang_bekerja'
+                ? 'home_cta_absen_pulang'.tr()
+                : 'home_cta_lihat_absen'.tr();
+
+    return _softSurface(
+      emphasize: true,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (isLibur ? Colors.red : OptikKaryawanTokens.cyan)
+                      .withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  'home_shift_hari_ini'.tr().toUpperCase(),
+                  style: TextStyle(
+                    color: isLibur
+                        ? Colors.red.shade700
+                        : OptikKaryawanTokens.ink.withOpacity(0.78),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.15,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$hari${tgl.isEmpty ? '' : ' · $tgl'}',
+                style: TextStyle(
+                  color: OptikKaryawanTokens.muted.withOpacity(0.9),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            isLibur ? 'home_absen_libur'.tr() : shift,
+            style: GoogleFonts.fraunces(
+              color: isLibur ? const Color(0xFFC62828) : OptikKaryawanTokens.ink,
+              fontSize: isLibur ? 38 : 34,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1.2,
+              height: 1.02,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isLibur
+                ? 'home_absen_libur_desc'.tr()
+                : _shiftCountdownText(),
+            style: TextStyle(
+              color: OptikKaryawanTokens.muted.withOpacity(0.95),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.35,
+            ),
+          ),
+          if (!isLibur || hasOpenAbsen) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              decoration: BoxDecoration(
+                color: OptikKaryawanTokens.snow.withOpacity(0.55),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.14),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          OptikKaryawanTokens.cyan.withOpacity(0.28),
+                          OptikKaryawanTokens.cyan.withOpacity(0.10),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.fingerprint_rounded,
+                      color: _warnaAbsenStatus(),
+                      size: 21,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _labelAbsenStatus(),
+                          style: TextStyle(
+                            color: _warnaAbsenStatus(),
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${'home_absen_masuk'.tr()} ${_fmtJam(_absenMasukAt)}  ·  ${'home_absen_pulang'.tr()} ${_fmtJam(_absenPulangAt)}',
+                          style: TextStyle(
+                            color: OptikKaryawanTokens.muted.withOpacity(0.9),
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: OptikKaryawanTokens.accentGradient,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: OptikKaryawanTokens.cyan.withOpacity(0.28),
+                    blurRadius: 16,
+                    offset: const Offset(0, 7),
+                  ),
+                ],
+              ),
+              child: FilledButton(
+                onPressed: _bukaAbsensi,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: OptikKaryawanTokens.ink,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                child: Text(
+                  ctaLabel,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPengumumanBanner() {
+    final p = _pengumuman.first;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: OptikKaryawanTokens.cyan.withOpacity(0.10),
+            border: Border.all(
+              color: OptikKaryawanTokens.cyan.withOpacity(0.22),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.campaign_rounded,
+                    size: 17, color: OptikKaryawanTokens.ink),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'home_pengumuman'.tr(),
+                      style: TextStyle(
+                        color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.9,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${p['judul'] ?? '-'}',
+                      style: const TextStyle(
+                        color: OptikKaryawanTokens.ink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${p['isi'] ?? ''}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: OptikKaryawanTokens.ink.withOpacity(0.72),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSopHariIniCard() {
+    final total = _daftarSOPTugas.length;
+    final done = _daftarSOPTugas.where((e) => e['selesai'] == true).length;
+    final pending = _daftarSOPTugas
+        .where((e) => e['selesai'] != true)
+        .take(2)
+        .toList();
+    return _softSurface(
+      onTap: () => setState(() => _currentIndex = 1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  total == 0
+                      ? 'home_sop_kosong'.tr()
+                      : 'home_sop_progress'.tr(args: ['$done', '$total']),
+                  style: const TextStyle(
+                    color: OptikKaryawanTokens.ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 13,
+                  color: OptikKaryawanTokens.muted.withOpacity(0.7)),
+            ],
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: done / total,
+                minHeight: 5,
+                backgroundColor: OptikKaryawanTokens.cyan.withOpacity(0.12),
+                valueColor:
+                    const AlwaysStoppedAnimation(OptikKaryawanTokens.cyan),
+              ),
+            ),
+          ],
+          if (pending.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...pending.map((t) => Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    '• ${t['tugas']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: OptikKaryawanTokens.ink.withOpacity(0.85),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )),
+          ] else if (total > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              'home_sop_semua_selesai'.tr(),
+              style: TextStyle(
+                color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPengajuanCard() {
+    final pending = _pengajuanTerbaru
+        .where((e) => '${e['status']}'.toUpperCase() == 'PENDING')
+        .length;
+    final rows = _pengajuanTerbaru.take(2).toList();
+    return _softSurface(
+      onTap: _bukaPengajuanJadwal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rows.isEmpty
+                      ? 'home_pengajuan_kosong'.tr()
+                      : 'home_pengajuan_judul'.tr(),
+                  style: const TextStyle(
+                    color: OptikKaryawanTokens.ink,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (pending > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    'home_pengajuan_badge'.tr(args: ['$pending']),
+                    style: TextStyle(
+                      color: Colors.orange.shade800,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (rows.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...rows.map((r) {
+              final status = '${r['status'] ?? 'PENDING'}';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${r['tipe'] ?? '-'} · ${r['tanggal'] ?? '-'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: OptikKaryawanTokens.ink,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _labelPengajuanStatus(status),
+                      style: TextStyle(
+                        color: status.toUpperCase() == 'APPROVED'
+                            ? OptikKaryawanTokens.success
+                            : status.toUpperCase() == 'REJECTED'
+                                ? Colors.redAccent
+                                : Colors.orange.shade800,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabQueueCard() {
+    final open = _labOpenJobs.take(4).toList();
+    final mine = _labMineJobs.take(3).toList();
+    if (open.isEmpty && mine.isEmpty) {
+      return _softSurface(
+        child: Text(
+          'lab_queue_kosong'.tr(),
+          style: TextStyle(
+            color: OptikKaryawanTokens.muted.withOpacity(0.95),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    return _softSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'lab_queue_desc'.tr(),
+            style: TextStyle(
+              color: OptikKaryawanTokens.muted.withOpacity(0.95),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (mine.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'lab_queue_mine'.tr(),
+              style: const TextStyle(
+                color: OptikKaryawanTokens.ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...mine.map((j) => _labJobTile(j, mine: true)),
+          ],
+          if (open.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'lab_queue_open'.tr(args: ['${_labOpenJobs.length}']),
+              style: const TextStyle(
+                color: OptikKaryawanTokens.ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...open.map((j) => _labJobTile(j, mine: false)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _labJobTile(Map<String, dynamic> job, {required bool mine}) {
+    final inv = job['no_invoice']?.toString() ?? '-';
+    final qty = job['unit_qty']?.toString() ?? '1';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  inv,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: OptikKaryawanTokens.ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  mine
+                      ? 'lab_queue_mine_sub'.tr(args: [qty])
+                      : 'lab_queue_open_sub'.tr(args: [qty]),
+                  style: TextStyle(
+                    color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!mine)
+            FilledButton(
+              onPressed: _labBusy ? null : () => _claimLabJob(job),
+              style: FilledButton.styleFrom(
+                backgroundColor: OptikKaryawanTokens.cyan,
+                foregroundColor: OptikKaryawanTokens.ink,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+                ),
+              ),
+              child: Text(
+                'lab_queue_btn_kerjakan'.tr(),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: OptikKaryawanTokens.cyan.withOpacity(0.14),
+                borderRadius:
+                    BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+              ),
+              child: Text(
+                'lab_queue_status_claimed'.tr(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: OptikKaryawanTokens.ink,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickShortcuts() {
+    final items = [
+      (Icons.warning_amber_rounded, 'home_shortcut_pengaduan'.tr(),
+          _bukaPengaduan),
+      (Icons.support_agent_rounded, 'home_shortcut_hubungi'.tr(),
+          _hubungiPusat),
+      (Icons.notifications_active_rounded, 'home_shortcut_pengingat'.tr(),
+          _bukaPengingat),
+      (Icons.badge_outlined, 'home_shortcut_profil'.tr(), _bukaDetailPribadi),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('home_shortcut_judul'.tr()),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(
+                        OptikKaryawanTokens.radiusLg),
+                    onTap: items[i].$3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                          OptikKaryawanTokens.radiusLg),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Ink(
+                          height: 78,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                                OptikKaryawanTokens.radiusLg),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                OptikKaryawanTokens.snow.withOpacity(0.94),
+                                OptikKaryawanTokens.cyan.withOpacity(0.12),
+                              ],
+                            ),
+                            border: Border.all(
+                              color:
+                                  OptikKaryawanTokens.cyan.withOpacity(0.20),
+                            ),
+                            boxShadow: OptikKaryawanTokens.cardShadow,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: OptikKaryawanTokens.cyan
+                                      .withOpacity(0.16),
+                                  borderRadius: BorderRadius.circular(
+                                      OptikKaryawanTokens.radiusSm),
+                                ),
+                                child: Icon(items[i].$1,
+                                    color: OptikKaryawanTokens.ink, size: 18),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                items[i].$2,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: OptikKaryawanTokens.ink,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChecklistBukaTutupCard() {
+    final items = _checklistBukaTutup;
+    return _softSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'home_checklist_desc'.tr(),
+                  style: TextStyle(
+                    color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _currentIndex = 1),
+                style: TextButton.styleFrom(
+                  foregroundColor: OptikKaryawanTokens.ink,
+                  backgroundColor: OptikKaryawanTokens.cyan.withOpacity(0.14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text(
+                  'home_checklist_buka_sop'.tr(),
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (items.isEmpty)
+            Text(
+              'home_checklist_kosong'.tr(),
+              style: TextStyle(
+                color: OptikKaryawanTokens.muted.withOpacity(0.9),
+                fontSize: 12.5,
+              ),
+            )
+          else
+            ...items.map((t) {
+              final done = t['selesai'] == true;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Row(
+                  children: [
+                    Icon(
+                      done
+                          ? Icons.check_circle_rounded
+                          : Icons.circle_outlined,
+                      size: 18,
+                      color: done
+                          ? OptikKaryawanTokens.cyan
+                          : OptikKaryawanTokens.muted.withOpacity(0.65),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${t['tugas']}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: OptikKaryawanTokens.ink,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          decoration:
+                              done ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  /// Banner KPI — eskalasi premium per level.
+  /// L1 matte → L2 clean → L3 gold → L4 elite → L5 max. Api PNG solid.
+  Widget _buildMetricTwinRow() {
+    final fire = _kpiFire.fire;
+    final progress = _kpiFire.progress;
+    final lv = fire.level.clamp(0, 5);
+
+    final pal = StreakFireFlame.levelPalette(lv <= 0 ? 1 : lv);
+    final tip = lv <= 0 ? const Color(0xFF8AA0A8) : pal.top;
+    final tipDeep = Color.lerp(tip, const Color(0xFF0C0408), 0.38) ?? tip;
+
+    final kpiPct = (progress * 100).round();
+    final fairPct = (_kpiFire.fairShare * 100).round();
+    final aktualPct = (_kpiFire.aktualPct * 100).round();
+    final layerLabel = _kpiFire.layer == OfficeLayer.back
+        ? 'kpi_layer_back'.tr()
+        : 'kpi_layer_front'.tr();
+    final fairLine = _kpiFire.peerCount > 0
+        ? 'kpi_balance_sub'.tr(args: ['$aktualPct', '$fairPct', layerLabel])
+        : 'kpi_balance_sub_empty'.tr();
+    final fireLine = fire.level == 0
+        ? fire.labelKey.tr()
+        : '${fire.labelKey.tr()} · ${'kpi_fire_level'.tr(args: ['${fire.fifth}'])}';
+
+    const ink = OptikKaryawanTokens.ink;
+    final snow = OptikKaryawanTokens.snow;
+    // L1 soft-light (teks gelap) · L2+ saturated (teks terang).
+    final lit = lv >= 2;
+
+    // Identitas beda per tier (L1 & L5 sudah OK — jangan digoyang).
+    // L2: clean mid · L3: gold jewelry · L4: pre-peak night · L5: MAX
+    final showSheen = lv >= 3;
+    final showOrbLeft = lv >= 3;
+    final showOrbRight = lv >= 4;
+    final showRail = lv >= 3;
+    final showOuterRing = lv >= 4;
+    final showPeakBadge = lv >= 5;
+    final showEliteBadge = lv == 4; // penanda kelas sebelum MAX
+    final showGoldMark = lv == 3;
+    final showInnerStroke = lv >= 3;
+    final cornerR = switch (lv) {
+      1 => 18.0,
+      2 => 20.0,
+      3 => 22.0,
+      4 => 25.0,
+      5 => 28.0,
+      _ => 18.0,
+    };
+    final radius = BorderRadius.circular(cornerR);
+    final borderW = switch (lv) {
+      1 => 1.0,
+      2 => 1.15,
+      3 => 1.55,
+      4 => 1.7,
+      5 => 1.8,
+      _ => 1.0,
+    };
+    final railW = switch (lv) {
+      3 => 4.0,
+      4 => 4.6,
+      5 => 5.0,
+      _ => 0.0,
+    };
+    final flameSize = switch (lv) {
+      1 => 26.0,
+      2 => 27.0,
+      3 => 30.0,
+      4 => 31.5,
+      5 => 32.0,
+      _ => 26.0,
+    };
+    final ptsSize = switch (lv) {
+      1 => 26.0,
+      2 => 27.0,
+      3 => 30.0,
+      4 => 32.0,
+      5 => 33.0,
+      _ => 26.0,
+    };
+    final barH = switch (lv) {
+      1 => 5.0,
+      2 => 5.5,
+      3 => 6.5,
+      4 => 7.2,
+      5 => 7.5,
+      _ => 5.0,
+    };
+    final shadowDepth = switch (lv) {
+      1 => 0.05,
+      2 => 0.07,
+      3 => 0.14,
+      4 => 0.20,
+      5 => 0.22,
+      _ => 0.05,
+    };
+    final glowStr = switch (lv) {
+      1 => 0.0,
+      2 => 0.06,
+      3 => 0.24,
+      4 => 0.34,
+      5 => 0.38,
+      _ => 0.0,
+    };
+
+    late final List<Color> bodyColors;
+    late final Color borderColor;
+    late final Color orbA;
+    late final Color orbB;
+    late final Color fillBar;
+    switch (lv) {
+      case 1: // Soft matte — sudah OK
+        bodyColors = const [
+          Color(0xFFFFF1EE),
+          Color(0xFFFFD2C8),
+          Color(0xFFF2A89A),
+        ];
+        borderColor = const Color(0x55C62828);
+        orbA = const Color(0xFFE57373);
+        orbB = orbA;
+        fillBar = const Color(0xFFD32F2F);
+      case 2: // Clean mid — flat 2-tone, tanpa ornament mewah
+        bodyColors = const [
+          Color(0xFFFF9800),
+          Color(0xFFEF6C00),
+        ];
+        borderColor = const Color(0x66FFFFFF);
+        orbA = const Color(0xFFFFB74D);
+        orbB = orbA;
+        fillBar = const Color(0xFFFFE0B2);
+      case 3: // Gold jewelry — metal dalam, beda jelas dari L2
+        bodyColors = const [
+          Color(0xFFFFE082),
+          Color(0xFFC9A227),
+          Color(0xFF4A3608),
+        ];
+        borderColor = const Color(0xEEFFE082);
+        orbA = const Color(0xFFFFF59D);
+        orbB = const Color(0xFFFFF8E1);
+        fillBar = const Color(0xFFFFECB3);
+      case 4: // Pre-peak night magenta — gelap, hampir L5
+        bodyColors = const [
+          Color(0xFF9C1258),
+          Color(0xFF5A0A36),
+          Color(0xFF1A0612),
+        ];
+        borderColor = const Color(0xDDF8BBD0);
+        orbA = const Color(0xFFFF80AB);
+        orbB = const Color(0xFFFFCDD2);
+        fillBar = const Color(0xFFF8BBD0);
+      case 5: // Peak night — sudah OK, jangan diubah
+        bodyColors = const [
+          Color(0xFF4A2080),
+          Color(0xFF2A1058),
+          Color(0xFF0E061C),
+        ];
+        borderColor = const Color(0xE6E0C8FF);
+        orbA = const Color(0xFFD2B4FF);
+        orbB = const Color(0xFFF0E0FF);
+        fillBar = const Color(0xFFE8D4FF);
+      default:
+        bodyColors = [snow, const Color(0xFFF5FAFB)];
+        borderColor = OptikKaryawanTokens.lineStrong;
+        orbA = tip;
+        orbB = tip;
+        fillBar = tip;
+    }
+
+    final titleC = !lit
+        ? ink.withOpacity(lv <= 1 ? 0.48 : 0.55)
+        : Colors.white.withOpacity(lv == 2 ? 0.72 : 0.78);
+    final valueC = !lit ? ink : Colors.white;
+    final metaC = !lit
+        ? ink.withOpacity(0.62)
+        : Colors.white.withOpacity(0.82);
+    final historyC = !lit
+        ? ink.withOpacity(0.38)
+        : Colors.white.withOpacity(0.52);
+    final trackC = !lit
+        ? ink.withOpacity(0.08)
+        : Colors.white.withOpacity(lv == 2 ? 0.16 : 0.20);
+
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      child: InkWell(
+        borderRadius: radius,
+        splashColor: Colors.white.withOpacity(0.08),
+        highlightColor: Colors.transparent,
+        onTap: _showFireHistorySheet,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: bodyColors,
+              stops: bodyColors.length == 2
+                  ? const [0.0, 1.0]
+                  : const [0.0, 0.46, 1.0],
+            ),
+            border: Border.all(color: borderColor, width: borderW),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(shadowDepth),
+                blurRadius: 12.0 + lv * 4,
+                spreadRadius: -3,
+                offset: Offset(0, 6.0 + lv * 1.2),
+              ),
+              if (glowStr > 0)
+                BoxShadow(
+                  color: orbA.withOpacity(glowStr),
+                  blurRadius: 16.0 + lv * 5,
+                  spreadRadius: -6,
+                  offset: Offset(0, 8.0 + lv),
+                ),
+              if (lv >= 5)
+                BoxShadow(
+                  color: const Color(0xFFB388FF).withOpacity(0.35),
+                  blurRadius: 36,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 14),
+                ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: Stack(
+              children: [
+                if (showInnerStroke)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(cornerR - 3),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(
+                                  lv >= 5 ? 0.22 : 0.14),
+                              width: lv >= 5 ? 1.1 : 0.8,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (showSheen)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: 28.0 + lv * 4,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withOpacity(0.06 + lv * 0.025),
+                              Colors.white.withOpacity(0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (showOrbLeft)
+                  Positioned(
+                    left: -30,
+                    top: -34,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 100 + lv * 12,
+                        height: 100 + lv * 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              orbA.withOpacity(0.20 + lv * 0.05),
+                              orbA.withOpacity(0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (showOrbRight)
+                  Positioned(
+                    right: -32,
+                    bottom: -40,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 130 + lv * 8,
+                        height: 130 + lv * 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              orbB.withOpacity(lv >= 5 ? 0.32 : 0.20),
+                              orbB.withOpacity(0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (showRail)
+                  Positioned(
+                    left: 0,
+                    top: 14,
+                    bottom: 14,
+                    width: railW,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.horizontal(
+                            right: Radius.circular(99),
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: lv == 3
+                                ? const [
+                                    Color(0xFFFFF6D0),
+                                    Color(0xFFE0B43A),
+                                    Color(0xFF6B4E0E),
+                                  ]
+                                : lv >= 5
+                                    ? const [
+                                        Color(0xFFF0E0FF),
+                                        Color(0xFFB48CFF),
+                                        Color(0xFF3A1870),
+                                      ]
+                                    : [
+                                        Colors.white.withOpacity(0.70),
+                                        orbA,
+                                        tipDeep,
+                                      ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    14 + (showRail ? railW : 0),
+                    15,
+                    10,
+                    14,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 52 + lv * 1.5,
+                            height: 52 + lv * 1.5,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                if (showOuterRing)
+                                  IgnorePointer(
+                                    child: Container(
+                                      width: 50 + lv.toDouble(),
+                                      height: 50 + lv.toDouble(),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(
+                                              lv >= 5 ? 0.35 : 0.22),
+                                          width: lv >= 5 ? 1.4 : 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                if (lv >= 2)
+                                  IgnorePointer(
+                                    child: Container(
+                                      width: 46,
+                                      height: 46,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: RadialGradient(
+                                          colors: [
+                                            orbA.withOpacity(
+                                                0.18 + lv * 0.05),
+                                            orbA.withOpacity(0),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                IgnorePointer(
+                                  child: Container(
+                                    width: lv <= 1 ? 40 : 42,
+                                    height: lv <= 1 ? 40 : 42,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: !lit
+                                          ? snow.withOpacity(0.85)
+                                          : Colors.white.withOpacity(0.12),
+                                      border: Border.all(
+                                        color: !lit
+                                            ? tip.withOpacity(0.35)
+                                            : Colors.white.withOpacity(0.42),
+                                        width: lv <= 1 ? 1.0 : 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                StreakFireFlame(
+                                  fire: fire,
+                                  size: flameSize,
+                                  solid: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'kpi_banner_judul'.tr().toUpperCase(),
+                                        style: TextStyle(
+                                          color: titleC,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: switch (lv) {
+                                            2 => 0.7,
+                                            3 => 1.0,
+                                            4 => 1.15,
+                                            5 => 1.25,
+                                            _ => 0.6,
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    if (showGoldMark)
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFFFF8E1),
+                                              Color(0xFFE0B43A),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                          border: Border.all(
+                                            color: const Color(0xFFFFF59D)
+                                                .withOpacity(0.8),
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFE0B43A)
+                                                  .withOpacity(0.40),
+                                              blurRadius: 8,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Text(
+                                          'GOLD',
+                                          style: TextStyle(
+                                            color: Color(0xFF3A2808),
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.7,
+                                          ),
+                                        ),
+                                      ),
+                                    if (showEliteBadge)
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFFFE0EC),
+                                              Color(0xFFFF80AB),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFFF80AB)
+                                                  .withOpacity(0.45),
+                                              blurRadius: 10,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Text(
+                                          'ELITE',
+                                          style: TextStyle(
+                                            color: Color(0xFF4A0A28),
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.7,
+                                          ),
+                                        ),
+                                      ),
+                                    if (showPeakBadge)
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFF0E0FF),
+                                              Color(0xFFB48CFF),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFFB48CFF)
+                                                  .withOpacity(0.45),
+                                              blurRadius: 10,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Text(
+                                          'MAX',
+                                          style: TextStyle(
+                                            color: Color(0xFF2A1058),
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                // Poin & level 1 sumber: _kpiFire.totalPoin.
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.end,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        '${_kpiFire.totalPoin}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.fraunces(
+                                          color: valueC,
+                                          fontSize: ptsSize,
+                                          fontWeight: FontWeight.w700,
+                                          height: 1.0,
+                                          letterSpacing: -1.0,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 3),
+                                      child: Text(
+                                        'kpi_banner_pts'.tr(),
+                                        style: TextStyle(
+                                          color: metaC,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      margin:
+                                          const EdgeInsets.only(bottom: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: lv <= 1
+                                            ? tip.withOpacity(0.14)
+                                            : Colors.white.withOpacity(0.22),
+                                        borderRadius:
+                                            BorderRadius.circular(99),
+                                        border: Border.all(
+                                          color: lv <= 1
+                                              ? tip.withOpacity(0.40)
+                                              : Colors.white
+                                                  .withOpacity(0.40),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '$kpiPct%',
+                                        style: TextStyle(
+                                          color: switch (lv) {
+                                            1 => tipDeep,
+                                            3 => const Color(0xFF3A2808),
+                                            4 => const Color(0xFF3E0A28),
+                                            5 => const Color(0xFF2A1058),
+                                            _ => Colors.white,
+                                          },
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
+                            tooltip: 'poin_riwayat_judul'.tr(),
+                            onPressed: _tampilkanRiwayatPoin,
+                            icon: Icon(
+                              Icons.history_rounded,
+                              size: 18 + (lv >= 4 ? 2 : 0),
+                              color: historyC,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: lv >= 4 ? 13 : 11),
+                      Text(
+                        fairLine,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: metaC,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Container(
+                            width: lv >= 4 ? 8 : 6,
+                            height: lv >= 4 ? 8 : 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: fillBar,
+                              boxShadow: lv >= 3
+                                  ? [
+                                      BoxShadow(
+                                        color: orbA.withOpacity(0.55),
+                                        blurRadius: 7,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              fireLine,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: valueC,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                          if (fire.level > 0)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: lv >= 4 ? 9 : 7,
+                                vertical: lv >= 4 ? 4 : 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(
+                                    lv <= 1 ? 0.10 : 0.14),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(
+                                      lv <= 1 ? 0.18 : 0.30),
+                                  width: lv >= 5 ? 1.2 : 1.0,
+                                ),
+                              ),
+                              child: Text(
+                                '${fire.fifth}/5',
+                                style: TextStyle(
+                                  color: valueC,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: lv >= 4 ? 13 : 11),
+                      StreakFireProgressBar(
+                        progress: progress,
+                        height: barH,
+                        compact: true,
+                        trackColor: trackC,
+                        fillColor: fillBar,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _kpiBreakdownTile(
+    String label,
+    String value, {
+    bool showDivider = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: showDivider
+          ? BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: OptikKaryawanTokens.border.withOpacity(0.9),
+                ),
+              ),
+            )
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              color: OptikKaryawanTokens.ink,
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFireHistorySheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.94,
+          minChildSize: 0.5,
+          maxChildSize: 0.98,
+          builder: (context, scrollController) {
+            return _buildKpiDetailPageShell(
+              scrollController: scrollController,
+              children: _buildKpiDetailSections(),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showKpiYearHistorySheet() {
+    final history = _kpiYearHistory;
+    final now = DateTime.now();
+    final byKey = {
+      for (final r in history) r.monthKey: r,
+    };
+    final minYear = history.isEmpty
+        ? now.year
+        : history.map((e) => e.year).reduce((a, b) => a < b ? a : b);
+    final maxYear = now.year;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        var viewYear = maxYear;
+        KpiMonthHistoryRecord? selected;
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.92,
+          minChildSize: 0.5,
+          maxChildSize: 0.98,
+          builder: (context, scrollController) {
+            return StatefulBuilder(
+              builder: (context, setSheet) {
+                Widget monthCell(int month) {
+                  final key =
+                      '$viewYear-${month.toString().padLeft(2, '0')}';
+                  final rec = byKey[key];
+                  final isFuture = viewYear > now.year ||
+                      (viewYear == now.year && month > now.month);
+                  final isCurrent =
+                      viewYear == now.year && month == now.month;
+                  final isSelected = selected?.monthKey == key;
+                  final fire = rec?.fire ??
+                      StreakFireLevel.forKpiProgress(0);
+                  final lv = fire.level.clamp(1, 5);
+                  final pal = StreakFireFlame.levelPalette(lv);
+                  final monthName = DateFormat.MMM(context.locale.toString())
+                      .format(DateTime(viewYear, month));
+                  final pct = ((rec?.progress ?? 0) * 100).round();
+
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: isFuture
+                          ? null
+                          : () => setSheet(() {
+                                selected = rec ??
+                                    KpiMonthHistoryRecord(
+                                      year: viewYear,
+                                      month: month,
+                                      totalPoin: 0,
+                                      pointTarget:
+                                          KpiFireSnapshot.monthlyPointTarget,
+                                      workDays:
+                                          KpiFireSnapshot.fallbackWorkDays,
+                                      progress: 0,
+                                      fire: fire,
+                                    );
+                              }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                        decoration: BoxDecoration(
+                          color: isFuture
+                              ? const Color(0xFFF3F6F7)
+                              : (isCurrent || isSelected
+                                  ? Color.lerp(
+                                      Colors.white, pal.bottom, 0.62)!
+                                  : const Color(0xFFF8FBFC)),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected || isCurrent
+                                ? Color.lerp(pal.top, Colors.white, 0.3)!
+                                : OptikKaryawanTokens.border,
+                            width: isSelected || isCurrent ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              monthName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: isFuture
+                                    ? OptikKaryawanTokens.muted
+                                        .withOpacity(0.55)
+                                    : OptikKaryawanTokens.ink,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Opacity(
+                              opacity: isFuture ? 0.28 : 1,
+                              child: StreakFireFlame(
+                                fire: fire,
+                                size: 28,
+                                solid: true,
+                                muted: isFuture ||
+                                    ((rec?.isEmptyMonth ?? true) &&
+                                        !isCurrent),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              isFuture
+                                  ? '—'
+                                  : 'kpi_fire_level'.tr(args: ['$lv']),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: isFuture
+                                    ? OptikKaryawanTokens.muted
+                                        .withOpacity(0.5)
+                                    : pal.top,
+                              ),
+                            ),
+                            Text(
+                              isFuture ? '' : '$pct%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: OptikKaryawanTokens.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: OptikKaryawanTokens.border,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'kpi_year_history_title'.tr(),
+                        style: GoogleFonts.fraunces(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: OptikKaryawanTokens.ink,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'kpi_year_history_sub'.tr(),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.4,
+                          color: OptikKaryawanTokens.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Navigasi tahun
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F7F8),
+                          borderRadius: BorderRadius.circular(14),
+                          border:
+                              Border.all(color: OptikKaryawanTokens.border),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: viewYear <= minYear
+                                  ? null
+                                  : () => setSheet(() {
+                                        viewYear -= 1;
+                                        selected = null;
+                                      }),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '$viewYear',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.fraunces(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: OptikKaryawanTokens.ink,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: viewYear >= maxYear
+                                  ? null
+                                  : () => setSheet(() {
+                                        viewYear += 1;
+                                        selected = null;
+                                      }),
+                              icon: const Icon(Icons.chevron_right_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Grid kalender 3×4 (Jan–Des)
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.92,
+                        children: [
+                          for (var m = 1; m <= 12; m++) monthCell(m),
+                        ],
+                      ),
+                      if (selected != null) ...[
+                        const SizedBox(height: 16),
+                        Builder(
+                          builder: (context) {
+                            final rec = selected!;
+                            final lv = rec.fire.level.clamp(1, 5);
+                            final pal =
+                                StreakFireFlame.levelPalette(lv);
+                            final pct = (rec.progress * 100).round();
+                            final label = DateFormat.yMMMM(
+                                    context.locale.toString())
+                                .format(
+                                    DateTime(rec.year, rec.month));
+                            return Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Color.lerp(
+                                    Colors.white, pal.bottom, 0.45)!,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: Color.lerp(
+                                      pal.top, Colors.white, 0.35)!,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  StreakFireFlame(
+                                    fire: rec.fire,
+                                    size: 34,
+                                    solid: true,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          label,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15,
+                                            color: OptikKaryawanTokens.ink,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${rec.fire.labelKey.tr()} · ${'kpi_fire_level'.tr(args: ['$lv'])}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                            color: pal.top,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${rec.totalPoin} / ${rec.pointTarget} ${'kpi_banner_pts'.tr()} · $pct%',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                            color:
+                                                OptikKaryawanTokens.muted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1393,86 +4502,8 @@ class KaryawanPageState extends State<KaryawanPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.orange.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8))
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.stars_rounded,
-                          color: Colors.white, size: 28),
-                      const SizedBox(height: 10),
-                      Text("poin_total_judul".tr(),
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                      Text("$totalPoinBulanIni / 1000",
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF059669)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.green.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 8))
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.local_fire_department_rounded,
-                          color: Colors.white, size: 28),
-                      const SizedBox(height: 10),
-                      Text("poin_streak_judul".tr(),
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                      Text("$currentStreakHari ${'poin hari'.tr()}",
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 25),
+          _buildMetricTwinRow(),
+          const SizedBox(height: 22),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1488,7 +4519,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: progress == 1.0
-                      ? Colors.green.shade100
+                      ? OptikKaryawanTokens.seasideWash
                       : OptikKaryawanTokens.gold.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -1496,7 +4527,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   "$tugasSelesai / ${_daftarSOPTugas.length} ${'sop_selesai'.tr()}",
                   style: TextStyle(
                       color: progress == 1.0
-                          ? Colors.green.shade700
+                          ? OptikKaryawanTokens.ink
                           : OptikKaryawanTokens.gold,
                       fontWeight: FontWeight.w800,
                       fontSize: 12),
@@ -1511,7 +4542,7 @@ class KaryawanPageState extends State<KaryawanPage>
               value: progress,
               minHeight: 8,
               backgroundColor: Colors.grey.shade200,
-              color: progress == 1.0 ? Colors.green : OptikKaryawanTokens.gold,
+              color: progress == 1.0 ? OptikKaryawanTokens.seasideMid : OptikKaryawanTokens.gold,
             ),
           ),
           const SizedBox(height: 25),
@@ -1530,11 +4561,13 @@ class KaryawanPageState extends State<KaryawanPage>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                   decoration: BoxDecoration(
-                    color: isSelesai ? const Color(0xFFF0FDF4) : Colors.white,
+                    color: isSelesai
+                        ? OptikKaryawanTokens.seasideWash
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(15),
                     border: Border.all(
                       color: isSelesai
-                          ? Colors.green.shade300
+                          ? OptikKaryawanTokens.seasidePale
                           : Colors.grey.shade200,
                       width: 1.5,
                     ),
@@ -1552,17 +4585,17 @@ class KaryawanPageState extends State<KaryawanPage>
                         width: 26,
                         height: 26,
                         decoration: BoxDecoration(
-                          color: isSelesai ? Colors.green : Colors.transparent,
+                          color: isSelesai ? OptikKaryawanTokens.seasideMid : Colors.transparent,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color:
-                                isSelesai ? Colors.green : Colors.grey.shade400,
+                                isSelesai ? OptikKaryawanTokens.seasideMid : Colors.grey.shade400,
                             width: 2,
                           ),
                         ),
                         child: isSelesai
                             ? const Icon(Icons.check_rounded,
-                                color: Colors.white, size: 16)
+                                color: OptikKaryawanTokens.ink, size: 16)
                             : null,
                       ),
                       const SizedBox(width: 15),
@@ -1574,12 +4607,12 @@ class KaryawanPageState extends State<KaryawanPage>
                             fontWeight:
                                 isSelesai ? FontWeight.w700 : FontWeight.w600,
                             color: isSelesai
-                                ? Colors.green.shade700
+                                ? OptikKaryawanTokens.ink
                                 : OptikKaryawanTokens.navyDeep,
                             decoration: isSelesai
                                 ? TextDecoration.lineThrough
                                 : TextDecoration.none,
-                            decorationColor: Colors.green.shade700,
+                            decorationColor: OptikKaryawanTokens.ink,
                           ),
                         ),
                       ),
@@ -1626,7 +4659,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     );
                     setState(() {
                       _sudahKlaimPoinHariIni = true;
-                      totalPoinBulanIni += claimed;
+                      _applyPoinBulan(totalPoinBulanIni + claimed);
                       isStreakBonusActive = currentStreakHari >= 3;
                     });
                     if (isStreakBonusActive) {
@@ -1636,7 +4669,7 @@ class KaryawanPageState extends State<KaryawanPage>
                           Colors.orange.shade700);
                     } else {
                       _showPremiumSnackbar("poin_selesai_judul".tr(),
-                          "poin_selesai_msg".tr(), Colors.green);
+                          "poin_selesai_msg".tr(), OptikKaryawanTokens.seasideMid);
                     }
                   } catch (e) {
                     _showPremiumSnackbar(
@@ -1644,10 +4677,10 @@ class KaryawanPageState extends State<KaryawanPage>
                   }
                 },
                 icon:
-                    const Icon(Icons.cloud_upload_rounded, color: Colors.white),
+                    const Icon(Icons.cloud_upload_rounded, color: OptikKaryawanTokens.ink),
                 label: Text("sop_btn_simpan".tr(),
                     style: const TextStyle(
-                        color: Colors.white,
+                        color: OptikKaryawanTokens.ink,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.2)),
               ),
@@ -1668,16 +4701,19 @@ class KaryawanPageState extends State<KaryawanPage>
             padding: const EdgeInsets.all(25),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [OptikKaryawanTokens.navyDeep, OptikKaryawanTokens.navySoft],
+                colors: [
+                  OptikKaryawanTokens.seasideWash,
+                  OptikKaryawanTokens.seasidePale,
+                  OptikKaryawanTokens.seasideMid,
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(25),
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.05), width: 1),
+              border: Border.all(color: OptikKaryawanTokens.border, width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: OptikKaryawanTokens.seasideMid.withOpacity(0.18),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1691,17 +4727,17 @@ class KaryawanPageState extends State<KaryawanPage>
                   children: [
                     Text("profil_perlindungan_akun".tr(),
                         style: const TextStyle(
-                            color: Colors.white,
+                            color: OptikKaryawanTokens.ink,
                             fontSize: 18,
                             fontWeight: FontWeight.w800)),
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.greenAccent.withOpacity(0.1),
+                        color: OptikKaryawanTokens.seasidePale.withOpacity(0.75),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.security_rounded,
-                          color: Colors.greenAccent.shade400, size: 28),
+                      child: const Icon(Icons.security_rounded,
+                          color: OptikKaryawanTokens.seasideMid, size: 28),
                     ),
                   ],
                 ),
@@ -1710,8 +4746,8 @@ class KaryawanPageState extends State<KaryawanPage>
                     '${(_securityScore * 100).round()}% aman',
                     style: TextStyle(
                         color: _securityScore >= 0.9
-                            ? Colors.greenAccent.shade400
-                            : Colors.orangeAccent,
+                            ? OptikKaryawanTokens.success
+                            : OptikKaryawanTokens.warning,
                         fontWeight: FontWeight.w700,
                         fontSize: 14)),
                 const SizedBox(height: 12),
@@ -1719,40 +4755,41 @@ class KaryawanPageState extends State<KaryawanPage>
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
                     value: _securityScore,
-                    backgroundColor: Colors.grey.shade800,
+                    backgroundColor: OptikKaryawanTokens.seasidePale,
                     color: _securityScore >= 0.9
-                        ? Colors.greenAccent.shade400
-                        : Colors.orangeAccent,
+                        ? OptikKaryawanTokens.success
+                        : OptikKaryawanTokens.warning,
                     minHeight: 8,
                   ),
                 ),
                 const SizedBox(height: 15),
                 Text("profil_enkripsi".tr(),
                     style: const TextStyle(
-                        color: Colors.white60, fontSize: 13, height: 1.5)),
+                        color: OptikKaryawanTokens.muted, fontSize: 13, height: 1.5)),
               ],
             ),
           ),
           const SizedBox(height: 30),
           Padding(
             padding: const EdgeInsets.only(left: 10, bottom: 10),
-            child: Text("menu utama label".tr(),
+            child: Text("menu_utama_label".tr(),
                 style: const TextStyle(
-                    color: Colors.white54,
+                    color: OptikKaryawanTokens.muted,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.2)),
           ),
           Container(
             decoration: BoxDecoration(
-              color: OptikKaryawanTokens.navyDeep,
+              color: OptikKaryawanTokens.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              border: Border.all(color: OptikKaryawanTokens.border),
+              boxShadow: OptikKaryawanTokens.cardShadow,
             ),
             child: Column(
               children: [
                 _buildMenuProfil(Icons.person_rounded,
-                    "menu_detail profil".tr(), "sub_detail_profil".tr(), true),
+                    "menu_detail_profil".tr(), "sub_detail_profil".tr(), true),
                 _buildMenuProfil(
                     Icons.face_retouching_natural_rounded,
                     'Absensi',
@@ -1761,7 +4798,7 @@ class KaryawanPageState extends State<KaryawanPage>
                 _buildMenuProfil(
                     Icons.face_outlined,
                     'Bentuk Wajah',
-                    'Scan landmark + rekomendasi frame (konsultasi)',
+                    'Referensi bentuk wajah + rekomendasi frame',
                     true),
                 _buildMenuProfil(
                     Icons.settings_rounded,
@@ -1777,15 +4814,15 @@ class KaryawanPageState extends State<KaryawanPage>
                           : 'Kepala Toko / Kepala Area — kode login web Admin',
                       true),
                 _buildMenuProfil(Icons.headset_mic_rounded,
-                    "menu pusat bantuan".tr(), "sub_pusat_bantuan".tr(), true),
-                _buildMenuProfil(Icons.warning_rounded, "menu pengaduan".tr(),
+                    "menu_pusat_bantuan".tr(), "sub_pusat_bantuan".tr(), true),
+                _buildMenuProfil(Icons.warning_rounded, "menu_pengaduan".tr(),
                     "sub_pengaduan".tr(), true),
                 _buildMenuProfil(Icons.notifications_active_rounded,
                     "menu_pengingat".tr(), "sub_pengingat".tr(), true),
                 _buildMenuProfil(Icons.system_update_rounded,
-                    "menu_update".tr(), "sub update".tr(), true),
+                    "menu_update".tr(), "sub_update".tr(), true),
                 _buildMenuProfil(Icons.translate_rounded,
-                    "menu_ganti bahasa".tr(), "sub_ganti_bahasa".tr(), false),
+                    "menu_ganti_bahasa".tr(), "sub_ganti_bahasa".tr(), false),
               ],
             ),
           ),
@@ -1802,10 +4839,10 @@ class KaryawanPageState extends State<KaryawanPage>
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
-            highlightColor: Colors.white.withOpacity(0.05),
-            splashColor: Colors.white.withOpacity(0.1),
+            highlightColor: OptikKaryawanTokens.seasideWash.withOpacity(0.55),
+            splashColor: OptikKaryawanTokens.seasidePale.withOpacity(0.45),
             onTap: () {
-              if (title == "menu_detail profil".tr()) {
+              if (title == "menu_detail_profil".tr()) {
                 Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -1830,12 +4867,12 @@ class KaryawanPageState extends State<KaryawanPage>
                     context,
                     MaterialPageRoute(
                         builder: (context) => const AdminLoginCodePage()));
-              } else if (title == "menu pusat bantuan".tr()) {
+              } else if (title == "menu_pusat_bantuan".tr()) {
                 Navigator.push(
                     context,
                     MaterialPageRoute(
                         builder: (context) => const BantuanPage()));
-              } else if (title == "menu pengaduan".tr()) {
+              } else if (title == "menu_pengaduan".tr()) {
                 Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -1850,7 +4887,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     context,
                     MaterialPageRoute(
                         builder: (context) => const SoftwareUpdatePage()));
-              } else if (title == "menu_ganti bahasa".tr()) {
+              } else if (title == "menu_ganti_bahasa".tr()) {
                 _tampilkanDialogBahasa(context);
               }
             },
@@ -1867,7 +4904,7 @@ class KaryawanPageState extends State<KaryawanPage>
                           color: OptikKaryawanTokens.gold.withOpacity(0.3), width: 1),
                     ),
                     child:
-                        Icon(icon, color: OptikKaryawanTokens.goldLite, size: 22),
+                        Icon(icon, color: OptikKaryawanTokens.seasideMid, size: 22),
                   ),
                   const SizedBox(width: 18),
                   Expanded(
@@ -1876,27 +4913,27 @@ class KaryawanPageState extends State<KaryawanPage>
                       children: [
                         Text(title,
                             style: const TextStyle(
-                                color: Colors.white,
+                                color: OptikKaryawanTokens.ink,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
                         Text(subtitle,
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
+                            style: const TextStyle(
+                                color: OptikKaryawanTokens.muted,
                                 fontSize: 12)),
                       ],
                     ),
                   ),
                   Icon(Icons.arrow_forward_ios_rounded,
-                      color: Colors.white.withOpacity(0.2), size: 16),
+                      color: OptikKaryawanTokens.muted.withOpacity(0.45), size: 16),
                 ],
               ),
             ),
           ),
         ),
         if (showDivider)
-          Divider(
-              color: Colors.white.withOpacity(0.05),
+          const Divider(
+              color: OptikKaryawanTokens.border,
               height: 1,
               indent: 70,
               endIndent: 20),

@@ -202,7 +202,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Konfirmasi instalasi di layar sistem Android.'),
-        backgroundColor: Colors.green,
+        backgroundColor: OptikKaryawanTokens.seasideMid,
         duration: Duration(seconds: 5),
       ));
     } catch (e) {
@@ -243,13 +243,18 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
     final adaUpdate = info?.hasUpdate ?? false;
 
     return Scaffold(
-      backgroundColor: OptikKaryawanTokens.darkBg,
+      backgroundColor: OptikKaryawanTokens.scaffold,
       appBar: AppBar(
         title: Text("update_title".tr(),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: OptikKaryawanTokens.darkCard,
-        foregroundColor: Colors.white,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, color: OptikKaryawanTokens.ink)),
+        backgroundColor: OptikKaryawanTokens.surface,
+        foregroundColor: OptikKaryawanTokens.ink,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: OptikKaryawanTokens.border),
+        ),
       ),
       body: _isLoading
           ? const Center(
@@ -257,7 +262,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
           : Column(
               children: [
                 Container(
-                  color: OptikKaryawanTokens.darkCard,
+                  color: OptikKaryawanTokens.surface,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   child: Row(
@@ -268,11 +273,11 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                           children: [
                             Text("update_auto".tr(),
                                 style: const TextStyle(
-                                    color: Colors.white, fontSize: 15)),
+                                    color: OptikKaryawanTokens.ink, fontSize: 15)),
                             const Text(
                               'Auto-unduh di background; pasang tetap perlu konfirmasi',
                               style: TextStyle(
-                                  color: Colors.white54, fontSize: 11),
+                                  color: OptikKaryawanTokens.muted, fontSize: 11),
                             ),
                           ],
                         ),
@@ -283,8 +288,8 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                               : "update_off".tr(),
                           style: TextStyle(
                               color: _isAutoUpdateOn
-                                  ? Colors.greenAccent
-                                  : Colors.grey,
+                                  ? OptikKaryawanTokens.success
+                                  : OptikKaryawanTokens.muted,
                               fontWeight: FontWeight.bold)),
                       const SizedBox(width: 10),
                       CupertinoSwitch(
@@ -310,19 +315,19 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                         children: [
                           if (!adaUpdate) ...[
                             const Icon(Icons.check_circle_outline_rounded,
-                                size: 64, color: Colors.greenAccent),
+                                size: 64, color: OptikKaryawanTokens.success),
                             const SizedBox(height: 20),
                             Text("update_up_to_date".tr(),
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                    color: Colors.white,
+                                    color: OptikKaryawanTokens.ink,
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
                             Text(
                                 "${"update_version".tr()} ${info?.localVersion ?? '-'}",
-                                style: TextStyle(
-                                    color: Colors.grey.shade500, fontSize: 14)),
+                                style: const TextStyle(
+                                    color: OptikKaryawanTokens.muted, fontSize: 14)),
                           ] else ...[
                             const Icon(Icons.system_update_rounded,
                                 size: 64, color: OptikKaryawanTokens.gold),
@@ -330,14 +335,14 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                             Text("update_available".tr(),
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                    color: Colors.white,
+                                    color: OptikKaryawanTokens.ink,
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
                             Text(
                               '${info!.localVersion} → ${info.serverVersion}',
-                              style: TextStyle(
-                                  color: Colors.grey.shade400, fontSize: 14),
+                              style: const TextStyle(
+                                  color: OptikKaryawanTokens.muted, fontSize: 14),
                             ),
                             if (!info.urlReachable) ...[
                               const SizedBox(height: 12),
@@ -354,7 +359,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                 info.notes!,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                    color: Colors.white70, height: 1.4),
+                                    color: OptikKaryawanTokens.muted, height: 1.4),
                               ),
                             ],
                             const SizedBox(height: 28),
@@ -365,7 +370,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                     value: _downloadProgress > 0
                                         ? _downloadProgress
                                         : null,
-                                    backgroundColor: Colors.grey.shade800,
+                                    backgroundColor: OptikKaryawanTokens.seasidePale,
                                     color: OptikKaryawanTokens.gold,
                                     minHeight: 6,
                                     borderRadius: BorderRadius.circular(3),
@@ -373,8 +378,8 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                   const SizedBox(height: 12),
                                   Text(
                                     '${"update_downloading".tr()} ${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                                    style: TextStyle(
-                                        color: Colors.grey.shade400),
+                                    style: const TextStyle(
+                                        color: OptikKaryawanTokens.muted),
                                   ),
                                 ],
                               )
@@ -384,7 +389,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                 icon: const Icon(Icons.install_mobile_rounded),
                                 label: const Text('Pasang sekarang'),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: OptikKaryawanTokens.seasideMid,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 28, vertical: 14),
                                 ),
@@ -410,7 +415,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                               _statusHint!,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                  color: Colors.white60,
+                                  color: OptikKaryawanTokens.muted,
                                   fontSize: 12.5,
                                   height: 1.4),
                             ),

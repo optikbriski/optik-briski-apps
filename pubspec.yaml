@@ -62,6 +62,7 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   flutter_local_notifications: ^18.0.1
+  google_fonts: ^8.2.1
 
 dev_dependencies:
   flutter_test:
@@ -73,5 +74,6 @@ flutter:
   assets:
     - assets/images/
     - assets/images/face_shapes/
+    - assets/images/streak_flames/
     - assets/translations/
     - assets/models/

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 /// Grade Member:
 /// Basic 0–249 · Silver 250–499 · Gold 500–999 · Platinum 1000–1999 · Diamond 2000+.
@@ -8,6 +9,28 @@ enum MemberGrade {
   gold,
   platinum,
   diamond,
+}
+
+/// Format angka poin Member (locale id → 80000 → `80.000`).
+String formatMemberPoints(int value) =>
+    NumberFormat.decimalPattern('id').format(value);
+
+/// Label riwayat ledger (hindari raw reason key di UI).
+String memberPointsLedgerTitle(String reason, {String invoice = ''}) {
+  final r = reason.trim();
+  final inv = invoice.trim();
+  switch (r) {
+    case 'purchase_10pct':
+      return inv.isEmpty ? 'Belanja (invoice lunas)' : 'Invoice $inv';
+    case 'voucher_redeem':
+      return inv.isEmpty ? 'Tukar voucher' : 'Tukar voucher · $inv';
+    case 'voucher_release_online':
+      return 'Pengembalian poin voucher';
+    case '':
+      return 'Mutasi poin';
+    default:
+      return r.replaceAll('_', ' ');
+  }
 }
 
 class MemberGradeBenefit {

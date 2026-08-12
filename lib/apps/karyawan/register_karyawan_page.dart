@@ -127,7 +127,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
 
   //--- VARIABEL VALIDASI PASSWORD
   Color _passwordColor = Colors.grey;
-  String _passwordFeedback = "reg_pwd_hint".tr();
+  String _passwordFeedback = '';
   bool isPasswordValid = false;
   Color _confirmColor = Colors.grey;
   String _confirmFeedback = "";
@@ -162,7 +162,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       if (!hasSpecial) missing.add("simbol");
 
       if (missing.isEmpty) {
-        _passwordColor = Colors.green;
+        _passwordColor = OptikKaryawanTokens.seasideMid;
         _passwordFeedback = "reg_pwd_valid".tr();
         isPasswordValid = true;
       } else {
@@ -189,7 +189,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         isConfirmValid = false;
         _confirmColor = Colors.grey;
       } else if (value == passwordCtrl.text) {
-        _confirmColor = Colors.green;
+        _confirmColor = OptikKaryawanTokens.seasideMid;
         _confirmFeedback = "reg_pwd_match".tr();
         isConfirmValid = true;
       } else {
@@ -221,6 +221,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
 
   // BIOMETRIK STATE
   bool isFaceVerified = false;
+  LivenessCaptureResult? _faceCapture;
 
   // Penampung cabang dinamis database Supabase
   List<Map<String, dynamic>> _listToko = [];
@@ -229,6 +230,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   @override
   void initState() {
     super.initState();
+    _passwordFeedback = "reg_pwd_hint".tr();
     _ttlCtrl.addListener(_sinkronUmurDariTtl);
     _fetchProvinsi();
     _fetchDaftarToko();
@@ -370,14 +372,18 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: OptikKaryawanTokens.navyDeep,
+        backgroundColor: OptikKaryawanTokens.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: OptikKaryawanTokens.border),
+        ),
         title: const Text(
           'Upload ditolak',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
         ),
         content: Text(
           pesan,
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
         ),
         actions: [
           FilledButton(
@@ -507,11 +513,16 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     );
   }
 
-  bool _emailFormatOk(String email) =>
-      email.contains('@') && email.contains('.');
+  bool _emailFormatOk(String email) {
+    final e = email.trim().toLowerCase();
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(e);
+  }
+
+  String get _normalizedEmail => _emailCtrl.text.trim().toLowerCase();
 
   void _resetOtpState() {
     _otpTimer?.cancel();
+    if (!mounted) return;
     setState(() {
       _showOtpField = false;
       _emailVerified = false;
@@ -526,6 +537,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
 
   void _startOtpCooldown([int seconds = 60]) {
     _otpTimer?.cancel();
+    if (!mounted) return;
     setState(() {
       _canResendOtp = false;
       _otpCooldown = seconds;
@@ -547,8 +559,54 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     });
   }
 
+  /// Cek surel/NIK sudah ada di tabel karyawan.
+  /// [failClosed] = true → error baca DB dilempar (submit wajib aman).
+  Future<String?> _findRegisterConflict({
+    String? email,
+    String? nik,
+    bool failClosed = false,
+  }) async {
+    final client = Supabase.instance.client;
+    try {
+      if (email != null && email.isNotEmpty) {
+        final row = await client
+            .from('karyawan')
+            .select('id')
+            .ilike('email', email)
+            .limit(1)
+            .maybeSingle();
+        if (row != null) return 'email';
+      }
+      if (nik != null && nik.isNotEmpty) {
+        final row = await client
+            .from('karyawan')
+            .select('id')
+            .eq('nik', nik)
+            .limit(1)
+            .maybeSingle();
+        if (row != null) return 'nik';
+      }
+    } on PostgrestException catch (e) {
+      debugPrint('register conflict check: $e');
+      if (failClosed) rethrow;
+    } catch (e) {
+      debugPrint('register conflict check: $e');
+      if (failClosed) rethrow;
+    }
+    return null;
+  }
+
+  bool _isLikelyMissingColumnError(Object error) {
+    final raw = error.toString().toLowerCase();
+    return raw.contains('column') ||
+        raw.contains('schema cache') ||
+        raw.contains('pgrst204') ||
+        raw.contains('does not exist');
+  }
+
   Future<void> _kirimOtpEmail() async {
-    final email = _emailCtrl.text.trim();
+    if (_sendingOtp || _verifyingOtp || _submitting) return;
+    final email = _normalizedEmail;
     if (!_emailFormatOk(email)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text("reg_err_email".tr()),
@@ -556,10 +614,31 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       ));
       return;
     }
-    if (_emailVerified && _otpEmailSentTo == email) return;
+    if (_emailVerified &&
+        (_otpEmailSentTo ?? '').toLowerCase() == email) {
+      return;
+    }
+
+    if (_emailCtrl.text.trim() != email) {
+      _emailCtrl.value = TextEditingValue(
+        text: email,
+        selection: TextSelection.collapsed(offset: email.length),
+      );
+    }
 
     setState(() => _sendingOtp = true);
     try {
+      final conflict = await _findRegisterConflict(email: email);
+      if (!mounted) return;
+      if (conflict == 'email') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("reg_err_email_terdaftar".tr()),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 5),
+        ));
+        return;
+      }
+
       await Supabase.instance.client.auth.signInWithOtp(
         email: email,
         shouldCreateUser: true,
@@ -572,14 +651,41 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       });
       _startOtpCooldown();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("otp_sukses_resend".tr()),
-        backgroundColor: Colors.green,
+        content: Text(
+          "otp_sukses_resend".tr(),
+          style: const TextStyle(
+            color: OptikKaryawanTokens.ink,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: OptikKaryawanTokens.cyan,
+      ));
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      final friendly = (msg.contains('sending confirmation email') ||
+              msg.contains('error sending') ||
+              msg.contains('smtp'))
+          ? "reg_err_otp_email_server".tr()
+          : (e.message.isNotEmpty
+              ? "${"otp_gagal_resend".tr()}${e.message}"
+              : "otp_gagal_resend".tr());
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(friendly),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 6),
       ));
     } catch (e) {
       if (!mounted) return;
+      final raw = e.toString().toLowerCase();
+      final friendly = (raw.contains('sending confirmation email') ||
+              raw.contains('error sending'))
+          ? "reg_err_otp_email_server".tr()
+          : "${"otp_gagal_resend".tr()}$e";
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("${"otp_gagal_resend".tr()}$e"),
+        content: Text(friendly),
         backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 6),
       ));
     } finally {
       if (mounted) setState(() => _sendingOtp = false);
@@ -587,11 +693,19 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   }
 
   Future<void> _verifikasiOtpInline() async {
-    final email = _emailCtrl.text.trim();
+    if (_verifyingOtp || _sendingOtp || _submitting) return;
+    final email = _normalizedEmail;
     final token = _otpCtrl.text.trim();
-    if (token.length < 6) {
+    if (token.length < 6 || token.length > 8) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text("otp_err_digit".tr()),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+    if (!_emailFormatOk(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("reg_err_email".tr()),
         backgroundColor: Colors.redAccent,
       ));
       return;
@@ -605,16 +719,29 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         type: OtpType.email,
       );
       if (!mounted) return;
-      if (res.session == null) {
-        throw Exception('session kosong');
+      if (res.session == null || res.user == null) {
+        throw const AuthException('OTP tidak valid');
       }
       setState(() {
         _emailVerified = true;
         _otpEmailSentTo = email;
+        _showOtpField = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("reg_email_terverifikasi".tr()),
-        backgroundColor: Colors.green,
+        content: Text(
+          "reg_email_terverifikasi".tr(),
+          style: const TextStyle(
+            color: OptikKaryawanTokens.ink,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: OptikKaryawanTokens.cyan,
+      ));
+    } on AuthException catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("otp_gagal_verifikasi".tr()),
+        backgroundColor: Colors.redAccent,
       ));
     } catch (_) {
       if (!mounted) return;
@@ -946,10 +1073,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
 
   // FUNGSI SUBMIT PENDAFTARAN
   Future<void> submitPendaftaran() async {
-    if (_submitting || _ktpScanning) return;
+    if (_submitting || _ktpScanning || _sendingOtp || _verifyingOtp) return;
 
-    // 1. Validasi Wajah (Liveness)
-    if (!isFaceVerified) {
+    // 1. Validasi Wajah (Liveness) — di HP wajib ada foto capture
+    if (!isFaceVerified ||
+        (!kIsWeb &&
+            (_faceCapture == null ||
+                _faceCapture!.photoBytes == null ||
+                _faceCapture!.photoBytes!.isEmpty))) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("reg_err_scan_wajah".tr()),
           backgroundColor: Colors.red,
@@ -967,9 +1098,15 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     }
 
     // 2. Email harus sudah diverifikasi OTP di form
+    final email = _normalizedEmail;
+    final authEmail =
+        (Supabase.instance.client.auth.currentUser?.email ?? '')
+            .trim()
+            .toLowerCase();
     if (!_emailVerified ||
         Supabase.instance.client.auth.currentUser == null ||
-        (_otpEmailSentTo ?? '') != _emailCtrl.text.trim()) {
+        (_otpEmailSentTo ?? '').toLowerCase() != email ||
+        (authEmail.isNotEmpty && authEmail != email)) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text("reg_err_email_belum_otp".tr()),
           backgroundColor: Colors.red,
@@ -987,7 +1124,8 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     }
 
     // 4. Validasi Form Kosong
-    if (!formKey.currentState!.validate()) {
+    final formState = formKey.currentState;
+    if (formState == null || !formState.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text("reg_ditolak_kosong".tr()),
         backgroundColor: Colors.redAccent,
@@ -1003,11 +1141,44 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       return;
     }
 
+    if (_cabang == null || (jabatan ?? '').trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("reg_ditolak_kosong".tr()),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
 
     try {
       final client = Supabase.instance.client;
-      final uid = client.auth.currentUser!.id;
+      final uid = client.auth.currentUser?.id;
+      if (uid == null || uid.isEmpty) {
+        throw const AuthException('Sesi OTP hilang. Verifikasi email ulang.');
+      }
+
+      final nik = _nikCtrl.text.trim();
+      try {
+        final conflict = await _findRegisterConflict(
+          email: email,
+          nik: nik,
+          failClosed: true,
+        );
+        if (conflict == 'email') {
+          throw AuthException("reg_err_email_terdaftar".tr());
+        }
+        if (conflict == 'nik') {
+          throw AuthException("reg_err_nik_terdaftar".tr());
+        }
+      } on AuthException {
+        rethrow;
+      } on PostgrestException {
+        throw AuthException("reg_err_cek_data".tr());
+      } catch (_) {
+        throw AuthException("reg_err_cek_data".tr());
+      }
 
       // Set password setelah email terverifikasi (OTP dulu, password belakangan)
       await client.auth.updateUser(
@@ -1028,19 +1199,38 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           );
       ktpUrl = client.storage.from('ktp_photos').getPublicUrl(path);
 
-      String namaCabangTeks = _cabang ?? '';
-      if (_listToko.any((e) => e['id'] == _cabang)) {
-        namaCabangTeks = _listToko
-            .firstWhere((e) => e['id'] == _cabang)['toko_id']
-            .toString();
+      // Enroll wajah dari liveness (untuk absensi / approval)
+      String? facePhotoUrl;
+      final faceBytes = _faceCapture?.photoBytes;
+      if (faceBytes != null && faceBytes.isNotEmpty) {
+        final facePath =
+            '$uid/enroll_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await client.storage.from('attendance_photos').uploadBinary(
+              facePath,
+              faceBytes,
+              fileOptions: const FileOptions(
+                contentType: 'image/jpeg',
+                upsert: true,
+              ),
+            );
+        facePhotoUrl =
+            client.storage.from('attendance_photos').getPublicUrl(facePath);
+      }
+
+      String namaCabangTeks = _cabang?.toString() ?? '';
+      final cabangMatch = _listToko.where(
+        (e) => e['id']?.toString() == _cabang?.toString(),
+      );
+      if (cabangMatch.isNotEmpty) {
+        namaCabangTeks = cabangMatch.first['toko_id'].toString();
       }
 
       final alamatDomisili =
-          "${_jalanCtrl.text}, Desa $_namaDesa, Kec. $_namaKecamatan, $_namaKota, $_namaProvinsi";
+          "${_jalanCtrl.text.trim()}, Desa $_namaDesa, Kec. $_namaKecamatan, $_namaKota, $_namaProvinsi";
 
       final karyawanData = {
         'id': uid,
-        'nik': _nikCtrl.text.trim(),
+        'nik': nik,
         'nama': _namaCtrl.text.trim(),
         'nik_ocr': _nikOcr,
         'nama_ocr': _namaOcr,
@@ -1065,19 +1255,26 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         'gender_ocr': _genderOcr,
         'ktp_sumber': _ktpSumber,
         'ktp_photo_url': ktpUrl,
-        'email': _emailCtrl.text.trim(),
-        'wa': _waCtrl.text,
+        if (facePhotoUrl != null) ...{
+          'face_photo_url': facePhotoUrl,
+          'foto_profile': facePhotoUrl,
+          'face_enrolled_at': DateTime.now().toIso8601String(),
+          if (_faceCapture?.faceTemplate != null)
+            'face_template': _faceCapture!.faceTemplate,
+        },
+        'email': email,
+        'wa': _waCtrl.text.trim(),
         'gender': gender,
-        'umur': _umurCtrl.text,
-        'jabatan': jabatan,
+        'umur': _umurCtrl.text.trim(),
+        'jabatan': (jabatan ?? '').trim(),
         'cabang': namaCabangTeks,
         'toko_id': _cabang,
-        'pin_absensi': pinCtrl.text,
+        'pin_absensi': pinCtrl.text.trim(),
         'alamat_lengkap': alamatDomisili,
         'nama_bank': namaBankCtrl.text.trim().toUpperCase(),
         'no_rekening': _noRekeningCtrl.text.trim(),
-        'darurat_nama': _daruratNamaCtrl.text,
-        'darurat_wa': _daruratWaCtrl.text,
+        'darurat_nama': _daruratNamaCtrl.text.trim(),
+        'darurat_wa': _daruratWaCtrl.text.trim(),
         'darurat_hubungan': _hubunganDarurat,
         'tanggal_mulai': _tanggalMulai?.toIso8601String(),
         'status_approval': 'Menunggu Persetujuan',
@@ -1085,8 +1282,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
 
       try {
         await client.from('karyawan').upsert(karyawanData);
-      } catch (_) {
-        // Fallback bila migrasi field KTP lengkap belum dijalankan di Supabase.
+      } catch (e) {
+        // Fallback HANYA untuk kolom KTP yang mungkin belum dimigrasi.
+        if (!_isLikelyMissingColumnError(e)) rethrow;
         final fallback = Map<String, dynamic>.from(karyawanData)
           ..removeWhere((k, _) => k.endsWith('_ocr') ||
               k == 'tempat_tgl_lahir' ||
@@ -1103,7 +1301,12 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
               k == 'tempat_lahir' ||
               k == 'tanggal_lahir' ||
               k == 'pekerjaan' ||
-              k == 'kewarganegaraan');
+              k == 'kewarganegaraan' ||
+              k == 'face_photo_url' ||
+              k == 'foto_profile' ||
+              k == 'face_enrolled_at' ||
+              k == 'face_template' ||
+              k == 'ktp_sumber');
         final withKtpDetail = {
           ...fallback,
           'alamat_ktp': _alamatKtpCtrl.text.trim(),
@@ -1120,10 +1323,15 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           'tanggal_lahir': _tanggalLahirKtp,
           'pekerjaan': _pekerjaanKtp,
           'kewarganegaraan': _kewarganegaraanKtp,
+          if (facePhotoUrl != null) ...{
+            'face_photo_url': facePhotoUrl,
+            'foto_profile': facePhotoUrl,
+          },
         };
         try {
           await client.from('karyawan').upsert(withKtpDetail);
-        } catch (_) {
+        } catch (e2) {
+          if (!_isLikelyMissingColumnError(e2)) rethrow;
           await client.from('karyawan').upsert({
             ...fallback,
             'alamat_ktp': _alamatKtpCtrl.text.trim(),
@@ -1134,20 +1342,59 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           });
         }
       }
-      await client.auth.signOut();
+      try {
+        await client.auth.signOut();
+      } catch (e) {
+        debugPrint('register signOut: $e');
+      }
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("reg_sukses_daftar".tr()),
-        backgroundColor: Colors.green,
+        content: Text(
+          "reg_sukses_daftar".tr(),
+          style: const TextStyle(
+            color: OptikKaryawanTokens.ink,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: OptikKaryawanTokens.cyan,
         duration: const Duration(seconds: 5),
       ));
 
-      Navigator.pushReplacement(
-        context,
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginKaryawanPage()),
       );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      final friendly = msg.contains('password')
+          ? "reg_err_password_syarat".tr()
+          : (e.message.isNotEmpty ? e.message : "reg_gagal".tr());
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("${"reg_gagal".tr()}$friendly"),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 5),
+      ));
+    } on StorageException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          "${"reg_gagal".tr()}${e.message.isNotEmpty ? e.message : 'Upload KTP gagal'}",
+        ),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 5),
+      ));
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          "${"reg_gagal".tr()}${e.message.isNotEmpty ? e.message : e.code ?? ''}",
+        ),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 5),
+      ));
     } catch (error) {
+      debugPrint('register submit: $error');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text("${"reg_gagal".tr()}$error"),
@@ -1155,13 +1402,15 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         duration: const Duration(seconds: 5),
       ));
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        setState(() => _submitting = false);
+      }
     }
   }
 
   static const _navy = OptikKaryawanTokens.navyDeep;
   static const _navyMid = OptikKaryawanTokens.navyMid;
-  static const _gold = OptikKaryawanTokens.goldSoft;
+  static const _gold = OptikKaryawanTokens.gold;
   static const _ink = OptikKaryawanTokens.ink;
   static const _muted = OptikKaryawanTokens.muted;
 
@@ -1175,18 +1424,8 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           message: _busyOverlayMessage,
           subtitle: _busyOverlaySubtitle,
           child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              OptikKaryawanTokens.navyDeep,
-              Color(0xFF163A5F),
-              Color(0xFFE8EEF5),
-              Color(0xFFF4F7FB),
-            ],
-            stops: [0, 0.18, 0.38, 1],
-          ),
+        decoration: BoxDecoration(
+          gradient: OptikKaryawanTokens.registerBgGradient,
         ),
         child: SafeArea(
           child: Column(
@@ -1200,7 +1439,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           ? null
                           : () => Navigator.maybePop(context),
                       icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white, size: 18),
+                          color: OptikKaryawanTokens.ink, size: 18),
                     ),
                     Expanded(
                       child: Column(
@@ -1209,7 +1448,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           Text(
                             "reg_title".tr(),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: OptikKaryawanTokens.ink,
                               fontWeight: FontWeight.w700,
                               fontSize: 18,
                               letterSpacing: 0.2,
@@ -1218,7 +1457,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           Text(
                             'Optik B. Riski · Onboarding karyawan',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.65),
+                              color: OptikKaryawanTokens.muted.withOpacity(0.95),
                               fontSize: 11.5,
                             ),
                           ),
@@ -1290,7 +1529,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                         final ok = result == true ||
                             (result is LivenessCaptureResult &&
                                 result.success);
-                        if (ok) setState(() => isFaceVerified = true);
+                        if (!ok || !mounted) return;
+                        setState(() {
+                          isFaceVerified = true;
+                          _faceCapture = result is LivenessCaptureResult
+                              ? result
+                              : const LivenessCaptureResult(success: true);
+                        });
                       },
                     ),
                   ],
@@ -1327,7 +1572,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                         ),
                         border: Border.all(
                           color: _ktpScanned
-                              ? const Color(0xFF16A34A).withOpacity(0.35)
+                              ? OptikKaryawanTokens.seasideMid.withOpacity(0.35)
                               : _navyMid.withOpacity(0.12),
                         ),
                       ),
@@ -1352,7 +1597,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF16A34A),
+                                          color: OptikKaryawanTokens.seasideMid,
                                           borderRadius:
                                               BorderRadius.circular(20),
                                         ),
@@ -1360,14 +1605,15 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             const Icon(Icons.check,
-                                                size: 12, color: Colors.white),
+                                                size: 12,
+                                                color: OptikKaryawanTokens.ink),
                                             const SizedBox(width: 4),
                                             Text(
                                               _ktpSumber == 'ikd'
                                                   ? 'IKD OK'
                                                   : 'KTP OK',
                                               style: const TextStyle(
-                                                color: Colors.white,
+                                                color: OptikKaryawanTokens.ink,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w700,
                                               ),
@@ -1436,7 +1682,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                   onPressed: _ktpScanning ? null : _uploadIkd,
                                   style: FilledButton.styleFrom(
                                     backgroundColor: _ktpSumber == 'ikd'
-                                        ? const Color(0xFF16A34A)
+                                        ? OptikKaryawanTokens.seasideMid
                                         : _navyMid,
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14),
@@ -1645,9 +1891,18 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           child: TextFormField(
                             controller: _emailCtrl,
                             keyboardType: TextInputType.emailAddress,
-                            enabled: !_emailVerified,
-                            onChanged: (_) {
-                              if (_showOtpField || _emailVerified) {
+                            autofillHints: const [AutofillHints.email],
+                            textInputAction: TextInputAction.next,
+                            enabled: !_emailVerified &&
+                                !_sendingOtp &&
+                                !_verifyingOtp &&
+                                !_submitting,
+                            onChanged: (value) {
+                              final next = value.trim().toLowerCase();
+                              final sent =
+                                  (_otpEmailSentTo ?? '').toLowerCase();
+                              if ((_showOtpField || _emailVerified) &&
+                                  next != sent) {
                                 _resetOtpState();
                               }
                             },
@@ -1656,14 +1911,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                               Icons.email,
                               _emailVerified
                                   ? const Icon(Icons.verified_rounded,
-                                      color: Colors.green)
+                                      color: OptikKaryawanTokens.cyan)
                                   : null,
                             ),
                             validator: (value) {
-                              if (value == null || value.isEmpty) {
+                              if (value == null || value.trim().isEmpty) {
                                 return "reg_err_wajib".tr();
                               }
-                              if (!_emailFormatOk(value.trim())) {
+                              if (!_emailFormatOk(value)) {
                                 return "reg_err_email".tr();
                               }
                               if (!_emailVerified) {
@@ -1686,7 +1941,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                 : _kirimOtpEmail,
                             style: FilledButton.styleFrom(
                               backgroundColor: OptikKaryawanTokens.navyMid,
-                              disabledBackgroundColor: Colors.green.shade400,
+                              foregroundColor: OptikKaryawanTokens.ink,
+                              disabledBackgroundColor: OptikKaryawanTokens.seasideMid,
+                              disabledForegroundColor: OptikKaryawanTokens.ink,
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
                               shape: RoundedRectangleBorder(
@@ -1699,7 +1956,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                     height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Colors.white,
+                                      color: OptikKaryawanTokens.ink,
                                     ),
                                   )
                                 : Text(
@@ -1722,6 +1979,13 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                       TextFormField(
                         controller: _otpCtrl,
                         keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) {
+                          if (!_verifyingOtp && !_sendingOtp && !_submitting) {
+                            _verifikasiOtpInline();
+                          }
+                        },
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 20,
@@ -1746,7 +2010,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                                   ),
                                 )
                               : TextButton(
-                                  onPressed: _verifyingOtp
+                                  onPressed: (_verifyingOtp ||
+                                          _sendingOtp ||
+                                          _submitting)
                                       ? null
                                       : _verifikasiOtpInline,
                                   child: Text(
@@ -1781,7 +2047,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                       Text(
                         "reg_email_terverifikasi".tr(),
                         style: const TextStyle(
-                          color: Colors.green,
+                          color: OptikKaryawanTokens.seasideMid,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -2209,7 +2475,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           border: Border.all(
                             color: _tanggalMulai == null
                                 ? OptikKaryawanTokens.navyMid.withOpacity(0.25)
-                                : const Color(0xFF16A34A).withOpacity(0.35),
+                                : OptikKaryawanTokens.seasideMid.withOpacity(0.35),
                           ),
                         ),
                         child: Row(
@@ -2218,7 +2484,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                               Icons.calendar_month_rounded,
                               color: _tanggalMulai == null
                                   ? OptikKaryawanTokens.navyMid
-                                  : const Color(0xFF16A34A),
+                                  : OptikKaryawanTokens.seasideMid,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -2430,9 +2696,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                 height: 56,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  gradient: const LinearGradient(
-                    colors: [_navy, _navyMid, Color(0xFF2A508A)],
-                  ),
+                  gradient: OptikKaryawanTokens.goldGradient,
                   boxShadow: [
                     BoxShadow(
                       color: _navyMid.withOpacity(0.35),
@@ -2451,14 +2715,14 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                   ),
                   onPressed: _showBusyOverlay ? null : submitPendaftaran,
                   icon: const Icon(Icons.arrow_forward_rounded,
-                      color: Colors.white, size: 20),
+                      color: OptikKaryawanTokens.ink, size: 20),
                   label: Text(
                     "reg_btn_kirim".tr(),
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.8,
-                      color: Colors.white,
+                      color: OptikKaryawanTokens.ink,
                     ),
                   ),
                 ),
@@ -2494,15 +2758,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.14),
-            Colors.white.withOpacity(0.06),
-          ],
-        ),
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
+        color: OptikKaryawanTokens.surface,
+        border: Border.all(color: OptikKaryawanTokens.border),
+        boxShadow: OptikKaryawanTokens.cardShadow,
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2510,7 +2768,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           Text(
             'Lengkapi data dengan teliti',
             style: TextStyle(
-              color: Colors.white,
+              color: OptikKaryawanTokens.ink,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -2519,7 +2777,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           Text(
             'Scan wajah & KTP, verifikasi email, lalu tunggu persetujuan Pusat.',
             style: TextStyle(
-              color: Colors.white70,
+              color: OptikKaryawanTokens.muted,
               fontSize: 12.5,
               height: 1.4,
             ),
@@ -2542,12 +2800,12 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: (done ? const Color(0xFF16A34A) : _navyMid).withOpacity(0.1),
+            color: (done ? OptikKaryawanTokens.seasideMid : _navyMid).withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             done ? Icons.check_rounded : icon,
-            color: done ? const Color(0xFF16A34A) : _navyMid,
+            color: done ? OptikKaryawanTokens.seasideMid : _navyMid,
             size: 20,
           ),
         ),
@@ -2592,16 +2850,16 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       child: FilledButton.icon(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: success ? const Color(0xFF16A34A) : _navyMid,
+          backgroundColor: success ? OptikKaryawanTokens.seasideMid : _navyMid,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
         ),
-        icon: Icon(icon, color: Colors.white, size: 18),
+        icon: Icon(icon, color: OptikKaryawanTokens.ink, size: 18),
         label: Text(
           label,
           style: const TextStyle(
-            color: Colors.white,
+            color: OptikKaryawanTokens.ink,
             fontWeight: FontWeight.w700,
           ),
         ),

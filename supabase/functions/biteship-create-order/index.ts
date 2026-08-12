@@ -299,6 +299,7 @@ Deno.serve(async (req: Request) => {
             ? `Resi ${waybill}`
             : "Kurir sudah membawa pesanan Anda.",
           p_kind: "status",
+          p_online_order_id: orderId,
         });
       }
     } catch (_) {
