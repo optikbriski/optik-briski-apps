@@ -48,11 +48,25 @@ class _MemberBookingPageState extends State<MemberBookingPage> {
       final bookings =
           phone.isEmpty ? <Map<String, dynamic>>[] : await _repo.listBookings(phone);
       if (!mounted) return;
+      final preferred =
+          (MemberSession.instance.preferredTokoId ?? '').trim().toUpperCase();
+      final ids = (rows as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      String? initial = _tokoId;
+      if (initial == null || initial.isEmpty) {
+        if (preferred.isNotEmpty &&
+            ids.any((t) =>
+                (t['toko_id'] ?? '').toString().trim().toUpperCase() ==
+                preferred)) {
+          initial = preferred;
+        } else if (ids.isNotEmpty) {
+          initial = ids.first['toko_id']?.toString();
+        }
+      }
       setState(() {
-        _toko = (rows as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-        _tokoId ??= _toko.isNotEmpty ? _toko.first['toko_id']?.toString() : null;
+        _toko = ids;
+        _tokoId = initial;
         _bookings = bookings;
         _loading = false;
       });

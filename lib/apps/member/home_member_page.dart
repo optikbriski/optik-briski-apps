@@ -146,8 +146,10 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     await Clipboard.setData(ClipboardData(text: code));
     if (!mounted) return;
     messenger.showSnackBar(
-      SnackBar(content: Text('Kode $code disalin')),
+      SnackBar(content: Text('Kode $code disalin · buka Poin untuk tukar')),
     );
+    // Strip Beranda: salin kode lalu masuk jalur Poin (redeem / tukar).
+    await _openPoints();
   }
 
   @override
