@@ -143,11 +143,15 @@ class _MemberDateSheetState extends State<_MemberDateSheet> {
       for (var y = widget.firstDate.year; y <= widget.lastDate.year; y++) y,
     ];
 
+    // macOS / short viewports: sheet must scroll — fixed Column overflowed by ~12px.
+    final maxSheetH = MediaQuery.sizeOf(context).height * 0.92;
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: m.isTablet ? 480 : double.infinity,
+          maxHeight: maxSheetH,
         ),
         child: Material(
           color: OptikMemberTokens.white,
@@ -155,7 +159,7 @@ class _MemberDateSheetState extends State<_MemberDateSheet> {
           clipBehavior: Clip.antiAlias,
           child: SafeArea(
             top: false,
-            child: Padding(
+            child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                 m.pagePadding,
                 12,

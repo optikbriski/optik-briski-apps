@@ -1048,6 +1048,24 @@ class MemberRepository {
     });
   }
 
+  Future<void> updateFamily({
+    required String id,
+    required String nama,
+    String? hubungan,
+    String? phone,
+  }) async {
+    await _db.from('member_family').update({
+      'nama': nama,
+      'hubungan': hubungan,
+      'phone_e164':
+          phone == null || phone.isEmpty ? null : normalizeWaNumber(phone),
+    }).eq('id', id);
+  }
+
+  Future<void> deleteFamily(String id) async {
+    await _db.from('member_family').delete().eq('id', id);
+  }
+
   Future<Map<String, dynamic>?> storeSettings(String tokoId) async {
     try {
       final s = await InvoiceSettingsService(client: _db).fetchForToko(tokoId);

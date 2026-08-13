@@ -1010,6 +1010,127 @@ class _MemberFamilyPageState extends State<MemberFamilyPage> {
     }
   }
 
+  Future<void> _edit(Map<String, dynamic> row) async {
+    final id = (row['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final namaCtrl = TextEditingController(text: '${row['nama'] ?? ''}');
+    final hubCtrl = TextEditingController(text: '${row['hubungan'] ?? ''}');
+    final phoneCtrl =
+        TextEditingController(text: '${row['phone_e164'] ?? ''}');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ubah anggota'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: namaCtrl,
+              decoration: const InputDecoration(labelText: 'Nama'),
+              textCapitalization: TextCapitalization.words,
+            ),
+            TextField(
+              controller: hubCtrl,
+              decoration: const InputDecoration(labelText: 'Hubungan'),
+            ),
+            TextField(
+              controller: phoneCtrl,
+              decoration: const InputDecoration(labelText: 'No. WA (opsional)'),
+              keyboardType: TextInputType.phone,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    final nama = namaCtrl.text.trim();
+    final hub = hubCtrl.text.trim();
+    final phone = phoneCtrl.text.trim();
+    namaCtrl.dispose();
+    hubCtrl.dispose();
+    phoneCtrl.dispose();
+    if (ok != true || !mounted) return;
+    if (nama.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nama wajib diisi')),
+      );
+      return;
+    }
+    try {
+      await _repo.updateFamily(
+        id: id,
+        nama: nama,
+        hubungan: hub,
+        phone: phone.isEmpty ? null : phone,
+      );
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anggota diperbarui')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: OptikMemberTokens.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _delete(Map<String, dynamic> row) async {
+    final id = (row['id'] ?? '').toString();
+    final nama = (row['nama'] ?? 'anggota').toString();
+    if (id.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus anggota?'),
+        content: Text('Hapus $nama dari daftar keluarga?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: OptikMemberTokens.danger,
+            ),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _repo.deleteFamily(id);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anggota dihapus')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: OptikMemberTokens.danger,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final m = MemberLayout.of(context);
@@ -1057,13 +1178,22 @@ class _MemberFamilyPageState extends State<MemberFamilyPage> {
                       crossAxisSpacing: 10,
                       childAspectRatio: 3.2,
                     ),
-                    itemBuilder: (context, i) =>
-                        _FamilyCard(data: _family[i], metrics: m),
+                    itemBuilder: (context, i) => _FamilyCard(
+                      data: _family[i],
+                      metrics: m,
+                      onEdit: () => _edit(_family[i]),
+                      onDelete: () => _delete(_family[i]),
+                    ),
                   )
                 else
                   ..._family.map((f) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: _FamilyCard(data: f, metrics: m),
+                        child: _FamilyCard(
+                          data: f,
+                          metrics: m,
+                          onEdit: () => _edit(f),
+                          onDelete: () => _delete(f),
+                        ),
                       )),
                 const SizedBox(height: 8),
                 if (m.formColumns > 1) ...[
@@ -1514,10 +1644,17 @@ class _MenuGridCard extends StatelessWidget {
 }
 
 class _FamilyCard extends StatelessWidget {
-  const _FamilyCard({required this.data, required this.metrics});
+  const _FamilyCard({
+    required this.data,
+    required this.metrics,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Map<String, dynamic> data;
   final MemberLayoutMetrics metrics;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1569,6 +1706,18 @@ class _FamilyCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Ubah',
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            color: OptikMemberTokens.blue,
+          ),
+          IconButton(
+            tooltip: 'Hapus',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded, size: 20),
+            color: OptikMemberTokens.danger,
           ),
         ],
       ),

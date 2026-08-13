@@ -68,14 +68,19 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         }
       } catch (_) {}
 
-      List<dynamic> rows = [];
-      try {
-        rows = await client
-            .from('invoice_settings')
-            .select('toko_id, shop_name, address, phone, google_review_url')
-            .order('toko_id');
-      } catch (_) {
-        rows = [];
+      // Prefer SECURITY DEFINER RPCs — invoice_settings RLS is auth-only while
+      // Member runs as anon + custom session (direct SELECT returns []).
+      List<dynamic> rows = await _loadStoreDirectoryRpc(client);
+
+      if (rows.isEmpty) {
+        try {
+          rows = await client
+              .from('invoice_settings')
+              .select('toko_id, shop_name, address, phone, google_review_url')
+              .order('toko_id');
+        } catch (_) {
+          rows = [];
+        }
       }
       if (rows.isEmpty) {
         rows = geoById.keys
@@ -94,8 +99,9 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         final id = (s['toko_id'] ?? '').toString().trim();
         if (id.isEmpty) continue;
         final geo = geoById[id.toUpperCase()];
-        s['latitude'] = geo?['latitude'];
-        s['longitude'] = geo?['longitude'];
+        // RPC may already include lat/lng; fill gaps from toko_id master.
+        s['latitude'] ??= geo?['latitude'];
+        s['longitude'] ??= geo?['longitude'];
         list.add(s);
       }
 
@@ -112,6 +118,31 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         _error = e.toString();
       });
     }
+  }
+
+  /// Anon-safe directory. Cabang RPC includes PUSAT + Google Review; help RPC
+  /// is the older fallback (no PUSAT / no review URL).
+  Future<List<dynamic>> _loadStoreDirectoryRpc(SupabaseClient client) async {
+    for (final name in const [
+      'list_member_cabang_stores',
+      'list_member_help_stores',
+    ]) {
+      try {
+        final raw = await client.rpc(name);
+        final list = _parseStoreDirectoryRpc(raw);
+        if (list.isNotEmpty) return list;
+      } catch (_) {}
+    }
+    return const [];
+  }
+
+  List<Map<String, dynamic>> _parseStoreDirectoryRpc(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((s) => (s['toko_id'] ?? '').toString().trim().isNotEmpty)
+        .toList(growable: false);
   }
 
   void _applyDistances() {
