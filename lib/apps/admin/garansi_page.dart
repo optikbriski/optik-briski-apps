@@ -40,6 +40,8 @@ class _GaransiPageState extends State<GaransiPage>
   String? _error;
   List<Map<String, dynamic>> _kartu = [];
   List<Map<String, dynamic>> _klaim = [];
+  /// Pengajuan dari Member app (`garansi_klaim_request`).
+  List<Map<String, dynamic>> _claimRequests = [];
   Map<String, int> _stats = const {};
 
   String get _tokoId => widget.profile['toko_id']?.toString() ?? '';
@@ -104,12 +106,23 @@ class _GaransiPageState extends State<GaransiPage>
         isPusat: _isPusat,
       );
       final klaim = await _svc.listKlaim(tokoId: _tokoId, isPusat: _isPusat);
+      List<Map<String, dynamic>> requests = const [];
+      try {
+        requests = await _svc.listClaimRequests(
+          tokoId: _tokoId,
+          isPusat: _isPusat,
+        );
+      } catch (_) {
+        // Jangan gagalkan seluruh halaman kalau tabel/RLS request bermasalah.
+        requests = const [];
+      }
       Map<String, int> stats = const {};
       if (_isPusat) stats = await _svc.statsPusat();
       if (!mounted) return;
       setState(() {
         _kartu = kartu;
         _klaim = klaim;
+        _claimRequests = requests;
         _stats = stats;
         _loading = false;
       });
@@ -379,7 +392,7 @@ class _GaransiPageState extends State<GaransiPage>
   }
 
   Widget _buildKlaimTab() {
-    if (_klaim.isEmpty) {
+    if (_claimRequests.isEmpty && _klaim.isEmpty) {
       return Center(
         child: Text(
           'garansi_empty_klaim'.tr(),
@@ -387,50 +400,194 @@ class _GaransiPageState extends State<GaransiPage>
         ),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-      itemCount: _klaim.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final row = _klaim[i];
+
+    final children = <Widget>[];
+
+    if (_claimRequests.isNotEmpty) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Pengajuan Member (${_claimRequests.length})',
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+      for (final row in _claimRequests) {
         final kartu = row['garansi_kartu'];
         final kMap = kartu is Map
             ? Map<String, dynamic>.from(kartu)
             : <String, dynamic>{};
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: OptikAdminTokens.navy.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                kMap['nama_produk']?.toString() ?? 'garansi_klaim_label'.tr(),
-                style: const TextStyle(
-                  color: OptikAdminTokens.navy,
-                  fontWeight: FontWeight.w700,
+        final statusLabel = GaransiService.claimRequestStatusLabel(
+          row['status']?.toString(),
+        );
+        final jadwalRaw = row['jadwal_kunjungan']?.toString();
+        final jadwalDt = jadwalRaw == null || jadwalRaw.isEmpty
+            ? null
+            : DateTime.tryParse(jadwalRaw)?.toLocal();
+        final foto = row['foto_url']?.toString();
+        children.add(
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: OptikAdminTokens.trainingSoft.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: OptikAdminTokens.trainingSoft.withOpacity(0.35),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  kMap['nama_produk']?.toString() ??
+                      'garansi_klaim_label'.tr(),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.navy,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${row['keputusan']} · ${row['kategori_masalah'] ?? '-'} · '
-                '${kMap['no_invoice'] ?? '-'}',
-                style: TextStyle(
-                  color: OptikAdminTokens.navy.withOpacity(0.55),
-                  fontSize: 12,
+                const SizedBox(height: 4),
+                Text(
+                  '$statusLabel · ${kMap['no_invoice'] ?? '-'} · '
+                  '${row['toko_id'] ?? '-'}',
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy.withOpacity(0.55),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                row['alasan']?.toString() ?? '-',
-                style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  'ID: ${row['id']}',
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy.withOpacity(0.45),
+                    fontSize: 11,
+                  ),
+                ),
+                if ((row['phone_e164']?.toString() ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'WA: ${row['phone_e164']}',
+                    style: TextStyle(
+                      color: OptikAdminTokens.navy.withOpacity(0.55),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                if (jadwalDt != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Jadwal: ${DateFormat('EEE, d MMM yyyy · HH:mm', 'id').format(jadwalDt)}',
+                    style: TextStyle(
+                      color: OptikAdminTokens.navy.withOpacity(0.55),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  row['alasan']?.toString() ?? '-',
+                  style: const TextStyle(
+                    color: OptikAdminTokens.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                if (foto != null && foto.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      foto,
+                      height: 72,
+                      width: 72,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image_outlined,
+                        color: OptikAdminTokens.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         );
-      },
+      }
+    }
+
+    if (_klaim.isNotEmpty) {
+      children.add(
+        Padding(
+          padding: EdgeInsets.only(
+            top: _claimRequests.isEmpty ? 0 : 12,
+            bottom: 8,
+          ),
+          child: Text(
+            'Keputusan toko (${_klaim.length})',
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+      for (final row in _klaim) {
+        final kartu = row['garansi_kartu'];
+        final kMap = kartu is Map
+            ? Map<String, dynamic>.from(kartu)
+            : <String, dynamic>{};
+        children.add(
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: OptikAdminTokens.navy.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  kMap['nama_produk']?.toString() ??
+                      'garansi_klaim_label'.tr(),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.navy,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${row['keputusan']} · ${row['kategori_masalah'] ?? '-'} · '
+                  '${kMap['no_invoice'] ?? '-'}',
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy.withOpacity(0.55),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  row['alasan']?.toString() ?? '-',
+                  style: const TextStyle(
+                    color: OptikAdminTokens.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+      children: children,
     );
   }
 

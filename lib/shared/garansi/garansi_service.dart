@@ -541,6 +541,27 @@ class GaransiService {
         .toList();
   }
 
+  /// Pengajuan klaim dari Member app (`garansi_klaim_request`).
+  Future<List<Map<String, dynamic>>> listClaimRequests({
+    String? tokoId,
+    bool isPusat = false,
+    int limit = 100,
+  }) async {
+    var req = _db.from('garansi_klaim_request').select(
+          '*, garansi_kartu:kartu_id(id, no_invoice, nama_pelanggan, no_wa, '
+          'nama_produk, jenis_garansi, tanggal_akhir, status, toko_id)',
+        );
+
+    if (!isPusat && tokoId != null && tokoId.isNotEmpty) {
+      req = req.eq('toko_id', tokoId);
+    }
+
+    final rows = await req.order('created_at', ascending: false).limit(limit);
+    return (rows as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
   Future<List<Map<String, dynamic>>> klaimForKartu(String kartuId) async {
     final rows = await _db
         .from('garansi_klaim')
