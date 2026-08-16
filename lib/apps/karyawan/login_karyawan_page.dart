@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
+import 'forgot_password_karyawan_page.dart';
 import 'main_karyawan.dart';
 import 'register_karyawan_page.dart';
 
@@ -658,7 +659,36 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                             onFieldSubmitted: (_) =>
                                                 _loginKaryawan(),
                                           ),
-                                          const SizedBox(height: 20),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: TextButton(
+                                              onPressed: _isLoading
+                                                  ? null
+                                                  : () {
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              ForgotPasswordKaryawanPage(
+                                                            initialEmail:
+                                                                _normalizedEmail,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                              child: Text(
+                                                'lupa_pw_tautan'.tr(),
+                                                style: TextStyle(
+                                                  color: OptikKaryawanTokens
+                                                      .cyan
+                                                      .withOpacity(0.95),
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
                                           SizedBox(
                                             width: double.infinity,
                                             height: 54,
