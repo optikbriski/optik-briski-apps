@@ -26,13 +26,14 @@ class InvoiceHubService {
     String? phone,
   }) async {
     try {
+      // Always send p_phone so PostgREST picks the 2-arg overload
+      // (1-arg + 2-arg → PGRST203 when only p_no_invoice is sent).
+      // Empty string (not omitted key) — some clients strip JSON null.
+      final p = phone?.trim();
       final params = <String, dynamic>{
         'p_no_invoice': noInvoice.trim(),
+        'p_phone': (p == null || p.isEmpty) ? '' : p,
       };
-      final p = phone?.trim();
-      if (p != null && p.isNotEmpty) {
-        params['p_phone'] = p;
-      }
       final res = await _db.rpc('get_invoice_hub', params: params);
       if (res == null) return null;
       if (res is Map) return Map<String, dynamic>.from(res);
