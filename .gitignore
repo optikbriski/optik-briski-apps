@@ -66,3 +66,21 @@ scripts/face_shape/**/*.png
 scripts/face_shape/**/*.webp
 scripts/face_shape/**/*.task
 
+
+# Local Python venvs
+.venv/
+venv/
+.venv-slides/
+
+# Android / Flutter generated (root /build/ already listed)
+android/build/
+
+# Supabase CLI local cache
+supabase/.temp/
+
+# Temp screen recordings
+.tmp_screenrec/
+.tmp_screenrec2/
+
+# Cursor IDE (local rules stay on disk; do not commit)
+.cursor/
