@@ -250,6 +250,9 @@ class _SalesPageState extends State<SalesPage> {
   final TextEditingController voucherCtrl = TextEditingController();
   String? _appliedVoucherCode;
   int _appliedVoucherPointsCost = 0;
+  /// Nominal diskon voucher terkunci (jangan parse ulang dari text field —
+  /// "QA1PUSAT".replaceAll(non-digit) → "1" → total salah Rp 299999).
+  int _appliedVoucherNominal = 0;
   bool _lookingUpVoucher = false;
 
   // TOOGLE SELEKSI LAYOUT BARANG
@@ -774,6 +777,7 @@ class _SalesPageState extends State<SalesPage> {
         discountCtrl.text = '$nominal';
         _appliedVoucherCode = (res['voucher_code'] ?? code).toString();
         _appliedVoucherPointsCost = pointsCost;
+        _appliedVoucherNominal = nominal;
         if (paymentStatus == 'Lunas') {
           paidCtrl.text = _totalAkhir.toString();
         }
@@ -796,7 +800,17 @@ class _SalesPageState extends State<SalesPage> {
     voucherCtrl.clear();
     _appliedVoucherCode = null;
     _appliedVoucherPointsCost = 0;
+    _appliedVoucherNominal = 0;
     discountCtrl.text = '0';
+  }
+
+  /// Parse diskon manual. Tolak campuran huruf (kode voucher terlanjur di field)
+  /// supaya "QA1PUSAT" tidak jadi potongan Rp 1.
+  int _parseDiskonRpText(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return 0;
+    if (RegExp(r'[A-Za-z]').hasMatch(t)) return 0;
+    return int.tryParse(t.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
   }
 
   static const _lensJenisOptions = ['Standar', 'Progresif', 'Kryptok'];
@@ -2029,6 +2043,7 @@ class _SalesPageState extends State<SalesPage> {
         'discount': discountCtrl.text,
         'voucher_code': _appliedVoucherCode,
         'voucher_points_cost': _appliedVoucherPointsCost,
+        'voucher_nominal': _appliedVoucherNominal,
         'payment_method': paymentMethod,
         'payment_status': paymentStatus,
         'paid': paidCtrl.text,
@@ -2117,11 +2132,13 @@ class _SalesPageState extends State<SalesPage> {
             draftVoucher.isEmpty ? null : draftVoucher;
         _appliedVoucherPointsCost =
             int.tryParse('${map['voucher_points_cost'] ?? 0}') ?? 0;
+        _appliedVoucherNominal = _appliedVoucherCode == null
+            ? 0
+            : (int.tryParse('${map['voucher_nominal'] ?? ''}') ??
+                _parseDiskonRpText(discountCtrl.text));
         // Diskon tanpa kode voucher di draft = diskon manual (bukan voucher).
         if (_appliedVoucherCode == null &&
-            (int.tryParse(discountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
-                    0) >
-                0) {
+            _parseDiskonRpText(discountCtrl.text) > 0) {
           // biarkan diskon manual
         }
         paymentMethod = (map['payment_method'] ?? paymentMethod).toString();
@@ -3361,9 +3378,12 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   int get _totalAkhir {
-    int diskon =
-        int.tryParse(discountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-    int total = _subtotalBelanja - diskon;
+    final diskon = _appliedVoucherCode != null
+        ? (_appliedVoucherNominal > 0
+            ? _appliedVoucherNominal
+            : _parseDiskonRpText(discountCtrl.text))
+        : _parseDiskonRpText(discountCtrl.text);
+    final total = _subtotalBelanja - diskon;
     return total < 0 ? 0 : total;
   }
 
@@ -3832,9 +3852,9 @@ class _SalesPageState extends State<SalesPage> {
       final voucherCode = (_appliedVoucherCode ?? '').trim();
       final voucherDiscount = voucherCode.isEmpty
           ? 0
-          : (int.tryParse(
-                  discountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
-              0);
+          : (_appliedVoucherNominal > 0
+              ? _appliedVoucherNominal
+              : _parseDiskonRpText(discountCtrl.text));
 
       // 🎯 SINKRONISASI FINANSIAL: Mengunci nilai nominal bayar sesuai status pilihan aktif di POS (Lunas/DP)
       int bayar = paymentStatus == "Lunas"
