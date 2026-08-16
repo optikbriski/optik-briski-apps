@@ -356,9 +356,14 @@ class MemberStatusWatch with WidgetsBindingObserver {
 
     List<Map<String, dynamic>> alerts;
     try {
+      // Always include p_after to avoid PGRST203 overload clash with
+      // list_member_order_alerts(p_phone) vs (p_phone, p_after).
       final res = await Supabase.instance.client.rpc(
         'list_member_order_alerts',
-        params: {'p_phone': phone},
+        params: {
+          'p_phone': phone,
+          'p_after': '1970-01-01T00:00:00.000Z',
+        },
       );
       alerts = _asMapList(res);
     } catch (_) {

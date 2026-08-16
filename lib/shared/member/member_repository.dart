@@ -671,10 +671,14 @@ class MemberRepository {
     final digits = phone.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return const [];
     try {
-      final params = <String, dynamic>{'p_phone': digits};
-      if (after != null) {
-        params['p_after'] = after.toUtc().toIso8601String();
-      }
+      // Always send p_after so PostgREST picks the 2-arg overload
+      // (1-arg + 2-arg overloads → PGRST203 when only p_phone is sent).
+      // Epoch fallback keeps the key present even if a client strips JSON null.
+      final params = <String, dynamic>{
+        'p_phone': digits,
+        'p_after': after?.toUtc().toIso8601String() ??
+            '1970-01-01T00:00:00.000Z',
+      };
       final res = await _db.rpc('list_member_order_alerts', params: params);
       if (res is List) {
         return res
