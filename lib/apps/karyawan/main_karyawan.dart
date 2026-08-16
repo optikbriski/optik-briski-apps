@@ -2569,7 +2569,8 @@ class KaryawanPageState extends State<KaryawanPage>
               ),
               const SizedBox(height: 12),
               Text(
-                "${'dash_halo'.tr().trim()}, $firstName",
+                // Translations already include trailing punctuation (e.g. "Halo, ").
+                "${'dash_halo'.tr()}$firstName",
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
