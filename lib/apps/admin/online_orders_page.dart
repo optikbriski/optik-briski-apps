@@ -259,6 +259,21 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       );
       return;
     }
+    // Defense-in-depth: jangan panggil kurir sebelum lunas (edge juga wajib cek).
+    final stNow = (order['status'] ?? '').toString();
+    if (!const {'paid', 'packing', 'ready'}.contains(stNow)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Status order belum bisa dipanggil kurir ($stNow). '
+            'Lunasi & proses dulu. Bisa isi resi manual setelah ready.',
+          ),
+          backgroundColor: OptikAdminTokens.danger,
+        ),
+      );
+      return;
+    }
     final oid = (order['id'] ?? '').toString();
     if (oid.isEmpty) return;
     final confirm = await showDialog<bool>(
