@@ -1275,5 +1275,7 @@
   "member_help_stock_qty": "数量 {qty}",
   "member_help_stock_show_more": "显示更多",
   "member_help_stock_refine_hint": "该门店最多可能有 {count} 个有货 SKU。请输入名称/SKU 以缩小范围。",
-  "member_help_product_not_found": "目录中未找到该商品。"
+  "member_help_product_not_found": "目录中未找到该商品。",
+  "bantuan_ql": "打卡时断网怎么办？",
+  "bantuan_al": "使用移动数据打卡，并确保开启定位服务。"
 }

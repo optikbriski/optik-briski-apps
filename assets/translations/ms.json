@@ -1272,5 +1272,7 @@
   "member_help_stock_qty": "Kuantiti {qty}",
   "member_help_stock_show_more": "Tunjuk lagi",
   "member_help_stock_refine_hint": "Masih ada sehingga {count} SKU di cawangan. Taip nama/SKU untuk menapis.",
-  "member_help_product_not_found": "Produk tidak dijumpai dalam katalog."
+  "member_help_product_not_found": "Produk tidak dijumpai dalam katalog.",
+  "bantuan_q1": "Bagaimana jika internet kedai mati ketika ingin log kehadiran?",
+  "bantuan_a1": "Gunakan data selular peribadi sementara untuk merekod kehadiran. Pastikan GPS (Lokasi) anda kekal aktif dan berada di kawasan kedai."
 }

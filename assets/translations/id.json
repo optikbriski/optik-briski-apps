@@ -1513,5 +1513,7 @@
   "member_help_stock_qty": "Qty {qty}",
   "member_help_stock_show_more": "Tampilkan lebih",
   "member_help_stock_refine_hint": "Masih ada hingga {count} SKU tersedia di cabang. Ketik nama/SKU untuk mempersempit.",
-  "member_help_product_not_found": "Produk tidak ditemukan di katalog."
+  "member_help_product_not_found": "Produk tidak ditemukan di katalog.",
+  "bantuan_ql": "Bagaimana jika internet toko mati saat ingin absen?",
+  "bantuan_al": "Gunakan data seluler pribadi sementara untuk melakukan klik absen masuk/pulang. Pastikan titik GPS (Lokasi) Anda tetap menyala dan berada di area toko."
 }

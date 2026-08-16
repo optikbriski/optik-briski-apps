@@ -1538,5 +1538,7 @@
   "member_help_stock_qty": "Qty {qty}",
   "member_help_stock_show_more": "Show more",
   "member_help_stock_refine_hint": "Up to {count} SKUs may be in stock at this branch. Type a name/SKU to narrow results.",
-  "member_help_product_not_found": "Product not found in the catalog."
+  "member_help_product_not_found": "Product not found in the catalog.",
+  "bantuan_q1": "What if the store internet is down when trying to clock in/out?",
+  "bantuan_a1": "Temporarily use personal mobile data to click clock in/out. Ensure your GPS (Location) is on and you are in the store area."
 }

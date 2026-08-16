@@ -987,5 +987,7 @@
   "member_help_stock_qty": "数量 {qty}",
   "member_help_stock_show_more": "もっと見る",
   "member_help_stock_refine_hint": "この店舗には最大 {count} SKU の在庫がある可能性があります。名前／SKU で絞り込んでください。",
-  "member_help_product_not_found": "カタログに商品が見つかりません。"
+  "member_help_product_not_found": "カタログに商品が見つかりません。",
+  "bantuan_q1": "出勤/退勤の際に店舗のインターネットが停止した場合はどうすればよいですか？",
+  "bantuan_a1": "出勤/退勤をクリックするには、一時的に個人のモバイルデータを使用してください。GPS（位置情報）がオンになっており、店舗エリア内にいることを確認してください。"
 }
