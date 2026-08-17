@@ -10,6 +10,9 @@ import 'shared/config.dart';
 /// - lib/main_admin.dart
 /// - lib/main_karyawan.dart
 /// - lib/main_member.dart
+///
+/// Owner shell is opened from Karyawan APK after login when
+/// profiles.role == 'owner' (not a separate APP_FLAVOR).
 Future<void> main() async {
   await bootstrapApp(app: const _FlavorRoot());
 }

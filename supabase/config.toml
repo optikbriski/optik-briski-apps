@@ -42,3 +42,8 @@ entrypoint = "./functions/member-send-register-otp/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/member-help-bot/index.ts"
+
+[functions.provision-owner]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/provision-owner/index.ts"

@@ -10,7 +10,7 @@ abstract final class KaryawanJabatan {
   static const admin = 'Admin';
   static const owner = 'Owner';
 
-  /// Urutan hierarki (rendah → tinggi) untuk dropdown registrasi.
+  /// Urutan hierarki (rendah → tinggi). Termasuk Owner untuk HR/TOTP legacy.
   static const List<String> all = [
     frontliner,
     backliner,
@@ -18,6 +18,15 @@ abstract final class KaryawanJabatan {
     kepalaArea,
     admin,
     owner,
+  ];
+
+  /// Self-register Karyawan — Owner tidak boleh dipilih (akun Owner diprovision Admin).
+  static const List<String> registerable = [
+    frontliner,
+    backliner,
+    kepalaToko,
+    kepalaArea,
+    admin,
   ];
 
   static String normalize(String? raw) => (raw ?? '').trim().toLowerCase();

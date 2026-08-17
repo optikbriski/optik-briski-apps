@@ -12,6 +12,7 @@ const String supabasePublishableKey = String.fromEnvironment(
 const String supabaseAnonKey = supabasePublishableKey;
 
 /// Which product shell is running. Set via --dart-define=APP_FLAVOR=admin|karyawan|member
+/// Owner UX lives inside Karyawan APK (post-login route) — not a separate flavor.
 const String appFlavor = String.fromEnvironment(
   'APP_FLAVOR',
   defaultValue: 'admin',

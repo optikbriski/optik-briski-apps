@@ -2380,7 +2380,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                     DropdownButtonFormField<String>(
                       value: jabatan,
                       dropdownColor: Colors.white,
-                      items: KaryawanJabatan.all
+                      items: KaryawanJabatan.registerable
                           .map((e) => DropdownMenuItem(
                               value: e,
                               child: Text(e,

@@ -12,6 +12,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
+import '../owner/owner_service.dart';
+import '../owner/owner_session.dart';
+import '../owner/owner_shell.dart';
 import 'forgot_password_karyawan_page.dart';
 import 'main_karyawan.dart';
 import 'register_karyawan_page.dart';
@@ -120,12 +123,9 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         await Supabase.instance.client.auth.signOut();
         return;
       }
-      final ok = await _assertKaryawanAktif(email);
+      final routed = await _routeAfterAuth(userId: user.id, email: email);
       if (!mounted) return;
-      if (ok) {
-        _goHome();
-        return;
-      }
+      if (!routed) return;
     } catch (e) {
       debugPrint('bootstrap session login: $e');
       try {
@@ -136,6 +136,52 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Owner (profiles.role=owner + owners row) → OwnerShell.
+  /// Else karyawan aktif → KaryawanPage.
+  /// Returns false if signed out / blocked.
+  Future<bool> _routeAfterAuth({
+    required String userId,
+    required String email,
+  }) async {
+    Map<String, dynamic>? profileRow;
+    try {
+      profileRow = await Supabase.instance.client
+          .from('profiles')
+          .select('id, role, toko_id, email')
+          .eq('id', userId)
+          .maybeSingle();
+    } catch (e) {
+      debugPrint('profiles lookup: $e');
+    }
+
+    final role = (profileRow?['role'] ?? '').toString().toLowerCase();
+    if (role == 'owner') {
+      try {
+        final ownerProfile = await OwnerService().myProfile();
+        OwnerSession.instance.setProfile(ownerProfile);
+        if (!mounted) return false;
+        _goOwnerHome();
+        return true;
+      } catch (e) {
+        debugPrint('owner profile: $e');
+        await Supabase.instance.client.auth.signOut();
+        OwnerSession.instance.clear();
+        if (!mounted) return false;
+        _snack(
+          'Akun Owner belum diprovision lengkap. Hubungi Admin Pusat.',
+          color: Colors.orange,
+          duration: const Duration(seconds: 5),
+        );
+        return false;
+      }
+    }
+
+    final ok = await _assertKaryawanAktif(email);
+    if (!ok || !mounted) return false;
+    _goHome();
+    return true;
   }
 
   /// Returns `true` if profile exists and status is Aktif.
@@ -312,8 +358,6 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
 
       final userEmail =
           (res.user!.email ?? email).trim().toLowerCase();
-      final ok = await _assertKaryawanAktif(userEmail);
-      if (!ok || !mounted) return;
 
       await _persistCredentialsForBiometric(
         email: email,
@@ -322,7 +366,12 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
 
       if (!mounted) return;
       _snack("masuk_berhasil".tr(), color: OptikKaryawanTokens.cyan);
-      _goHome();
+
+      final routed = await _routeAfterAuth(
+        userId: res.user!.id,
+        email: userEmail,
+      );
+      if (!routed || !mounted) return;
     } on AuthException catch (e) {
       if (!mounted) return;
       final msg = e.message.toLowerCase();
@@ -355,6 +404,12 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
   void _goHome() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const KaryawanPage()),
+    );
+  }
+
+  void _goOwnerHome() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const OwnerShell()),
     );
   }
 
