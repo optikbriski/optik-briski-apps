@@ -19,5 +19,6 @@
 ///
 /// Yang tidak nabrak:
 /// - Unique HP/NIK/nota **per tenant**. `PUSAT` Optik ≠ `{kode}-PUSAT`.
+/// - RPC Member/stok/owner wajib `tenant_id`. Null tidak jatuh ke Optik.
 /// - Auth email tetap unik global (batas Supabase Auth).
 library;

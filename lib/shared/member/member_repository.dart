@@ -1138,10 +1138,10 @@ class MemberRepository {
     required String courier,
   }) async {
     try {
-      final res = await _db.rpc('quote_online_delivery', params: {
+      final res = await _db.rpc('quote_online_delivery', params: withTenant({
         'p_toko_id': tokoId,
         'p_courier': courier,
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};

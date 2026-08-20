@@ -13,6 +13,7 @@ import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/stock_realtime.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -465,6 +466,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     try {
       await client.rpc('propagate_pusat_sku_to_all_toko', params: {
         'p_sku': sku,
+        'p_tenant_id': TenantService.instance.boundId,
       });
       return;
     } catch (e) {
