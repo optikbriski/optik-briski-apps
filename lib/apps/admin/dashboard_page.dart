@@ -7,6 +7,7 @@ import 'inventory.dart';
 import 'product_master.dart';
 import 'buku_besar.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
@@ -385,6 +386,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (!training &&
+                              isRekasaControlPlane &&
                               (widget.profile['is_platform'] == true ||
                                   widget.profile['is_platform'] == 'true' ||
                                   widget.profile['role'] == 'platform'))

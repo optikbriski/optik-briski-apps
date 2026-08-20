@@ -41,9 +41,11 @@ else
   echo "WARN: GOOGLE_MAPS_API_KEY not set — Geofence Google Map akan gagal load di web."
 fi
 
+# Konsol Rekasa: jangan pin merek. Web per merek: scripts/release_brand_web.sh
 flutter build web --release \
   -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=admin \
+  --dart-define=ADMIN_PIN_TENANT=false \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"

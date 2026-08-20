@@ -55,10 +55,15 @@ const bool pinAdminTenant =
 
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
 
+/// Web/APK toko: terkunci satu merek. Bukan konsol Rekasa.
 bool get isBrandedStoreApk =>
     currentFlavor == AppFlavor.member ||
     currentFlavor == AppFlavor.karyawan ||
     (currentFlavor == AppFlavor.admin && pinAdminTenant);
+
+/// Hanya web Admin tanpa pin. Di sini Rekasa atur tenant + paket semua merek.
+bool get isRekasaControlPlane =>
+    currentFlavor == AppFlavor.admin && !pinAdminTenant;
 
 String get brandedStoreSlug {
   switch (currentFlavor) {

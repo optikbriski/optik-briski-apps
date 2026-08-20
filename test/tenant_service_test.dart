@@ -41,5 +41,7 @@ void main() {
     expect(karyawanTenantSlug, TenantService.defaultSlug);
     expect(adminTenantSlug, TenantService.defaultSlug);
     expect(pinAdminTenant, isFalse);
+    expect(isRekasaControlPlane, isTrue);
+    expect(isBrandedStoreApk, isFalse);
   });
 }
