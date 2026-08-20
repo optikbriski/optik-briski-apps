@@ -7,6 +7,7 @@ import 'inventory.dart';
 import 'product_master.dart';
 import 'buku_besar.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_curriculum.dart';
@@ -314,9 +315,13 @@ class _DashboardPageState extends State<DashboardPage> {
               PremiumSectionHeader(label: "dash_navigasi_menu".tr()),
 
               ListenableBuilder(
-                listenable: TrainingMode.instance,
+                listenable: Listenable.merge([
+                  TrainingMode.instance,
+                  TenantModules.instance,
+                ]),
                 builder: (context, _) {
                   final training = TrainingCurriculum.isActive;
+                  final mod = TenantModules.instance;
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final w = constraints.maxWidth;
@@ -399,6 +404,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Payroll period + mutasi saldo pusat↔toko (Owner monitor sync).
                           if (!training &&
+                              mod.allows('finance') &&
                               (widget.profile['toko_id'] == 'PUSAT' ||
                                   widget.profile['toko_id'] ==
                                       'CABANG-PUSAT' ||
@@ -421,6 +427,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Monitor Absensi (tile sendiri): admin_pusat cabang + owner semua.
                           if (!training &&
+                              mod.allows('attendance') &&
                               AttendanceAdminScope.canOpenStoreMonitor(
                                   widget.profile))
                             PremiumMenuTile(
@@ -441,6 +448,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           // - admin_toko cabang → Absensi (toko sendiri)
                           // - owner / admin_pusat → Absensi Pusat (perangkat Pusat)
                           if (!training &&
+                              mod.allows('attendance') &&
                               AttendanceAdminScope.canOpenStoreKiosk(
                                   widget.profile))
                             PremiumMenuTile(
@@ -462,6 +470,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Antrean tinjauan lanjut — hanya role yang boleh monitor.
                           if (!training &&
+                              mod.allows('attendance') &&
                               AttendanceAdminScope.canOpenStoreMonitor(
                                   widget.profile))
                             PremiumMenuTile(
@@ -480,6 +489,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Geofence: owner + admin_pusat saja (bukan cabang).
                           if (!training &&
+                              mod.allows('attendance') &&
                               AttendanceAdminScope.canManageGeofence(
                                   widget.profile))
                             PremiumMenuTile(
@@ -497,6 +507,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (!training &&
+                              mod.allows('attendance') &&
                               (widget.profile['toko_id'] == 'PUSAT' ||
                                   widget.profile['toko_id'] ==
                                       'CABANG-PUSAT' ||
@@ -517,7 +528,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          if (TrainingCurriculum.allows('pos'))
+                          if (TrainingCurriculum.allows('pos') &&
+                              mod.allows('pos'))
                             PremiumMenuTile(
                               title: "POS Cashier",
                               icon: Icons.point_of_sale_rounded,
@@ -533,7 +545,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           // Request Order: only via Logistics hub (not a dashboard tile).
 
-                          if (TrainingCurriculum.allows('history_dp'))
+                          if (TrainingCurriculum.allows('history_dp') &&
+                              mod.allows('history_dp'))
                             PremiumMenuTile(
                               title: "DP · PENDING · READY · CLEAR",
                               icon: Icons.history_edu,
@@ -548,7 +561,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          if (TrainingCurriculum.allows('logistics'))
+                          if (TrainingCurriculum.allows('logistics') &&
+                              mod.allows('logistics'))
                             PremiumMenuTile(
                               title: "dash_menu_logistik".tr(),
                               icon: Icons.local_shipping_rounded,
@@ -566,6 +580,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('master_data') &&
+                              mod.allows('master_data') &&
                               (training ||
                                   widget.profile['role'] == 'owner' ||
                                   widget.profile['role'] == 'admin_pusat' ||
@@ -587,7 +602,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               },
                             ),
 
-                          if (TrainingCurriculum.allows('finance'))
+                          if (TrainingCurriculum.allows('finance') &&
+                              mod.allows('finance'))
                             PremiumMenuTile(
                               title: "dash_menu_keuangan".tr(),
                               icon: Icons.account_balance_wallet_rounded,
@@ -622,6 +638,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (!training &&
+                              mod.allows('member_app') &&
                               (widget.profile['role'] == 'owner' ||
                                   widget.profile['role'] == 'admin_pusat' ||
                                   widget.profile['role'] == 'super_admin'))
@@ -641,7 +658,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               },
                             ),
 
-                          if (!training)
+                          if (!training && mod.allows('online_orders'))
                             PremiumMenuTile(
                               title: 'Pesanan Online',
                               icon: Icons.shopping_bag_outlined,
@@ -679,7 +696,8 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          if (TrainingCurriculum.allows('warranty'))
+                          if (TrainingCurriculum.allows('warranty') &&
+                              mod.allows('warranty'))
                             PremiumMenuTile(
                               title: 'dash_menu_garansi'.tr(),
                               icon: Icons.verified_rounded,

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'brand/brand_chrome.dart';
 import 'brand/brand_service.dart';
 import 'config.dart';
+import 'tenant/tenant_modules.dart';
 import 'tenant/tenant_service.dart';
 import 'training/training_http_client.dart';
 
@@ -53,6 +54,7 @@ Future<void> bootstrapApp({
     await TenantService.instance.ensureResolved();
   }
   await BrandService.load();
+  await TenantModules.instance.load();
   BrandChrome.attach();
 
   runApp(

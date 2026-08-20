@@ -15,6 +15,7 @@ import 'dashboard_page.dart';
 import 'login_page.dart';
 import '../../shared/brand/brand_chrome.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 
 /// Role yang boleh masuk Admin (pusat / cabang). Bukan karyawan lapangan.
@@ -212,6 +213,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
 
       await TenantService.instance.bindFromProfile(merged);
       await BrandService.load();
+      await TenantModules.instance.load();
 
       setState(() {
         _session = session;
