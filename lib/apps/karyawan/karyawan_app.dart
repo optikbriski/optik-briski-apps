@@ -5,7 +5,7 @@ import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
 import 'login_karyawan_page.dart';
-import '../../shared/brand/brand_service.dart';
+import '../../shared/brand/brand_chrome.dart';
 
 /// Karyawan shell: jobdesk / literatur per individu.
 class KaryawanApp extends StatelessWidget {
@@ -18,7 +18,8 @@ class KaryawanApp extends StatelessWidget {
   Widget build(BuildContext context) {
     GeofenceExitMonitor.attachNavigator(navigatorKey);
     return MaterialApp(
-      title: '${BrandService.name} — Karyawan',
+      title: BrandChrome.windowTitle,
+      onGenerateTitle: (_) => BrandChrome.windowTitle,
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       localizationsDelegates: context.localizationDelegates,

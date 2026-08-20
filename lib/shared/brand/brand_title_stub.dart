@@ -1,0 +1,1 @@
+void setWebDocumentTitle(String title) {}

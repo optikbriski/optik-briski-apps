@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../tenant/tenant_service.dart';
@@ -33,6 +34,9 @@ class BrandService {
   static String get name => _current.displayName;
   static String get shortName => _current.shortName;
   static String get assistantName => _current.assistantName;
+
+  /// Naik setiap [load] selesai supaya judul jendela/tab rebuild.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   static Future<void> load({SupabaseClient? client}) async {
     try {
@@ -82,6 +86,8 @@ class BrandService {
       );
     } catch (_) {
       // Tetap fallback — app boleh jalan offline / sebelum migrasi.
+    } finally {
+      revision.value++;
     }
   }
 

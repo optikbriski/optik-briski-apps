@@ -13,6 +13,7 @@ import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
+import '../../shared/brand/brand_chrome.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/tenant/tenant_service.dart';
 
@@ -65,7 +66,8 @@ class _AdminAppState extends State<AdminApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '${BrandService.name} — Admin',
+      title: BrandChrome.windowTitle,
+      onGenerateTitle: (_) => BrandChrome.windowTitle,
       debugShowCheckedModeBanner: false,
       navigatorKey: AdminApp.navigatorKey,
       localizationsDelegates: context.localizationDelegates,

@@ -1,11 +1,11 @@
 {
-    "name": "toko_kacamata_natan",
-    "short_name": "toko_kacamata_natan",
+    "name": "Rekasa POS",
+    "short_name": "Rekasa",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "POS UMKM — merek toko mengikuti usaha Anda.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

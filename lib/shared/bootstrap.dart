@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'brand/brand_chrome.dart';
 import 'brand/brand_service.dart';
 import 'config.dart';
 import 'tenant/tenant_service.dart';
@@ -48,6 +49,7 @@ Future<void> bootstrapApp({
   await TenantService.instance.loadLocal();
   await TenantService.instance.ensureResolved();
   await BrandService.load();
+  BrandChrome.attach();
 
   runApp(
     EasyLocalization(

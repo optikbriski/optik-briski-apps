@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Optik Admin</string>
+    <!-- Label ikon home screen — nama produk Rekasa, bukan merek tenant. -->
+    <string name="app_name">Rekasa Admin</string>
 </resources>
