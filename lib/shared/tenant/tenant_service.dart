@@ -40,8 +40,8 @@ class TenantService {
       'Kode usaha belum terverifikasi. Tidak boleh memakai data usaha lain.';
 
   Future<void> loadLocal() async {
-    if (isBrandedMemberApk) {
-      slug = memberTenantSlug;
+    if (isBrandedStoreApk) {
+      slug = brandedStoreSlug;
       return;
     }
     try {
@@ -52,19 +52,22 @@ class TenantService {
     if (slug.isEmpty) slug = defaultSlug;
   }
 
-  /// APK Member = satu merek. Pelanggan tidak pilih kode usaha.
-  Future<void> bindBrandedMemberApk({SupabaseClient? client}) async {
-    await persistSlug(memberTenantSlug);
-    await resolveSlug(memberTenantSlug, client: client);
+  /// Member / Karyawan APK = satu merek. Isi dalam app tetap sama.
+  Future<void> bindBrandedStoreApk({SupabaseClient? client}) async {
+    await persistSlug(brandedStoreSlug);
+    await resolveSlug(brandedStoreSlug, client: client);
   }
 
   /// Tolak sesi/akun yang bukan merek APK ini.
-  bool memberMatchesApk(String? memberTenantId) {
-    if (!isBrandedMemberApk || !isBound) return true;
-    final t = (memberTenantId ?? '').trim();
+  bool storeMatchesApk(String? tenantId) {
+    if (!isBrandedStoreApk || !isBound) return true;
+    final t = (tenantId ?? '').trim();
     if (t.isEmpty) return true;
     return t == id;
   }
+
+  bool memberMatchesApk(String? memberTenantId) =>
+      storeMatchesApk(memberTenantId);
 
   Future<void> persistSlug(String next) async {
     slug = next.trim().isEmpty ? defaultSlug : next.trim().toLowerCase();
@@ -118,7 +121,7 @@ class TenantService {
   }) async {
     if (profile == null) return;
     final tid = (profile['tenant_id'] ?? '').toString().trim();
-    if (tid.isNotEmpty) id = tid;
+    if (tid.isNotEmpty && storeMatchesApk(tid)) id = tid;
     final plat = profile['is_platform'];
     isPlatform = plat == true ||
         plat == 'true' ||

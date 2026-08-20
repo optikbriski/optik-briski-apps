@@ -11,7 +11,11 @@ DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
 DEST_ARM32="build/optik-karyawan-${VERSION}-armeabi-v7a.apk"
 
 echo "==> Build Karyawan APK v${VERSION} (split per-ABI, tanpa x86 emulator)"
-DEFINE_ARGS=(--dart-define=APP_FLAVOR=karyawan)
+# APK merek toko (default Optik). Fitur di dalam tetap sama.
+DEFINE_ARGS=(
+  --dart-define=APP_FLAVOR=karyawan
+  --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-optik-briski}"
+)
 if [[ -f .dart_define.karyawan.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.karyawan.json)
 else

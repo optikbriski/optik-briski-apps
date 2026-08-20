@@ -32,11 +32,30 @@ AppFlavor get currentFlavor {
   }
 }
 
-/// Member APK terikat satu merek toko (bukan picker multi-UMKM).
-/// Build merek lain: `--dart-define=MEMBER_TENANT_SLUG=...` + ganti `app_name`.
+/// Member / Karyawan APK terikat satu merek toko. Admin tetap produk Rekasa.
+/// Build merek lain: `MEMBER_TENANT_SLUG` / `KARYAWAN_TENANT_SLUG` + `app_name`.
 const String memberTenantSlug = String.fromEnvironment(
   'MEMBER_TENANT_SLUG',
   defaultValue: 'optik-briski',
 );
 
+const String karyawanTenantSlug = String.fromEnvironment(
+  'KARYAWAN_TENANT_SLUG',
+  defaultValue: 'optik-briski',
+);
+
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
+
+bool get isBrandedStoreApk =>
+    currentFlavor == AppFlavor.member || currentFlavor == AppFlavor.karyawan;
+
+String get brandedStoreSlug {
+  switch (currentFlavor) {
+    case AppFlavor.member:
+      return memberTenantSlug;
+    case AppFlavor.karyawan:
+      return karyawanTenantSlug;
+    case AppFlavor.admin:
+      return 'optik-briski';
+  }
+}

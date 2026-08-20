@@ -7,7 +7,7 @@ import 'brand_title_stub.dart'
 
 /// Judul jendela / tab / recent-apps. Bukan label ikon di home screen.
 ///
-/// Label ikon: Admin/Karyawan = Rekasa. Member APK = satu merek toko.
+/// Label ikon: Admin = Rekasa. Member & Karyawan APK = merek toko.
 class BrandChrome {
   BrandChrome._();
 

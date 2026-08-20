@@ -161,6 +161,12 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     final role = (profileRow?['role'] ?? '').toString().toLowerCase();
     if (role == 'owner') {
       try {
+        if (!TenantService.instance.storeMatchesApk(profileRow?['tenant_id']?.toString())) {
+          await Supabase.instance.client.auth.signOut();
+          if (!mounted) return false;
+          _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
+          return false;
+        }
         await TenantService.instance.bindFromProfile(profileRow);
         await BrandService.load();
         final ownerProfile = await OwnerService().myProfile();
@@ -227,6 +233,12 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         color: ditolak ? Colors.redAccent : Colors.orange,
         duration: const Duration(seconds: 5),
       );
+      return false;
+    }
+    if (!TenantService.instance.storeMatchesApk(userData['tenant_id']?.toString())) {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return false;
+      _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
       return false;
     }
     await TenantService.instance.bindFromProfile({
@@ -519,7 +531,18 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                           child: Column(
                             children: [
                               const OptikBrandLogo.color(height: 56),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 10),
+                              Text(
+                                BrandService.name,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: OptikKaryawanTokens.navyMid,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
                               Text(
                                 "sub_judul_portal".tr().toUpperCase(),
                                 textAlign: TextAlign.center,

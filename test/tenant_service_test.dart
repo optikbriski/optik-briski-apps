@@ -30,13 +30,14 @@ void main() {
     expect(withTenant({})['p_tenant_id'], other);
   });
 
-  test('memberMatchesApk is inert on Admin/Karyawan', () {
+  test('storeMatchesApk is inert on Admin test flavor', () {
     TenantService.instance.debugBind('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-    expect(isBrandedMemberApk, isFalse);
-    expect(TenantService.instance.memberMatchesApk('other-tenant'), isTrue);
+    expect(isBrandedStoreApk, isFalse);
+    expect(TenantService.instance.storeMatchesApk('other-tenant'), isTrue);
   });
 
-  test('Member APK default slug is Optik', () {
+  test('store APK default slugs are Optik', () {
     expect(memberTenantSlug, TenantService.defaultSlug);
+    expect(karyawanTenantSlug, TenantService.defaultSlug);
   });
 }

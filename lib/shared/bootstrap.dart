@@ -47,8 +47,8 @@ Future<void> bootstrapApp({
     httpClient: TrainingHttpClient(),
   );
   await TenantService.instance.loadLocal();
-  if (isBrandedMemberApk) {
-    await TenantService.instance.bindBrandedMemberApk();
+  if (isBrandedStoreApk) {
+    await TenantService.instance.bindBrandedStoreApk();
   } else {
     await TenantService.instance.ensureResolved();
   }

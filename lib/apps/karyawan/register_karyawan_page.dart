@@ -19,6 +19,7 @@ import '../../shared/liveness_camera_page.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import 'login_karyawan_page.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
 import '../../shared/tenant/tenant_service.dart';
 
 // MESIN AUTO-CAPSLOCK AWAL KATA
@@ -761,7 +762,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // FUNGSI TARIK DAFTAR CABANG MASTER DARI DATABASE
   Future<void> _fetchDaftarToko() async {
     try {
-      await TenantService.instance.requireResolved(slug: _slugCtrl.text);
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? brandedStoreSlug : _slugCtrl.text,
+      );
       final data = await Supabase.instance.client.rpc(
         'list_tenant_stores',
         params: withTenant({}),
@@ -2406,6 +2409,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                     ),
                     const SizedBox(height: 15),
 
+                    if (!isBrandedStoreApk) ...[
                     TextFormField(
                       controller: _slugCtrl,
                       textInputAction: TextInputAction.next,
@@ -2420,6 +2424,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           : null,
                     ),
                     const SizedBox(height: 15),
+                    ],
 
                     // CABANG — searchable (banyak toko)
                     FormField<String>(
