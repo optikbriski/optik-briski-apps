@@ -134,6 +134,7 @@ class BrandService {
 
 extension BrandTranslation on String {
   String brandTr({Map<String, String>? namedArgs}) => tr(
+        this,
         namedArgs: {
           'brand': BrandService.name,
           'assistant': BrandService.assistantName,

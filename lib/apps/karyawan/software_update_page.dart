@@ -218,7 +218,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             title: const Text('Izin instalasi diperlukan'),
-            content: const Text(
+            content: Text(
               'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal → aktifkan untuk ${BrandService.name}, lalu coba lagi.\n\nApp yang terpasang tidak rusak.',
             ),
             actions: [

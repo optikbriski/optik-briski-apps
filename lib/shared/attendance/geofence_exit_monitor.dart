@@ -248,13 +248,13 @@ class GeofenceExitMonitor {
               fontSize: 16,
             ),
           ),
-          content: const Text(
+          content: Text(
             'Agar pantauan lokasi tetap jalan saat layar mati, nonaktifkan '
             'optimasi baterai untuk ${BrandService.name} (pilih “Tidak dioptimalkan” '
             '/ “Tidak ada batasan”).\n\n'
             'Ini tidak membuat app kebal force-stop — hanya mengurangi '
             'pematian otomatis oleh sistem.',
-            style: TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
+            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
           ),
           actions: [
             TextButton(

@@ -280,11 +280,11 @@ class _MemberSoftwareUpdatePageState extends State<MemberSoftwareUpdatePage> {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            content: const Text(
+            content: Text(
               'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal '
               '→ aktifkan untuk ${BrandService.name} Member, lalu coba lagi.\n\n'
               'App yang terpasang tidak rusak.',
-              style: TextStyle(
+              style: const TextStyle(
                 color: OptikMemberTokens.inkSecondary,
                 height: 1.4,
               ),

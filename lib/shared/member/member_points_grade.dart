@@ -249,7 +249,7 @@ class MemberGradePalette {
   );
 
   /// Diamond — di atas Platinum (2000+): hitam kristal + biru diamond.
-  static const diamond = MemberGradePalette(
+  static final diamond = MemberGradePalette(
     grade: MemberGrade.diamond,
     label: 'Diamond',
     unlockAt: 2000,
@@ -304,7 +304,7 @@ class MemberGradePalette {
     ],
   );
 
-  static const all = [basic, silver, gold, platinum, diamond];
+  static final all = [basic, silver, gold, platinum, diamond];
 
   static MemberGradePalette of(MemberGrade g) {
     switch (g) {

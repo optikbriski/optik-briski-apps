@@ -558,11 +558,11 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
           ),
         ] else ...[
           const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
               'Semua cabang ${BrandService.name} — aktifkan GPS untuk rekomendasi terdekat.',
-              style: TextStyle(
+              style: const TextStyle(
                 color: OptikMemberTokens.inkMuted,
                 fontSize: 12.5,
                 height: 1.35,
