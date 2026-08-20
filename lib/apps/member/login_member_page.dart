@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/config.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
@@ -22,6 +23,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   final _repo = MemberRepository();
   final _idCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   bool _busy = false;
   bool _obscure = true;
 
@@ -29,6 +31,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   void dispose() {
     _idCtrl.dispose();
     _passCtrl.dispose();
+    _slugCtrl.dispose();
     super.dispose();
   }
 
@@ -43,7 +46,9 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
     setState(() => _busy = true);
     try {
-      await TenantService.instance.requireResolved();
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? null : _slugCtrl.text,
+      );
       await BrandService.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
@@ -75,7 +80,23 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
   }
 
-  void _guest() {
+  Future<void> _guest() async {
+    if (!isBrandedStoreApk) {
+      try {
+        await TenantService.instance.requireResolved(slug: _slugCtrl.text);
+        await BrandService.load();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: OptikMemberTokens.danger,
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
@@ -289,6 +310,35 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                                 ],
                               ),
                               const SizedBox(height: 18),
+                              if (!isBrandedStoreApk) ...[
+                                TextField(
+                                  controller: _slugCtrl,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (v) {
+                                    TenantService.instance.persistSlug(v);
+                                  },
+                                  onSubmitted: (_) async {
+                                    await TenantService.instance
+                                        .persistSlug(_slugCtrl.text);
+                                    await BrandService.load();
+                                    if (mounted) setState(() {});
+                                  },
+                                  decoration: _fieldDec(
+                                    label: 'Kode usaha',
+                                    icon: Icons.storefront_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'APK Rekasa dipakai banyak toko. Kode usaha memisahkan data merek.',
+                                  style: TextStyle(
+                                    color: OptikMemberTokens.inkMuted.withOpacity(0.95),
+                                    fontSize: 12,
+                                    height: 1.35,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                               TextField(
                                 controller: _idCtrl,
                                 keyboardType: TextInputType.emailAddress,
@@ -323,13 +373,21 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
+                                    if (!isBrandedStoreApk) {
+                                      await TenantService.instance
+                                          .persistSlug(_slugCtrl.text);
+                                    }
+                                    if (!context.mounted) return;
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
                                             MemberForgotPasswordPage(
                                           initialIdentifier:
                                               _idCtrl.text.trim(),
+                                          initialSlug: isBrandedStoreApk
+                                              ? null
+                                              : _slugCtrl.text.trim(),
                                         ),
                                       ),
                                     );
@@ -380,7 +438,12 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                onPressed: () {
+                                onPressed: () async {
+                                  if (!isBrandedStoreApk) {
+                                    await TenantService.instance
+                                        .persistSlug(_slugCtrl.text);
+                                  }
+                                  if (!context.mounted) return;
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) =>

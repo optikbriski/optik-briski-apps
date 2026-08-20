@@ -26,6 +26,7 @@ echo "==> Build Member APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=member
   --dart-define=MEMBER_TENANT_SLUG="${MEMBER_TENANT_SLUG:-$STORE_SLUG}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-true}"
 )
 if [[ -f .dart_define.member.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.member.json)

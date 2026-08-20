@@ -26,6 +26,10 @@ def exp(name, key, default=""):
     print(f"export {name}={shlex.quote(v)}")
 
 slug = str(p.get("slug") or "optik-briski").strip()
+pin = p.get("pinTenant")
+if pin is None:
+    pin = slug != "rekasa"
+print(f"export STORE_PIN_TENANT={shlex.quote('true' if pin else 'false')}")
 exp("STORE_SLUG", "slug", "optik-briski")
 exp("STORE_DISPLAY_NAME", "displayName", slug)
 exp("STORE_MEMBER_APP_NAME", "memberAppName", p.get("displayName") or slug)

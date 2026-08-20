@@ -11,6 +11,12 @@ cd "$ROOT"
 # shellcheck source=scripts/brand_env.sh
 source "$ROOT/scripts/brand_env.sh"
 
+if [[ "${STORE_PIN_TENANT:-true}" != "true" ]]; then
+  echo "ERROR: Web merek sendiri hanya untuk paket white-label (pinTenant=true)."
+  echo "Paket bawah memakai web Rekasa + kode usaha. Konsol Rekasa: Vercel Git."
+  exit 1
+fi
+
 if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_ANON_KEY:-}" ]]; then
   if [[ -f .dart_define.admin.json ]]; then
     echo "Pakai .dart_define.admin.json untuk URL/key."

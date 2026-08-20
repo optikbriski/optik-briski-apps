@@ -44,12 +44,12 @@ class TenantService {
       slug = brandedStoreSlug;
       return;
     }
+    slug = '';
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = (prefs.getString(_prefsKey) ?? '').trim();
       if (saved.isNotEmpty) slug = saved;
     } catch (_) {}
-    if (slug.isEmpty) slug = defaultSlug;
   }
 
   /// Member / Karyawan APK = satu merek. Isi dalam app tetap sama.
@@ -71,16 +71,30 @@ class TenantService {
       storeMatchesApk(memberTenantId);
 
   Future<void> persistSlug(String next) async {
-    slug = next.trim().isEmpty ? defaultSlug : next.trim().toLowerCase();
+    final t = next.trim().toLowerCase();
+    if (t.isEmpty) {
+      slug = isBrandedStoreApk ? brandedStoreSlug : '';
+    } else {
+      slug = t;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKey, slug);
+      if (slug.isEmpty) {
+        await prefs.remove(_prefsKey);
+      } else {
+        await prefs.setString(_prefsKey, slug);
+      }
     } catch (_) {}
   }
 
   /// Resolusi kode usaha (anon-safe). Gagal = false, [id] tidak diubah ke Optik.
   Future<bool> resolveSlug(String raw, {SupabaseClient? client}) async {
-    final s = raw.trim().isEmpty ? defaultSlug : raw.trim().toLowerCase();
+    var s = raw.trim().toLowerCase();
+    if (s.isEmpty) {
+      if (!isBrandedStoreApk) return false;
+      s = brandedStoreSlug.trim().toLowerCase();
+    }
+    if (s.isEmpty) return false;
     try {
       final db = client ?? Supabase.instance.client;
       final res = await db.rpc('resolve_tenant', params: {'p_slug': s});
@@ -108,7 +122,15 @@ class TenantService {
     SupabaseClient? client,
   }) async {
     final raw = (slug ?? this.slug).trim();
-    final ok = await resolveSlug(raw.isEmpty ? defaultSlug : raw, client: client);
+    if (raw.isEmpty && !isBrandedStoreApk) {
+      throw StateError(
+        'Isi kode usaha dulu. Tanpa itu data merek lain tidak boleh dibuka.',
+      );
+    }
+    final ok = await resolveSlug(
+      raw.isEmpty ? brandedStoreSlug : raw,
+      client: client,
+    );
     if (!ok || !isBound) {
       throw StateError(
         'Kode usaha tidak valid atau tidak aktif. Cek ejaan, jangan pakai kode usaha lain.',
@@ -168,7 +190,11 @@ class TenantService {
   /// Coba resolve slug tersimpan. Gagal = tetap unbound (bukan Optik).
   Future<void> ensureResolved({SupabaseClient? client}) async {
     if (isBound) return;
-    await resolveSlug(slug, client: client);
+    if (!isBrandedStoreApk && slug.trim().isEmpty) return;
+    await resolveSlug(
+      isBrandedStoreApk ? brandedStoreSlug : slug,
+      client: client,
+    );
   }
 
   void clearSessionTenant() {

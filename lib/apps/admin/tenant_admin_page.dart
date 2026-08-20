@@ -4,7 +4,8 @@ import '../../shared/tenant/module_catalog.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
-/// Rekasa: daftar UMKM + paket A/B/C. Upgrade paket tidak ganti APK/data.
+/// Rekasa: daftar UMKM + paket A/B/C + white-label.
+/// Paket bawah = kulit Rekasa. Paket A = APK/web merek sendiri.
 class TenantAdminPage extends StatefulWidget {
   const TenantAdminPage({super.key, required this.profile});
 
@@ -16,9 +17,21 @@ class TenantAdminPage extends StatefulWidget {
 
 class _TenantAdminPageState extends State<TenantAdminPage> {
   static const _fallbackPlans = [
-    {'plan_key': 'paket_c', 'label': 'Paket C — Starter (POS + master + member)'},
-    {'plan_key': 'paket_b', 'label': 'Paket B — Bisnis (+ logistik, garansi, absensi)'},
-    {'plan_key': 'paket_a', 'label': 'Paket A — Pro (semua modul)'},
+    {
+      'plan_key': 'paket_c',
+      'label': 'Paket C — Starter · kulit Rekasa (sekat di login)',
+      'white_label': false,
+    },
+    {
+      'plan_key': 'paket_b',
+      'label': 'Paket B — Bisnis · kulit Rekasa + modul lebih lengkap',
+      'white_label': false,
+    },
+    {
+      'plan_key': 'paket_a',
+      'label': 'Paket A — Pro · APK & web merek sendiri (nama + ikon)',
+      'white_label': true,
+    },
   ];
 
   final _slug = TextEditingController();
@@ -30,6 +43,20 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
   String _planKey = 'paket_c';
   List<Map<String, dynamic>> _rows = [];
   List<Map<String, dynamic>> _plans = List.of(_fallbackPlans);
+
+  String _planLabel(Map<String, dynamic> p) {
+    final label = (p['label'] ?? p['plan_key'] ?? '').toString();
+    final shell = (p['shell'] ?? '').toString().trim();
+    if (shell.isNotEmpty && !label.contains('merek sendiri') && !label.contains('kulit Rekasa')) {
+      return '$label · $shell';
+    }
+    return label;
+  }
+
+  String _shellCaption(Map<String, dynamic> row) {
+    if (row['white_label'] == true) return 'APK & web merek sendiri';
+    return 'kulit Rekasa + kode usaha';
+  }
 
   bool get _isPlatform {
     final v = widget.profile['is_platform'];
@@ -158,7 +185,8 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
         SnackBar(
           content: Text(
             'Paket ${row['display_name'] ?? row['slug']} → $planKey. '
-            'APK dan data lama tetap. Menu mengikuti paket setelah login ulang.',
+            'Modul ikut paket. Kulit APK: paket A = merek sendiri, '
+            'B/C = Rekasa + kode usaha. Data lama tetap.',
           ),
           backgroundColor: OptikAdminTokens.success,
         ),
@@ -193,6 +221,8 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
       }
     } catch (_) {}
 
+    var whiteLabel = row['white_label'] == true;
+
     if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
@@ -212,6 +242,18 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                         style: TextStyle(fontSize: 13, height: 1.35),
                       ),
                       const SizedBox(height: 8),
+                      SwitchListTile(
+                        dense: true,
+                        title: const Text('APK & web merek sendiri'),
+                        subtitle: const Text(
+                          'Nama + ikon toko. Paket A default nyala. '
+                          'B/C pakai kulit Rekasa + kode usaha.',
+                          style: TextStyle(fontSize: 12, height: 1.3),
+                        ),
+                        value: whiteLabel,
+                        onChanged: (v) => setLocal(() => whiteLabel = v),
+                      ),
+                      const Divider(),
                       for (final m in moduleCatalog)
                         SwitchListTile(
                           dense: true,
@@ -246,12 +288,24 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
       });
       final map = res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
       if (map['ok'] != true) throw map['error'] ?? 'Gagal simpan modul';
+      try {
+        final wl = await supabase.rpc('platform_set_tenant_white_label', params: {
+          'p_tenant_id': id,
+          'p_white_label': whiteLabel,
+        });
+        final wlMap = wl is Map ? Map<String, dynamic>.from(wl) : <String, dynamic>{};
+        if (wlMap['ok'] != true) throw wlMap['error'] ?? 'Gagal simpan white-label';
+      } catch (e) {
+        if (e.toString().contains('Gagal simpan white-label')) rethrow;
+        // Migrasi 000006 belum di-apply: modul tetap tersimpan.
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Modul disimpan (${map['plan_key'] ?? 'custom'}). '
-            'APK tetap. Menu berubah setelah login ulang.',
+            '${whiteLabel ? 'APK/web merek sendiri.' : 'Kulit Rekasa + kode usaha.'} '
+            'Menu berubah setelah login ulang.',
           ),
           backgroundColor: OptikAdminTokens.success,
         ),
@@ -280,8 +334,10 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 Text(
-                  'Setiap UMKM punya merek dan data sendiri. '
-                  'Paket A/B/C bisa diganti kapan saja — tanpa ganti APK, tanpa pindah data.',
+                  'Setiap UMKM sekat tenant_id — bukan cabang Optik. '
+                  'Paket C/B: APK & web Rekasa, beda di kode usaha + isi dalam. '
+                  'Paket A: APK & web nama+ikon merek sendiri (build BRAND=slug). '
+                  'Modul dan white-label bisa dicentang satu-satu.',
                   style: TextStyle(
                     color: OptikAdminTokens.navy.withOpacity(0.75),
                     height: 1.35,
@@ -307,7 +363,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                         ),
                         subtitle: Text(
                           '${r['slug']} · ${r['plan_label'] ?? r['plan_key'] ?? 'paket?'} · '
-                          'pusat ${r['pusat_toko_id'] ?? '-'}',
+                          '${_shellCaption(r)} · pusat ${r['pusat_toko_id'] ?? '-'}',
                         ),
                         trailing: !_isPlatform
                             ? null
@@ -326,7 +382,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                                       for (final p in _plans)
                                         PopupMenuItem(
                                           value: '${p['plan_key']}',
-                                          child: Text('${p['label'] ?? p['plan_key']}'),
+                                          child: Text(_planLabel(p)),
                                         ),
                                     ],
                                     child: const Padding(
@@ -369,6 +425,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _plans.any((p) => p['plan_key'] == _planKey)
                       ? _planKey
                       : '${_plans.first['plan_key']}',
@@ -377,12 +434,23 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                     for (final p in _plans)
                       DropdownMenuItem(
                         value: '${p['plan_key']}',
-                        child: Text('${p['label'] ?? p['plan_key']}'),
+                        child: Text(_planLabel(p), overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (v) {
                     if (v != null) setState(() => _planKey = v);
                   },
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _planKey == 'paket_a'
+                      ? 'Paket A: build APK/web merek ini (nama + ikon sendiri).'
+                      : 'Paket ini: pakai APK/web Rekasa. Member & karyawan isi kode usaha.',
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy.withOpacity(0.65),
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 PremiumPrimaryButton(

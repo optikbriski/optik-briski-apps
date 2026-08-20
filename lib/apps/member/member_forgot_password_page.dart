@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/config.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 
 class MemberForgotPasswordPage extends StatefulWidget {
-  const MemberForgotPasswordPage({super.key, this.initialIdentifier});
+  const MemberForgotPasswordPage({
+    super.key,
+    this.initialIdentifier,
+    this.initialSlug,
+  });
 
   final String? initialIdentifier;
+  final String? initialSlug;
 
   @override
   State<MemberForgotPasswordPage> createState() =>
@@ -18,6 +24,7 @@ class MemberForgotPasswordPage extends StatefulWidget {
 class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
   final _repo = MemberRepository();
   late final TextEditingController _id;
+  late final TextEditingController _slug;
   final _code = TextEditingController();
   final _pass = TextEditingController();
   final _pass2 = TextEditingController();
@@ -30,15 +37,25 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
   void initState() {
     super.initState();
     _id = TextEditingController(text: widget.initialIdentifier ?? '');
+    _slug = TextEditingController(
+      text: (widget.initialSlug ?? TenantService.instance.slug).trim(),
+    );
   }
 
   @override
   void dispose() {
     _id.dispose();
+    _slug.dispose();
     _code.dispose();
     _pass.dispose();
     _pass2.dispose();
     super.dispose();
+  }
+
+  Future<void> _bindTenant() async {
+    await TenantService.instance.requireResolved(
+      slug: isBrandedStoreApk ? null : _slug.text,
+    );
   }
 
   Future<void> _requestCode() async {
@@ -50,7 +67,7 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
     }
     setState(() => _busy = true);
     try {
-      await TenantService.instance.requireResolved();
+      await _bindTenant();
       final res = await _repo.requestPasswordReset(_id.text.trim());
       if (!mounted) return;
       if (res['ok'] != true) {
@@ -101,7 +118,7 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
     }
     setState(() => _busy = true);
     try {
-      await TenantService.instance.requireResolved();
+      await _bindTenant();
       final res = await _repo.resetPassword(
         identifier: _id.text.trim(),
         code: _code.text.trim(),
@@ -163,6 +180,17 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (!isBrandedStoreApk) ...[
+                  TextField(
+                    controller: _slug,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Kode usaha',
+                      prefixIcon: Icon(Icons.storefront_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
                   controller: _id,
                   keyboardType: TextInputType.emailAddress,

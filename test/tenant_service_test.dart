@@ -41,7 +41,19 @@ void main() {
     expect(karyawanTenantSlug, TenantService.defaultSlug);
     expect(adminTenantSlug, TenantService.defaultSlug);
     expect(pinAdminTenant, isFalse);
+    expect(pinStoreTenant, isTrue);
     expect(isRekasaControlPlane, isTrue);
     expect(isBrandedStoreApk, isFalse);
+  });
+
+  test('requireResolved refuses empty slug on shared Rekasa shell', () async {
+    TenantService.instance.debugUnbind();
+    TenantService.instance.slug = '';
+    expect(isBrandedStoreApk, isFalse);
+    await expectLater(
+      TenantService.instance.requireResolved(slug: ''),
+      throwsA(isA<StateError>()),
+    );
+    expect(TenantService.instance.isBound, isFalse);
   });
 }

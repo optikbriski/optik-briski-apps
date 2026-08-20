@@ -53,13 +53,22 @@ const String adminTenantSlug = String.fromEnvironment(
 const bool pinAdminTenant =
     bool.fromEnvironment('ADMIN_PIN_TENANT', defaultValue: false);
 
+/// Paket A / white-label: true. Kulit Rekasa (paket bawah): false.
+const bool pinStoreTenant =
+    bool.fromEnvironment('PIN_STORE_TENANT', defaultValue: true);
+
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
 
-/// Web/APK toko: terkunci satu merek. Bukan konsol Rekasa.
-bool get isBrandedStoreApk =>
-    currentFlavor == AppFlavor.member ||
-    currentFlavor == AppFlavor.karyawan ||
-    (currentFlavor == AppFlavor.admin && pinAdminTenant);
+/// APK/web merek sendiri (paket atas). False = kulit Rekasa + kode usaha.
+bool get isBrandedStoreApk {
+  switch (currentFlavor) {
+    case AppFlavor.member:
+    case AppFlavor.karyawan:
+      return pinStoreTenant;
+    case AppFlavor.admin:
+      return pinAdminTenant;
+  }
+}
 
 /// Hanya web Admin tanpa pin. Di sini Rekasa atur tenant + paket semua merek.
 bool get isRekasaControlPlane =>

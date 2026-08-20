@@ -21,6 +21,7 @@ echo "==> Build Karyawan APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SL
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=karyawan
   --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-$STORE_SLUG}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-true}"
 )
 if [[ -f .dart_define.karyawan.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.karyawan.json)

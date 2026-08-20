@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import '../tenant/tenant_service.dart';
 import '../tenant/toko_ids.dart';
 
@@ -17,18 +18,28 @@ class AppBrand {
   final String shortName;
   final String assistantName;
 
-  /// Hanya fallback offline / sebelum row `app_brand` ada.
+  /// Hanya fallback offline / sebelum row `app_brand` ada (APK merek sendiri).
   static const fallback = AppBrand(
     displayName: 'Optik B. Riski',
     shortName: 'OBR',
     assistantName: 'OBRA',
   );
+
+  /// Kulit bersama paket B/C — launcher Rekasa, isi toko setelah kode usaha.
+  static const rekasaShell = AppBrand(
+    displayName: 'Rekasa',
+    shortName: 'RKS',
+    assistantName: 'Asisten',
+  );
+
+  static AppBrand get shellFallback =>
+      isBrandedStoreApk ? fallback : rekasaShell;
 }
 
 class BrandService {
   BrandService._();
 
-  static AppBrand _current = AppBrand.fallback;
+  static AppBrand _current = AppBrand.shellFallback;
 
   static AppBrand get current => _current;
   static String get name => _current.displayName;
@@ -44,7 +55,18 @@ class BrandService {
       await TenantService.instance.ensureResolved(client: db);
       final t = TenantService.instance;
       if (!t.isBound) {
-        // Jangan tampilkan merek Optik untuk slug usaha lain yang gagal resolve.
+        // Kulit Rekasa: jangan diam-diam pakai merek Optik.
+        if (!isBrandedStoreApk) {
+          final label = t.slug.trim();
+          _current = label.isEmpty
+              ? AppBrand.rekasaShell
+              : AppBrand(
+                  displayName: label,
+                  shortName: label,
+                  assistantName: 'Asisten',
+                );
+          return;
+        }
         if (t.slug != TenantService.defaultSlug) {
           final label = t.slug.trim().isEmpty ? 'POS' : t.slug;
           _current = AppBrand(
@@ -60,10 +82,10 @@ class BrandService {
         _current = AppBrand(
           displayName: fromRpc,
           shortName: (t.shortName ?? '').trim().isEmpty
-              ? AppBrand.fallback.shortName
+              ? AppBrand.shellFallback.shortName
               : t.shortName!.trim(),
           assistantName: (t.assistantName ?? '').trim().isEmpty
-              ? AppBrand.fallback.assistantName
+              ? AppBrand.shellFallback.assistantName
               : t.assistantName!.trim(),
         );
       }
@@ -80,9 +102,9 @@ class BrandService {
       final assistant = (data['assistant_name'] ?? '').toString().trim();
       _current = AppBrand(
         displayName: name,
-        shortName: short.isEmpty ? AppBrand.fallback.shortName : short,
+        shortName: short.isEmpty ? AppBrand.shellFallback.shortName : short,
         assistantName:
-            assistant.isEmpty ? AppBrand.fallback.assistantName : assistant,
+            assistant.isEmpty ? AppBrand.shellFallback.assistantName : assistant,
       );
     } catch (_) {
       // Tetap fallback — app boleh jalan offline / sebelum migrasi.

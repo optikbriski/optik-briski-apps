@@ -1,6 +1,7 @@
 {
   "slug": "nama-usaha",
   "displayName": "Nama Merek",
+  "pinTenant": true,
   "memberAppName": "Nama Merek",
   "karyawanAppName": "Nama Merek Karyawan",
   "memberApplicationId": "com.rekasa.member.namausaha",

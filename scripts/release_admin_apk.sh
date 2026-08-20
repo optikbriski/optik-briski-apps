@@ -21,7 +21,7 @@ fi
 echo "==> Build Admin APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG})"
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=admin
-  --dart-define=ADMIN_PIN_TENANT=true
+  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-true}"
   --dart-define=ADMIN_TENANT_SLUG="${ADMIN_TENANT_SLUG:-$STORE_SLUG}"
 )
 if [[ -f .dart_define.admin.json ]]; then
@@ -34,6 +34,10 @@ else
   [[ -n "${SUPABASE_URL:-}" ]] && DEFINE_ARGS+=(--dart-define=SUPABASE_URL="$SUPABASE_URL")
   [[ -n "${SUPABASE_ANON_KEY:-}" ]] && DEFINE_ARGS+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
 fi
+DEFINE_ARGS+=(
+  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-true}"
+  --dart-define=ADMIN_TENANT_SLUG="${ADMIN_TENANT_SLUG:-$STORE_SLUG}"
+)
 
 FLUTTER_ARGS=(
   build apk --release --split-per-abi
