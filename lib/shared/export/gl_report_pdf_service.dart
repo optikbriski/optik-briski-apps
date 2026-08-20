@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../finance/gl_report_service.dart';
+import '../brand/brand_service.dart';
 
 class GlReportPdfService {
   GlReportPdfService._();
@@ -113,7 +114,7 @@ class GlReportPdfService {
     required List<String> headers,
     required List<List<String>> data,
   }) async {
-    final doc = pw.Document(title: title, author: 'Optik B. Riski');
+    final doc = pw.Document(title: title, author: '${BrandService.name}');
     final generated =
         DateFormat('d MMM yyyy HH:mm', 'id_ID').format(DateTime.now());
 

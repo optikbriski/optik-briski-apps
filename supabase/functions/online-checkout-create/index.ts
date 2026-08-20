@@ -2,6 +2,7 @@
 declare const Deno: any;
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +21,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
+    const brand = (await loadBrand(db)).displayName;
 
     const {
       phone,
@@ -179,7 +181,7 @@ Deno.serve(async (req: Request) => {
               id: "ORDER",
               price: gross,
               quantity: 1,
-              name: "Pesanan Optik B. Riski",
+              name: `Pesanan ${brand}`,
             }];
           }
           return items;

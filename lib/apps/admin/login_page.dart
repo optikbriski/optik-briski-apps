@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/brand/brand_service.dart';
 import '../../shared/admin/admin_code_login_service.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/theme.dart';
@@ -542,7 +543,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      "admin_login_footer".tr(),
+                      "admin_login_footer".brandTr(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

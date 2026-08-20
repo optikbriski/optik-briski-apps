@@ -13,6 +13,7 @@ import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
+import '../../shared/brand/brand_service.dart';
 
 /// Role yang boleh masuk Admin (pusat / cabang). Bukan karyawan lapangan.
 const _adminRoles = {
@@ -62,7 +63,7 @@ class _AdminAppState extends State<AdminApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Optik B. Riski — Admin',
+      title: '${BrandService.name} — Admin',
       debugShowCheckedModeBanner: false,
       navigatorKey: AdminApp.navigatorKey,
       localizationsDelegates: context.localizationDelegates,

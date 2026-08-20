@@ -13,6 +13,7 @@ import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
 import '../theme.dart';
+import '../brand/brand_service.dart';
 
 /// Pantau lokasi karyawan saat shift OPEN; notifikasi lokal jika keluar area
 /// atau GPS/izin lokasi dimatikan.
@@ -249,7 +250,7 @@ class GeofenceExitMonitor {
           ),
           content: const Text(
             'Agar pantauan lokasi tetap jalan saat layar mati, nonaktifkan '
-            'optimasi baterai untuk Optik B. Riski (pilih “Tidak dioptimalkan” '
+            'optimasi baterai untuk ${BrandService.name} (pilih “Tidak dioptimalkan” '
             '/ “Tidak ada batasan”).\n\n'
             'Ini tidak membuat app kebal force-stop — hanya mengurangi '
             'pematian otomatis oleh sistem.',

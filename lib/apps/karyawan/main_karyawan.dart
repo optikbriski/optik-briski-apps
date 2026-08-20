@@ -37,6 +37,7 @@ import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/scanner_penerimaan_page.dart';
 import '../member/pages/member_face_shape_page.dart';
+import '../../shared/brand/brand_service.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -332,7 +333,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
                     _showPremiumSnackbar(
                       'Izin instalasi diperlukan',
-                      'Aktifkan “Instal aplikasi tidak dikenal” untuk Optik B. Riski di Pengaturan.',
+                      'Aktifkan “Instal aplikasi tidak dikenal” untuk ${BrandService.name} di Pengaturan.',
                       Colors.orange,
                     );
                   } else {
@@ -2381,7 +2382,7 @@ class KaryawanPageState extends State<KaryawanPage>
       await openAdminWhatsApp(
         client: Supabase.instance.client,
         message:
-            'Halo Admin Optik B. Riski, saya $_namaKaryawan ($_cabangKaryawan) butuh bantuan.',
+            'Halo Admin ${BrandService.name}, saya $_namaKaryawan ($_cabangKaryawan) butuh bantuan.',
       );
     } catch (e) {
       if (!mounted) return;

@@ -1,6 +1,9 @@
 // @ts-ignore
 declare const Deno: any;
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -57,10 +60,15 @@ Deno.serve(async (req: Request) => {
         ? "Konfirmasi pembayaran"
         : qrPhase || "Nota";
 
+    const brandDb = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const brand = (await loadBrand(brandDb)).displayName;
     const cabang = (tokoId || "").toUpperCase();
     const hasLifecycleQr = qrPayload.startsWith("OBRINV|");
     const lines = [
-      `*Optik B. Riski — Nota digital*`,
+      `*${brand} — Nota digital*`,
       ``,
       headline || `Halo *${customerName}*,`,
       `Nota *${invoice}*${cabang ? ` · cabang *${cabang}*` : ""}.`,

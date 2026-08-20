@@ -11,6 +11,7 @@ import 'member_update_coordinator.dart';
 import 'pages/member_invoice_hub_page.dart';
 import 'pages/member_online_order_page.dart';
 import 'pages/member_orders_list_page.dart';
+import '../../shared/brand/brand_service.dart';
 
 class MemberApp extends StatefulWidget {
   const MemberApp({super.key});
@@ -93,7 +94,7 @@ class _MemberAppState extends State<MemberApp> {
     // bisa mereset Navigator stack. Login/logout pakai named routes.
     return MaterialApp(
       navigatorKey: _navKey,
-      title: 'Optik B. Riski — Member',
+      title: '${BrandService.name} — Member',
       debugShowCheckedModeBanner: false,
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,

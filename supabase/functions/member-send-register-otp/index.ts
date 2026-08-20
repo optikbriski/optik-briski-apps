@@ -2,6 +2,7 @@
 declare const Deno: any;
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,12 +15,13 @@ async function sendEmailResend(opts: {
   to: string;
   otp: string;
   nama?: string;
+  brand: string;
 }): Promise<{ ok: boolean; detail?: string }> {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) return { ok: false, detail: "RESEND_API_KEY belum di-set" };
 
   const from = Deno.env.get("RESEND_FROM") ||
-    "Optik B. Riski <onboarding@resend.dev>";
+    `${opts.brand} <onboarding@resend.dev>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -29,10 +31,10 @@ async function sendEmailResend(opts: {
     body: JSON.stringify({
       from,
       to: [opts.to],
-      subject: `${opts.otp} — Kode OTP daftar Member Optik B. Riski`,
+      subject: `${opts.otp} — Kode OTP daftar Member ${opts.brand}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0f172a">
-          <h2 style="margin:0 0 8px;color:#0B3D8C">Optik B. Riski</h2>
+          <h2 style="margin:0 0 8px;color:#0B3D8C">${opts.brand}</h2>
           <p>Halo${opts.nama ? ` <b>${opts.nama}</b>` : ""},</p>
           <p>Kode OTP untuk mendaftar akun Member:</p>
           <p style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1565C0;margin:16px 0">${opts.otp}</p>
@@ -53,9 +55,10 @@ async function sendWhatsApp(opts: {
   phoneE164: string;
   otp: string;
   nama?: string;
+  brand: string;
 }): Promise<{ ok: boolean; detail?: string }> {
   const msg =
-    `*Optik B. Riski*\nKode OTP daftar Member: *${opts.otp}*\nBerlaku 15 menit. Jangan bagikan.`;
+    `*${opts.brand}*\nKode OTP daftar Member: *${opts.otp}*\nBerlaku 15 menit. Jangan bagikan.`;
 
   const fonnte = Deno.env.get("FONNTE_TOKEN");
   if (fonnte) {
@@ -108,6 +111,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
+    const brand = (await loadBrand(db)).displayName;
 
     const { data, error } = await db.rpc("member_begin_register", {
       p_phone: body.phone,
@@ -131,8 +135,8 @@ Deno.serve(async (req: Request) => {
     const nama = body.nama ? String(body.nama) : undefined;
 
     const [wa, mail] = await Promise.all([
-      sendWhatsApp({ phoneE164: phone, otp, nama }),
-      sendEmailResend({ to: email, otp, nama }),
+      sendWhatsApp({ phoneE164: phone, otp, nama, brand }),
+      sendEmailResend({ to: email, otp, nama, brand }),
     ]);
 
     return new Response(

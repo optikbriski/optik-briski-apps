@@ -6,6 +6,7 @@ import 'sales_page.dart';
 import 'inventory.dart';
 import 'product_master.dart';
 import 'buku_besar.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_curriculum.dart';
@@ -278,7 +279,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                   .toUpperCase();
                               final toko = widget.profile['toko_id'] ==
                                       'CABANG-PUSAT'
-                                  ? 'nama_toko_pusat'.tr()
+                                  ? 'nama_toko_pusat'.brandTr()
                                   : widget.profile['toko_id'];
                               final via = (widget.profile[
                                           'login_via_karyawan_nama'] ??

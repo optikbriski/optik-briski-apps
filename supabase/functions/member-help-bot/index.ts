@@ -15,6 +15,7 @@
 declare const Deno: any;
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { fallbackBrand, loadBrand } from "../_shared/brand.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,8 +43,9 @@ const DEFAULT_GEMINI_MODELS = [
 /** In-memory soft rate limit (per isolate). */
 const rateBucket = new Map<string, { count: number; resetAt: number }>();
 
-const FAQ = `
-FAQ Optik B. Riski (Member):
+function faqFor(brand: string): string {
+  return `
+FAQ ${brand} (Member):
 - Perawatan: cuci air + sabun lembut lensa; keringkan microfiber; lepas saat olahraga kontak/berenang.
 - Garansi aktif 7 hari sejak diambil di toko (hari diambil s/d hari ke-7). Lebih dari 7 hari → garansi mati, tidak bisa klaim. Klaim wajib datang membawa barang; maks. 1× per transaksi. Batal jika: benturan/terjatuh/disengaja, modifikasi sendiri, kehilangan (bukan tanggung jawab toko).
 - Jam umum: 09:00–21:00 (bisa beda per cabang / libur). Jam hari ini berubah / konfirmasi rak fisik sekarang / nego / keluhan fisik / jumlah orang di lobby → WhatsApp cabang.
@@ -52,6 +54,7 @@ FAQ Optik B. Riski (Member):
 - Poin Reward bisa ditukar voucher; Status Poin menentukan grade (Basic/Silver/Gold/Platinum/Diamond).
 - Status pesanan hanya dari data sistem yang diberikan; jangan mengarang.
 `.trim();
+}
 
 /** True lobby / physical-shelf confirm / nego / physical / today's hours — WA only. */
 const LIVE_HINTS = [
@@ -1213,7 +1216,7 @@ async function loadGrounding(db: ReturnType<typeof createClient>, opts: {
     const { data: stores } = await q;
     if (Array.isArray(stores) && stores.length > 0) {
       const lines = stores.map((s: Record<string, unknown>) =>
-        `- ${s.toko_id}: ${s.shop_name ?? "Optik B. Riski"} | ${
+        `- ${s.toko_id}: ${s.shop_name ?? fallbackBrand.displayName} | ${
           s.address ?? "-"
         }`
       );
@@ -1288,12 +1291,14 @@ async function callGeminiOnce(opts: {
   message: string;
   locale: string;
   grounding: string;
+  brand: string;
+  assistantName: string;
   /** When true, ask model to skip thinking tokens (2.5 Flash / Lite). */
   disableThinking: boolean;
 }): Promise<GeminiOnceResult> {
   const preferId = !opts.locale.toLowerCase().startsWith("en");
   const system = `
-You are OBRA (Optik B. Riski Asisten), the Optik B. Riski Member help assistant.
+You are ${opts.assistantName} (${opts.brand} Asisten), the ${opts.brand} Member help assistant.
 Rules:
 1) Answer ONLY from CONTEXT + FAQ below. Never invent live lobby foot traffic, physical shelf confirmation, negotiation, or physical complaint status. Lobby people-count is not in the app — escalate those to WhatsApp.
 2) Lab/production queue: if CONTEXT includes "Beban lab/pengerjaan", you MAY quote those aggregate counts honestly as invoice/lab pipeline load (waiting / in progress / ready). Never invent lobby wait minutes.
@@ -1310,7 +1315,7 @@ Rules:
    suggested_chips subset of: orderStatus,pointsGrade,storeInfo,labQueue,stok,careWarranty,contactWa
 
 FAQ:
-${FAQ}
+${faqFor(opts.brand)}
 
 CONTEXT:
 ${opts.grounding || "(no member context)"}
@@ -1416,6 +1421,8 @@ async function callGemini(opts: {
   message: string;
   locale: string;
   grounding: string;
+  brand: string;
+  assistantName: string;
 }): Promise<
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; reason: "rate_limit" | "unavailable" }
@@ -1561,8 +1568,10 @@ Deno.serve(async (req: Request) => {
     }
 
     let grounding = "";
+    let brand = fallbackBrand;
     if (supabaseUrl && serviceKey) {
       const db = createClient(supabaseUrl, serviceKey);
+      brand = await loadBrand(db);
       grounding = await loadGrounding(db, { memberId, phone, tokoId });
     }
 
@@ -1571,6 +1580,8 @@ Deno.serve(async (req: Request) => {
       message,
       locale,
       grounding,
+      brand: brand.displayName,
+      assistantName: brand.assistantName,
     });
 
     if (!ai.ok) {

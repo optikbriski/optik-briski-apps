@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../brand/brand_service.dart';
 import '../../apps/admin/garansi_page.dart';
 import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
@@ -62,7 +63,7 @@ class InvoiceHubPage extends StatefulWidget {
     final inv = result.invoiceNo ?? InvoiceLink.parse(result.raw);
     if (inv == null || inv.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('invoice_hub_not_invoice'.tr())),
+        SnackBar(content: Text('invoice_hub_not_invoice'.brandTr())),
       );
       return;
     }

@@ -1,4 +1,4 @@
-/// Hierarki jabatan resmi Optik B. Riski.
+/// Hierarki jabatan resmi tenant (nama merek dari app_brand).
 ///
 /// Cabang (operasional toko): Frontliner, Backliner, Kepala Toko, Kepala Area.
 /// Pusat (back-office web): Admin, Owner.

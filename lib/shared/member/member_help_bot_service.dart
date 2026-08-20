@@ -10,6 +10,7 @@ import 'member_help_nearest_store.dart';
 import 'member_points_grade.dart';
 import 'member_repository.dart';
 import 'member_session.dart';
+import '../brand/brand_service.dart';
 
 /// Client API for Member help bot: chips (DB/FAQ) + free-text Edge (Gemini).
 class MemberHelpBotService {
@@ -22,7 +23,7 @@ class MemberHelpBotService {
   final MemberRepository _repo;
   final SupabaseClient _db;
 
-  static const careFaqId = '''
+  static String get careFaqId => '''
 Perawatan kacamata:
 • Cuci dengan air bersih dan sabun lembut khusus lensa.
 • Keringkan dengan lap microfiber — hindari baju/tisu kasar.
@@ -34,12 +35,12 @@ Garansi:
 • Lebih dari 7 hari sejak diambil → garansi mati, tidak bisa klaim.
 • Klaim wajib datang ke toko membawa barang; keputusan setelah cek fisik.
 • Maksimal 1× klaim per transaksi.
-• Batal jika: benturan / terjatuh / disengaja, modifikasi di luar Optik B. Riski, atau kehilangan (bukan tanggung jawab toko).
+• Batal jika: benturan / terjatuh / disengaja, modifikasi di luar ${BrandService.name}, atau kehilangan (bukan tanggung jawab toko).
 
 Jam operasional umum: 09:00–21:00 (bisa beda per cabang / hari libur). Untuk jam hari ini, konfirmasi via WhatsApp cabang.
 ''';
 
-  static const careFaqEn = '''
+  static String get careFaqEn => '''
 Eyewear care:
 • Rinse with clean water and a mild lens-safe soap.
 • Dry with a microfiber cloth — avoid clothing or rough tissues.
@@ -51,7 +52,7 @@ Warranty:
 • After more than 7 days from pickup → warranty is dead; claims are not allowed.
 • Claims require visiting the store with the item; decision after physical check.
 • Maximum 1 claim per purchase.
-• Voided by: impact / drop / intentional damage, self-modification outside Optik B. Riski, or lost glasses (not the store’s responsibility).
+• Voided by: impact / drop / intentional damage, self-modification outside ${BrandService.name}, or lost glasses (not the store’s responsibility).
 
 Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s hours via store WhatsApp.
 ''';
@@ -459,7 +460,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
             final id = (e is Map ? e['id'] : null)?.toString().trim() ?? '';
             return <String, dynamic>{
               'toko_id': id,
-              'shop_name': 'Optik B. Riski',
+              'shop_name': '${BrandService.name}',
               'address': '',
               'phone': '',
             };
@@ -472,12 +473,12 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
           .toList(growable: false);
     } catch (e) {
       debugPrint('member help toko_id fallback: $e');
-      return const [];
+      return [];
     }
   }
 
   List<Map<String, dynamic>> _parseStoreDirectoryRpc(dynamic raw) {
-    if (raw is! List) return const [];
+    if (raw is! List) return [];
     return raw
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
@@ -620,7 +621,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
         en ? 'Branch info (directory):\n' : 'Info cabang (dari data toko):\n',
       );
       final id = (focus['toko_id'] ?? '-').toString();
-      final name = (focus['shop_name'] ?? 'Optik B. Riski').toString();
+      final name = (focus['shop_name'] ?? '${BrandService.name}').toString();
       final addrRaw = (focus['address'] ?? '').toString().trim();
       final phoneRaw = (focus['phone'] ?? '').toString().trim();
       final addrMissing = addrRaw.isEmpty || addrRaw == '-';
@@ -1059,7 +1060,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
     final q = (lastQuestion ?? '').trim();
     final tokoLabel = (target.tokoId ?? '').trim();
 
-    final buf = StringBuffer('Halo Optik B. Riski, saya dari aplikasi Member.');
+    final buf = StringBuffer('Halo ${BrandService.name}, saya dari aplikasi Member.');
     if (name.isNotEmpty) buf.write('\nNama: $name');
     if (phone.isNotEmpty) buf.write('\nHP: $phone');
     if (tokoLabel.isNotEmpty) buf.write('\nCabang: $tokoLabel');

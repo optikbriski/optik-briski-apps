@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/brand/brand_service.dart';
 
 /// CMS Member: layout hide/show, banner bergambar, promo detail (Member + POS).
 class MemberHomeContentPage extends StatefulWidget {
@@ -227,7 +228,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
             'image_url': '',
           },
           {
-            'title': 'Garansi digital\nOptik B. Riski',
+            'title': 'Garansi digital\n${BrandService.name}',
             'subtitle': 'Data asli sistem · klaim wajib cek di toko',
             'image_url': '',
           },
@@ -1875,7 +1876,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           ),
         ];
       case 'reminders':
-        return const [
+        return [
           Text(
             'Pengingat diisi otomatis dari pesanan aktif, DP, dan janji kontrol Member. Tidak ada teks CMS di sini — hanya show/hide & urutan.',
             style: TextStyle(
@@ -1886,7 +1887,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           ),
         ];
       case 'store':
-        return const [
+        return [
           Text(
             'Cabang dipilih Member di APK (atau dari nota terakhir). CMS hanya mengatur apakah section ini tampil.',
             style: TextStyle(
@@ -1923,7 +1924,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               ),
         ];
       default:
-        return const [
+        return [
           Text('Pilih bagian di preview HP.'),
         ];
     }

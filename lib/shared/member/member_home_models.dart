@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../brand/brand_service.dart';
 
 enum MemberHomeReminderKind {
   ready,
@@ -142,14 +143,14 @@ class MemberHomeSnapshot {
       }
     }
     if (out.isEmpty) {
-      return const [
+      return [
         {
           'title': 'Kacamata siap?\nLangsung tahu di sini',
           'subtitle': 'Pantau status pesanan & ambil tanpa ribet',
           'image_url': '',
         },
         {
-          'title': 'Garansi digital\nOptik B. Riski',
+          'title': 'Garansi digital\n${BrandService.name}',
           'subtitle': 'Data asli sistem · klaim wajib cek di toko',
           'image_url': '',
         },

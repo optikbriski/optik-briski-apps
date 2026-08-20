@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/theme.dart';
 import 'pages/member_software_update_page.dart';
+import '../../shared/brand/brand_service.dart';
 
 /// Koordinator update Member — cek silent, auto-unduh, dialog putih–biru.
 /// Digunakan dari [MemberShell] supaya alur unduh/pasang tidak nge-bug.
@@ -304,7 +305,7 @@ class MemberUpdateCoordinator {
                   if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
                     _snack(
                       context,
-                      'Aktifkan “Instal aplikasi tidak dikenal” untuk Optik B. Riski Member.',
+                      'Aktifkan “Instal aplikasi tidak dikenal” untuk ${BrandService.name} Member.',
                       OptikMemberTokens.warning,
                     );
                   } else {

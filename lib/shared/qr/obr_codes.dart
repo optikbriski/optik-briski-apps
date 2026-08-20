@@ -1,4 +1,4 @@
-// Unified Optik B. Riski QR / SKU payloads (pipe-separated, one scanner).
+// Unified tenant QR / SKU payloads (pipe-separated, one scanner).
 //
 // OBRPROD|v1|<sku>|<product_id>       → product_code.dart
 // OBRATT|v1|<toko_id>|<token>         → qr_route.dart AttendanceQrPayload

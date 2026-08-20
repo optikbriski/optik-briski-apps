@@ -20,6 +20,7 @@ import '../member_rating_page.dart';
 import '../member_widgets.dart';
 import 'member_claim_terms_gate.dart';
 import 'member_survey_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Detail nota + status + QR fase + foto + review + garansi (fitur 1,2,11,16,17).
 /// Layout nota = kit yang sama dengan Adjust Invoice / POS / PDF.
@@ -540,7 +541,7 @@ class _MemberInvoiceHubPageState extends State<MemberInvoiceHubPage> {
       children: [
         FilledButton.icon(
           onPressed: () => _waToko(
-            'Halo Optik B. Riski, saya cek status nota {inv}.',
+            'Halo ${BrandService.name}, saya cek status nota {inv}.',
           ),
           icon: const Icon(Icons.chat_rounded),
           label: const Text('Hubungi toko (WA)'),

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../brand/brand_service.dart';
 
 typedef ExportProgress = void Function(String message, double? progress);
 
@@ -753,11 +754,11 @@ class MonthlyDataExportService {
   }) async {
     final subjectDomain = docSubjectDomain ?? 'multi-domain';
     final doc = pw.Document(
-      title: '$reportTitle — Optik B. Riski (Salinan $salinanKe)',
-      author: 'Optik B. Riski',
+      title: '$reportTitle — ${BrandService.name} (Salinan $salinanKe)',
+      author: '${BrandService.name}',
       subject:
           'Operational export $subjectDomain ${range.label} Salinan $salinanKe',
-      creator: 'Optik B. Riski App',
+      creator: '${BrandService.name} App',
     );
 
     doc.addPage(
@@ -993,7 +994,7 @@ class MonthlyDataExportService {
         pw.Container(height: 1, color: _gold),
         pw.SizedBox(height: 12),
         pw.Text(
-          'Dokumen ini untuk keperluan internal Optik B. Riski. '
+          'Dokumen ini untuk keperluan internal ${BrandService.name}. '
           'Jangan sebarkan di luar pihak yang berwenang.',
           style: const pw.TextStyle(
             fontSize: 8,
@@ -1003,7 +1004,7 @@ class MonthlyDataExportService {
         ),
         pw.SizedBox(height: 6),
         pw.Text(
-          '© Optik B. Riski  ·  Operational Report  ·  Salinan $salinanKe',
+          '© ${BrandService.name}  ·  Operational Report  ·  Salinan $salinanKe',
           style: const pw.TextStyle(fontSize: 8, color: _muted),
         ),
       ],
@@ -1108,7 +1109,7 @@ class MonthlyDataExportService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Optik B. Riski · Internal · Salinan $salinanKe',
+              '${BrandService.name} · Internal · Salinan $salinanKe',
               style: const pw.TextStyle(fontSize: 7, color: _muted),
             ),
             pw.Text(

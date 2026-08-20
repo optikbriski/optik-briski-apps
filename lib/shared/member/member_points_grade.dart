@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../brand/brand_service.dart';
 
 /// Grade Member:
 /// Basic 0–249 · Silver 250–499 · Gold 500–999 · Platinum 1000–1999 · Diamond 2000+.
@@ -288,7 +289,7 @@ class MemberGradePalette {
       MemberGradeBenefit(
         Icons.card_membership_rounded,
         'Akses early product & event',
-        'Undangan private Optik B. Riski',
+        'Undangan private ${BrandService.name}',
       ),
       MemberGradeBenefit(
         Icons.support_agent_rounded,

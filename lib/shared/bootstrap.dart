@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'brand/brand_service.dart';
 import 'config.dart';
 import 'training/training_http_client.dart';
 
@@ -43,6 +44,7 @@ Future<void> bootstrapApp({
     publishableKey: supabasePublishableKey,
     httpClient: TrainingHttpClient(),
   );
+  await BrandService.load();
 
   runApp(
     EasyLocalization(

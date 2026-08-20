@@ -18,6 +18,7 @@ import '../../shared/ktp/ktp_ocr_service.dart';
 import '../../shared/liveness_camera_page.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import 'login_karyawan_page.dart';
+import '../../shared/brand/brand_service.dart';
 
 // MESIN AUTO-CAPSLOCK AWAL KATA
 class CapitalizeEachWordFormatter extends TextInputFormatter {
@@ -1455,7 +1456,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                             ),
                           ),
                           Text(
-                            'Optik B. Riski · Onboarding karyawan',
+                            '${BrandService.name} · Onboarding karyawan',
                             style: TextStyle(
                               color: OptikKaryawanTokens.muted.withOpacity(0.95),
                               fontSize: 11.5,

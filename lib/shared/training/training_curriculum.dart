@@ -1,5 +1,6 @@
 import 'training_mode.dart';
 import 'training_sandbox_store.dart';
+import '../brand/brand_service.dart';
 
 /// Admin Training Mode curriculum — only these modules are available.
 ///
@@ -68,7 +69,7 @@ class TrainingCurriculum {
     await store.insert('invoice_settings', {
       'id': 'tr_inv_settings',
       'toko_id': tokoId,
-      'nama_toko': 'Optik B. Riski — Mode Latihan',
+      'nama_toko': '${BrandService.name} — Mode Latihan',
       'alamat': 'Sandbox lokal (bukan data asli)',
       'footer_text': 'NOTA LATIHAN — tidak valid di sistem live',
       'updated_at': now,

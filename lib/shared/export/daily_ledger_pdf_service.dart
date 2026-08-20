@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../brand/brand_service.dart';
 
 /// Ringkasan laba-rugi harian + mutasi untuk ekspor dari Buku Besar Stage 3.
 class DailyLedgerPdfData {
@@ -81,7 +82,7 @@ class DailyLedgerPdfService {
   static Future<Uint8List> buildPdf(DailyLedgerPdfData data) async {
     final doc = pw.Document(
       title: 'Ledger Harian ${data.tokoLabel} ${data.dateStr}',
-      author: 'Optik B. Riski',
+      author: '${BrandService.name}',
     );
 
     final untungKotor = data.omzet - data.hpp;
@@ -214,7 +215,7 @@ class DailyLedgerPdfService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Dibuat $generatedAt · Internal Optik B. Riski',
+              'Dibuat $generatedAt · Internal ${BrandService.name}',
               style: const pw.TextStyle(fontSize: 7, color: _muted),
             ),
             pw.Text(

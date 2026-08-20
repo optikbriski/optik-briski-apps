@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/whatsapp_launcher.dart';
+import '../../shared/brand/brand_service.dart';
 
 class BantuanPage extends StatelessWidget {
   const BantuanPage({super.key});
@@ -9,7 +10,7 @@ class BantuanPage extends StatelessWidget {
   Future<void> _openWa(BuildContext context) async {
     try {
       await openAdminWhatsApp(
-        message: 'Halo Admin Optik B. Riski, saya butuh bantuan dari APK Karyawan.',
+        message: 'Halo Admin ${BrandService.name}, saya butuh bantuan dari APK Karyawan.',
       );
     } catch (e) {
       if (!context.mounted) return;
