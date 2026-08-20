@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Label ikon home screen — nama produk Rekasa, bukan merek tenant. -->
-    <string name="app_name">Rekasa Member</string>
+    <!-- Member = aplikasi pelanggan. Ikon memakai merek tenant (default Optik). -->
+    <string name="app_name">Optik B. Riski</string>
 </resources>

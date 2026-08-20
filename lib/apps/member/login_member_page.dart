@@ -34,6 +34,11 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     super.dispose();
   }
 
+  Future<void> _applySlugBrand() async {
+    await TenantService.instance.persistSlug(_slugCtrl.text);
+    await BrandService.load();
+  }
+
   Future<void> _loginPassword() async {
     final id = _idCtrl.text.trim();
     final pass = _passCtrl.text;
@@ -166,26 +171,33 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                       children: [
                         const SizedBox(height: 12),
                         const Center(child: OptikBrandLogo.color(height: 48)),
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Selamat datang',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: OptikMemberTokens.blueDeep,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                            letterSpacing: -0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Login untuk pengalaman Member yang lebih lengkap dan praktis.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: OptikMemberTokens.inkMuted,
-                            fontSize: 14.5,
-                            height: 1.45,
+                        const SizedBox(height: 16),
+                        ValueListenableBuilder<int>(
+                          valueListenable: BrandService.revision,
+                          builder: (_, __, ___) => Column(
+                            children: [
+                              Text(
+                                BrandService.name,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: OptikMemberTokens.blueDeep,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.15,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Login Member ${BrandService.name} — nota, garansi, dan promo toko.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: OptikMemberTokens.inkMuted,
+                                  fontSize: 14.5,
+                                  height: 1.45,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -287,6 +299,8 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               TextField(
                                 controller: _slugCtrl,
                                 textInputAction: TextInputAction.next,
+                                onSubmitted: (_) => _applySlugBrand(),
+                                onEditingComplete: _applySlugBrand,
                                 decoration: _fieldDec(
                                   label: 'Kode usaha',
                                   icon: Icons.storefront_outlined,

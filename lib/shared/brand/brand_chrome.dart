@@ -7,8 +7,8 @@ import 'brand_title_stub.dart'
 
 /// Judul jendela / tab / recent-apps. Bukan label ikon di home screen.
 ///
-/// Label ikon APK tetap compile-time (satu APK = satu nama produk Rekasa).
-/// Merek tenant (`app_brand`) hanya muncul di dalam app, tab browser, dan recents.
+/// Label ikon: Admin/Karyawan = Rekasa (produk). Member = merek toko
+/// (compile-time default Optik; di dalam app ikut `app_brand`).
 class BrandChrome {
   BrandChrome._();
 

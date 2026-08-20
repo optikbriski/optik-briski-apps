@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/brand/brand_service.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
@@ -290,10 +291,10 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
                       icon: const Icon(Icons.arrow_back_rounded,
                           color: OptikMemberTokens.blueDeep),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Daftar Member',
-                        style: TextStyle(
+                        'Daftar Member ${BrandService.name}',
+                        style: const TextStyle(
                           color: OptikMemberTokens.blueDeep,
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
