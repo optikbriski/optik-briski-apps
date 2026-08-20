@@ -39,5 +39,7 @@ void main() {
   test('store APK default slugs are Optik', () {
     expect(memberTenantSlug, TenantService.defaultSlug);
     expect(karyawanTenantSlug, TenantService.defaultSlug);
+    expect(adminTenantSlug, TenantService.defaultSlug);
+    expect(pinAdminTenant, isFalse);
   });
 }

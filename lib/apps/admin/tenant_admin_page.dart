@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../shared/bootstrap.dart';
+import '../../shared/tenant/module_catalog.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -171,6 +172,99 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
     }
   }
 
+  Future<void> _editModules(Map<String, dynamic> row) async {
+    if (!_isPlatform) return;
+    final id = (row['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final enabled = <String, bool>{
+      for (final m in moduleCatalog) m.key: false,
+    };
+    try {
+      final raw = await supabase.rpc(
+        'platform_list_tenant_modules',
+        params: {'p_tenant_id': id},
+      );
+      if (raw is List) {
+        for (final e in raw) {
+          if (e is! Map) continue;
+          final k = (e['module_key'] ?? '').toString();
+          if (enabled.containsKey(k)) enabled[k] = e['enabled'] == true;
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: Text('Modul ${row['display_name'] ?? row['slug']}'),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Centang yang dibeli merek ini. Boleh campur, tidak harus A/B/C.',
+                        style: TextStyle(fontSize: 13, height: 1.35),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final m in moduleCatalog)
+                        SwitchListTile(
+                          dense: true,
+                          title: Text(m.label),
+                          value: enabled[m.key] ?? false,
+                          onChanged: (v) => setLocal(() => enabled[m.key] = v),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Batal'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Simpan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final res = await supabase.rpc('platform_set_tenant_modules', params: {
+        'p_tenant_id': id,
+        'p_modules': enabled,
+      });
+      final map = res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
+      if (map['ok'] != true) throw map['error'] ?? 'Gagal simpan modul';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Modul disimpan (${map['plan_key'] ?? 'custom'}). '
+            'APK tetap. Menu berubah setelah login ulang.',
+          ),
+          backgroundColor: OptikAdminTokens.success,
+        ),
+      );
+      await _boot();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -217,20 +311,30 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                         ),
                         trailing: !_isPlatform
                             ? null
-                            : PopupMenuButton<String>(
-                                tooltip: 'Ganti paket',
-                                onSelected: (k) => _setPlan(r, k),
-                                itemBuilder: (_) => [
-                                  for (final p in _plans)
-                                    PopupMenuItem(
-                                      value: '${p['plan_key']}',
-                                      child: Text('${p['label'] ?? p['plan_key']}'),
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Pilih modul',
+                                    onPressed: () => _editModules(r),
+                                    icon: const Icon(Icons.extension_rounded),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Ganti paket',
+                                    onSelected: (k) => _setPlan(r, k),
+                                    itemBuilder: (_) => [
+                                      for (final p in _plans)
+                                        PopupMenuItem(
+                                          value: '${p['plan_key']}',
+                                          child: Text('${p['label'] ?? p['plan_key']}'),
+                                        ),
+                                    ],
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(Icons.tune_rounded),
                                     ),
+                                  ),
                                 ],
-                                child: const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Icon(Icons.tune_rounded),
-                                ),
                               ),
                       ),
                     ),

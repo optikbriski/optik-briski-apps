@@ -32,8 +32,9 @@ AppFlavor get currentFlavor {
   }
 }
 
-/// Member / Karyawan APK terikat satu merek toko. Admin = satu APK Rekasa.
-/// Merek lain: `BRAND=slug bash scripts/release_member_apk.sh` (lihat brands/).
+/// Member / Karyawan / Admin APK toko terikat satu merek.
+/// Web Admin (Vercel) tidak di-pin — Rekasa atur paket semua merek di sana.
+/// Merek lain: `BRAND=slug bash scripts/release_*_apk.sh` (lihat brands/).
 const String memberTenantSlug = String.fromEnvironment(
   'MEMBER_TENANT_SLUG',
   defaultValue: 'optik-briski',
@@ -44,10 +45,20 @@ const String karyawanTenantSlug = String.fromEnvironment(
   defaultValue: 'optik-briski',
 );
 
+const String adminTenantSlug = String.fromEnvironment(
+  'ADMIN_TENANT_SLUG',
+  defaultValue: 'optik-briski',
+);
+
+const bool pinAdminTenant =
+    bool.fromEnvironment('ADMIN_PIN_TENANT', defaultValue: false);
+
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
 
 bool get isBrandedStoreApk =>
-    currentFlavor == AppFlavor.member || currentFlavor == AppFlavor.karyawan;
+    currentFlavor == AppFlavor.member ||
+    currentFlavor == AppFlavor.karyawan ||
+    (currentFlavor == AppFlavor.admin && pinAdminTenant);
 
 String get brandedStoreSlug {
   switch (currentFlavor) {
@@ -56,6 +67,6 @@ String get brandedStoreSlug {
     case AppFlavor.karyawan:
       return karyawanTenantSlug;
     case AppFlavor.admin:
-      return 'optik-briski';
+      return adminTenantSlug;
   }
 }

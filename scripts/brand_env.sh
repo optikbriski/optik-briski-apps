@@ -32,6 +32,8 @@ exp("STORE_MEMBER_APP_NAME", "memberAppName", p.get("displayName") or slug)
 exp("STORE_KARYAWAN_APP_NAME", "karyawanAppName", p.get("displayName") or slug)
 exp("STORE_MEMBER_APPLICATION_ID", "memberApplicationId")
 exp("STORE_KARYAWAN_APPLICATION_ID", "karyawanApplicationId")
+exp("STORE_ADMIN_APP_NAME", "adminAppName", (p.get("displayName") or slug) + " Admin")
+exp("STORE_ADMIN_APPLICATION_ID", "adminApplicationId")
 PY
 )"
 

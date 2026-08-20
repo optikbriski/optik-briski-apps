@@ -8,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/brand/brand_service.dart';
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/theme.dart';
@@ -114,6 +115,17 @@ class _LoginPageState extends State<LoginPage> {
       'super_admin',
       'platform',
     };
+    final isPlat = profile['is_platform'] == true ||
+        profile['is_platform'] == 'true' ||
+        assignedRole == 'platform';
+    if (!TenantService.instance.storeMatchesApk(
+      profile['tenant_id']?.toString(),
+      platform: isPlat,
+    )) {
+      await client.auth.signOut();
+      throw 'Akun ini bukan admin ${BrandService.name}.';
+    }
+
     if (!adminRoles.contains(assignedRole)) {
       await client.auth.signOut();
       throw 'Role "$assignedRole" tidak diizinkan di Admin. '
@@ -155,6 +167,7 @@ class _LoginPageState extends State<LoginPage> {
 
     await TenantService.instance.bindFromProfile(merged);
     await BrandService.load();
+    await TenantModules.instance.load();
 
     if (!mounted) return;
     if (actor != null && actor.isPresent) {
@@ -329,6 +342,17 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const OptikBrandLogo.color(height: 58),
+                    const SizedBox(height: 10),
+                    Text(
+                      BrandService.name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.navy,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       "admin_login_subtitle".tr().toUpperCase(),

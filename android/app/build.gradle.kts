@@ -58,7 +58,10 @@ compileOptions {
         }
         create("admin") {
             dimension = "app"
-            applicationId = "com.optikbriski.admin"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.optikbriski.admin" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
     }
 

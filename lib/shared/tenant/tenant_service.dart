@@ -59,7 +59,8 @@ class TenantService {
   }
 
   /// Tolak sesi/akun yang bukan merek APK ini.
-  bool storeMatchesApk(String? tenantId) {
+  bool storeMatchesApk(String? tenantId, {bool platform = false}) {
+    if (platform || isPlatform) return true;
     if (!isBrandedStoreApk || !isBound) return true;
     final t = (tenantId ?? '').trim();
     if (t.isEmpty) return true;
