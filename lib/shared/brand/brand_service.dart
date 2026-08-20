@@ -1,6 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../tenant/tenant_service.dart';
+import '../tenant/toko_ids.dart';
+
 /// Merek tenant (bukan nama cabang). Nama toko = `invoice_settings.shop_name`.
 class AppBrand {
   const AppBrand({
@@ -34,16 +37,40 @@ class BrandService {
   static Future<void> load({SupabaseClient? client}) async {
     try {
       final db = client ?? Supabase.instance.client;
+      await TenantService.instance.ensureResolved(client: db);
+      final t = TenantService.instance;
+      final fromRpc = (t.displayName ?? '').trim();
+      if (fromRpc.isNotEmpty) {
+        _current = AppBrand(
+          displayName: fromRpc,
+          shortName: (t.shortName ?? '').trim().isEmpty
+              ? AppBrand.fallback.shortName
+              : t.shortName!.trim(),
+          assistantName: (t.assistantName ?? '').trim().isEmpty
+              ? AppBrand.fallback.assistantName
+              : t.assistantName!.trim(),
+        );
+      }
+      final tenantId = t.boundId;
       final row = await db
           .from('app_brand')
           .select('display_name, short_name, assistant_name')
-          .eq('id', 'default')
+          .eq('tenant_id', tenantId)
           .maybeSingle();
-      if (row == null) return;
-      final name = (row['display_name'] ?? '').toString().trim();
+      Map<String, dynamic>? data = row;
+      if (data == null) {
+        final fallback = await db
+            .from('app_brand')
+            .select('display_name, short_name, assistant_name')
+            .eq('id', 'default')
+            .maybeSingle();
+        data = fallback;
+      }
+      if (data == null) return;
+      final name = (data['display_name'] ?? '').toString().trim();
       if (name.isEmpty) return;
-      final short = (row['short_name'] ?? '').toString().trim();
-      final assistant = (row['assistant_name'] ?? '').toString().trim();
+      final short = (data['short_name'] ?? '').toString().trim();
+      final assistant = (data['assistant_name'] ?? '').toString().trim();
       _current = AppBrand(
         displayName: name,
         shortName: short.isEmpty ? AppBrand.fallback.shortName : short,
@@ -59,7 +86,9 @@ class BrandService {
   static String defaultShopName(String? tokoId) {
     final id = _normalizeTokoId(tokoId);
     final brand = name.trim().toUpperCase();
-    if (id == 'PUSAT') return '$brand PUSAT';
+    if (TokoIds.isPusat(id, tenantPusatTokoId: TenantService.instance.pusatTokoId)) {
+      return '$brand PUSAT';
+    }
     var label = id;
     if (label.startsWith('CABANG-')) {
       label = label.substring('CABANG-'.length);

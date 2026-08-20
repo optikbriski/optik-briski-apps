@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
-    const brand = (await loadBrand(db)).displayName;
+    const brand = (await loadBrand(db, body.tenant_id)).displayName;
 
     const { data, error } = await db.rpc("member_begin_register", {
       p_phone: body.phone,

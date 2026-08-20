@@ -14,6 +14,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 import 'dashboard_page.dart';
 import 'login_page.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 
 /// Role yang boleh masuk Admin (pusat / cabang). Bukan karyawan lapangan.
 const _adminRoles = {
@@ -21,6 +22,7 @@ const _adminRoles = {
   'admin_pusat',
   'admin_toko',
   'super_admin',
+  'platform',
 };
 
 /// Admin shell: back-office + POS.
@@ -205,6 +207,9 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
         merged['login_via_karyawan_jabatan'] = actor.jabatan;
         merged['login_via_audit_id'] = actor.auditId;
       }
+
+      await TenantService.instance.bindFromProfile(merged);
+      await BrandService.load();
 
       setState(() {
         _session = session;

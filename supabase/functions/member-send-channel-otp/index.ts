@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const brand = (await loadBrand(db)).displayName;
+    const brand = (await loadBrand(db, body.tenant_id)).displayName;
 
     // Pastikan draft tersimpan
     const draft = await db.rpc("member_save_register_draft", {

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 
 /// CMS Member: layout hide/show, banner bergambar, promo detail (Member + POS).
 class MemberHomeContentPage extends StatefulWidget {
@@ -195,7 +196,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       final row = await _db
           .from('member_home_content')
           .select()
-          .eq('id', 'default')
+          .eq('tenant_id', TenantService.instance.boundId)
           .maybeSingle();
       final data =
           row == null ? <String, dynamic>{} : Map<String, dynamic>.from(row);
@@ -474,7 +475,10 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final flagsJson =
         jsonDecode(jsonEncode(_flags)) as Map<String, dynamic>;
     return {
-      'id': 'default',
+      'id': TenantService.instance.boundId == TenantService.optikId
+          ? 'default'
+          : TenantService.instance.boundId,
+      'tenant_id': TenantService.instance.boundId,
       'brand_label': _brand.text.trim().isEmpty
           ? 'OPTIK B. RISKI'
           : _brand.text.trim(),

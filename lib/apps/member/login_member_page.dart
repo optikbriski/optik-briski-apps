@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/tenant/tenant_service.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import 'member_forgot_password_page.dart';
@@ -20,6 +22,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   final _repo = MemberRepository();
   final _idCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   bool _busy = false;
   bool _obscure = true;
 
@@ -27,6 +30,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   void dispose() {
     _idCtrl.dispose();
     _passCtrl.dispose();
+    _slugCtrl.dispose();
     super.dispose();
   }
 
@@ -41,6 +45,8 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
     setState(() => _busy = true);
     try {
+      await TenantService.instance.resolveSlug(_slugCtrl.text);
+      await BrandService.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
       if (res['ok'] != true) {
@@ -278,6 +284,15 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                                 ],
                               ),
                               const SizedBox(height: 18),
+                              TextField(
+                                controller: _slugCtrl,
+                                textInputAction: TextInputAction.next,
+                                decoration: _fieldDec(
+                                  label: 'Kode usaha',
+                                  icon: Icons.storefront_outlined,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
                               TextField(
                                 controller: _idCtrl,
                                 keyboardType: TextInputType.emailAddress,

@@ -11,6 +11,7 @@ import 'member_points_grade.dart';
 import 'member_repository.dart';
 import 'member_session.dart';
 import '../brand/brand_service.dart';
+import '../tenant/tenant_service.dart';
 
 /// Client API for Member help bot: chips (DB/FAQ) + free-text Edge (Gemini).
 class MemberHelpBotService {
@@ -425,7 +426,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
     // Prefer SECURITY DEFINER RPC — invoice_settings RLS is authenticated-only
     // while Member uses anon + custom session.
     try {
-      final raw = await _db.rpc('list_member_help_stores');
+      final raw = await _db.rpc('list_member_help_stores', params: withTenant({}));
       final list = _parseStoreDirectoryRpc(raw);
       if (list.isNotEmpty) return list;
     } catch (e) {
@@ -454,7 +455,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
 
     // Last resort: toko_id ids so picker is never hard-empty.
     try {
-      final rows = await _db.from('toko_id').select('id').order('id');
+      final rows = await _db.rpc('list_tenant_stores', params: withTenant({}));
       return (rows as List)
           .map((e) {
             final id = (e is Map ? e['id'] : null)?.toString().trim() ?? '';
@@ -997,7 +998,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
     final geoById = <String, Map<String, dynamic>>{};
     try {
       final geoRows =
-          await _db.from('toko_id').select('id, latitude, longitude').order('id');
+          await _db.rpc('list_tenant_stores', params: withTenant({}));
       for (final raw in (geoRows as List)) {
         final m = Map<String, dynamic>.from(raw as Map);
         final id = (m['id'] ?? '').toString().trim().toUpperCase();

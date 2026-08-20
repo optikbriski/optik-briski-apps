@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../invoice/invoice_hub_service.dart';
 import '../invoice/invoice_settings_service.dart';
 import '../maps/osm_address_search.dart';
+import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'member_catalog_kategori.dart';
 import 'member_points_grade.dart';
@@ -69,10 +70,10 @@ class MemberRepository {
     required String identifier,
     required String password,
   }) async {
-    final res = await _db.rpc('member_login', params: {
+    final res = await _db.rpc('member_login', params: withTenant({
       'p_identifier': identifier.trim(),
       'p_password': password,
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     if (map['ok'] == true && map['member'] is Map) {
       await MemberSession.instance
@@ -88,14 +89,14 @@ class MemberRepository {
     String? email,
     DateTime? tanggalLahir,
   }) async {
-    final res = await _db.rpc('member_register', params: {
+    final res = await _db.rpc('member_register', params: withTenant({
       'p_phone': phone.trim(),
       'p_password': password,
       'p_nama': nama?.trim(),
       'p_email': email?.trim(),
       'p_tanggal_lahir':
           tanggalLahir?.toIso8601String().substring(0, 10),
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     if (map['ok'] == true && map['member'] is Map) {
       await MemberSession.instance
@@ -304,7 +305,7 @@ class MemberRepository {
     String? locale,
   }) async {
     try {
-      final res = await _db.rpc('member_upsert_profile', params: {
+      final res = await _db.rpc('member_upsert_profile', params: withTenant({
         'p_phone': phone,
         'p_nama': nama,
         'p_email': email,
@@ -313,7 +314,7 @@ class MemberRepository {
         'p_tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
         'p_font_scale': fontScale,
         'p_locale': locale,
-      });
+      }));
       if (res is Map) {
         await MemberSession.instance
             .applyMember(Map<String, dynamic>.from(res));
@@ -327,9 +328,9 @@ class MemberRepository {
 
   Future<List<Map<String, dynamic>>> listSales(String phone) async {
     try {
-      dynamic res = await _db.rpc('list_member_sales', params: {
+      dynamic res = await _db.rpc('list_member_sales', params: withTenant({
         'p_phone': phone,
-      });
+      }));
       if (res is String && res.isNotEmpty) {
         try {
           res = jsonDecode(res);
@@ -520,7 +521,7 @@ class MemberRepository {
           'brand_label, slides, greeting_guest, greeting_subtitle_guest, '
           'promo_title, promo_subtitle, sections, feature_flags',
         )
-        .eq('id', 'default')
+        .eq('tenant_id', TenantService.instance.boundId)
         .maybeSingle();
     if (row == null) return null;
     return Map<String, dynamic>.from(row);
@@ -751,12 +752,12 @@ class MemberRepository {
     try {
       final toko = (tokoId ?? '').trim().toUpperCase();
       // Frame/Lensa/Lainnya → server p_kategori (Lainnya = not Frame/Lensa).
-      final res = await _db.rpc('list_member_catalog', params: {
+      final res = await _db.rpc('list_member_catalog', params: withTenant({
         'p_kategori': memberCatalogServerKategoriParam(kategori),
         'p_q': (search == null || search.trim().isEmpty) ? null : search.trim(),
         'p_limit': limit,
         if (toko.isNotEmpty && toko != 'PUSAT') 'p_toko': toko,
-      });
+      }));
       if (res is List) {
         return res.map((e) {
           final m = Map<String, dynamic>.from(e as Map);

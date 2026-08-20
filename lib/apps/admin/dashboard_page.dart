@@ -30,6 +30,7 @@ import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import 'owner_provision_page.dart';
 import 'owner_finance_ops_page.dart';
+import 'tenant_admin_page.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -372,6 +373,24 @@ class _DashboardPageState extends State<DashboardPage> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => OwnerProvisionPage(
+                                    profile: widget.profile,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          if (!training &&
+                              (widget.profile['is_platform'] == true ||
+                                  widget.profile['is_platform'] == 'true' ||
+                                  widget.profile['role'] == 'platform'))
+                            PremiumMenuTile(
+                              title: 'UMKM / Tenant',
+                              icon: Icons.apartment_rounded,
+                              color: OptikAdminTokens.navy,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TenantAdminPage(
                                     profile: widget.profile,
                                   ),
                                 ),

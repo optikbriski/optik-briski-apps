@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
 import '../../../shared/brand/brand_service.dart';
+import '../../../shared/tenant/tenant_service.dart';
 
 export 'member_notifications_page.dart';
 export 'member_profile_page.dart';
@@ -58,10 +59,10 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
       final client = Supabase.instance.client;
       final geoById = <String, Map<String, dynamic>>{};
       try {
-        final geoRows = await client
-            .from('toko_id')
-            .select('id, latitude, longitude')
-            .order('id');
+        final geoRows = await client.rpc(
+          'list_tenant_stores',
+          params: withTenant({}),
+        );
         for (final raw in (geoRows as List)) {
           final m = Map<String, dynamic>.from(raw as Map);
           final id = (m['id'] ?? '').toString().trim().toUpperCase();
@@ -129,7 +130,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
       'list_member_help_stores',
     ]) {
       try {
-        final raw = await client.rpc(name);
+        final raw = await client.rpc(name, params: withTenant({}));
         final list = _parseStoreDirectoryRpc(raw);
         if (list.isNotEmpty) return list;
       } catch (_) {}

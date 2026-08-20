@@ -8,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/brand/brand_service.dart';
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -111,11 +112,12 @@ class _LoginPageState extends State<LoginPage> {
       'admin_pusat',
       'admin_toko',
       'super_admin',
+      'platform',
     };
     if (!adminRoles.contains(assignedRole)) {
       await client.auth.signOut();
       throw 'Role "$assignedRole" tidak diizinkan di Admin. '
-          'Set role di Table Editor: owner / admin_pusat / admin_toko.';
+          'Set role di Table Editor: owner / admin_pusat / admin_toko / platform.';
     }
 
     if (assignedTokoId.isEmpty) {
@@ -150,6 +152,9 @@ class _LoginPageState extends State<LoginPage> {
       merged['login_via_karyawan_jabatan'] = actor.jabatan;
       merged['login_via_audit_id'] = actor.auditId;
     }
+
+    await TenantService.instance.bindFromProfile(merged);
+    await BrandService.load();
 
     if (!mounted) return;
     if (actor != null && actor.isPresent) {

@@ -19,6 +19,7 @@ import '../../shared/liveness_camera_page.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import 'login_karyawan_page.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 
 // MESIN AUTO-CAPSLOCK AWAL KATA
 class CapitalizeEachWordFormatter extends TextInputFormatter {
@@ -758,13 +759,20 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // FUNGSI TARIK DAFTAR CABANG MASTER DARI DATABASE
   Future<void> _fetchDaftarToko() async {
     try {
-      final data = await Supabase.instance.client
-          .from('toko_id')
-          .select('id, toko_id')
-          .order('toko_id', ascending: true);
+      await TenantService.instance.ensureResolved();
+      final data = await Supabase.instance.client.rpc(
+        'list_tenant_stores',
+        params: withTenant({}),
+      );
+      final list = <Map<String, dynamic>>[];
+      if (data is List) {
+        for (final e in data) {
+          if (e is Map) list.add(Map<String, dynamic>.from(e));
+        }
+      }
       if (mounted) {
         setState(() {
-          _listToko = List<Map<String, dynamic>>.from(data);
+          _listToko = list;
           _isLoadingToko = false;
         });
       }

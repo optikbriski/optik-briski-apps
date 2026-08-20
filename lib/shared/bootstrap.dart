@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'brand/brand_service.dart';
 import 'config.dart';
+import 'tenant/tenant_service.dart';
 import 'training/training_http_client.dart';
 
 final supabase = Supabase.instance.client;
@@ -44,6 +45,8 @@ Future<void> bootstrapApp({
     publishableKey: supabasePublishableKey,
     httpClient: TrainingHttpClient(),
   );
+  await TenantService.instance.loadLocal();
+  await TenantService.instance.ensureResolved();
   await BrandService.load();
 
   runApp(

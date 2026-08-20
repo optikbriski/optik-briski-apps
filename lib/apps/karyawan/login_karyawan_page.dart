@@ -12,6 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../owner/owner_service.dart';
 import '../owner/owner_session.dart';
 import '../owner/owner_shell.dart';
@@ -149,7 +151,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     try {
       profileRow = await Supabase.instance.client
           .from('profiles')
-          .select('id, role, toko_id, email')
+          .select('id, role, toko_id, email, tenant_id, is_platform')
           .eq('id', userId)
           .maybeSingle();
     } catch (e) {
@@ -159,6 +161,8 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     final role = (profileRow?['role'] ?? '').toString().toLowerCase();
     if (role == 'owner') {
       try {
+        await TenantService.instance.bindFromProfile(profileRow);
+        await BrandService.load();
         final ownerProfile = await OwnerService().myProfile();
         OwnerSession.instance.setProfile(ownerProfile);
         if (!mounted) return false;
@@ -191,7 +195,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     try {
       userData = await Supabase.instance.client
           .from('karyawan')
-          .select('status_approval')
+          .select('status_approval, tenant_id, toko_id')
           .ilike('email', email)
           .limit(1)
           .maybeSingle();
@@ -225,6 +229,11 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
       );
       return false;
     }
+    await TenantService.instance.bindFromProfile({
+      'tenant_id': userData['tenant_id'],
+      'toko_id': userData['toko_id'],
+    });
+    await BrandService.load();
     return true;
   }
 
