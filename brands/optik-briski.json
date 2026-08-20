@@ -1,0 +1,8 @@
+{
+  "slug": "optik-briski",
+  "displayName": "Optik B. Riski",
+  "memberAppName": "Optik B. Riski",
+  "karyawanAppName": "Optik Karyawan",
+  "memberApplicationId": "com.optikbriski.member",
+  "karyawanApplicationId": "com.example.toko_kacamata_natan"
+}

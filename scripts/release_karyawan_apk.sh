@@ -6,15 +6,21 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
+# shellcheck source=scripts/brand_env.sh
+source "$ROOT/scripts/brand_env.sh"
 OUT_DIR="build/app/outputs/flutter-apk"
-DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
-DEST_ARM32="build/optik-karyawan-${VERSION}-armeabi-v7a.apk"
+if [[ "$STORE_SLUG" == "optik-briski" ]]; then
+  DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
+  DEST_ARM32="build/optik-karyawan-${VERSION}-armeabi-v7a.apk"
+else
+  DEST_ARM64="build/${STORE_SLUG}-karyawan-${VERSION}.apk"
+  DEST_ARM32="build/${STORE_SLUG}-karyawan-${VERSION}-armeabi-v7a.apk"
+fi
 
-echo "==> Build Karyawan APK v${VERSION} (split per-ABI, tanpa x86 emulator)"
-# APK merek toko (default Optik). Fitur di dalam tetap sama.
+echo "==> Build Karyawan APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG})"
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=karyawan
-  --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-optik-briski}"
+  --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-$STORE_SLUG}"
 )
 if [[ -f .dart_define.karyawan.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.karyawan.json)
@@ -31,6 +37,12 @@ FLUTTER_ARGS=(
   --obfuscate --split-debug-info=build/app/outputs/symbols
   "${DEFINE_ARGS[@]}"
 )
+if [[ -n "${STORE_KARYAWAN_APPLICATION_ID:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreApplicationId="$STORE_KARYAWAN_APPLICATION_ID")
+fi
+if [[ -n "${STORE_KARYAWAN_APP_NAME:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreAppName="$STORE_KARYAWAN_APP_NAME")
+fi
 flutter "${FLUTTER_ARGS[@]}"
 
 # HP modern (2018+) hampir semua arm64 — ini yang dibagikan.

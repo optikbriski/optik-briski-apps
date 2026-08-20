@@ -1,0 +1,8 @@
+{
+  "slug": "nama-usaha",
+  "displayName": "Nama Merek",
+  "memberAppName": "Nama Merek",
+  "karyawanAppName": "Nama Merek Karyawan",
+  "memberApplicationId": "com.rekasa.member.namausaha",
+  "karyawanApplicationId": "com.rekasa.karyawan.namausaha"
+}

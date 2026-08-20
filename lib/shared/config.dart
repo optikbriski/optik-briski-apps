@@ -32,8 +32,8 @@ AppFlavor get currentFlavor {
   }
 }
 
-/// Member / Karyawan APK terikat satu merek toko. Admin tetap produk Rekasa.
-/// Build merek lain: `MEMBER_TENANT_SLUG` / `KARYAWAN_TENANT_SLUG` + `app_name`.
+/// Member / Karyawan APK terikat satu merek toko. Admin = satu APK Rekasa.
+/// Merek lain: `BRAND=slug bash scripts/release_member_apk.sh` (lihat brands/).
 const String memberTenantSlug = String.fromEnvironment(
   'MEMBER_TENANT_SLUG',
   defaultValue: 'optik-briski',

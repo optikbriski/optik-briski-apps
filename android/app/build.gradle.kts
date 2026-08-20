@@ -5,6 +5,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun storeProp(name: String): String =
+    (project.findProperty(name) as String?)?.trim().orEmpty()
+
 android {
     namespace = "com.example.toko_kacamata_natan"
     compileSdk = flutter.compileSdkVersion
@@ -39,13 +42,19 @@ compileOptions {
     productFlavors {
         create("karyawan") {
             dimension = "app"
-            // Tetap ID lama supaya update Karyawan yang sudah terpasang tidak putus.
-            applicationId = "com.example.toko_kacamata_natan"
+            // Default Optik — jangan ganti, update Play yang sudah terpasang.
+            // Merek lain: -PstoreApplicationId= -PstoreAppName=
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.example.toko_kacamata_natan" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("member") {
             dimension = "app"
-            // ID baru → install berdampingan, bukan overwrite Karyawan.
-            applicationId = "com.optikbriski.member"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.optikbriski.member" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("admin") {
             dimension = "app"
