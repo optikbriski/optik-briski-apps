@@ -253,6 +253,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         promoRows = await _db
             .from('member_promos')
             .select()
+            .eq('tenant_id', TenantService.instance.boundId)
             .order('sort_order')
             .order('created_at', ascending: false);
       } catch (_) {
@@ -495,6 +496,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
 
   Map<String, dynamic> _promoDbPayload(Map<String, dynamic> p) {
     final payload = <String, dynamic>{
+      'tenant_id': TenantService.instance.boundId,
       'title': (p['title'] ?? '').toString().trim(),
       'description': (p['description'] ?? '').toString(),
       'voucher_code': () {

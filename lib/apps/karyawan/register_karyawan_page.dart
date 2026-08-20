@@ -59,6 +59,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // CONTROLLER FORM DATA DIRI
   final formKey = GlobalKey<FormState>();
   final _nikCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   final _namaCtrl = TextEditingController();
   final _alamatKtpCtrl = TextEditingController();
   final _ttlCtrl = TextEditingController();
@@ -243,6 +244,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     _otpTimer?.cancel();
     _ttlCtrl.removeListener(_sinkronUmurDariTtl);
     _nikCtrl.dispose();
+    _slugCtrl.dispose();
     _namaCtrl.dispose();
     _alamatKtpCtrl.dispose();
     _ttlCtrl.dispose();
@@ -759,7 +761,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // FUNGSI TARIK DAFTAR CABANG MASTER DARI DATABASE
   Future<void> _fetchDaftarToko() async {
     try {
-      await TenantService.instance.ensureResolved();
+      await TenantService.instance.requireResolved(slug: _slugCtrl.text);
       final data = await Supabase.instance.client.rpc(
         'list_tenant_stores',
         params: withTenant({}),
@@ -1278,6 +1280,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         'jabatan': (jabatan ?? '').trim(),
         'cabang': namaCabangTeks,
         'toko_id': _cabang,
+        'tenant_id': TenantService.instance.boundId,
         'pin_absensi': pinCtrl.text.trim(),
         'alamat_lengkap': alamatDomisili,
         'nama_bank': namaBankCtrl.text.trim().toUpperCase(),
@@ -2400,6 +2403,21 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           "reg_label_jabatan".tr(), Icons.assignment_ind, null),
                       validator: (value) =>
                           value == null ? "reg_err_jabatan".tr() : null,
+                    ),
+                    const SizedBox(height: 15),
+
+                    TextFormField(
+                      controller: _slugCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: _premiumDecoration(
+                        'Kode usaha',
+                        Icons.storefront_outlined,
+                        null,
+                      ),
+                      onFieldSubmitted: (_) => _fetchDaftarToko(),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Isi kode usaha'
+                          : null,
                     ),
                     const SizedBox(height: 15),
 

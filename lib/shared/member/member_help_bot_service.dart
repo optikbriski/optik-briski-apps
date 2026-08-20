@@ -259,7 +259,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
     try {
       final raw = await _db.rpc(
         'get_toko_lab_queue_counts',
-        params: {'p_toko_id': tid},
+        params: withTenant({'p_toko_id': tid}),
       );
       if (raw is Map) {
         return MemberHelpLabQueueCounts.fromJson(
@@ -402,11 +402,11 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
     try {
       final raw = await _db.rpc(
         'search_member_toko_stock',
-        params: {
+        params: withTenant({
           'p_toko_id': tid,
           'p_q': (query ?? '').trim().isEmpty ? null : query!.trim(),
           'p_limit': lim,
-        },
+        }),
       );
       if (raw is Map) {
         return MemberHelpStockResult.fromJson(Map<String, dynamic>.from(raw));

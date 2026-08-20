@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../invoice/invoice_hub_service.dart';
+import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'member_inbox_unread.dart';
 import 'member_notification_payload.dart';
@@ -360,10 +361,10 @@ class MemberStatusWatch with WidgetsBindingObserver {
       // list_member_order_alerts(p_phone) vs (p_phone, p_after).
       final res = await Supabase.instance.client.rpc(
         'list_member_order_alerts',
-        params: {
+        params: withTenant({
           'p_phone': phone,
           'p_after': '1970-01-01T00:00:00.000Z',
-        },
+        }),
       );
       alerts = _asMapList(res);
     } catch (_) {

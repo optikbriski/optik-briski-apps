@@ -94,6 +94,16 @@ Deno.serve(async (req: Request) => {
     );
     const brand = (await loadBrand(db, body.tenant_id)).displayName;
 
+    if (!body.tenant_id) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "tenant_id / kode usaha wajib" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     // Pastikan draft tersimpan
     const draft = await db.rpc("member_save_register_draft", {
       p_phone: body.phone,
@@ -101,6 +111,7 @@ Deno.serve(async (req: Request) => {
       p_nama: body.nama ?? null,
       p_email: body.email ?? null,
       p_tanggal_lahir: body.tanggal_lahir ?? null,
+      p_tenant_id: body.tenant_id,
     });
     if (draft.error) throw draft.error;
     if (!(draft.data as any)?.ok) {
@@ -113,6 +124,7 @@ Deno.serve(async (req: Request) => {
     const issued = await db.rpc("member_issue_register_otp", {
       p_phone: body.phone,
       p_channel: channel,
+      p_tenant_id: body.tenant_id,
     });
     if (issued.error) throw issued.error;
     const result = issued.data as Record<string, unknown>;

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../garansi/garansi_service.dart';
 import '../karyawan/lab_job_service.dart';
 import '../qr/obr_codes.dart';
+import '../tenant/tenant_service.dart';
 import 'invoice_link.dart';
 
 class InvoiceHubService {
@@ -30,10 +31,10 @@ class InvoiceHubService {
       // (1-arg + 2-arg → PGRST203 when only p_no_invoice is sent).
       // Empty string (not omitted key) — some clients strip JSON null.
       final p = phone?.trim();
-      final params = <String, dynamic>{
+      final params = withTenant(<String, dynamic>{
         'p_no_invoice': noInvoice.trim(),
         'p_phone': (p == null || p.isEmpty) ? '' : p,
-      };
+      });
       final res = await _db.rpc('get_invoice_hub', params: params);
       if (res == null) return null;
       if (res is Map) return Map<String, dynamic>.from(res);
@@ -371,12 +372,12 @@ class InvoiceHubService {
     String? komentar,
     String? phone,
   }) async {
-    final params = <String, dynamic>{
+    final params = withTenant(<String, dynamic>{
       'p_no_invoice': noInvoice,
       'p_peran': peran,
       'p_skor': skor,
       'p_komentar': komentar,
-    };
+    });
     final p = phone?.trim();
     if (p != null && p.isNotEmpty) {
       params['p_phone'] = p;
@@ -384,24 +385,6 @@ class InvoiceHubService {
     try {
       await _db.rpc('submit_invoice_rating', params: params);
     } catch (e) {
-      // Fallback hanya jika overload p_phone belum di-deploy.
-      final msg = '$e'.toLowerCase();
-      final missingOverload = msg.contains('pgrst202') ||
-          msg.contains('could not find the function') ||
-          msg.contains('function public.submit_invoice_rating') ||
-          msg.contains('does not exist');
-      if (p != null && p.isNotEmpty && missingOverload) {
-        await _db.rpc(
-          'submit_invoice_rating',
-          params: {
-            'p_no_invoice': noInvoice,
-            'p_peran': peran,
-            'p_skor': skor,
-            'p_komentar': komentar,
-          },
-        );
-        return;
-      }
       rethrow;
     }
   }

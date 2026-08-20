@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../shared/member/member_repository.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 import 'pages/member_date_picker.dart';
 
@@ -157,6 +158,15 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       return;
     }
+    try {
+      await TenantService.instance.requireResolved();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: OptikMemberTokens.danger),
+      );
+      return;
+    }
     setState(() {
       if (channel == 'wa') {
         _sendingWa = true;
@@ -216,6 +226,7 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
     if (!_canCreate) return;
     setState(() => _busyCreate = true);
     try {
+      await TenantService.instance.requireResolved();
       final res = await _repo.finalizeRegister(
         phone: _phone.text.trim(),
         password: _pass.text,

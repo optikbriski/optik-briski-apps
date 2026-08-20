@@ -111,6 +111,18 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
+    if (!body.tenant_id) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "tenant_id wajib. Pakai member-send-channel-otp.",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
     const brand = (await loadBrand(db, body.tenant_id)).displayName;
 
     const { data, error } = await db.rpc("member_begin_register", {

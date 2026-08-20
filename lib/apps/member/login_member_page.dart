@@ -45,7 +45,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
     setState(() => _busy = true);
     try {
-      await TenantService.instance.resolveSlug(_slugCtrl.text);
+      await TenantService.instance.requireResolved(slug: _slugCtrl.text);
       await BrandService.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
@@ -327,7 +327,10 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
+                                    await TenantService.instance
+                                        .persistSlug(_slugCtrl.text);
+                                    if (!context.mounted) return;
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
@@ -384,7 +387,10 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                onPressed: () {
+                                onPressed: () async {
+                                  await TenantService.instance
+                                      .persistSlug(_slugCtrl.text);
+                                  if (!context.mounted) return;
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) =>

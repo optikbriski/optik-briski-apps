@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 
 class MemberForgotPasswordPage extends StatefulWidget {
@@ -49,6 +50,7 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
     }
     setState(() => _busy = true);
     try {
+      await TenantService.instance.requireResolved();
       final res = await _repo.requestPasswordReset(_id.text.trim());
       if (!mounted) return;
       if (res['ok'] != true) {
@@ -99,6 +101,7 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
     }
     setState(() => _busy = true);
     try {
+      await TenantService.instance.requireResolved();
       final res = await _repo.resetPassword(
         identifier: _id.text.trim(),
         code: _code.text.trim(),

@@ -39,6 +39,18 @@ class BrandService {
       final db = client ?? Supabase.instance.client;
       await TenantService.instance.ensureResolved(client: db);
       final t = TenantService.instance;
+      if (!t.isBound) {
+        // Jangan tampilkan merek Optik untuk slug usaha lain yang gagal resolve.
+        if (t.slug != TenantService.defaultSlug) {
+          final label = t.slug.trim().isEmpty ? 'POS' : t.slug;
+          _current = AppBrand(
+            displayName: label,
+            shortName: label,
+            assistantName: 'Asisten',
+          );
+        }
+        return;
+      }
       final fromRpc = (t.displayName ?? '').trim();
       if (fromRpc.isNotEmpty) {
         _current = AppBrand(
@@ -51,21 +63,12 @@ class BrandService {
               : t.assistantName!.trim(),
         );
       }
-      final tenantId = t.boundId;
       final row = await db
           .from('app_brand')
           .select('display_name, short_name, assistant_name')
-          .eq('tenant_id', tenantId)
+          .eq('tenant_id', t.boundId)
           .maybeSingle();
-      Map<String, dynamic>? data = row;
-      if (data == null) {
-        final fallback = await db
-            .from('app_brand')
-            .select('display_name, short_name, assistant_name')
-            .eq('id', 'default')
-            .maybeSingle();
-        data = fallback;
-      }
+      final data = row;
       if (data == null) return;
       final name = (data['display_name'] ?? '').toString().trim();
       if (name.isEmpty) return;
