@@ -22,7 +22,6 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   final _repo = MemberRepository();
   final _idCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   bool _busy = false;
   bool _obscure = true;
 
@@ -30,13 +29,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   void dispose() {
     _idCtrl.dispose();
     _passCtrl.dispose();
-    _slugCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _applySlugBrand() async {
-    await TenantService.instance.persistSlug(_slugCtrl.text);
-    await BrandService.load();
   }
 
   Future<void> _loginPassword() async {
@@ -50,7 +43,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
     setState(() => _busy = true);
     try {
-      await TenantService.instance.requireResolved(slug: _slugCtrl.text);
+      await TenantService.instance.requireResolved();
       await BrandService.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
@@ -297,17 +290,6 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               ),
                               const SizedBox(height: 18),
                               TextField(
-                                controller: _slugCtrl,
-                                textInputAction: TextInputAction.next,
-                                onSubmitted: (_) => _applySlugBrand(),
-                                onEditingComplete: _applySlugBrand,
-                                decoration: _fieldDec(
-                                  label: 'Kode usaha',
-                                  icon: Icons.storefront_outlined,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
                                 controller: _idCtrl,
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
@@ -341,10 +323,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () async {
-                                    await TenantService.instance
-                                        .persistSlug(_slugCtrl.text);
-                                    if (!context.mounted) return;
+                                  onPressed: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
@@ -401,10 +380,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                onPressed: () async {
-                                  await TenantService.instance
-                                      .persistSlug(_slugCtrl.text);
-                                  if (!context.mounted) return;
+                                onPressed: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) =>

@@ -66,6 +66,10 @@ class MemberSession extends ChangeNotifier {
       } catch (_) {}
     }
     loaded = true;
+    if (!TenantService.instance.memberMatchesApk(tenantId)) {
+      await logout();
+      return;
+    }
     // Alamat dulu, baru notify — UI jangan sempat baca bucket akun lama.
     await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
     if ((tenantId ?? '').trim().isNotEmpty) {
@@ -75,6 +79,11 @@ class MemberSession extends ChangeNotifier {
   }
 
   Future<void> applyMember(Map<String, dynamic> member) async {
+    if (!TenantService.instance.memberMatchesApk(member['tenant_id']?.toString())) {
+      throw StateError(
+        'Akun ini bukan member ${TenantService.instance.displayName ?? TenantService.instance.slug}.',
+      );
+    }
     phoneE164 = member['phone_e164']?.toString();
     phoneRaw = member['phone_raw']?.toString() ?? phoneRaw;
     memberId = member['id']?.toString();

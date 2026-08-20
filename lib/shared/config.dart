@@ -31,3 +31,12 @@ AppFlavor get currentFlavor {
       return AppFlavor.admin;
   }
 }
+
+/// Member APK terikat satu merek toko (bukan picker multi-UMKM).
+/// Build merek lain: `--dart-define=MEMBER_TENANT_SLUG=...` + ganti `app_name`.
+const String memberTenantSlug = String.fromEnvironment(
+  'MEMBER_TENANT_SLUG',
+  defaultValue: 'optik-briski',
+);
+
+bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;

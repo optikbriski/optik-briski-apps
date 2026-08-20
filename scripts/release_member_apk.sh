@@ -16,7 +16,11 @@ DEST_ARM32="build/optik-member-${VERSION}-armeabi-v7a.apk"
 LIMIT=$((50 * 1000 * 1000))
 
 echo "==> Build Member APK v${VERSION} (split per-ABI, tanpa x86)"
-DEFINE_ARGS=(--dart-define=APP_FLAVOR=member)
+# APK ini milik satu merek (default Optik). Bukan picker multi-UMKM.
+DEFINE_ARGS=(
+  --dart-define=APP_FLAVOR=member
+  --dart-define=MEMBER_TENANT_SLUG="${MEMBER_TENANT_SLUG:-optik-briski}"
+)
 if [[ -f .dart_define.member.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.member.json)
 else

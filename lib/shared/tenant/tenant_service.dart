@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import 'toko_ids.dart';
 
 /// Sekat UMKM. Satu login = satu tenant. Bukan cabang Optik.
@@ -39,12 +40,30 @@ class TenantService {
       'Kode usaha belum terverifikasi. Tidak boleh memakai data usaha lain.';
 
   Future<void> loadLocal() async {
+    if (isBrandedMemberApk) {
+      slug = memberTenantSlug;
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = (prefs.getString(_prefsKey) ?? '').trim();
       if (saved.isNotEmpty) slug = saved;
     } catch (_) {}
     if (slug.isEmpty) slug = defaultSlug;
+  }
+
+  /// APK Member = satu merek. Pelanggan tidak pilih kode usaha.
+  Future<void> bindBrandedMemberApk({SupabaseClient? client}) async {
+    await persistSlug(memberTenantSlug);
+    await resolveSlug(memberTenantSlug, client: client);
+  }
+
+  /// Tolak sesi/akun yang bukan merek APK ini.
+  bool memberMatchesApk(String? memberTenantId) {
+    if (!isBrandedMemberApk || !isBound) return true;
+    final t = (memberTenantId ?? '').trim();
+    if (t.isEmpty) return true;
+    return t == id;
   }
 
   Future<void> persistSlug(String next) async {
@@ -116,7 +135,9 @@ class TenantService {
   Future<void> bindFromMember(Map<String, dynamic>? member) async {
     if (member == null) return;
     final tid = (member['tenant_id'] ?? '').toString().trim();
-    if (tid.isNotEmpty) id = tid;
+    if (tid.isEmpty) return;
+    if (!memberMatchesApk(tid)) return;
+    id = tid;
   }
 
   Future<void> _hydrateFromTable(SupabaseClient? client) async {

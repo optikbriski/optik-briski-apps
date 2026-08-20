@@ -47,7 +47,11 @@ Future<void> bootstrapApp({
     httpClient: TrainingHttpClient(),
   );
   await TenantService.instance.loadLocal();
-  await TenantService.instance.ensureResolved();
+  if (isBrandedMemberApk) {
+    await TenantService.instance.bindBrandedMemberApk();
+  } else {
+    await TenantService.instance.ensureResolved();
+  }
   await BrandService.load();
   BrandChrome.attach();
 

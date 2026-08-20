@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:optik_b_riski/shared/config.dart';
 import 'package:optik_b_riski/shared/tenant/tenant_service.dart';
 
 void main() {
@@ -27,5 +28,15 @@ void main() {
     TenantService.instance.debugBind(other, slug: 'optik-maju');
     expect(TenantService.instance.boundId, other);
     expect(withTenant({})['p_tenant_id'], other);
+  });
+
+  test('memberMatchesApk is inert on Admin/Karyawan', () {
+    TenantService.instance.debugBind('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(isBrandedMemberApk, isFalse);
+    expect(TenantService.instance.memberMatchesApk('other-tenant'), isTrue);
+  });
+
+  test('Member APK default slug is Optik', () {
+    expect(memberTenantSlug, TenantService.defaultSlug);
   });
 }
