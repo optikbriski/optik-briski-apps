@@ -7,12 +7,12 @@ abstract final class RekasaTokens {
   static const Color inkSoft = Color(0xFF2B6BC4);
   static const Color ink = Color(0xFF0047AB);
   static const Color inkDeep = Color(0xFF001F4D);
-  static const Color canvas = Color(0xFFF0F5FC);
+  static const Color canvas = Color(0xFFD6E5F7);
   static const Color paper = Color(0xFFFFFFFF);
-  static const Color muted = Color(0xFF4A5F80);
-  static const Color line = Color(0x1A0047AB);
-  static const Color lineStrong = Color(0x330047AB);
-  static const Color wash = Color(0x148BB4E8);
+  static const Color muted = Color(0xFF4E7BB8);
+  static const Color line = Color(0x668BB4E8);
+  static const Color lineStrong = Color(0x998BB4E8);
+  static const Color wash = Color(0x4D8BB4E8);
   static const Color danger = Color(0xFFA65D5D);
   static const Color warning = Color(0xFF9A7B3C);
 
@@ -36,8 +36,8 @@ abstract final class RekasaTokens {
   static LinearGradient get badgeFill => const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [inkSoft, ink, inkDeep],
-        stops: [0.0, 0.48, 1.0],
+        colors: [sky, inkSoft, ink],
+        stops: [0.0, 0.52, 1.0],
       );
 }
 
@@ -103,8 +103,8 @@ ThemeData buildRekasaStoreTheme() {
     textTheme: text,
     scaffoldBackgroundColor: RekasaTokens.canvas,
     colorScheme: const ColorScheme.light(
-      primary: RekasaTokens.ink,
-      secondary: RekasaTokens.inkSoft,
+      primary: RekasaTokens.inkSoft,
+      secondary: RekasaTokens.sky,
       surface: RekasaTokens.paper,
       error: RekasaTokens.danger,
       onPrimary: RekasaTokens.paper,
@@ -157,7 +157,7 @@ ThemeData buildRekasaStoreTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: RekasaTokens.ink,
+        backgroundColor: RekasaTokens.inkSoft,
         foregroundColor: RekasaTokens.paper,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),

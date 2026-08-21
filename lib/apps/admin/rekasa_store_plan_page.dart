@@ -347,7 +347,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
         color: RekasaTokens.paper,
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: RekasaTokens.line)),
+            border: Border(top: BorderSide(color: RekasaTokens.inkSoft, width: 2.5)),
           ),
           child: SafeArea(
             child: Padding(
@@ -363,7 +363,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                       '${q.fromServer ? '' : ' · perkiraan'}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: RekasaTokens.ink,
+                        color: RekasaTokens.inkSoft,
                         fontSize: 16,
                       ),
                     ),

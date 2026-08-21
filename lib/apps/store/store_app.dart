@@ -217,7 +217,9 @@ class _StoreHomePageState extends State<StoreHomePage> {
             child: Container(
               decoration: const BoxDecoration(
                 color: RekasaTokens.paper,
-                border: Border(bottom: BorderSide(color: RekasaTokens.line)),
+                border: Border(
+                  bottom: BorderSide(color: RekasaTokens.inkSoft, width: 2.5),
+                ),
               ),
               child: SafeArea(
                 bottom: false,

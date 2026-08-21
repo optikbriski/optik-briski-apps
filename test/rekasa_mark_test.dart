@@ -14,8 +14,14 @@ void main() {
     expect(RekasaTokens.ink, const Color(0xFF0047AB));
     expect(RekasaTokens.inkSoft, const Color(0xFF2B6BC4));
     expect(RekasaTokens.sky, const Color(0xFF8BB4E8));
+    expect(RekasaTokens.canvas, const Color(0xFFD6E5F7));
     expect(RekasaTokens.inkDeep, const Color(0xFF001F4D));
     expect(RekasaTokens.paper, const Color(0xFFFFFFFF));
+    expect(RekasaTokens.badgeFill.colors, [
+      RekasaTokens.sky,
+      RekasaTokens.inkSoft,
+      RekasaTokens.ink,
+    ]);
     expect(RekasaTokens.ink, isNot(const Color(0xFF000080)));
     expect(RekasaTokens.ink, isNot(const Color(0xFF0B3D8C)));
   });

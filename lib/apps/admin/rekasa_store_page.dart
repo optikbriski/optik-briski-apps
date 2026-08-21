@@ -271,8 +271,8 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: p.planKey == 'paket_a'
-                                      ? RekasaTokens.ink
-                                      : RekasaTokens.wash,
+                                      ? RekasaTokens.inkSoft
+                                      : RekasaTokens.sky,
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
@@ -292,7 +292,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                         Text(
                           TenantBilling.formatRp(p.priceIdr),
                           style: GoogleFonts.plusJakartaSans(
-                            color: RekasaTokens.ink,
+                            color: RekasaTokens.inkSoft,
                             fontWeight: FontWeight.w800,
                             fontSize: 28,
                             letterSpacing: -0.8,

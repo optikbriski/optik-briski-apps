@@ -60,7 +60,7 @@ class RekasaIconTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.22),
         boxShadow: [
           BoxShadow(
-            color: RekasaTokens.ink.withOpacity(0.22),
+            color: RekasaTokens.inkSoft.withOpacity(0.28),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -102,7 +102,7 @@ class RekasaEyebrow extends StatelessWidget {
     return Text(
       text.toUpperCase(),
       style: GoogleFonts.plusJakartaSans(
-        color: RekasaTokens.muted,
+        color: RekasaTokens.inkSoft,
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.8,
@@ -126,7 +126,7 @@ class RekasaPillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: filled ? RekasaTokens.ink : RekasaTokens.paper,
+      color: filled ? RekasaTokens.inkSoft : RekasaTokens.paper,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -136,13 +136,13 @@ class RekasaPillButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: filled ? RekasaTokens.ink : RekasaTokens.lineStrong,
+              color: RekasaTokens.inkSoft,
             ),
           ),
           child: Text(
             label,
             style: GoogleFonts.plusJakartaSans(
-              color: filled ? RekasaTokens.paper : RekasaTokens.ink,
+              color: filled ? RekasaTokens.paper : RekasaTokens.inkSoft,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
