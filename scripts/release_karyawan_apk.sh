@@ -49,6 +49,7 @@ flutter "${FLUTTER_ARGS[@]}"
 # HP modern (2018+) hampir semua arm64 — ini yang dibagikan.
 ARM64_SRC=""
 for candidate in \
+  "$OUT_DIR/app-arm64-v8a-karyawan-release.apk" \
   "$OUT_DIR/app-karyawan-arm64-v8a-release.apk" \
   "$OUT_DIR/app-arm64-v8a-release.apk"; do
   if [[ -f "$candidate" ]]; then ARM64_SRC="$candidate"; break; fi
@@ -63,6 +64,7 @@ cp -f "$ARM64_SRC" "$DEST_ARM64"
 bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
 # HP lama 32-bit (opsional)
 for candidate in \
+  "$OUT_DIR/app-armeabi-v7a-karyawan-release.apk" \
   "$OUT_DIR/app-karyawan-armeabi-v7a-release.apk" \
   "$OUT_DIR/app-armeabi-v7a-release.apk"; do
   if [[ -f "$candidate" ]]; then

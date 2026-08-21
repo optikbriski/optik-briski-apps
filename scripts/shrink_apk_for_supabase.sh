@@ -4,11 +4,20 @@
 set -euo pipefail
 
 APK="${1:?Usage: shrink_apk_for_supabase.sh path/to.apk}"
-JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
+if [[ -z "${JAVA_HOME:-}" ]]; then
+  if [[ -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]]; then
+    JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+  elif [[ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]]; then
+    JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  fi
+fi
 export JAVA_HOME
-export PATH="$JAVA_HOME/bin:$PATH"
+export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}$PATH"
 
-BUILD_TOOLS="$(ls -d "$HOME"/Library/Android/sdk/build-tools/*/ 2>/dev/null | sort -V | tail -1)"
+BUILD_TOOLS="$(ls -d \
+  "${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/*/ \
+  "$HOME"/Library/Android/sdk/build-tools/*/ \
+  2>/dev/null | sort -V | tail -1)"
 ZIPALIGN="${BUILD_TOOLS}zipalign"
 APKSIGNER="${BUILD_TOOLS}apksigner"
 KS="${DEBUG_KEYSTORE:-$HOME/.android/debug.keystore}"
