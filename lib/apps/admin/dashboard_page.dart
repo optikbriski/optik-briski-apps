@@ -33,7 +33,6 @@ import '../../shared/widgets/admin/admin_premium.dart';
 import 'owner_provision_page.dart';
 import 'owner_finance_ops_page.dart';
 import 'tenant_admin_page.dart';
-import 'rekasa_store_page.dart';
 import 'rekasa_store_orders_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -382,25 +381,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                 MaterialPageRoute(
                                   builder: (_) => OwnerProvisionPage(
                                     profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training && isRekasaControlPlane)
-                            PremiumMenuTile(
-                              title: 'Etalase & beli paket',
-                              icon: Icons.storefront_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => RekasaStorePage(
-                                    isUpgrade: widget.profile['is_platform'] !=
-                                            true &&
-                                        widget.profile['is_platform'] !=
-                                            'true' &&
-                                        widget.profile['role'] != 'platform',
                                   ),
                                 ),
                               ),

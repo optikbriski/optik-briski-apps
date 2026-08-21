@@ -18,3 +18,4 @@ echo ""
 echo "APK operasional:"
 ls -lh build/rekasa-karyawan-*.apk build/rekasa-admin-*.apk 2>/dev/null || true
 echo "Pasang, lalu isi kode usaha di login. Data sekat tenant_id."
+echo "Etalase/kontrak: bash scripts/release_rekasa_store.sh (com.rekasa.store) — bukan APK ini."

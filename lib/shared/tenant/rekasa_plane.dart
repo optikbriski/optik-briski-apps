@@ -10,10 +10,11 @@
 ///   dan **kontrak online** (taut `?kontrak=`).
 /// - Hari H tagihan belum lunas → `tenants.status = suspend` (sistem down,
 ///   data tidak dihapus). Lunas / Rekasa nyalakan lagi → `aktif`.
-/// - APK/web Rekasa = **etalase**: pilih **bidang usaha** (optik, retail,
-///   F&B, jasa, bengkel, klinik, grosir, umum), lalu paket C→A + fitur
-///   yang namanya menyesuaikan. Satu mesin, bukan fork per klien.
-///   Detail (video + teks), beli langsung (tagihan + kontrak).
+/// - **APK Rekasa Store** (`com.rekasa.store`, `APP_FLAVOR=store`):
+///   katalog bidang + paket, beli, kontrak. Bukan kasir.
+/// - **APK yang dibeli klien**: Admin / Karyawan / Member
+///   (kulit Rekasa + kode usaha, atau white-label paket A).
+///   Tidak memuat etalase. Satu repo, APK terpisah — bukan fork.
 ///
 /// Paket bawah (C Starter, B Bisnis):
 /// - Kulit **Rekasa** (`brands/rekasa.json`, `pinTenant=false`).

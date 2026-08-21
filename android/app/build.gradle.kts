@@ -63,6 +63,13 @@ compileOptions {
             val name = storeProp("storeAppName")
             if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
+        create("store") {
+            dimension = "app"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.rekasa.store" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
+        }
     }
 
     buildTypes {
@@ -85,6 +92,14 @@ androidComponents {
     onVariants(selector().withFlavor("app" to "member")) { variant ->
         variant.packaging.jniLibs.excludes.add("**/libmlkit_google_ocr_pipeline.so")
         variant.packaging.resources.excludes.add("**/mlkit-google-ocr-models/**")
+    }
+    // Etalase Rekasa: bukan kasir — buang ML Kit / OCR native.
+    onVariants(selector().withFlavor("app" to "store")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libmlkit_google_ocr_pipeline.so")
+        variant.packaging.jniLibs.excludes.add("**/libmlkit*.so")
+        variant.packaging.jniLibs.excludes.add("**/libbarhopper_v3.so")
+        variant.packaging.resources.excludes.add("**/mlkit-google-ocr-models/**")
+        variant.packaging.resources.excludes.add("**/mlkit*/**")
     }
 }
 

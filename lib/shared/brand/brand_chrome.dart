@@ -31,6 +31,8 @@ class BrandChrome {
         return 'Member';
       case AppFlavor.karyawan:
         return 'Karyawan';
+      case AppFlavor.store:
+        return 'Etalase';
     }
   }
 

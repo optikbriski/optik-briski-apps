@@ -9,9 +9,14 @@ import 'rekasa_store_plan_page.dart';
 
 /// Etalase: pilih bidang dulu (seperti industri Odoo), baru paket + fitur.
 class RekasaStorePage extends StatefulWidget {
-  const RekasaStorePage({super.key, this.isUpgrade = false});
+  const RekasaStorePage({
+    super.key,
+    this.isUpgrade = false,
+    this.embedded = false,
+  });
 
   final bool isUpgrade;
+  final bool embedded;
 
   @override
   State<RekasaStorePage> createState() => _RekasaStorePageState();
@@ -61,6 +66,27 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
   @override
   Widget build(BuildContext context) {
     final selected = _catalog.industryKey;
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : selected == null
+            ? _industries()
+            : _plans();
+    if (widget.embedded) {
+      return Column(
+        children: [
+          if (selected != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _boot(),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Ganti bidang'),
+              ),
+            ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
@@ -74,11 +100,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
               )
             : null,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : selected == null
-              ? _industries()
-              : _plans(),
+      body: body,
     );
   }
 

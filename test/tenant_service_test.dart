@@ -43,6 +43,7 @@ void main() {
     expect(pinAdminTenant, isFalse);
     expect(pinStoreTenant, isTrue);
     expect(isRekasaControlPlane, isTrue);
+    expect(isRekasaStorefront, isFalse);
     expect(isBrandedStoreApk, isFalse);
   });
 

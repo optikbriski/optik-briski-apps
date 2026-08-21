@@ -38,6 +38,8 @@ exp("STORE_MEMBER_APPLICATION_ID", "memberApplicationId")
 exp("STORE_KARYAWAN_APPLICATION_ID", "karyawanApplicationId")
 exp("STORE_ADMIN_APP_NAME", "adminAppName", (p.get("displayName") or slug) + " Admin")
 exp("STORE_ADMIN_APPLICATION_ID", "adminApplicationId")
+exp("STOREFRONT_APP_NAME", "storefrontAppName", "Rekasa")
+exp("STOREFRONT_APPLICATION_ID", "storefrontApplicationId", "com.rekasa.store")
 PY
 )"
 

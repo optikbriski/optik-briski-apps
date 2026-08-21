@@ -11,14 +11,15 @@ const String supabasePublishableKey = String.fromEnvironment(
 @Deprecated('Use supabasePublishableKey')
 const String supabaseAnonKey = supabasePublishableKey;
 
-/// Which product shell is running. Set via --dart-define=APP_FLAVOR=admin|karyawan|member
+/// Which product shell is running.
+/// `store` = APK Rekasa (katalog + kontrak). Bukan APK kasir klien.
 /// Owner UX lives inside Karyawan APK (post-login route) — not a separate flavor.
 const String appFlavor = String.fromEnvironment(
   'APP_FLAVOR',
   defaultValue: 'admin',
 );
 
-enum AppFlavor { admin, karyawan, member }
+enum AppFlavor { admin, karyawan, member, store }
 
 AppFlavor get currentFlavor {
   switch (appFlavor.toLowerCase()) {
@@ -26,6 +27,8 @@ AppFlavor get currentFlavor {
       return AppFlavor.karyawan;
     case 'member':
       return AppFlavor.member;
+    case 'store':
+      return AppFlavor.store;
     case 'admin':
     default:
       return AppFlavor.admin;
@@ -67,12 +70,18 @@ bool get isBrandedStoreApk {
       return pinStoreTenant;
     case AppFlavor.admin:
       return pinAdminTenant;
+    case AppFlavor.store:
+      return false;
   }
 }
 
-/// Hanya web Admin tanpa pin. Di sini Rekasa atur tenant + paket semua merek.
+/// Web Admin tanpa pin, atau APK Rekasa Store. Bukan APK kasir klien.
 bool get isRekasaControlPlane =>
-    currentFlavor == AppFlavor.admin && !pinAdminTenant;
+    currentFlavor == AppFlavor.store ||
+    (currentFlavor == AppFlavor.admin && !pinAdminTenant);
+
+/// APK/web etalase Rekasa (katalog, beli, kontrak). Bukan POS.
+bool get isRekasaStorefront => currentFlavor == AppFlavor.store;
 
 String get brandedStoreSlug {
   switch (currentFlavor) {
@@ -81,6 +90,7 @@ String get brandedStoreSlug {
     case AppFlavor.karyawan:
       return karyawanTenantSlug;
     case AppFlavor.admin:
+    case AppFlavor.store:
       return adminTenantSlug;
   }
 }
