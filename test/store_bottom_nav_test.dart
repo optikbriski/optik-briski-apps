@@ -23,6 +23,7 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Kontrak'), findsNothing);
     await tester.tap(find.text('Akun'));
     await tester.pump();
     expect(index, 1);
