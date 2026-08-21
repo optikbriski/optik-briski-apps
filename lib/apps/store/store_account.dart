@@ -111,6 +111,33 @@ class StoreAccountSnapshot {
     return keys;
   }
 
+  factory StoreAccountSnapshot.merge(dynamic entitlements, dynamic access) {
+    final e = entitlements is Map
+        ? Map<String, dynamic>.from(entitlements)
+        : <String, dynamic>{};
+    final a = access is Map
+        ? Map<String, dynamic>.from(access)
+        : <String, dynamic>{};
+    final invoices = StoreAccountSnapshot._maps(a['invoices']);
+    return StoreAccountSnapshot(
+      ok: e['ok'] == true || a['ok'] == true,
+      platform: e['platform'] == true || a['platform'] == true,
+      reason: (e['reason'] ?? a['reason'])?.toString(),
+      error: (e['error'] ?? a['error'])?.toString(),
+      tenantId: (e['tenant_id'] ?? a['tenant_id'])?.toString(),
+      displayName: (e['display_name'] ?? a['display_name'])?.toString(),
+      slug: (e['slug'] ?? a['slug'])?.toString(),
+      status: (e['status'] ?? a['status'])?.toString(),
+      planKey: e['plan_key']?.toString(),
+      industryKey: e['industry_key']?.toString(),
+      whiteLabel: e['white_label'] == true,
+      shell: (e['shell'] ?? 'rekasa_shared').toString(),
+      modules: StoreAccountSnapshot._maps(e['modules']),
+      invoices: invoices,
+      unsignedContractToken: a['unsigned_contract_token']?.toString(),
+    );
+  }
+
   factory StoreAccountSnapshot.fromRpc(dynamic raw) {
     if (raw is! Map) {
       return const StoreAccountSnapshot(ok: false, reason: 'unknown');
@@ -145,21 +172,50 @@ class StoreAccountSnapshot {
   }
 }
 
+class StoreAccountHint {
+  const StoreAccountHint({this.slug, this.phone, this.email, this.contractToken});
+
+  final String? slug;
+  final String? phone;
+  final String? email;
+  final String? contractToken;
+}
+
 class StoreAccount {
   StoreAccount._();
 
   static Future<StoreAccountSnapshot> load({SupabaseClient? client}) async {
+    final db = client ?? supabase;
     try {
-      final raw = await (client ?? supabase).rpc('my_tenant_account');
+      final raw = await db.rpc('my_tenant_account');
       return StoreAccountSnapshot.fromRpc(raw);
     } catch (e) {
       debugPrint('my_tenant_account: $e');
-      return StoreAccountSnapshot(
+    }
+    try {
+      final ent = await db.rpc('my_tenant_entitlements');
+      final acc = await db.rpc('my_tenant_access');
+      return StoreAccountSnapshot.merge(ent, acc);
+    } catch (e) {
+      debugPrint('store account fallback: $e');
+      return const StoreAccountSnapshot(
         ok: false,
         reason: 'rpc_missing',
         error:
-            'SQL 000012 belum di-apply. Portal akun owner perlu my_tenant_account().',
+            'SQL 000012/000013 belum di-apply. Portal akun perlu my_tenant_account.',
       );
     }
+  }
+
+  static Future<StoreAccountSnapshot> claim({
+    required String slug,
+    required String phone,
+    SupabaseClient? client,
+  }) async {
+    final raw = await (client ?? supabase).rpc(
+      'claim_store_owner',
+      params: {'p_slug': slug, 'p_phone': phone},
+    );
+    return StoreAccountSnapshot.fromRpc(raw);
   }
 }

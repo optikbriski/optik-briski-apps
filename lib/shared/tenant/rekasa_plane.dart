@@ -40,9 +40,12 @@
 /// Sinkron beli → APK (setelah SQL 000011):
 /// 1. Etalase: centang fitur + beli → `submit_store_order`.
 /// 2. Baris `tenants` + `apply_store_modules` menulis `tenant_modules`.
-/// 3. APK toko login / isi kode usaha → `TenantModules.load()`.
-/// 4. RPC `my_tenant_entitlements()` = sumber menu. `allows(key)`
+/// 3. Struk: tanda tangan kontrak + **klaim owner**
+///    (`claim_store_owner` = email Auth + kode usaha + HP pesanan).
+/// 4. Dasbor merek di etalase baca `my_tenant_account()` (tagihan + kontrak).
+/// 5. APK toko login / isi kode usaha → `TenantModules.load()`.
+/// 6. RPC `my_tenant_entitlements()` = sumber menu. `allows(key)`
 ///    hanya true untuk modul `enabled`.
-/// 5. Upgrade = tenant yang sama, login ulang. Bukan ganti APK
+/// 7. Upgrade = tenant yang sama, login ulang. Bukan ganti APK
 ///    (kecuali pindah ke white-label / `BRAND=<slug>`).
 library;

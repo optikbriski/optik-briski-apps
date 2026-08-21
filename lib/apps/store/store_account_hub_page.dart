@@ -44,7 +44,7 @@ class StoreAccountHubPage extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 22),
-                _tile(
+                    _tile(
                   context,
                   icon: Icons.storefront_rounded,
                   title: kind == StoreAccountKind.owner
@@ -52,7 +52,7 @@ class StoreAccountHubPage extends StatelessWidget {
                       : 'Owner usaha',
                   body: kind == StoreAccountKind.owner
                       ? 'Buka pembayaran, kontrak, dan paket usaha Anda.'
-                      : 'Sudah beli. Masuk pakai akun yang Rekasa kirim.',
+                      : 'Sudah beli: masuk atau daftar, klaim kode usaha + HP.',
                   onTap: () {
                     if (kind == StoreAccountKind.owner) {
                       Navigator.push(

@@ -269,7 +269,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                         ),
                         RekasaPillButton(label: 'Keluar', onTap: _logout),
                       ] else
-                        RekasaPillButton(label: 'Operator', onTap: _login),
+                        RekasaPillButton(label: 'Operator Rekasa', onTap: _login),
                     ],
                   ),
                 ),

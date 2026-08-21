@@ -52,6 +52,26 @@ void main() {
     expect(wl.amountIdr, extra.amountIdr + cat.whiteLabelAddonIdr);
   });
 
+  test('quote fromRpc prefers server amount', () {
+    final local = StoreCatalog.local('optik').quote(
+      plan: StoreCatalog.local('optik').plans.first,
+      enabled: const {},
+      whiteLabel: false,
+    );
+    final remote = StoreQuote.fromRpc({
+      'ok': true,
+      'base_idr': 250000,
+      'add_on_idr': 75000,
+      'white_label_idr': 0,
+      'amount_idr': 325000,
+      'white_label': false,
+    }, fallback: local);
+    expect(remote.fromServer, isTrue);
+    expect(remote.amountIdr, 325000);
+    expect(remote.addOnIdr, 75000);
+    expect(StoreQuote.fromRpc(null, fallback: local).fromServer, isFalse);
+  });
+
   test('youtube id from watch and youtu.be', () {
     expect(
       StoreVideo.youtubeId('https://www.youtube.com/watch?v=dQw4w9wgGcQ'),

@@ -33,6 +33,7 @@ class StoreQuote {
     required this.whiteLabelIdr,
     required this.amountIdr,
     required this.whiteLabel,
+    this.fromServer = false,
   });
 
   final int baseIdr;
@@ -40,6 +41,20 @@ class StoreQuote {
   final int whiteLabelIdr;
   final int amountIdr;
   final bool whiteLabel;
+  final bool fromServer;
+
+  factory StoreQuote.fromRpc(dynamic raw, {required StoreQuote fallback}) {
+    if (raw is! Map || raw['ok'] != true) return fallback;
+    int n(dynamic v, int d) => int.tryParse('$v'.split('.').first) ?? d;
+    return StoreQuote(
+      baseIdr: n(raw['base_idr'], fallback.baseIdr),
+      addOnIdr: n(raw['add_on_idr'], fallback.addOnIdr),
+      whiteLabelIdr: n(raw['white_label_idr'], fallback.whiteLabelIdr),
+      amountIdr: n(raw['amount_idr'], fallback.amountIdr),
+      whiteLabel: raw['white_label'] == true || fallback.whiteLabel,
+      fromServer: true,
+    );
+  }
 }
 
 class StoreCatalog {
@@ -170,7 +185,51 @@ class StoreCatalog {
       return fromRpc(Map<String, dynamic>.from(raw), fallbackIndustry: industryKey);
     } catch (e) {
       debugPrint('list_store_catalog: $e');
+      try {
+        final raw = await supabase.rpc('list_store_catalog');
+        if (raw is Map && raw['ok'] == true) {
+          return fromRpc(
+            Map<String, dynamic>.from(raw),
+            fallbackIndustry: industryKey,
+          );
+        }
+      } catch (e2) {
+        debugPrint('list_store_catalog fallback: $e2');
+      }
       return StoreCatalog.local(industryKey);
+    }
+  }
+
+  Future<StoreQuote> quoteRemote({
+    required StorePlanDef plan,
+    required Map<String, bool> enabled,
+    required bool whiteLabel,
+  }) async {
+    final local = quote(plan: plan, enabled: enabled, whiteLabel: whiteLabel);
+    Future<StoreQuote> call(Map<String, dynamic> params) async {
+      final raw = await supabase.rpc('quote_store_order', params: params);
+      return StoreQuote.fromRpc(raw, fallback: local);
+    }
+
+    try {
+      return await call({
+        'p_plan_key': plan.planKey,
+        'p_modules': enabled,
+        'p_white_label': whiteLabel,
+        'p_industry_key': industryKey ?? 'umum',
+      });
+    } catch (e) {
+      debugPrint('quote_store_order: $e');
+      try {
+        return await call({
+          'p_plan_key': plan.planKey,
+          'p_modules': enabled,
+          'p_white_label': whiteLabel,
+        });
+      } catch (e2) {
+        debugPrint('quote_store_order fallback: $e2');
+        return local;
+      }
     }
   }
 

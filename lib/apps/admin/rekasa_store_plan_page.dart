@@ -8,6 +8,8 @@ import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
+import '../store/store_account.dart';
+import '../store/store_account_login_page.dart';
 import 'store_module_detail_page.dart';
 
 /// Satu paket: nyala/mati tiap fitur + beli.
@@ -31,8 +33,17 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
   late Map<String, bool> _on;
   late bool _whiteLabel;
   bool _buying = false;
+  StoreQuote? _remoteQuote;
 
   StorePlanDef get plan => widget.plan;
+
+  StoreQuote get _localQuote => widget.catalog.quote(
+        plan: plan,
+        enabled: _on,
+        whiteLabel: _whiteLabel,
+      );
+
+  StoreQuote get _quote => _remoteQuote ?? _localQuote;
 
   @override
   void initState() {
@@ -41,13 +52,28 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       for (final m in widget.catalog.modules) m.key: plan.includes(m.key),
     };
     _whiteLabel = plan.whiteLabel;
+    _refreshQuote();
   }
 
-  StoreQuote get _quote => widget.catalog.quote(
-        plan: plan,
-        enabled: _on,
-        whiteLabel: _whiteLabel,
-      );
+  Future<void> _refreshQuote() async {
+    final next = await widget.catalog.quoteRemote(
+      plan: plan,
+      enabled: _on,
+      whiteLabel: _whiteLabel,
+    );
+    if (!mounted) return;
+    setState(() => _remoteQuote = next.fromServer ? next : null);
+  }
+
+  void _setOn(String key, bool v) {
+    setState(() => _on[key] = v);
+    _refreshQuote();
+  }
+
+  void _setWhiteLabel(bool v) {
+    setState(() => _whiteLabel = v);
+    _refreshQuote();
+  }
 
   Future<void> _buy() async {
     final name = TextEditingController();
@@ -126,12 +152,20 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
 
     setState(() => _buying = true);
     try {
-      final raw = await supabase.rpc('submit_store_order', params: payload);
+      dynamic raw;
+      try {
+        raw = await supabase.rpc('submit_store_order', params: payload);
+      } catch (_) {
+        final slim = Map<String, dynamic>.from(payload)..remove('p_industry_key');
+        raw = await supabase.rpc('submit_store_order', params: slim);
+      }
       final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       if (map['ok'] != true) throw map['error'] ?? 'Gagal memesan';
       if (!mounted) return;
       final token = '${map['contract_token'] ?? ''}';
       final slug = '${map['slug'] ?? ''}'.trim();
+      final phone = '${payload['p_phone'] ?? ''}'.trim();
+      final orderEmail = '${payload['p_email'] ?? ''}'.trim();
       final serverMods = map['modules'];
       final enabledKeys = <String>{};
       if (serverMods is List) {
@@ -163,8 +197,9 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
             'Tagihan ${map['invoice_no'] ?? ''} · ${TenantBilling.formatRp(map['amount_idr'])}.\n\n'
             'Fitur yang nyala di APK toko:\n$labels\n\n'
             '${TenantModules.installHint(whiteLabel: wl, slug: slug)}\n\n'
-            'Tandatangani kontrak online, transfer ke Rekasa. '
-            'Setelah lunas sistem dinyalakan. Data tidak dihapus kalau telat bayar — hanya dimatikan.',
+            'Tandatangani kontrak, buat akun owner (kode usaha + HP), '
+            'transfer ke Rekasa. Setelah lunas sistem dinyalakan. '
+            'Data tidak dihapus kalau telat bayar — hanya dimatikan.',
           ),
           actions: [
             if (token.isNotEmpty)
@@ -180,6 +215,25 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                 },
                 child: const Text('Tandatangani sekarang'),
               ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StoreAccountLoginPage(
+                      hint: StoreAccountHint(
+                        slug: slug,
+                        phone: phone,
+                        email: orderEmail,
+                        contractToken: token,
+                      ),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Buka akun owner'),
+            ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('OK'),
@@ -234,7 +288,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                           : 'Add-on ${TenantBilling.formatRp(widget.catalog.whiteLabelAddonIdr)}',
                     ),
                     value: _whiteLabel,
-                    onChanged: (v) => setState(() => _whiteLabel = v),
+                    onChanged: (v) => _setWhiteLabel(v),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -259,7 +313,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                             ),
                             isThreeLine: true,
                             value: _on[m.key] ?? false,
-                            onChanged: (v) => setState(() => _on[m.key] = v),
+                            onChanged: (v) => _setOn(m.key, v),
                           ),
                           Align(
                             alignment: Alignment.centerRight,
@@ -305,7 +359,8 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Total ${TenantBilling.formatRp(q.amountIdr)}'
-                      '${q.addOnIdr > 0 ? ' · add-on ${TenantBilling.formatRp(q.addOnIdr)}' : ''}',
+                      '${q.addOnIdr > 0 ? ' · add-on ${TenantBilling.formatRp(q.addOnIdr)}' : ''}'
+                      '${q.fromServer ? '' : ' · perkiraan'}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         color: RekasaTokens.ink,

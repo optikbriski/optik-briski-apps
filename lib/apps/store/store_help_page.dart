@@ -30,7 +30,8 @@ class StoreHelpPage extends StatelessWidget {
                   SizedBox(height: 10),
                   Text(
                     'Pilih bidang dan paket di etalase, lalu beli. '
-                    'Rekasa kirim akses owner (email) setelah usaha diprovision.',
+                    'Setelah itu buka Akun: daftar/masuk dengan email, '
+                    'kode usaha, dan HP yang sama — usaha terikat ke merek Anda.',
                     style: TextStyle(height: 1.45),
                   ),
                   SizedBox(height: 14),

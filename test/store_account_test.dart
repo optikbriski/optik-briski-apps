@@ -61,4 +61,31 @@ void main() {
     final snap = StoreAccountSnapshot.fromRpc(null);
     expect(snap.ok, isFalse);
   });
+
+  test('merge entitlements + access keeps brand and invoices', () {
+    final snap = StoreAccountSnapshot.merge(
+      {
+        'ok': true,
+        'display_name': 'Klinik Sari',
+        'slug': 'klinik-sari',
+        'plan_key': 'paket_c',
+        'industry_key': 'klinik',
+        'modules': [
+          {'module_key': 'pos', 'enabled': true},
+        ],
+      },
+      {
+        'ok': true,
+        'status': 'trial',
+        'invoices': [
+          {'invoice_no': 'RK-1', 'amount_idr': 250000},
+        ],
+        'unsigned_contract_token': 'tok',
+      },
+    );
+    expect(snap.brandLabel, 'Klinik Sari');
+    expect(snap.invoices, hasLength(1));
+    expect(snap.unsignedContractToken, 'tok');
+    expect(snap.enabledModuleLabels, isNotEmpty);
+  });
 }
