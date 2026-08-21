@@ -20,13 +20,15 @@ void main() {
     expect(RekasaTokens.ink, isNot(const Color(0xFF0B3D8C)));
   });
 
-  testWidgets('mark shows R badge and Rekasa wordmark', (tester) async {
+  testWidgets('mark shows R badge and full-name lockup', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(body: RekasaMark()),
       ),
     );
     expect(find.text('R'), findsOneWidget);
-    expect(find.text('Rekasa'), findsOneWidget);
+    expect(find.text('REKASA'), findsOneWidget);
+    expect(find.text('KARYA INDONESIA'), findsOneWidget);
+    expect(find.text('Rekasa'), findsNothing);
   });
 }

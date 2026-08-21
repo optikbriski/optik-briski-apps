@@ -3,7 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../brand/rekasa_tokens.dart';
 
-/// Tanda Rekasa: kotak biru royal + R putih + wordmark.
+/// Lockup resmi etalase: badge R + nama lengkap.
+/// Bukan merek Optik. Favicon tetap badge saja.
 class RekasaMark extends StatelessWidget {
   const RekasaMark({
     super.key,
@@ -11,6 +12,10 @@ class RekasaMark extends StatelessWidget {
     this.showWordmark = true,
     this.wordmarkColor,
   });
+
+  static const String legalName = 'REKASA KARYA INDONESIA';
+  static const String primaryLine = 'REKASA';
+  static const String secondaryLine = 'KARYA INDONESIA';
 
   final double height;
   final bool showWordmark;
@@ -44,22 +49,47 @@ class RekasaMark extends StatelessWidget {
       ),
     );
     if (!showWordmark) return badge;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        badge,
-        SizedBox(width: height * 0.34),
-        Text(
-          'Rekasa',
-          style: GoogleFonts.plusJakartaSans(
-            color: wordmarkColor ?? RekasaTokens.ink,
-            fontWeight: FontWeight.w800,
-            fontSize: height * 0.68,
-            letterSpacing: -0.4,
-            height: 1,
+
+    final primary = wordmarkColor ?? RekasaTokens.ink;
+    final secondary = wordmarkColor?.withOpacity(0.72) ?? RekasaTokens.muted;
+
+    return Semantics(
+      label: legalName,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          badge,
+          SizedBox(width: height * 0.32),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                primaryLine,
+                style: GoogleFonts.plusJakartaSans(
+                  color: primary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: height * 0.48,
+                  letterSpacing: -0.6,
+                  height: 1,
+                ),
+              ),
+              SizedBox(height: height * 0.08),
+              Text(
+                secondaryLine,
+                style: GoogleFonts.plusJakartaSans(
+                  color: secondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: height * 0.26,
+                  letterSpacing: 1.15,
+                  height: 1,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

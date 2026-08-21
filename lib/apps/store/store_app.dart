@@ -225,8 +225,17 @@ class _StoreHomePageState extends State<StoreHomePage> {
                   padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
                   child: Row(
                     children: [
-                      const RekasaMark(height: 34),
-                      const Spacer(),
+                      const Flexible(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: RekasaMark(height: 34),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       if (_kind == StoreAccountKind.owner)
                         RekasaPillButton(
                           label: 'Dasbor',

@@ -43,12 +43,18 @@
       color: #fff; font: 800 24px/44px "Plus Jakarta Sans", system-ui, sans-serif;
       text-align: center; box-shadow: 0 8px 18px rgba(0, 71, 171, .22);
     }
+    .obr-boot .rks-lockup { display: flex; flex-direction: column; gap: 5px; }
     .obr-boot .rks-word {
-      font: 800 28px/1 "Plus Jakarta Sans", system-ui, sans-serif;
+      font: 800 22px/1 "Plus Jakarta Sans", system-ui, sans-serif;
       color: #0047AB; letter-spacing: -.04em;
+    }
+    .obr-boot .rks-legal {
+      font: 700 10px/1 "Plus Jakarta Sans", system-ui, sans-serif;
+      color: #4A5F80; letter-spacing: .14em;
     }
     .obr-boot.dark { background: #0B1220; }
     .obr-boot.dark .rks-word { color: #F7FAFF; }
+    .obr-boot.dark .rks-legal { color: #8BB4E8; }
   </style>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.css" />
@@ -66,7 +72,10 @@
 <body>
   <div class="obr-boot" id="obr-boot">
     <div class="rks-badge" aria-hidden="true">R</div>
-    <div class="rks-word">Rekasa</div>
+    <div class="rks-lockup" aria-label="REKASA KARYA INDONESIA">
+      <div class="rks-word">REKASA</div>
+      <div class="rks-legal">KARYA INDONESIA</div>
+    </div>
   </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
