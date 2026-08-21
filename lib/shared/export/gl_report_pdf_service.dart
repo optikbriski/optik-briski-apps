@@ -114,7 +114,7 @@ class GlReportPdfService {
     required List<String> headers,
     required List<List<String>> data,
   }) async {
-    final doc = pw.Document(title: title, author: '${BrandService.name}');
+    final doc = pw.Document(title: title, author: BrandService.name);
     final generated =
         DateFormat('d MMM yyyy HH:mm', 'id_ID').format(DateTime.now());
 

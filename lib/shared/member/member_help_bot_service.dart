@@ -461,7 +461,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
             final id = (e is Map ? e['id'] : null)?.toString().trim() ?? '';
             return <String, dynamic>{
               'toko_id': id,
-              'shop_name': '${BrandService.name}',
+              'shop_name': BrandService.name,
               'address': '',
               'phone': '',
             };
@@ -622,7 +622,7 @@ Typical hours: 09:00–21:00 (may vary by branch / holidays). Confirm today’s 
         en ? 'Branch info (directory):\n' : 'Info cabang (dari data toko):\n',
       );
       final id = (focus['toko_id'] ?? '-').toString();
-      final name = (focus['shop_name'] ?? '${BrandService.name}').toString();
+      final name = (focus['shop_name'] ?? BrandService.name).toString();
       final addrRaw = (focus['address'] ?? '').toString().trim();
       final phoneRaw = (focus['phone'] ?? '').toString().trim();
       final addrMissing = addrRaw.isEmpty || addrRaw == '-';

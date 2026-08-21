@@ -121,7 +121,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
         return;
       }
       if (!mounted) return;
-      setState(() => _platformProfile = Map<String, dynamic>.from(row!));
+      setState(() => _platformProfile = Map<String, dynamic>.from(row));
     } catch (err) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

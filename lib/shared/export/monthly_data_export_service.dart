@@ -755,7 +755,7 @@ class MonthlyDataExportService {
     final subjectDomain = docSubjectDomain ?? 'multi-domain';
     final doc = pw.Document(
       title: '$reportTitle — ${BrandService.name} (Salinan $salinanKe)',
-      author: '${BrandService.name}',
+      author: BrandService.name,
       subject:
           'Operational export $subjectDomain ${range.label} Salinan $salinanKe',
       creator: '${BrandService.name} App',

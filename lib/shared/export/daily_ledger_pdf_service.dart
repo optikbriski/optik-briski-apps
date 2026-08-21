@@ -82,7 +82,7 @@ class DailyLedgerPdfService {
   static Future<Uint8List> buildPdf(DailyLedgerPdfData data) async {
     final doc = pw.Document(
       title: 'Ledger Harian ${data.tokoLabel} ${data.dateStr}',
-      author: '${BrandService.name}',
+      author: BrandService.name,
     );
 
     final untungKotor = data.omzet - data.hpp;

@@ -154,6 +154,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
           });
         } catch (_) {}
       }
+      if (!mounted) return;
       _slug.clear();
       _name.clear();
       _short.clear();

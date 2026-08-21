@@ -88,7 +88,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         rows = geoById.keys
             .map((id) => {
                   'toko_id': id,
-                  'shop_name': '${BrandService.name}',
+                  'shop_name': BrandService.name,
                   'address': '',
                   'phone': '',
                 })
@@ -278,7 +278,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
   Future<void> _openMaps(Map<String, dynamic> store) async {
     final lat = (store['latitude'] as num?)?.toDouble();
     final lng = (store['longitude'] as num?)?.toDouble();
-    final name = (store['shop_name'] ?? '${BrandService.name}').toString();
+    final name = (store['shop_name'] ?? BrandService.name).toString();
     final addr = (store['address'] ?? '').toString();
     final Uri uri;
     if (lat != null && lng != null) {
@@ -307,7 +307,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
 
   Widget _storeCard(Map<String, dynamic> s, {bool highlighted = false}) {
     final id = (s['toko_id'] ?? '').toString();
-    final name = (s['shop_name'] ?? '${BrandService.name}').toString();
+    final name = (s['shop_name'] ?? BrandService.name).toString();
     final addr = (s['address'] ?? '').toString();
     final phone = (s['phone'] ?? '').toString();
     final review = (s['google_review_url'] ?? '').toString();
