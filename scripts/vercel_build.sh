@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Flutter Web (Admin) for Vercel Git / CLI builds.
+# Vercel: situs publik Rekasa di / ; konsol Admin di /admin/
 # Set in Vercel → Project → Settings → Environment Variables (Production + Preview):
 #   SUPABASE_URL
 #   SUPABASE_ANON_KEY
@@ -43,6 +43,8 @@ fi
 
 # Konsol Rekasa: jangan pin merek. Web per merek: scripts/release_brand_web.sh
 flutter build web --release \
+  -o build/web-admin \
+  --base-href /admin/ \
   -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=admin \
   --dart-define=ADMIN_PIN_TENANT=false \
@@ -50,5 +52,12 @@ flutter build web --release \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
 
+rm -rf build/web
+mkdir -p build/web
+cp -R site/. build/web/
+mkdir -p build/web/admin
+cp -R build/web-admin/. build/web/admin/
+
 test -f build/web/index.html
-echo "OK: build/web ready"
+test -f build/web/admin/index.html
+echo "OK: situs Rekasa di / ; konsol Admin di /admin/"
