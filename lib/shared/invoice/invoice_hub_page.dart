@@ -18,6 +18,7 @@ import 'invoice_detail_page.dart';
 import 'invoice_hub_service.dart';
 import 'invoice_lifecycle_service.dart';
 import 'invoice_link.dart';
+import '../pos/pos_midtrans.dart';
 import 'invoice_qr_anti_copy_beta.dart';
 import 'pickup_item_picker_dialog.dart';
 import 'sale_fulfillment_service.dart';
@@ -306,6 +307,34 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final metode = await _showPelunasanGateway(sisa);
     if (metode == null || !mounted) return;
 
+    var metodeBayar = metode;
+    if (PosMidtrans.usesGateway(metode)) {
+      if (sisa <= 0) return;
+      final paid = await PosMidtrans.chargeAndWait(
+        context: context,
+        amountIdr: sisa,
+        purpose: 'pelunasan',
+        tokoId: (h['toko_id'] ?? '').toString(),
+        saleId: saleId,
+        invoiceNo: (h['no_invoice'] ?? '').toString(),
+        customerName: (h['nama_pelanggan'] ?? '').toString(),
+        phone: (h['no_wa'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      if (!paid.ok || !paid.settled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(paid.error ?? 'Pembayaran Midtrans dibatalkan'),
+            backgroundColor: OptikAdminTokens.warning,
+          ),
+        );
+        return;
+      }
+      if ((paid.paymentType ?? '').trim().isNotEmpty) {
+        metodeBayar = PosMidtrans.labelForType(paid.paymentType!);
+      }
+    }
+
     final staff = await showStaffNikScanDialog(
       context,
       title: 'Scan karyawan · pelunasan',
@@ -317,7 +346,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     try {
       final updated = await _lifecycle.settleDpViaGateway(
         saleId: saleId,
-        metodePembayaran: metode,
+        metodePembayaran: metodeBayar,
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString() ?? '',
         rawScan: raw,
@@ -385,7 +414,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 children: [
                   Text(
                     'Bayar sisa tagihan sekali lunas.\n'
-                    'Jumlah: Rp ${_fmt(sisa)}',
+                    'Jumlah: Rp ${_fmt(sisa)}\n'
+                    'QRIS / Transfer / Debit = Midtrans Snap.',
                     style: TextStyle(
                       color: OptikAdminTokens.slate.withOpacity(0.75),
                       fontSize: 13.5,

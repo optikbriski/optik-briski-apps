@@ -52,6 +52,7 @@ import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/attendance/pos_duty_gate.dart';
+import '../../shared/pos/pos_midtrans.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -3931,6 +3932,43 @@ class _SalesPageState extends State<SalesPage> {
       // Tanpa QR hanya jika DP, atau LUNAS tanpa satu pun item READY.
       final paymentConfirmOnly = isDpCheckout || !canPickupPartial;
 
+      String? posMidtransOrderId;
+      if (PosMidtrans.usesGateway(paymentMethod)) {
+        final charge = isDpCheckout ? bayar : total;
+        if (charge <= 0) {
+          if (mounted) {
+            setState(() => isProcessing = false);
+            _showSnack(
+              'Nominal Midtrans tidak valid',
+              OptikAdminTokens.warning,
+            );
+          }
+          return;
+        }
+        final paid = await PosMidtrans.chargeAndWait(
+          context: context,
+          amountIdr: charge,
+          purpose: 'sale',
+          tokoId: tokoId.toString(),
+          invoiceNo: noInvoice,
+          customerName: nameCtrl.text.trim(),
+          phone: phoneCtrl.text.trim(),
+        );
+        if (!mounted) return;
+        if (!paid.ok || !paid.settled) {
+          setState(() => isProcessing = false);
+          _showSnack(
+            paid.error ?? 'Pembayaran Midtrans dibatalkan',
+            OptikAdminTokens.warning,
+          );
+          return;
+        }
+        posMidtransOrderId = paid.midtransOrderId;
+        if ((paid.paymentType ?? '').trim().isNotEmpty) {
+          paymentMethod = PosMidtrans.labelForType(paid.paymentType!);
+        }
+      }
+
       debugPrint(
           "DEBUG KASIR ID: ${activeCashier?['id'] ?? widget.profile['id']}");
 
@@ -3974,6 +4012,9 @@ class _SalesPageState extends State<SalesPage> {
           .single();
 
       final saleId = saleRes['id'];
+      if (posMidtransOrderId != null && posMidtransOrderId.isNotEmpty) {
+        unawaited(PosMidtrans.linkSale(posMidtransOrderId, saleId.toString()));
+      }
       // Snapshot sebelum proses lanjut — daftar tidak boleh berubah di tengah checkout.
       final terlibatIds = _terlibatIdsForCheckout();
       if (terlibatIds.isEmpty) {

@@ -47,3 +47,8 @@ entrypoint = "./functions/member-help-bot/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/provision-owner/index.ts"
+
+[functions.pos-midtrans-create]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/pos-midtrans-create/index.ts"
