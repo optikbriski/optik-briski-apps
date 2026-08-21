@@ -5,7 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../shared/tenant/module_catalog.dart';
 import '../../shared/tenant/store_catalog.dart';
-import '../../shared/theme.dart';
+import '../../shared/brand/rekasa_tokens.dart';
 
 /// Video + paragraf penjelasan satu fitur paket.
 class StoreModuleDetailPage extends StatefulWidget {
@@ -44,11 +44,9 @@ class _StoreModuleDetailPageState extends State<StoreModuleDetailPage> {
     final m = widget.module;
     final hasVideo = (m.videoUrl ?? '').trim().isNotEmpty;
     return Scaffold(
-      backgroundColor: OptikAdminTokens.bg,
+      backgroundColor: RekasaTokens.canvas,
       appBar: AppBar(
         title: Text(m.label),
-        backgroundColor: OptikAdminTokens.bg,
-        foregroundColor: OptikAdminTokens.navy,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -56,7 +54,7 @@ class _StoreModuleDetailPageState extends State<StoreModuleDetailPage> {
           Text(
             m.summary,
             style: const TextStyle(
-              color: OptikAdminTokens.slate,
+              color: RekasaTokens.muted,
               fontWeight: FontWeight.w600,
               height: 1.35,
             ),
@@ -80,7 +78,7 @@ class _StoreModuleDetailPageState extends State<StoreModuleDetailPage> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: OptikAdminTokens.ice.withOpacity(0.2),
+                color: RekasaTokens.wash,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Text(
@@ -92,7 +90,7 @@ class _StoreModuleDetailPageState extends State<StoreModuleDetailPage> {
           Text(
             m.body,
             style: TextStyle(
-              color: OptikAdminTokens.navy.withOpacity(0.88),
+              color: RekasaTokens.ink.withOpacity(0.88),
               height: 1.5,
               fontSize: 15,
             ),

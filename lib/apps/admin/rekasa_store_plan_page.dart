@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/bootstrap.dart';
+import '../../shared/brand/rekasa_tokens.dart';
 import '../../shared/tenant/module_catalog.dart';
 import '../../shared/tenant/store_catalog.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_modules.dart';
-import '../../shared/theme.dart';
-import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
 import 'store_module_detail_page.dart';
 
@@ -190,7 +190,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('$e'), backgroundColor: RekasaTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _buying = false);
@@ -201,108 +201,128 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
   Widget build(BuildContext context) {
     final q = _quote;
     return Scaffold(
-      backgroundColor: OptikAdminTokens.bg,
+      backgroundColor: RekasaTokens.canvas,
       appBar: AppBar(
         title: Text(plan.label),
-        backgroundColor: OptikAdminTokens.bg,
-        foregroundColor: OptikAdminTokens.navy,
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        padding: EdgeInsets.zero,
         children: [
-          Text(
-            '${widget.catalog.industry?.label ?? 'Usaha'} · ${plan.blurb}',
-            style: TextStyle(
-              color: OptikAdminTokens.navy.withOpacity(0.78),
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Harga dasar ${TenantBilling.formatRp(plan.priceIdr)}. '
-            'Centang fitur yang mau dipakai. Yang di luar paket = add-on.',
-            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.35),
-          ),
-          const SizedBox(height: 16),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('APK & web merek sendiri'),
-            subtitle: Text(
-              plan.whiteLabel
-                  ? 'Termasuk paket tertinggi.'
-                  : 'Add-on ${TenantBilling.formatRp(widget.catalog.whiteLabelAddonIdr)}',
-            ),
-            value: _whiteLabel,
-            onChanged: (v) => setState(() => _whiteLabel = v),
-          ),
-          const Divider(),
-          for (final m in widget.catalog.modules)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: PremiumPanel(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(m.label, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(
-                        plan.includes(m.key)
-                            ? '${m.summary}\nTermasuk paket.'
-                            : '${m.summary}\nAdd-on ${TenantBilling.formatRp(m.addOnPriceIdr)}',
-                      ),
-                      isThreeLine: true,
-                      value: _on[m.key] ?? false,
-                      onChanged: (v) => setState(() => _on[m.key] = v),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => StoreModuleDetailPage(module: m),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.play_circle_outline_rounded, size: 18),
-                        label: const Text('Detail (video + penjelasan)'),
-                      ),
-                    ),
-                  ],
+          RekasaPage(
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RekasaEyebrow(widget.catalog.industry?.label ?? 'Usaha'),
+                const SizedBox(height: 8),
+                Text(plan.blurb, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 8),
+                Text(
+                  'Harga dasar ${TenantBilling.formatRp(plan.priceIdr)}. '
+                  'Centang fitur yang mau dipakai. Yang di luar paket = add-on.',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ),
+                const SizedBox(height: 18),
+                RekasaSurface(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('APK & web merek sendiri'),
+                    subtitle: Text(
+                      plan.whiteLabel
+                          ? 'Termasuk paket tertinggi.'
+                          : 'Add-on ${TenantBilling.formatRp(widget.catalog.whiteLabelAddonIdr)}',
+                    ),
+                    value: _whiteLabel,
+                    onChanged: (v) => setState(() => _whiteLabel = v),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                for (final m in widget.catalog.modules)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: RekasaSurface(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              m.label,
+                              style: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            subtitle: Text(
+                              plan.includes(m.key)
+                                  ? '${m.summary}\nTermasuk paket.'
+                                  : '${m.summary}\nAdd-on ${TenantBilling.formatRp(m.addOnPriceIdr)}',
+                            ),
+                            isThreeLine: true,
+                            value: _on[m.key] ?? false,
+                            onChanged: (v) => setState(() => _on[m.key] = v),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        StoreModuleDetailPage(module: m),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.play_circle_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Detail (video + penjelasan)'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
       bottomNavigationBar: Material(
-        elevation: 8,
-        color: Colors.white,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Total ${TenantBilling.formatRp(q.amountIdr)}'
-                        '${q.addOnIdr > 0 ? ' · add-on ${TenantBilling.formatRp(q.addOnIdr)}' : ''}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+        color: RekasaTokens.paper,
+        child: Container(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: RekasaTokens.line)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(22, 12, 22, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Total ${TenantBilling.formatRp(q.amountIdr)}'
+                      '${q.addOnIdr > 0 ? ' · add-on ${TenantBilling.formatRp(q.addOnIdr)}' : ''}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: RekasaTokens.ink,
+                        fontSize: 16,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                PremiumPrimaryButton(
-                  label: _buying ? 'Memesan…' : 'Beli paket ini',
-                  onPressed: _buying ? null : _buy,
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _buying ? null : _buy,
+                      child: Text(_buying ? 'Memesan…' : 'Beli paket ini'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

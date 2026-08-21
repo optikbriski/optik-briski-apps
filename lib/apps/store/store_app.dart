@@ -1,13 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/brand/brand_chrome.dart';
+import '../../shared/brand/rekasa_tokens.dart';
 import '../../shared/tenant/tenant_billing.dart';
-import '../../shared/theme.dart';
 import '../../shared/widgets/rekasa_mark.dart';
+import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
 import '../admin/rekasa_store_orders_page.dart';
 import '../admin/rekasa_store_page.dart';
@@ -37,7 +39,7 @@ class StoreApp extends StatelessWidget {
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
-      theme: buildAdminTheme(),
+      theme: buildRekasaStoreTheme(),
       home: home,
     );
   }
@@ -67,20 +69,31 @@ class _StoreHomePageState extends State<StoreHomePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Masuk operator Rekasa'),
+        title: const RekasaMark(height: 28),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Masuk operator',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: RekasaTokens.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
             const Text(
               'Hanya akun Rekasa (is_platform). '
               'Klien toko pakai APK Admin/Karyawan yang dibeli — bukan APK ini.',
-              style: TextStyle(fontSize: 13, height: 1.35),
             ),
+            const SizedBox(height: 16),
             TextField(
               controller: email,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(labelText: 'Email'),
             ),
+            const SizedBox(height: 10),
             TextField(
               controller: pass,
               obscureText: true,
@@ -89,8 +102,14 @@ class _StoreHomePageState extends State<StoreHomePage> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Masuk')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Masuk'),
+          ),
         ],
       ),
     );
@@ -116,7 +135,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
             content: Text(
               'Ini APK etalase Rekasa. Akun toko masuk di APK Admin/Karyawan yang dibeli.',
             ),
-            backgroundColor: OptikAdminTokens.warning,
+            backgroundColor: RekasaTokens.warning,
           ),
         );
         return;
@@ -126,7 +145,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
     } catch (err) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$err'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('$err'), backgroundColor: RekasaTokens.danger),
       );
     }
   }
@@ -140,50 +159,65 @@ class _StoreHomePageState extends State<StoreHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: OptikAdminTokens.bg,
-      appBar: AppBar(
-        title: const RekasaMark(height: 28),
-        backgroundColor: OptikAdminTokens.bg,
-        foregroundColor: OptikAdminTokens.navy,
-        actions: [
-          if (_isPlatform) ...[
-            IconButton(
-              tooltip: 'Pesanan',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const RekasaStoreOrdersPage(),
+      backgroundColor: RekasaTokens.canvas,
+      body: Column(
+        children: [
+          Material(
+            color: RekasaTokens.paper,
+            elevation: 0,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: RekasaTokens.paper,
+                border: Border(bottom: BorderSide(color: RekasaTokens.line)),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: RekasaPage(
+                  padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
+                  child: Row(
+                    children: [
+                      const RekasaMark(height: 34),
+                      const Spacer(),
+                      if (_isPlatform) ...[
+                        IconButton(
+                          tooltip: 'Pesanan',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RekasaStoreOrdersPage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.shopping_bag_outlined),
+                          color: RekasaTokens.ink,
+                        ),
+                        IconButton(
+                          tooltip: 'UMKM',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TenantAdminPage(profile: _platformProfile!),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.apartment_outlined),
+                          color: RekasaTokens.ink,
+                        ),
+                        RekasaPillButton(label: 'Keluar', onTap: _logout),
+                      ] else
+                        RekasaPillButton(label: 'Operator', onTap: _login),
+                    ],
                   ),
-                );
-              },
-              icon: const Icon(Icons.shopping_bag_outlined),
+                ),
+              ),
             ),
-            IconButton(
-              tooltip: 'UMKM',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TenantAdminPage(profile: _platformProfile!),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.apartment_outlined),
-            ),
-            IconButton(
-              tooltip: 'Keluar',
-              onPressed: _logout,
-              icon: const Icon(Icons.logout_rounded),
-            ),
-          ] else
-            TextButton(
-              onPressed: _login,
-              child: const Text('Operator'),
-            ),
+          ),
+          const Expanded(child: RekasaStorePage(embedded: true)),
         ],
       ),
-      body: const RekasaStorePage(embedded: true),
     );
   }
 }

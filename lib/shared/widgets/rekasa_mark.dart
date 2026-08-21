@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Tanda Rekasa (bukan logo tenant Optik).
+import '../brand/rekasa_tokens.dart';
+
+/// Tanda Rekasa: kotak biru royal + R putih + wordmark.
 class RekasaMark extends StatelessWidget {
   const RekasaMark({
     super.key,
-    this.height = 28,
+    this.height = 32,
     this.showWordmark = true,
+    this.wordmarkColor,
   });
 
   final double height;
   final bool showWordmark;
+  final Color? wordmarkColor;
 
   @override
   Widget build(BuildContext context) {
@@ -18,15 +23,22 @@ class RekasaMark extends StatelessWidget {
       height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF0B3D8C),
+        gradient: RekasaTokens.badgeFill,
         borderRadius: BorderRadius.circular(height * 0.22),
+        boxShadow: [
+          BoxShadow(
+            color: RekasaTokens.ink.withOpacity(0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Text(
         'R',
-        style: TextStyle(
-          color: Colors.white,
+        style: GoogleFonts.plusJakartaSans(
+          color: RekasaTokens.paper,
           fontWeight: FontWeight.w800,
-          fontSize: height * 0.55,
+          fontSize: height * 0.54,
           height: 1,
         ),
       ),
@@ -36,14 +48,14 @@ class RekasaMark extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         badge,
-        SizedBox(width: height * 0.32),
+        SizedBox(width: height * 0.34),
         Text(
           'Rekasa',
-          style: TextStyle(
-            color: const Color(0xFF0B3D8C),
+          style: GoogleFonts.plusJakartaSans(
+            color: wordmarkColor ?? RekasaTokens.ink,
             fontWeight: FontWeight.w800,
-            fontSize: height * 0.72,
-            letterSpacing: 0.2,
+            fontSize: height * 0.68,
+            letterSpacing: -0.4,
             height: 1,
           ),
         ),
