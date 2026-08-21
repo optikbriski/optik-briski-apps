@@ -14,6 +14,7 @@ void main() {
     expect(html, contains('perangkat lunak'));
     expect(html, isNot(contains('PT Biasa')));
     expect(html, isNot(contains('/admin/')));
+    expect(html, isNot(contains('Konsol')));
     expect(File('site/syarat.html').existsSync(), isTrue);
     expect(File('site/kebijakan.html').existsSync(), isTrue);
     expect(File('site/kontak.html').existsSync(), isTrue);
@@ -24,6 +25,7 @@ void main() {
     expect(vercel, contains('"/perusahaan"'));
     expect(vercel, contains('"/(.*)"'));
     expect(vercel, contains('"/index.html"'));
+    expect(vercel, contains('rekasa-karya-indonesia.vercel.app'));
     expect(vercel, isNot(contains('/admin/index.html')));
 
     final build = File('scripts/vercel_build.sh').readAsStringSync();

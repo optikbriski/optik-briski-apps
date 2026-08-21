@@ -6,6 +6,26 @@
   "installCommand": "echo 'Flutter install handled in build script'",
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "rekasa-karya-indonesia.vercel.app"
+        }
+      ],
+      "destination": "/perusahaan/index.html"
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "rekasa-karya-indonesia.vercel.app"
+        }
+      ],
+      "destination": "/perusahaan/:path*"
+    },
+    {
       "source": "/perusahaan",
       "destination": "/perusahaan/index.html"
     },
