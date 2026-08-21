@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -14,6 +16,8 @@ import '../../shared/widgets/tenant_contract_sign_page.dart';
 import '../admin/rekasa_store_orders_page.dart';
 import '../admin/rekasa_store_page.dart';
 import '../admin/tenant_admin_page.dart';
+import 'store_account.dart';
+import 'store_brand_dashboard_page.dart';
 
 /// Kulit tipis: etalase + kontrak. Tidak memuat POS / absensi / training.
 class StoreApp extends StatelessWidget {
@@ -54,6 +58,51 @@ class StoreHomePage extends StatefulWidget {
 
 class _StoreHomePageState extends State<StoreHomePage> {
   Map<String, dynamic>? _platformProfile;
+  StoreAccountKind _kind = StoreAccountKind.none;
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+    _authSub = supabase.auth.onAuthStateChange.listen((_) {
+      if (mounted) _restoreSession();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _restoreSession() async {
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) {
+      if (!mounted) return;
+      setState(() {
+        _platformProfile = null;
+        _kind = StoreAccountKind.none;
+      });
+      return;
+    }
+    try {
+      final row = await supabase.from('profiles').select().eq('id', uid).maybeSingle();
+      if (!mounted) return;
+      if (row == null) {
+        setState(() {
+          _platformProfile = null;
+          _kind = StoreAccountKind.none;
+        });
+        return;
+      }
+      final map = Map<String, dynamic>.from(row);
+      setState(() {
+        _kind = StoreAuth.kind(map);
+        _platformProfile = _kind == StoreAccountKind.platform ? map : null;
+      });
+    } catch (_) {}
+  }
 
   bool get _isPlatform {
     final p = _platformProfile;
@@ -178,7 +227,19 @@ class _StoreHomePageState extends State<StoreHomePage> {
                     children: [
                       const RekasaMark(height: 34),
                       const Spacer(),
-                      if (_isPlatform) ...[
+                      if (_kind == StoreAccountKind.owner)
+                        RekasaPillButton(
+                          label: 'Dasbor',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const StoreBrandDashboardPage(),
+                              ),
+                            );
+                          },
+                        )
+                      else if (_isPlatform) ...[
                         IconButton(
                           tooltip: 'Pesanan',
                           onPressed: () {

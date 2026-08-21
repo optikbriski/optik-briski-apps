@@ -37,8 +37,8 @@ class TenantModules extends ChangeNotifier {
     return [for (final k in keys) byKey[k] ?? k];
   }
 
-  String get planLabel {
-    switch ((planKey ?? '').toLowerCase()) {
+  static String labelForPlan(String? key) {
+    switch ((key ?? '').toLowerCase()) {
       case 'paket_a':
         return 'Paket A — Pro';
       case 'paket_b':
@@ -46,9 +46,11 @@ class TenantModules extends ChangeNotifier {
       case 'paket_c':
         return 'Paket C — Starter';
       default:
-        return (planKey ?? '').trim().isEmpty ? 'Paket' : planKey!;
+        return (key ?? '').trim().isEmpty ? 'Paket' : key!;
     }
   }
+
+  String get planLabel => labelForPlan(planKey);
 
   String get shellHint {
     final s = (slug ?? '').trim();

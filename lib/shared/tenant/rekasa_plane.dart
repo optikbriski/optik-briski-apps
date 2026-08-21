@@ -11,7 +11,10 @@
 /// - Hari H tagihan belum lunas → `tenants.status = suspend` (sistem down,
 ///   data tidak dihapus). Lunas / Rekasa nyalakan lagi → `aktif`.
 /// - **APK Rekasa Store** (`com.rekasa.store`, `APP_FLAVOR=store`):
-///   katalog bidang + paket, beli, kontrak. Bukan kasir.
+///   katalog bidang + paket, beli, kontrak. Bawah etalase: Akun / Kontrak /
+///   Bantuan. Owner yang sudah beli login ke dasbor merek (tagihan +
+///   kontrak). Bukan kasir. Owner POS (cabang/bagi hasil) tetap di APK
+///   Karyawan.
 /// - **APK yang dibeli klien**: Admin / Karyawan / Member
 ///   (kulit Rekasa + kode usaha, atau white-label paket A).
 ///   Tidak memuat etalase. Satu repo, APK terpisah — bukan fork.
