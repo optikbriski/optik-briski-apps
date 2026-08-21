@@ -42,24 +42,24 @@ compileOptions {
     productFlavors {
         create("karyawan") {
             dimension = "app"
-            // Default Optik — jangan ganti, update Play yang sudah terpasang.
-            // Merek lain: -PstoreApplicationId= -PstoreAppName=
+            // Default Rekasa. Kulit Optik: -PstoreApplicationId dari brands/optik-briski.json
+            // Jangan ganti ID Optik di file merek itu.
             val id = storeProp("storeApplicationId")
-            applicationId = id.ifEmpty { "com.example.toko_kacamata_natan" }
+            applicationId = id.ifEmpty { "com.rekasa.karyawan" }
             val name = storeProp("storeAppName")
             if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("member") {
             dimension = "app"
             val id = storeProp("storeApplicationId")
-            applicationId = id.ifEmpty { "com.optikbriski.member" }
+            applicationId = id.ifEmpty { "com.rekasa.member" }
             val name = storeProp("storeAppName")
             if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("admin") {
             dimension = "app"
             val id = storeProp("storeApplicationId")
-            applicationId = id.ifEmpty { "com.optikbriski.admin" }
+            applicationId = id.ifEmpty { "com.rekasa.admin" }
             val name = storeProp("storeAppName")
             if (name.isNotEmpty()) resValue("string", "app_name", name)
         }

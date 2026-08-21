@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build APK Karyawan (split per-ABI = lebih kecil, kualitas sama) + petunjuk publish.
+# Build APK Karyawan. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +21,7 @@ echo "==> Build Karyawan APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SL
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=karyawan
   --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-$STORE_SLUG}"
-  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-true}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-false}"
 )
 if [[ -f .dart_define.karyawan.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.karyawan.json)
@@ -84,7 +84,7 @@ echo ""
 echo "Langkah publish update (tanpa kirim link ke karyawan):"
 echo "1. Supabase → Storage → bucket public 'app-releases' (jika belum)"
 echo "2. Upload file: $DEST_ARM64"
-echo "   Nama wajib: optik-karyawan-${VERSION}.apk"
+echo "Nama wajib: ${STORE_SLUG}-karyawan-${VERSION}.apk"
 echo "3. Setelah migration auto-sync: selesai — versi_app terisi otomatis."
 echo "   Atau: bash scripts/publish_karyawan_apk.sh (upload + mengandalkan trigger)"
 echo ""

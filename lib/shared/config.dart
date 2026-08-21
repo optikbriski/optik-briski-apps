@@ -35,30 +35,30 @@ AppFlavor get currentFlavor {
   }
 }
 
-/// Member / Karyawan / Admin APK toko terikat satu merek.
-/// Web Admin (Vercel) tidak di-pin — Rekasa atur paket semua merek di sana.
-/// Merek lain: `BRAND=slug bash scripts/release_*_apk.sh` (lihat brands/).
+/// Member / Karyawan / Admin APK toko terikat satu merek (Paket A).
+/// Default kosong = kulit Rekasa, login isi kode usaha.
+/// Optik B. Riski: `BRAND=optik-briski` (bukan default platform).
 const String memberTenantSlug = String.fromEnvironment(
   'MEMBER_TENANT_SLUG',
-  defaultValue: 'optik-briski',
+  defaultValue: '',
 );
 
 const String karyawanTenantSlug = String.fromEnvironment(
   'KARYAWAN_TENANT_SLUG',
-  defaultValue: 'optik-briski',
+  defaultValue: '',
 );
 
 const String adminTenantSlug = String.fromEnvironment(
   'ADMIN_TENANT_SLUG',
-  defaultValue: 'optik-briski',
+  defaultValue: '',
 );
 
 const bool pinAdminTenant =
     bool.fromEnvironment('ADMIN_PIN_TENANT', defaultValue: false);
 
-/// Paket A / white-label: true. Kulit Rekasa (paket bawah): false.
+/// Paket A / white_label: true. Kulit Rekasa (paket C/B): false.
 const bool pinStoreTenant =
-    bool.fromEnvironment('PIN_STORE_TENANT', defaultValue: true);
+    bool.fromEnvironment('PIN_STORE_TENANT', defaultValue: false);
 
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
 

@@ -36,12 +36,14 @@ void main() {
     expect(TenantService.instance.storeMatchesApk('other-tenant'), isTrue);
   });
 
-  test('store APK default slugs are Optik', () {
-    expect(memberTenantSlug, TenantService.defaultSlug);
-    expect(karyawanTenantSlug, TenantService.defaultSlug);
-    expect(adminTenantSlug, TenantService.defaultSlug);
+  test('platform default is Rekasa shell; Optik is a brand skin', () {
+    expect(memberTenantSlug, isEmpty);
+    expect(karyawanTenantSlug, isEmpty);
+    expect(adminTenantSlug, isEmpty);
+    expect(TenantService.defaultSlug, isEmpty);
+    expect(TenantService.optikSlug, 'optik-briski');
     expect(pinAdminTenant, isFalse);
-    expect(pinStoreTenant, isTrue);
+    expect(pinStoreTenant, isFalse);
     expect(isRekasaControlPlane, isTrue);
     expect(isRekasaStorefront, isFalse);
     expect(isBrandedStoreApk, isFalse);

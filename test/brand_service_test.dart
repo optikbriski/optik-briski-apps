@@ -7,7 +7,7 @@ void main() {
     BrandService.bind(AppBrand.shellFallback);
   });
 
-  test('bind locks storefront to Rekasa, not Optik fallback', () {
+  test('bind locks storefront to Rekasa; Optik fallback is skin-only', () {
     BrandService.bind(AppBrand.fallback);
     expect(BrandService.name, 'Optik B. Riski');
 

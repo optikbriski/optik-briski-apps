@@ -18,7 +18,7 @@ class AppBrand {
   final String shortName;
   final String assistantName;
 
-  /// Hanya fallback offline / sebelum row `app_brand` ada (APK merek sendiri).
+  /// Hanya fallback APK merek sendiri (Paket A). Optik = kulit, bukan platform.
   static const fallback = AppBrand(
     displayName: 'Optik B. Riski',
     shortName: 'OBR',
@@ -77,7 +77,7 @@ class BrandService {
                 );
           return;
         }
-        if (t.slug != TenantService.defaultSlug) {
+        if (t.slug != TenantService.optikSlug) {
           final label = t.slug.trim().isEmpty ? 'POS' : t.slug;
           _current = AppBrand(
             displayName: label,

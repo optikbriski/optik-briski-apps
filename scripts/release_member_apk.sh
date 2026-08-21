@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build APK Member (split per-ABI) — max 50 MB, tanpa potong fitur/kualitas.
+# Build APK Member. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
 # Shrink hanya buang aset junk + model ML Kit yang tidak dipakai mode accurate.
 # Bentuk (referensi wajah/frame) memakai aset foto + overlay — tanpa scan kamera.
 set -euo pipefail
@@ -26,7 +26,7 @@ echo "==> Build Member APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=member
   --dart-define=MEMBER_TENANT_SLUG="${MEMBER_TENANT_SLUG:-$STORE_SLUG}"
-  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-true}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-false}"
 )
 if [[ -f .dart_define.member.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.member.json)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build APK Admin untuk tablet/HP toko (Absensi Toko + face match ML Kit).
+# Build APK Admin. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
 # Admin production utama tetap web (Vercel); APK ini khusus perangkat toko.
 set -euo pipefail
 
@@ -21,7 +21,7 @@ fi
 echo "==> Build Admin APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG})"
 DEFINE_ARGS=(
   --dart-define=APP_FLAVOR=admin
-  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-true}"
+  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-false}"
   --dart-define=ADMIN_TENANT_SLUG="${ADMIN_TENANT_SLUG:-$STORE_SLUG}"
 )
 if [[ -f .dart_define.admin.json ]]; then
@@ -35,7 +35,7 @@ else
   [[ -n "${SUPABASE_ANON_KEY:-}" ]] && DEFINE_ARGS+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
 fi
 DEFINE_ARGS+=(
-  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-true}"
+  --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-false}"
   --dart-define=ADMIN_TENANT_SLUG="${ADMIN_TENANT_SLUG:-$STORE_SLUG}"
 )
 

@@ -1,16 +1,18 @@
 # shellcheck shell=bash
-# Muat brands/<BRAND>.json → env. Default BRAND=optik-briski.
-# Dipakai release_member_apk.sh / release_karyawan_apk.sh.
+# Muat brands/<BRAND>.json → env.
+# Default BRAND=rekasa (kulit bersama). Optik B. Riski = BRAND=optik-briski.
+# Dipakai release_member_apk.sh / release_karyawan_apk.sh / release_admin_apk.sh.
 
 : "${ROOT:?ROOT harus di-set sebelum source brand_env.sh}"
 
-BRAND="${BRAND:-optik-briski}"
+BRAND="${BRAND:-rekasa}"
 BRAND_FILE="$ROOT/brands/${BRAND}.json"
 
 if [[ ! -f "$BRAND_FILE" ]]; then
   echo "ERROR: $BRAND_FILE tidak ada."
   echo "Salin brands/_template.json → brands/${BRAND}.json, isi slug/nama/applicationId."
   echo "Tenant harus sudah dibuat di Admin Rekasa (UMKM / Tenant)."
+  echo "Kulit Optik: BRAND=optik-briski (jangan ganti applicationId di file itu)."
   exit 1
 fi
 
@@ -25,12 +27,12 @@ def exp(name, key, default=""):
     v = str(p.get(key) or default).strip()
     print(f"export {name}={shlex.quote(v)}")
 
-slug = str(p.get("slug") or "optik-briski").strip()
+slug = str(p.get("slug") or "").strip()
 pin = p.get("pinTenant")
 if pin is None:
-    pin = slug != "rekasa"
+    pin = slug not in ("", "rekasa")
 print(f"export STORE_PIN_TENANT={shlex.quote('true' if pin else 'false')}")
-exp("STORE_SLUG", "slug", "optik-briski")
+exp("STORE_SLUG", "slug", slug)
 exp("STORE_DISPLAY_NAME", "displayName", slug)
 exp("STORE_MEMBER_APP_NAME", "memberAppName", p.get("displayName") or slug)
 exp("STORE_KARYAWAN_APP_NAME", "karyawanAppName", p.get("displayName") or slug)

@@ -13,8 +13,11 @@ class TenantService {
   TenantService._();
   static final TenantService instance = TenantService._();
 
+  /// Tenant #1 (kulit Optik). Bukan default platform.
+  static const optikSlug = 'optik-briski';
   static const optikId = '00000000-0000-0000-0000-000000000001';
-  static const defaultSlug = 'optik-briski';
+  /// Kulit Rekasa sampai kode usaha diisi.
+  static const defaultSlug = '';
   static const _prefsKey = 'tenant_scope_v1';
 
   String? id;
@@ -246,7 +249,7 @@ class TenantService {
   }
 
   @visibleForTesting
-  void debugBind(String tenantId, {String slug = defaultSlug}) {
+  void debugBind(String tenantId, {String slug = optikSlug}) {
     id = tenantId;
     this.slug = slug;
   }
