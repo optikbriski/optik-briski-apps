@@ -73,6 +73,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/brand/
     - assets/images/face_shapes/
     - assets/images/streak_flames/
     - assets/translations/
