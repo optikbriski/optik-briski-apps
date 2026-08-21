@@ -8,6 +8,7 @@ import 'product_master.dart';
 import 'buku_besar.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
+import '../../shared/tenant/industry_catalog.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
@@ -162,6 +163,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!mounted) return;
     setState(() => isStatsLoading = true);
     try {
+      await TenantModules.instance.load();
       final today = DateTime.now().toIso8601String().split('T')[0];
       final res = await Supabase.instance.client
           .from('sales')
@@ -311,6 +313,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 12),
 
+              _buildPaketSayaCard(),
               _buildOmzetCard(),
               const SizedBox(height: 28),
 
@@ -850,6 +853,86 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
       ),
+    );
+  }
+
+  bool get _isPlatformProfile {
+    final v = widget.profile['is_platform'];
+    final role = (widget.profile['role'] ?? '').toString().toLowerCase();
+    return v == true || v == 'true' || role == 'platform';
+  }
+
+  Widget _buildPaketSayaCard() {
+    return ListenableBuilder(
+      listenable: TenantModules.instance,
+      builder: (context, _) {
+        final mod = TenantModules.instance;
+        if (!mod.loaded ||
+            mod.storefront ||
+            _isPlatformProfile ||
+            isRekasaStorefront) {
+          return const SizedBox.shrink();
+        }
+        final industry = industryByKey(mod.industryKey)?.label;
+        final chips = mod.enabledLabels;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: PremiumPanel(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Paket saya',
+                  style: TextStyle(
+                    color: OptikAdminTokens.slate.withOpacity(0.9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  [
+                    mod.planLabel,
+                    if (industry != null) industry,
+                    if ((mod.slug ?? '').trim().isNotEmpty) 'kode ${mod.slug}',
+                  ].join(' · '),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: OptikAdminTokens.navy,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  mod.shellHint,
+                  style: const TextStyle(
+                    color: OptikAdminTokens.slate,
+                    height: 1.35,
+                    fontSize: 12.5,
+                  ),
+                ),
+                if (chips.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final label in chips)
+                        Chip(
+                          label: Text(label, style: const TextStyle(fontSize: 12)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

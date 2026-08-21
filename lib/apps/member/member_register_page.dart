@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
 import '../../shared/member/member_repository.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 import 'pages/member_date_picker.dart';
@@ -166,6 +167,7 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
       await TenantService.instance.requireResolved(
         slug: isBrandedStoreApk ? null : _slug.text,
       );
+      await TenantModules.instance.load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -235,6 +237,7 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
       await TenantService.instance.requireResolved(
         slug: isBrandedStoreApk ? null : _slug.text,
       );
+      await TenantModules.instance.load();
       final res = await _repo.finalizeRegister(
         phone: _phone.text.trim(),
         password: _pass.text,

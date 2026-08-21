@@ -4,6 +4,7 @@ import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/config.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
@@ -50,6 +51,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
         slug: isBrandedStoreApk ? null : _slugCtrl.text,
       );
       await BrandService.load();
+      await TenantModules.instance.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
       if (res['ok'] != true) {
@@ -85,6 +87,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
       try {
         await TenantService.instance.requireResolved(slug: _slugCtrl.text);
         await BrandService.load();
+        await TenantModules.instance.load();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

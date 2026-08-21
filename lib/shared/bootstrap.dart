@@ -54,7 +54,11 @@ Future<void> bootstrapApp({
     await TenantService.instance.ensureResolved();
   }
   await BrandService.load();
-  await TenantModules.instance.load();
+  if (isRekasaStorefront) {
+    TenantModules.instance.sealStorefront();
+  } else {
+    await TenantModules.instance.load();
+  }
   BrandChrome.attach();
 
   runApp(

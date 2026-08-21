@@ -15,6 +15,7 @@ import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
 import '../../shared/tenant/tenant_billing.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/widgets/tenant_suspended_page.dart';
 import '../owner/owner_service.dart';
@@ -176,6 +177,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         }
         await TenantService.instance.bindFromProfile(profileRow);
         await BrandService.load();
+        await TenantModules.instance.load();
         if (await _goSuspendedIfLocked()) return true;
         final ownerProfile = await OwnerService().myProfile();
         OwnerSession.instance.setProfile(ownerProfile);
@@ -277,6 +279,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
       'toko_id': userData['toko_id'],
     });
     await BrandService.load();
+    await TenantModules.instance.load();
     return true;
   }
 

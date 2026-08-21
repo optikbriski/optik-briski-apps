@@ -7,6 +7,7 @@ import '../../shared/member/member_home_models.dart';
 import '../../shared/member/member_inbox_unread.dart';
 import '../../shared/member/member_points_grade.dart';
 import '../../shared/member/member_session.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import 'member_rating_page.dart';
@@ -42,6 +43,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     MemberCart.instance.addListener(_onCart);
     MemberSession.instance.addListener(_onSession);
     MemberInboxUnread.instance.addListener(_onInboxUnread);
+    TenantModules.instance.addListener(_onHome);
     MemberCart.instance.ensureLoaded();
     _home.ensureLoaded();
     MemberInboxUnread.instance.refresh();
@@ -53,6 +55,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     MemberCart.instance.removeListener(_onCart);
     MemberSession.instance.removeListener(_onSession);
     MemberInboxUnread.instance.removeListener(_onInboxUnread);
+    TenantModules.instance.removeListener(_onHome);
     super.dispose();
   }
 
@@ -257,6 +260,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             ),
           ),
           onGaransi: () => _open(const MemberWarrantyListPage()),
+          showGaransi: TenantModules.instance.allows('warranty'),
         );
       } else if (key == 'promo') {
         block = _PromoSection(
@@ -301,7 +305,8 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
         );
       } else if (key == 'services_main') {
         final mainItems = <Widget>[];
-        if (flag('katalog')) {
+        if (flag('katalog') &&
+            TenantModules.instance.allows('online_orders')) {
           mainItems.add(Expanded(
             child: _BigServiceButton(
               icon: Icons.storefront_rounded,
@@ -707,6 +712,7 @@ class _GreetingCard extends StatelessWidget {
     required this.onPoints,
     required this.onOrders,
     required this.onGaransi,
+    this.showGaransi = true,
   });
 
   final String hello;
@@ -721,6 +727,7 @@ class _GreetingCard extends StatelessWidget {
   final VoidCallback onPoints;
   final VoidCallback onOrders;
   final VoidCallback onGaransi;
+  final bool showGaransi;
 
   @override
   Widget build(BuildContext context) {
@@ -806,14 +813,15 @@ class _GreetingCard extends StatelessWidget {
                   onTap: onOrders,
                 ),
               ),
-              Expanded(
-                child: _RoundStat(
-                  icon: Icons.verified_user_outlined,
-                  label: 'Garansi',
-                  value: loading ? '…' : '$garansiCount',
-                  onTap: onGaransi,
+              if (showGaransi)
+                Expanded(
+                  child: _RoundStat(
+                    icon: Icons.verified_user_outlined,
+                    label: 'Garansi',
+                    value: loading ? '…' : '$garansiCount',
+                    onTap: onGaransi,
+                  ),
                 ),
-              ),
             ],
           ),
         ],

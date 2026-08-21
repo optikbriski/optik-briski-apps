@@ -97,3 +97,10 @@ const moduleCatalog = <StoreModuleDef>[
     addOnPriceIdr: 80000,
   ),
 ];
+
+String moduleLabel(String key) {
+  for (final m in moduleCatalog) {
+    if (m.key == key) return m.label;
+  }
+  return key;
+}

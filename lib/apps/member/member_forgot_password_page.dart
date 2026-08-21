@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/config.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 
@@ -56,6 +57,7 @@ class _MemberForgotPasswordPageState extends State<MemberForgotPasswordPage> {
     await TenantService.instance.requireResolved(
       slug: isBrandedStoreApk ? null : _slug.text,
     );
+    await TenantModules.instance.load();
   }
 
   Future<void> _requestCode() async {

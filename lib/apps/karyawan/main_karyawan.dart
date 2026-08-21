@@ -38,6 +38,7 @@ import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/scanner_penerimaan_page.dart';
 import '../member/pages/member_face_shape_page.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_modules.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -2349,6 +2350,15 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Future<void> _bukaAbsensi() async {
+    if (!TenantModules.instance.allows('attendance')) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Absensi tidak aktif di paket usaha ini.'),
+        ),
+      );
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AbsensiPage()),
@@ -4792,11 +4802,12 @@ class KaryawanPageState extends State<KaryawanPage>
               children: [
                 _buildMenuProfil(Icons.person_rounded,
                     "menu_detail_profil".tr(), "sub_detail_profil".tr(), true),
-                _buildMenuProfil(
-                    Icons.face_retouching_natural_rounded,
-                    'Absensi',
-                    'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
-                    true),
+                if (TenantModules.instance.allows('attendance'))
+                  _buildMenuProfil(
+                      Icons.face_retouching_natural_rounded,
+                      'Absensi',
+                      'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
+                      true),
                 _buildMenuProfil(
                     Icons.face_outlined,
                     'Bentuk Wajah',

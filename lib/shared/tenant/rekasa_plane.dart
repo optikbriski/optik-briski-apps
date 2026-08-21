@@ -29,4 +29,17 @@
 /// - Unique HP/NIK/nota **per tenant**. `PUSAT` Optik ≠ `{kode}-PUSAT`.
 /// - RPC Member/stok/owner wajib `tenant_id`. Null tidak jatuh ke Optik.
 /// - Auth email tetap unik global (batas Supabase Auth).
+/// - APK etalase (`com.rekasa.store`) tidak menjalankan POS.
+/// - APK Admin/Karyawan/Member tidak memuat etalase.
+/// - Satu kode usaha = satu tenant. Mix fitur = flag `tenant_modules`,
+///   bukan APK baru.
+///
+/// Sinkron beli → APK (setelah SQL 000011):
+/// 1. Etalase: centang fitur + beli → `submit_store_order`.
+/// 2. Baris `tenants` + `apply_store_modules` menulis `tenant_modules`.
+/// 3. APK toko login / isi kode usaha → `TenantModules.load()`.
+/// 4. RPC `my_tenant_entitlements()` = sumber menu. `allows(key)`
+///    hanya true untuk modul `enabled`.
+/// 5. Upgrade = tenant yang sama, login ulang. Bukan ganti APK
+///    (kecuali pindah ke white-label / `BRAND=<slug>`).
 library;

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/bootstrap.dart';
+import '../../shared/tenant/module_catalog.dart';
 import '../../shared/tenant/store_catalog.dart';
 import '../../shared/tenant/tenant_billing.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
@@ -129,13 +131,38 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       if (map['ok'] != true) throw map['error'] ?? 'Gagal memesan';
       if (!mounted) return;
       final token = '${map['contract_token'] ?? ''}';
+      final slug = '${map['slug'] ?? ''}'.trim();
+      final serverMods = map['modules'];
+      final enabledKeys = <String>{};
+      if (serverMods is List) {
+        for (final e in serverMods) {
+          if (e is! Map) continue;
+          if (e['enabled'] == true) {
+            final k = (e['module_key'] ?? '').toString().trim();
+            if (k.isNotEmpty) enabledKeys.add(k);
+          }
+        }
+      }
+      if (enabledKeys.isEmpty) {
+        enabledKeys.addAll(
+          _on.entries.where((e) => e.value).map((e) => e.key),
+        );
+      }
+      final labels = (enabledKeys.toList()..sort())
+          .map(moduleLabel)
+          .join(', ');
+      final wl = map['white_label'] == true ||
+          map['shell'] == 'white_label' ||
+          _whiteLabel;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Pesanan masuk'),
           content: Text(
-            'Kode usaha ${map['slug']}. '
+            'Kode usaha $slug.\n'
             'Tagihan ${map['invoice_no'] ?? ''} · ${TenantBilling.formatRp(map['amount_idr'])}.\n\n'
+            'Fitur yang nyala di APK toko:\n$labels\n\n'
+            '${TenantModules.installHint(whiteLabel: wl, slug: slug)}\n\n'
             'Tandatangani kontrak online, transfer ke Rekasa. '
             'Setelah lunas sistem dinyalakan. Data tidak dihapus kalau telat bayar — hanya dimatikan.',
           ),
