@@ -17,6 +17,7 @@ import '../../shared/config.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/widgets/tenant_suspended_page.dart';
+import '../admin/rekasa_store_page.dart';
 import '../owner/owner_service.dart';
 import '../owner/owner_session.dart';
 import '../owner/owner_shell.dart';
@@ -774,6 +775,27 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                                   _emailFocus.requestFocus(),
                                             ),
                                             const SizedBox(height: 12),
+                                            Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: TextButton.icon(
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          const RekasaStorePage(),
+                                                    ),
+                                                  );
+                                                },
+                                                icon: const Icon(
+                                                  Icons.storefront_outlined,
+                                                ),
+                                                label: const Text(
+                                                  'Lihat paket & beli',
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
                                           ],
                                           _buildField(
                                             controller: _emailCtrl,

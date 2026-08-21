@@ -8,8 +8,10 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/brand/brand_service.dart';
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/config.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
+import 'rekasa_store_page.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -564,6 +566,24 @@ class _LoginPageState extends State<LoginPage> {
                                   icon: Icons.login_rounded,
                                   onPressed: handleLogin,
                                 ),
+                                if (isRekasaControlPlane) ...[
+                                  const SizedBox(height: 10),
+                                  OutlinedButton.icon(
+                                    onPressed: isLoading
+                                        ? null
+                                        : () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const RekasaStorePage(),
+                                              ),
+                                            );
+                                          },
+                                    icon: const Icon(Icons.storefront_rounded),
+                                    label: const Text('Lihat paket & beli'),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
