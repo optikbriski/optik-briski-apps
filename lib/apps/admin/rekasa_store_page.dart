@@ -6,7 +6,6 @@ import '../../shared/tenant/industry_catalog.dart';
 import '../../shared/tenant/store_catalog.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/widgets/rekasa_surface.dart';
-import '../store/store_account_hub_page.dart';
 import 'rekasa_store_plan_page.dart';
 
 /// Etalase: pilih bidang dulu (seperti industri Odoo), baru paket + fitur.
@@ -164,7 +163,6 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                           ],
                         ),
                       ),
-                  const StoreServiceStrip(),
                 ],
               ),
             ),
@@ -324,7 +322,6 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                     ),
                   ),
                 ),
-              const StoreServiceStrip(),
             ],
           ),
         ),

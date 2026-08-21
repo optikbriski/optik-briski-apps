@@ -4,14 +4,13 @@ import '../../shared/brand/rekasa_tokens.dart';
 import '../../shared/widgets/rekasa_surface.dart';
 
 class StoreHelpPage extends StatelessWidget {
-  const StoreHelpPage({super.key});
+  const StoreHelpPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: RekasaTokens.canvas,
-      appBar: AppBar(title: const Text('Bantuan')),
-      body: ListView(
+    final body = ListView(
         children: [
           RekasaPage(
             padding: const EdgeInsets.fromLTRB(22, 22, 22, 36),
@@ -52,7 +51,12 @@ class StoreHelpPage extends StatelessWidget {
             ),
           ),
         ],
-      ),
+    );
+    if (embedded) return body;
+    return Scaffold(
+      backgroundColor: RekasaTokens.canvas,
+      appBar: AppBar(title: const Text('Bantuan')),
+      body: body,
     );
   }
 }

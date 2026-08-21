@@ -5,7 +5,9 @@ import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
 
 class StoreContractTokenPage extends StatefulWidget {
-  const StoreContractTokenPage({super.key});
+  const StoreContractTokenPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<StoreContractTokenPage> createState() => _StoreContractTokenPageState();
@@ -39,10 +41,7 @@ class _StoreContractTokenPageState extends State<StoreContractTokenPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: RekasaTokens.canvas,
-      appBar: AppBar(title: const Text('Kontrak')),
-      body: ListView(
+    final body = ListView(
         children: [
           RekasaPage(
             padding: const EdgeInsets.fromLTRB(22, 22, 22, 36),
@@ -80,7 +79,12 @@ class _StoreContractTokenPageState extends State<StoreContractTokenPage> {
             ),
           ),
         ],
-      ),
+    );
+    if (widget.embedded) return body;
+    return Scaffold(
+      backgroundColor: RekasaTokens.canvas,
+      appBar: AppBar(title: const Text('Kontrak')),
+      body: body,
     );
   }
 }

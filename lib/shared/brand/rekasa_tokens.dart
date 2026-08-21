@@ -185,6 +185,28 @@ ThemeData buildRekasaStoreTheme() {
         textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
       ),
     ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: RekasaTokens.paper,
+      elevation: 0,
+      height: 68,
+      indicatorColor: RekasaTokens.wash,
+      labelTextStyle: WidgetStateProperty.resolveWith((s) {
+        final on = s.contains(WidgetState.selected);
+        return GoogleFonts.plusJakartaSans(
+          fontSize: 11,
+          fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+          letterSpacing: 0.15,
+          color: on ? RekasaTokens.inkSoft : RekasaTokens.muted,
+        );
+      }),
+      iconTheme: WidgetStateProperty.resolveWith((s) {
+        final on = s.contains(WidgetState.selected);
+        return IconThemeData(
+          color: on ? RekasaTokens.inkSoft : RekasaTokens.muted,
+          size: 24,
+        );
+      }),
+    ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) {
         return s.contains(WidgetState.selected) ? RekasaTokens.paper : RekasaTokens.paper;

@@ -17,7 +17,10 @@ import '../admin/rekasa_store_orders_page.dart';
 import '../admin/rekasa_store_page.dart';
 import '../admin/tenant_admin_page.dart';
 import 'store_account.dart';
-import 'store_brand_dashboard_page.dart';
+import 'store_account_hub_page.dart';
+import 'store_bottom_nav.dart';
+import 'store_contract_token_page.dart';
+import 'store_help_page.dart';
 
 /// Kulit tipis: etalase + kontrak. Tidak memuat POS / absensi / training.
 class StoreApp extends StatelessWidget {
@@ -60,6 +63,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
   Map<String, dynamic>? _platformProfile;
   StoreAccountKind _kind = StoreAccountKind.none;
   StreamSubscription<AuthState>? _authSub;
+  int _tab = 0;
 
   @override
   void initState() {
@@ -243,14 +247,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                       if (_kind == StoreAccountKind.owner)
                         RekasaPillButton(
                           label: 'Dasbor',
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const StoreBrandDashboardPage(),
-                              ),
-                            );
-                          },
+                          onTap: () => setState(() => _tab = 1),
                         )
                       else if (_isPlatform) ...[
                         IconButton(
@@ -289,9 +286,23 @@ class _StoreHomePageState extends State<StoreHomePage> {
               ),
             ),
           ),
-          const Expanded(child: RekasaStorePage(embedded: true)),
+          Expanded(
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                const RekasaStorePage(embedded: true),
+                StoreAccountHubPage(kind: _kind, embedded: true),
+                const StoreContractTokenPage(embedded: true),
+                const StoreHelpPage(embedded: true),
+              ],
+            ),
+          ),
         ],
       ),
+      ),
+      bottomNavigationBar: StoreBottomNav(
+        index: _tab,
+        onChanged: (i) => setState(() => _tab = i),
       ),
     );
   }
