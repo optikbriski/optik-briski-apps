@@ -4,8 +4,14 @@ import 'package:optik_b_riski/shared/tenant/module_catalog.dart';
 import 'package:optik_b_riski/shared/tenant/store_catalog.dart';
 
 void main() {
-  test('paket A includes every catalog module', () {
+  test('local without industry is pick-bidang', () {
     final cat = StoreCatalog.local();
+    expect(cat.plans, isEmpty);
+    expect(cat.industries, isNotEmpty);
+  });
+
+  test('optik A includes every optik catalog module', () {
+    final cat = StoreCatalog.local('optik');
     final a = cat.plans.singleWhere((p) => p.planKey == 'paket_a');
     for (final m in cat.modules) {
       expect(a.includes(m.key), isTrue, reason: m.key);
@@ -13,8 +19,16 @@ void main() {
     expect(a.whiteLabel, isTrue);
   });
 
+  test('fnb packages are not optical POS', () {
+    final cat = StoreCatalog.local('fnb');
+    final a = cat.plans.singleWhere((p) => p.planKey == 'paket_a');
+    expect(a.includes('pos'), isTrue);
+    expect(a.includes('warranty'), isFalse);
+    expect(cat.module('pos')?.label.toLowerCase(), contains('meja'));
+  });
+
   test('quote adds add-on only for extras', () {
-    final cat = StoreCatalog.local();
+    final cat = StoreCatalog.local('optik');
     final c = cat.plans.singleWhere((p) => p.planKey == 'paket_c');
     final enabled = {for (final m in cat.modules) m.key: c.includes(m.key)};
     final base = cat.quote(plan: c, enabled: enabled, whiteLabel: false);

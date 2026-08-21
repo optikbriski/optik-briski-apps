@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../shared/bootstrap.dart';
+import '../../shared/tenant/industry_catalog.dart';
 import '../../shared/tenant/module_catalog.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/theme.dart';
@@ -43,6 +44,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
   bool _saving = false;
   String? _error;
   String _planKey = 'paket_c';
+  String _industry = 'optik';
   List<Map<String, dynamic>> _rows = [];
   List<Map<String, dynamic>> _plans = List.of(_fallbackPlans);
 
@@ -143,6 +145,14 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
       final map = res is Map ? Map<String, dynamic>.from(res) : <String, dynamic>{};
       if (map['ok'] != true) {
         throw map['error'] ?? 'Gagal buat tenant';
+      }
+      if (map['tenant_id'] != null) {
+        try {
+          await supabase.rpc('platform_set_tenant_industry', params: {
+            'p_tenant_id': map['tenant_id'],
+            'p_industry_key': _industry,
+          });
+        } catch (_) {}
       }
       _slug.clear();
       _name.clear();
@@ -340,6 +350,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                   'Paket C/B: APK & web Rekasa, beda di kode usaha + isi dalam. '
                   'Paket A: APK & web nama+ikon merek sendiri (build BRAND=slug). '
                   'Modul dan white-label bisa dicentang satu-satu. '
+                  'Bidang usaha (optik, resto, bengkel, …) menentukan paket dan nama fitur. '
                   'Tagihan hari H belum lunas → sistem UMKM dimatikan (data tetap).',
                   style: TextStyle(
                     color: OptikAdminTokens.navy.withOpacity(0.75),
@@ -365,7 +376,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: Text(
-                          '${r['slug']} · ${r['status'] ?? 'aktif'} · '
+                          '${r['slug']} · ${r['industry_label'] ?? r['industry_key'] ?? ''} · ${r['status'] ?? 'aktif'} · '
                           '${r['plan_label'] ?? r['plan_key'] ?? 'paket?'} · '
                           '${_shellCaption(r)}'
                           '${r['plan_price_idr'] != null ? ' · ${TenantBilling.formatRp(r['plan_price_idr'])}/periode' : ''}'
@@ -443,6 +454,24 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                     labelText: 'Singkatan (opsional)',
                     hintText: 'OM',
                   ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: industryCatalog.any((i) => i.key == _industry)
+                      ? _industry
+                      : industryCatalog.first.key,
+                  decoration: const InputDecoration(labelText: 'Bidang usaha'),
+                  items: [
+                    for (final i in industryCatalog)
+                      DropdownMenuItem(
+                        value: i.key,
+                        child: Text(i.label, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _industry = v);
+                  },
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(

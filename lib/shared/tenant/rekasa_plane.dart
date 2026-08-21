@@ -10,7 +10,9 @@
 ///   dan **kontrak online** (taut `?kontrak=`).
 /// - Hari H tagihan belum lunas → `tenants.status = suspend` (sistem down,
 ///   data tidak dihapus). Lunas / Rekasa nyalakan lagi → `aktif`.
-/// - APK/web Rekasa = **etalase**: katalog paket C→A, nyala/mati fitur,
+/// - APK/web Rekasa = **etalase**: pilih **bidang usaha** (optik, retail,
+///   F&B, jasa, bengkel, klinik, grosir, umum), lalu paket C→A + fitur
+///   yang namanya menyesuaikan. Satu mesin, bukan fork per klien.
 ///   Detail (video + teks), beli langsung (tagihan + kontrak).
 ///
 /// Paket bawah (C Starter, B Bisnis):

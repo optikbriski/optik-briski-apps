@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../bootstrap.dart';
+import 'industry_catalog.dart';
 import 'module_catalog.dart';
 
 class StorePlanDef {
@@ -45,67 +46,87 @@ class StoreCatalog {
   StoreCatalog({
     required this.plans,
     required this.modules,
+    this.industries = const [],
+    this.industryKey,
     this.whiteLabelAddonIdr = 200000,
     this.fromServer = false,
   });
 
   final List<StorePlanDef> plans;
   final List<StoreModuleDef> modules;
+  final List<StoreIndustryDef> industries;
+  final String? industryKey;
   final int whiteLabelAddonIdr;
   final bool fromServer;
 
-  static StoreCatalog local() {
+  StoreIndustryDef? get industry {
+    for (final i in industries) {
+      if (i.key == industryKey) return i;
+    }
+    return industryByKey(industryKey);
+  }
+
+  static StoreCatalog local([String? industryKey]) {
+    final industries = List<StoreIndustryDef>.from(industryCatalog);
+    final pack = industryByKey(industryKey);
+    if (pack == null) {
+      return StoreCatalog(plans: const [], modules: const [], industries: industries);
+    }
+    final prices = <String, int>{
+      'paket_c': 250000,
+      'paket_b': 450000,
+      'paket_a': 750000,
+    };
+    final labels = <String, String>{
+      'paket_c': 'Paket C — Starter',
+      'paket_b': 'Paket B — Bisnis',
+      'paket_a': 'Paket A — Pro',
+    };
+    final blurbs = <String, String>{
+      'paket_c': 'Mulai jalan. Kulit Rekasa + kode usaha.',
+      'paket_b': 'Operasional lebih lengkap. Masih kulit Rekasa.',
+      'paket_a': 'Paket tertinggi: modul penuh bidang ini + merek sendiri.',
+    };
+    final highlights = <String, String>{
+      'paket_c': 'Hemat',
+      'paket_b': 'Laku',
+      'paket_a': 'Tertinggi',
+    };
+    final modules = <StoreModuleDef>[];
+    pack.copy.forEach((key, m) {
+      final base = moduleCatalog.cast<StoreModuleDef?>().firstWhere(
+            (e) => e!.key == key,
+            orElse: () => null,
+          );
+      modules.add(
+        StoreModuleDef(
+          key: m.key,
+          label: m.label,
+          summary: m.summary,
+          body: m.body,
+          videoUrl: m.videoUrl ?? base?.videoUrl,
+          addOnPriceIdr: m.addOnPriceIdr != 50000
+              ? m.addOnPriceIdr
+              : (base?.addOnPriceIdr ?? 50000),
+        ),
+      );
+    });
     return StoreCatalog(
-      plans: const [
-        StorePlanDef(
-          planKey: 'paket_c',
-          label: 'Paket C — Starter',
-          priceIdr: 250000,
-          whiteLabel: false,
-          blurb:
-              'Mulai jualan: kasir, master barang, aplikasi member. Kulit Rekasa + kode usaha.',
-          highlight: 'Paling hemat',
-          moduleKeys: ['pos', 'master_data', 'member_app'],
-        ),
-        StorePlanDef(
-          planKey: 'paket_b',
-          label: 'Paket B — Bisnis',
-          priceIdr: 450000,
-          whiteLabel: false,
-          blurb:
-              'Toko berkembang: stok antar cabang, garansi, absensi, riwayat DP. Masih kulit Rekasa.',
-          highlight: 'Paling laku',
-          moduleKeys: [
-            'pos',
-            'master_data',
-            'member_app',
-            'logistics',
-            'warranty',
-            'attendance',
-            'history_dp',
-          ],
-        ),
-        StorePlanDef(
-          planKey: 'paket_a',
-          label: 'Paket A — Pro',
-          priceIdr: 750000,
-          whiteLabel: true,
-          blurb: 'Semua modul + APK & web nama+ikon merek sendiri. Paket tertinggi.',
-          highlight: 'Tertinggi',
-          moduleKeys: [
-            'pos',
-            'master_data',
-            'member_app',
-            'logistics',
-            'warranty',
-            'attendance',
-            'history_dp',
-            'finance',
-            'online_orders',
-          ],
-        ),
+      industryKey: pack.key,
+      industries: industries,
+      modules: modules,
+      plans: [
+        for (final k in ['paket_c', 'paket_b', 'paket_a'])
+          StorePlanDef(
+            planKey: k,
+            label: labels[k]!,
+            priceIdr: prices[k]!,
+            whiteLabel: k == 'paket_a',
+            blurb: '${blurbs[k]} ${pack.blurb}',
+            highlight: highlights[k]!,
+            moduleKeys: pack.modulesFor(k),
+          ),
       ],
-      modules: List.of(moduleCatalog),
     );
   }
 
@@ -137,18 +158,26 @@ class StoreCatalog {
     );
   }
 
-  static Future<StoreCatalog> load() async {
+  static Future<StoreCatalog> load([String? industryKey]) async {
     try {
-      final raw = await supabase.rpc('list_store_catalog');
-      if (raw is! Map || raw['ok'] != true) return StoreCatalog.local();
-      return fromRpc(Map<String, dynamic>.from(raw));
+      final raw = await supabase.rpc(
+        'list_store_catalog',
+        params: {'p_industry_key': industryKey},
+      );
+      if (raw is! Map || raw['ok'] != true) {
+        return StoreCatalog.local(industryKey);
+      }
+      return fromRpc(Map<String, dynamic>.from(raw), fallbackIndustry: industryKey);
     } catch (e) {
       debugPrint('list_store_catalog: $e');
-      return StoreCatalog.local();
+      return StoreCatalog.local(industryKey);
     }
   }
 
-  static StoreCatalog fromRpc(Map<String, dynamic> raw) {
+  static StoreCatalog fromRpc(
+    Map<String, dynamic> raw, {
+    String? fallbackIndustry,
+  }) {
     final plans = <StorePlanDef>[];
     final modules = <StoreModuleDef>[];
     final p = raw['plans'];
@@ -196,10 +225,42 @@ class StoreCatalog {
         );
       }
     }
-    if (plans.isEmpty || modules.isEmpty) return StoreCatalog.local();
+    final industries = <StoreIndustryDef>[];
+    final inds = raw['industries'];
+    if (inds is List) {
+      for (final e in inds) {
+        if (e is! Map) continue;
+        final m = Map<String, dynamic>.from(e);
+        final local = industryByKey('${m['key']}');
+        industries.add(
+          StoreIndustryDef(
+            key: '${m['key']}',
+            label: '${m['label'] ?? m['key']}',
+            blurb: '${m['blurb'] ?? local?.blurb ?? ''}',
+            planModules: local?.planModules ?? const {},
+            copy: local?.copy ?? const {},
+          ),
+        );
+      }
+    }
+    final selected = (raw['industry_key'] ?? fallbackIndustry)?.toString();
+    if (plans.isEmpty || modules.isEmpty) {
+      final local = StoreCatalog.local(selected);
+      return StoreCatalog(
+        plans: local.plans,
+        modules: local.modules,
+        industries: industries.isEmpty ? local.industries : industries,
+        industryKey: selected,
+        whiteLabelAddonIdr:
+            int.tryParse('${raw['white_label_addon_idr']}') ?? 200000,
+        fromServer: true,
+      );
+    }
     return StoreCatalog(
       plans: plans,
       modules: modules,
+      industries: industries.isEmpty ? industryCatalog : industries,
+      industryKey: selected,
       whiteLabelAddonIdr:
           int.tryParse('${raw['white_label_addon_idr']}') ?? 200000,
       fromServer: true,

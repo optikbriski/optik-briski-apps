@@ -113,6 +113,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       'p_phone': phone.text,
       'p_email': email.text,
       'p_signer_name': signer.text,
+      'p_industry_key': widget.catalog.industryKey ?? 'umum',
     };
     name.dispose();
     slug.dispose();
@@ -183,7 +184,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
           Text(
-            plan.blurb,
+            '${widget.catalog.industry?.label ?? 'Usaha'} · ${plan.blurb}',
             style: TextStyle(
               color: OptikAdminTokens.navy.withOpacity(0.78),
               height: 1.4,
