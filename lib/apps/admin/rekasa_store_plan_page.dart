@@ -10,6 +10,7 @@ import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
 import '../store/store_account.dart';
 import '../store/store_account_login_page.dart';
+import '../store/store_checkout_sheet.dart';
 import 'store_module_detail_page.dart';
 
 /// Satu paket: nyala/mati tiap fitur + beli.
@@ -81,55 +82,57 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
     final phone = TextEditingController();
     final email = TextEditingController();
     final signer = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showRekasaSheet<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(widget.isUpgrade ? 'Upgrade paket' : 'Beli paket'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Total ${TenantBilling.formatRp(_quote.amountIdr)} / periode. '
-                'Usaha baru = uji coba sampai tagihan lunas + kontrak ditandatangani. '
-                'Data tidak dicampur merek lain.',
-                style: const TextStyle(fontSize: 13, height: 1.35),
+      builder: (ctx) => RekasaSheetScaffold(
+        eyebrow: widget.catalog.industry?.label ?? 'Checkout',
+        title: widget.isUpgrade ? 'Upgrade paket' : 'Beli paket',
+        price: TenantBilling.formatRp(_quote.amountIdr),
+        caption: 'Per periode. Usaha baru uji coba sampai tagihan lunas '
+            'dan kontrak ditandatangani. Data tidak dicampur merek lain.',
+        primaryLabel: 'Pesan',
+        onPrimary: () => Navigator.pop(ctx, true),
+        onSecondary: () => Navigator.pop(ctx, false),
+        child: Column(
+          children: [
+            TextField(
+              controller: name,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'Nama usaha / merek'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: slug,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Kode usaha',
+                hintText: 'optik-maju',
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Nama usaha / merek'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'WA / HP'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: email,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'Email (opsional)'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: signer,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Nama penandatangan kontrak',
               ),
-              TextField(
-                controller: slug,
-                decoration: const InputDecoration(
-                  labelText: 'Kode usaha (slug)',
-                  hintText: 'optik-maju',
-                ),
-              ),
-              TextField(
-                controller: phone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'WA / HP'),
-              ),
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email (opsional)'),
-              ),
-              TextField(
-                controller: signer,
-                decoration: const InputDecoration(
-                  labelText: 'Nama penandatangan kontrak',
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Pesan')),
-        ],
       ),
     );
     final payload = {
@@ -188,57 +191,49 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       final wl = map['white_label'] == true ||
           map['shell'] == 'white_label' ||
           _whiteLabel;
-      await showDialog<void>(
+      await showRekasaSheet<void>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Pesanan masuk'),
-          content: Text(
-            'Kode usaha $slug.\n'
-            'Tagihan ${map['invoice_no'] ?? ''} · ${TenantBilling.formatRp(map['amount_idr'])}.\n\n'
+        builder: (ctx) => RekasaSheetScaffold(
+          eyebrow: 'Pesanan',
+          title: 'Pesanan masuk',
+          price: TenantBilling.formatRp(map['amount_idr']),
+          caption: 'Kode usaha $slug · ${map['invoice_no'] ?? ''}',
+          primaryLabel: token.isNotEmpty ? 'Tandatangani' : 'Selesai',
+          secondaryLabel: 'Akun owner',
+          onPrimary: () {
+            Navigator.pop(ctx);
+            if (token.isEmpty) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TenantContractSignPage(token: token),
+              ),
+            );
+          },
+          onSecondary: () {
+            Navigator.pop(ctx);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StoreAccountLoginPage(
+                  hint: StoreAccountHint(
+                    slug: slug,
+                    phone: phone,
+                    email: orderEmail,
+                    contractToken: token,
+                  ),
+                ),
+              ),
+            );
+          },
+          child: Text(
             'Fitur yang nyala di APK toko:\n$labels\n\n'
             '${TenantModules.installHint(whiteLabel: wl, slug: slug)}\n\n'
             'Tandatangani kontrak, buat akun owner (kode usaha + HP), '
             'transfer ke Rekasa. Setelah lunas sistem dinyalakan. '
             'Data tidak dihapus kalau telat bayar — hanya dimatikan.',
+            style: Theme.of(ctx).textTheme.bodyMedium,
           ),
-          actions: [
-            if (token.isNotEmpty)
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TenantContractSignPage(token: token),
-                    ),
-                  );
-                },
-                child: const Text('Tandatangani sekarang'),
-              ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StoreAccountLoginPage(
-                      hint: StoreAccountHint(
-                        slug: slug,
-                        phone: phone,
-                        email: orderEmail,
-                        contractToken: token,
-                      ),
-                    ),
-                  ),
-                );
-              },
-              child: const Text('Buka akun owner'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
         ),
       );
     } catch (e) {
@@ -347,7 +342,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
         color: RekasaTokens.paper,
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: RekasaTokens.inkSoft, width: 2.5)),
+            border: Border(top: BorderSide(color: RekasaTokens.sky)),
           ),
           child: SafeArea(
             child: Padding(

@@ -152,18 +152,19 @@ ThemeData buildRekasaStoreTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: RekasaTokens.canvas,
+      fillColor: RekasaTokens.paper,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: RekasaTokens.lineStrong),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.sky),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: RekasaTokens.lineStrong),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.sky),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: RekasaTokens.ink, width: 1.4),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.inkSoft, width: 1.2),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
