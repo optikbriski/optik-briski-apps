@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optik_b_riski/shared/invoice/invoice_link.dart';
+import 'package:optik_b_riski/shared/tenant/tenant_billing.dart';
 
 void main() {
   test('situs publik Rekasa siap kolom link Midtrans', () {
@@ -11,8 +13,31 @@ void main() {
     expect(html, contains('Paket C'));
     expect(html, contains('perangkat lunak'));
     expect(html, isNot(contains('PT Biasa')));
+    expect(html, isNot(contains('/admin/')));
     expect(File('site/syarat.html').existsSync(), isTrue);
     expect(File('site/kebijakan.html').existsSync(), isTrue);
     expect(File('site/kontak.html').existsSync(), isTrue);
+  });
+
+  test('Vercel keeps Admin at / so invoice and contract links still resolve', () {
+    final vercel = File('vercel.json').readAsStringSync();
+    expect(vercel, contains('"/perusahaan"'));
+    expect(vercel, contains('"/(.*)"'));
+    expect(vercel, contains('"/index.html"'));
+    expect(vercel, isNot(contains('/admin/index.html')));
+
+    final build = File('scripts/vercel_build.sh').readAsStringSync();
+    expect(build, contains('build/web/perusahaan'));
+    expect(build, contains('-t lib/main_admin.dart'));
+    expect(build, isNot(contains('--base-href /admin/')));
+
+    expect(
+      InvoiceLink.httpsBase,
+      'https://optik-briski-apps.vercel.app/i',
+    );
+    expect(
+      TenantBilling.publicSignUrl('tokentest', origin: 'https://optik-briski-apps.vercel.app'),
+      'https://optik-briski-apps.vercel.app/?kontrak=tokentest',
+    );
   });
 }

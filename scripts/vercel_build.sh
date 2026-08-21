@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Vercel: situs publik Rekasa di / ; konsol Admin di /admin/
+# Flutter Web (Admin) di / — tautan nota /i/… dan ?kontrak= tetap hidup.
+# Situs perusahaan Rekasa (Midtrans) di /perusahaan/
 # Set in Vercel → Project → Settings → Environment Variables (Production + Preview):
 #   SUPABASE_URL
 #   SUPABASE_ANON_KEY
@@ -43,8 +44,6 @@ fi
 
 # Konsol Rekasa: jangan pin merek. Web per merek: scripts/release_brand_web.sh
 flutter build web --release \
-  -o build/web-admin \
-  --base-href /admin/ \
   -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=admin \
   --dart-define=ADMIN_PIN_TENANT=false \
@@ -52,12 +51,8 @@ flutter build web --release \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
 
-rm -rf build/web
-mkdir -p build/web
-cp -R site/. build/web/
-mkdir -p build/web/admin
-cp -R build/web-admin/. build/web/admin/
-
 test -f build/web/index.html
-test -f build/web/admin/index.html
-echo "OK: situs Rekasa di / ; konsol Admin di /admin/"
+mkdir -p build/web/perusahaan
+cp -R site/. build/web/perusahaan/
+test -f build/web/perusahaan/index.html
+echo "OK: konsol Admin di / ; situs Rekasa di /perusahaan/"

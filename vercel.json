@@ -6,17 +6,21 @@
   "installCommand": "echo 'Flutter install handled in build script'",
   "rewrites": [
     {
-      "source": "/admin",
-      "destination": "/admin/index.html"
+      "source": "/perusahaan",
+      "destination": "/perusahaan/index.html"
     },
     {
-      "source": "/admin/(.*)",
-      "destination": "/admin/index.html"
+      "source": "/perusahaan/",
+      "destination": "/perusahaan/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/admin/flutter_service_worker.js",
+      "source": "/flutter_service_worker.js",
       "headers": [
         {
           "key": "Cache-Control",
@@ -25,7 +29,7 @@
       ]
     },
     {
-      "source": "/admin/main.dart.js",
+      "source": "/main.dart.js",
       "headers": [
         {
           "key": "Cache-Control",
