@@ -48,15 +48,16 @@ Future<void> bootstrapApp({
     httpClient: TrainingHttpClient(),
   );
   await TenantService.instance.loadLocal();
-  if (isBrandedStoreApk) {
+  if (isRekasaStorefront) {
+    BrandService.bind(AppBrand.rekasaShell);
+    TenantModules.instance.sealStorefront();
+  } else if (isBrandedStoreApk) {
     await TenantService.instance.bindBrandedStoreApk();
+    await BrandService.load();
+    await TenantModules.instance.load();
   } else {
     await TenantService.instance.ensureResolved();
-  }
-  await BrandService.load();
-  if (isRekasaStorefront) {
-    TenantModules.instance.sealStorefront();
-  } else {
+    await BrandService.load();
     await TenantModules.instance.load();
   }
   BrandChrome.attach();

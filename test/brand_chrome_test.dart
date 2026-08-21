@@ -18,5 +18,6 @@ void main() {
     expect(BrandChrome.roleForFlavor(AppFlavor.admin), 'Admin');
     expect(BrandChrome.roleForFlavor(AppFlavor.member), 'Member');
     expect(BrandChrome.roleForFlavor(AppFlavor.karyawan), 'Karyawan');
+    expect(BrandChrome.roleForFlavor(AppFlavor.store), 'Etalase');
   });
 }

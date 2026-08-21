@@ -23,22 +23,31 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Rekasa POS">
-  <link rel="apple-touch-icon" href="logo-web.png">
+  <meta name="apple-mobile-web-app-title" content="Rekasa">
+  <link rel="apple-touch-icon" href="rekasa-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="logo-web.png"/>
+  <link rel="icon" type="image/png" href="rekasa-icon.png"/>
 
-  <title>Rekasa POS</title>
+  <title>Rekasa</title>
   <style>
     html, body { height: 100%; margin: 0; background: #F7FAFF; }
     .obr-boot {
       position: fixed; inset: 0; display: flex; align-items: center;
-      justify-content: center; background: #F7FAFF; z-index: 9999;
+      justify-content: center; gap: 12px; background: #F7FAFF; z-index: 9999;
       transition: opacity .25s ease;
     }
-    .obr-boot img { height: 44px; width: auto; }
+    .obr-boot .rks-badge {
+      width: 40px; height: 40px; border-radius: 9px; background: #0B3D8C;
+      color: #fff; font: 800 22px/40px system-ui, -apple-system, sans-serif;
+      text-align: center;
+    }
+    .obr-boot .rks-word {
+      font: 800 26px/1 system-ui, -apple-system, sans-serif;
+      color: #0B3D8C; letter-spacing: .04em;
+    }
     .obr-boot.dark { background: #0B1220; }
+    .obr-boot.dark .rks-word { color: #F7FAFF; }
   </style>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.css" />
@@ -55,7 +64,8 @@
 </head>
 <body>
   <div class="obr-boot" id="obr-boot">
-    <img src="logo-web.png" alt="Rekasa POS" />
+    <div class="rks-badge" aria-hidden="true">R</div>
+    <div class="rks-word">Rekasa</div>
   </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:optik_b_riski/shared/tenant/industry_catalog.dart';
 import 'package:optik_b_riski/shared/tenant/module_catalog.dart';
 import 'package:optik_b_riski/shared/tenant/store_catalog.dart';
 
@@ -8,6 +9,12 @@ void main() {
     final cat = StoreCatalog.local();
     expect(cat.plans, isEmpty);
     expect(cat.industries, isNotEmpty);
+  });
+
+  test('optik industry copy does not name the sample tenant', () {
+    final optik = industryCatalog.singleWhere((i) => i.key == 'optik');
+    expect(optik.blurb.toLowerCase(), isNot(contains('optik b. riski')));
+    expect(optik.blurb.toLowerCase(), isNot(contains('contoh tenant')));
   });
 
   test('optik A includes every optik catalog module', () {

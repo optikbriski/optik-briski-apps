@@ -17,7 +17,7 @@ class BrandChrome {
   static bool _attached = false;
 
   static String get windowTitle {
-    final n = BrandService.name.trim();
+    final n = isRekasaStorefront ? 'Rekasa' : BrandService.name.trim();
     if (n.isEmpty) return roleSuffix.isEmpty ? 'POS' : 'POS — $roleSuffix';
     if (roleSuffix.isEmpty) return n;
     return '$n — $roleSuffix';

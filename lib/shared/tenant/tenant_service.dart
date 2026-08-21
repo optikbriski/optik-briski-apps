@@ -48,6 +48,14 @@ class TenantService {
       'Kode usaha belum terverifikasi. Tidak boleh memakai data usaha lain.';
 
   Future<void> loadLocal() async {
+    if (isRekasaStorefront) {
+      slug = '';
+      id = null;
+      displayName = null;
+      shortName = null;
+      assistantName = null;
+      return;
+    }
     if (isBrandedStoreApk) {
       slug = brandedStoreSlug;
       return;
@@ -211,6 +219,7 @@ class TenantService {
 
   /// Coba resolve slug tersimpan. Gagal = tetap unbound (bukan Optik).
   Future<void> ensureResolved({SupabaseClient? client}) async {
+    if (isRekasaStorefront) return;
     if (isBound) return;
     if (!isBrandedStoreApk && slug.trim().isEmpty) return;
     await resolveSlug(

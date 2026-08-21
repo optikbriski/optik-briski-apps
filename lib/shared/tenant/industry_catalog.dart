@@ -31,7 +31,7 @@ final industryCatalog = <StoreIndustryDef>[
   StoreIndustryDef(
     key: 'optik',
     label: 'Optik / kacamata',
-    blurb: 'Kasir frame-lensa, resep, garansi, member. Optik B. Riski = contoh tenant.',
+    blurb: 'Kasir frame-lensa, resep, garansi, member.',
     planModules: {
       'paket_c': ['pos', 'master_data', 'member_app'],
       'paket_b': [

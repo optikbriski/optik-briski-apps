@@ -7,6 +7,7 @@ import '../../shared/bootstrap.dart';
 import '../../shared/brand/brand_chrome.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/rekasa_mark.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
 import '../admin/rekasa_store_orders_page.dart';
 import '../admin/rekasa_store_page.dart';
@@ -141,7 +142,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: const Text('Rekasa'),
+        title: const RekasaMark(height: 28),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
         actions: [

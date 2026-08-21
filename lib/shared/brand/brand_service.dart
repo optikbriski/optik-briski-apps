@@ -49,7 +49,17 @@ class BrandService {
   /// Naik setiap [load] selesai supaya judul jendela/tab rebuild.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
+  /// Kunci merek kulit (etalase Rekasa). Tidak membaca tenant / prefs.
+  static void bind(AppBrand brand) {
+    _current = brand;
+    revision.value++;
+  }
+
   static Future<void> load({SupabaseClient? client}) async {
+    if (isRekasaStorefront) {
+      bind(AppBrand.rekasaShell);
+      return;
+    }
     try {
       final db = client ?? Supabase.instance.client;
       await TenantService.instance.ensureResolved(client: db);
