@@ -10,9 +10,14 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  test('logo ink is royal blue, not Optik navy', () {
-    expect(RekasaTokens.ink, const Color(0xFF0B3D8C));
+  test('logo ink is cobalt sky, not Optik navy', () {
+    expect(RekasaTokens.ink, const Color(0xFF0047AB));
+    expect(RekasaTokens.inkSoft, const Color(0xFF2B6BC4));
+    expect(RekasaTokens.sky, const Color(0xFF8BB4E8));
+    expect(RekasaTokens.inkDeep, const Color(0xFF001F4D));
+    expect(RekasaTokens.paper, const Color(0xFFFFFFFF));
     expect(RekasaTokens.ink, isNot(const Color(0xFF000080)));
+    expect(RekasaTokens.ink, isNot(const Color(0xFF0B3D8C)));
   });
 
   testWidgets('mark shows R badge and Rekasa wordmark', (tester) async {

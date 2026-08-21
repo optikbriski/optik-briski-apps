@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Palet etalase = konsep logo: kotak biru royal, R putih, kanvas bersih.
+/// Palet etalase = Figma Cobalt sky. Bukan navy/es Optik.
 abstract final class RekasaTokens {
-  static const Color ink = Color(0xFF0B3D8C);
-  static const Color inkDeep = Color(0xFF07285F);
-  static const Color inkSoft = Color(0xFF1A54B8);
-  static const Color canvas = Color(0xFFF4F6FB);
+  static const Color sky = Color(0xFF8BB4E8);
+  static const Color inkSoft = Color(0xFF2B6BC4);
+  static const Color ink = Color(0xFF0047AB);
+  static const Color inkDeep = Color(0xFF001F4D);
+  static const Color canvas = Color(0xFFF0F5FC);
   static const Color paper = Color(0xFFFFFFFF);
-  static const Color muted = Color(0xFF5C6B82);
-  static const Color line = Color(0x1A0B3D8C);
-  static const Color lineStrong = Color(0x330B3D8C);
-  static const Color wash = Color(0x140B3D8C);
+  static const Color muted = Color(0xFF4A5F80);
+  static const Color line = Color(0x1A0047AB);
+  static const Color lineStrong = Color(0x330047AB);
+  static const Color wash = Color(0x148BB4E8);
   static const Color danger = Color(0xFFA65D5D);
   static const Color warning = Color(0xFF9A7B3C);
 

@@ -49,7 +49,7 @@ class BrandChrome {
     SystemChrome.setApplicationSwitcherDescription(
       ApplicationSwitcherDescription(
         label: windowTitle,
-        primaryColor: 0xFF0B3D8C,
+        primaryColor: isRekasaStorefront ? 0xFF0047AB : 0xFF0B3D8C,
       ),
     );
     setWebDocumentTitle(windowTitle);
