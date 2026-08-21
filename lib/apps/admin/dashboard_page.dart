@@ -391,7 +391,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                   widget.profile['is_platform'] == 'true' ||
                                   widget.profile['role'] == 'platform'))
                             PremiumMenuTile(
-                              title: 'UMKM / Tenant',
+                              title: 'UMKM, tagihan & kontrak',
                               icon: Icons.apartment_rounded,
                               color: OptikAdminTokens.navy,
                               onTap: () => Navigator.push(

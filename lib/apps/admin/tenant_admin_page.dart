@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../shared/bootstrap.dart';
 import '../../shared/tenant/module_catalog.dart';
+import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import 'tenant_billing_page.dart';
 
 /// Rekasa: daftar UMKM + paket A/B/C + white-label.
 /// Paket bawah = kulit Rekasa. Paket A = APK/web merek sendiri.
@@ -337,7 +339,8 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                   'Setiap UMKM sekat tenant_id — bukan cabang Optik. '
                   'Paket C/B: APK & web Rekasa, beda di kode usaha + isi dalam. '
                   'Paket A: APK & web nama+ikon merek sendiri (build BRAND=slug). '
-                  'Modul dan white-label bisa dicentang satu-satu.',
+                  'Modul dan white-label bisa dicentang satu-satu. '
+                  'Tagihan hari H belum lunas → sistem UMKM dimatikan (data tetap).',
                   style: TextStyle(
                     color: OptikAdminTokens.navy.withOpacity(0.75),
                     height: 1.35,
@@ -362,14 +365,32 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: Text(
-                          '${r['slug']} · ${r['plan_label'] ?? r['plan_key'] ?? 'paket?'} · '
-                          '${_shellCaption(r)} · pusat ${r['pusat_toko_id'] ?? '-'}',
+                          '${r['slug']} · ${r['status'] ?? 'aktif'} · '
+                          '${r['plan_label'] ?? r['plan_key'] ?? 'paket?'} · '
+                          '${_shellCaption(r)}'
+                          '${r['plan_price_idr'] != null ? ' · ${TenantBilling.formatRp(r['plan_price_idr'])}/periode' : ''}'
+                          '${(r['overdue_invoices'] ?? 0) != 0 ? ' · ${r['overdue_invoices']} jatuh tempo' : ''}',
                         ),
                         trailing: !_isPlatform
                             ? null
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  IconButton(
+                                    tooltip: 'Tagihan & kontrak',
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => TenantBillingPage(
+                                            profile: widget.profile,
+                                            tenant: r,
+                                          ),
+                                        ),
+                                      ).then((_) => _boot());
+                                    },
+                                    icon: const Icon(Icons.receipt_long_rounded),
+                                  ),
                                   IconButton(
                                     tooltip: 'Pilih modul',
                                     onPressed: () => _editModules(r),

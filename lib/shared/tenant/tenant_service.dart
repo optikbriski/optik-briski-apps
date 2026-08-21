@@ -25,7 +25,15 @@ class TenantService {
   String? pusatTokoId;
   bool isPlatform = false;
 
+  /// Alasan resolve terakhir (`suspend`, `trial`, `not_found`, …).
+  String? lastResolveReason;
+  String? lastResolveError;
+
   bool get isBound => id != null && id!.isNotEmpty;
+
+  static const suspendedMessage =
+      'Langganan ditangguhkan. Tagihan belum dibayar pada hari H — '
+      'sistem dimatikan sampai lunas. Data toko tidak dihapus. Hubungi Rekasa.';
 
   /// UUID tenant yang sudah di-resolve. Lempar jika belum — jangan fallback.
   String get boundId {
@@ -95,11 +103,17 @@ class TenantService {
       s = brandedStoreSlug.trim().toLowerCase();
     }
     if (s.isEmpty) return false;
+    lastResolveReason = null;
+    lastResolveError = null;
     try {
       final db = client ?? Supabase.instance.client;
       final res = await db.rpc('resolve_tenant', params: {'p_slug': s});
       if (res is! Map) return false;
-      if (res['ok'] != true) return false;
+      if (res['ok'] != true) {
+        lastResolveReason = res['reason']?.toString() ?? res['status']?.toString();
+        lastResolveError = res['error']?.toString();
+        return false;
+      }
       final nextId = res['id']?.toString();
       if (nextId == null || nextId.isEmpty) return false;
       id = nextId;
@@ -112,6 +126,7 @@ class TenantService {
       return true;
     } catch (e) {
       debugPrint('resolve_tenant: $e');
+      lastResolveError = '$e';
       return false;
     }
   }
@@ -132,8 +147,15 @@ class TenantService {
       client: client,
     );
     if (!ok || !isBound) {
+      final reason = lastResolveReason;
+      final err = (lastResolveError ?? '').trim();
+      if (reason == 'suspend' || reason == 'trial') {
+        throw StateError(err.isNotEmpty ? err : suspendedMessage);
+      }
       throw StateError(
-        'Kode usaha tidak valid atau tidak aktif. Cek ejaan, jangan pakai kode usaha lain.',
+        err.isNotEmpty
+            ? err
+            : 'Kode usaha tidak valid atau tidak aktif. Cek ejaan, jangan pakai kode usaha lain.',
       );
     }
   }
@@ -210,6 +232,8 @@ class TenantService {
     assistantName = null;
     pusatTokoId = null;
     isPlatform = false;
+    lastResolveReason = null;
+    lastResolveError = null;
   }
 
   @visibleForTesting

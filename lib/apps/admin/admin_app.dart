@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,8 +16,11 @@ import 'dashboard_page.dart';
 import 'login_page.dart';
 import '../../shared/brand/brand_chrome.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
+import '../../shared/widgets/tenant_contract_sign_page.dart';
+import '../../shared/widgets/tenant_suspended_page.dart';
 
 /// Role yang boleh masuk Admin (pusat / cabang). Bukan karyawan lapangan.
 const _adminRoles = {
@@ -84,7 +88,15 @@ class _AdminAppState extends State<AdminApp> {
           ],
         ),
       ),
-      home: const AdminAuthWrapper(),
+      home: () {
+        if (kIsWeb) {
+          final token = TenantBilling.tokenFromUri(Uri.base);
+          if (token != null) {
+            return TenantContractSignPage(token: token);
+          }
+        }
+        return const AdminAuthWrapper();
+      }(),
     );
   }
 }
@@ -100,6 +112,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
   StreamSubscription<AuthState>? _authSub;
   Session? _session;
   Map<String, dynamic>? _profile;
+  TenantAccessSnapshot? _access;
   bool _booting = true;
   String? _bannerError;
 
@@ -130,6 +143,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       setState(() {
         _session = null;
         _profile = null;
+        _access = null;
         _booting = false;
       });
       return;
@@ -142,6 +156,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
         _session = data.session;
         if (data.session == null) {
           _profile = null;
+          _access = null;
           _booting = false;
         } else {
           _booting = true;
@@ -160,6 +175,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       setState(() {
         _session = null;
         _profile = null;
+        _access = null;
         _booting = false;
       });
       return;
@@ -214,10 +230,12 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       await TenantService.instance.bindFromProfile(merged);
       await BrandService.load();
       await TenantModules.instance.load();
+      final access = await TenantAccess.load();
 
       setState(() {
         _session = session;
         _profile = merged;
+        _access = access;
         _booting = false;
         _bannerError = null;
       });
@@ -228,6 +246,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
         _bannerError = 'Gagal memuat profil admin: $e';
         _session = null;
         _profile = null;
+        _access = null;
       });
     }
   }
@@ -236,9 +255,11 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
     setState(() {
       _session = supabase.auth.currentSession;
       _profile = profile;
-      _booting = false;
+      _access = null;
+      _booting = true;
       _bannerError = null;
     });
+    _resolveProfileFromSession();
   }
 
   @override
@@ -255,6 +276,14 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       return LoginPage(
         bannerError: _bannerError,
         onLoggedIn: _onLoggedIn,
+      );
+    }
+
+    final access = _access;
+    if (access != null && !access.ok && !access.platform) {
+      return TenantSuspendedPage(
+        access: access,
+        onSignOut: () => unawaited(signOutQuiet()),
       );
     }
 

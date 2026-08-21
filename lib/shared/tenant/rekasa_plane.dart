@@ -6,7 +6,10 @@
 /// Rekasa (kontrol):
 /// - Web Admin **tanpa pin** (`isRekasaControlPlane`) — Vercel Git.
 /// - Akun `profiles.is_platform` atur tenant, paket A/B/C, modul custom,
-///   dan flag `white_label` (APK/web merek sendiri).
+///   flag `white_label` (APK/web merek sendiri), **tagihan langganan**,
+///   dan **kontrak online** (taut `?kontrak=`).
+/// - Hari H tagihan belum lunas → `tenants.status = suspend` (sistem down,
+///   data tidak dihapus). Lunas / Rekasa nyalakan lagi → `aktif`.
 ///
 /// Paket bawah (C Starter, B Bisnis):
 /// - Kulit **Rekasa** (`brands/rekasa.json`, `pinTenant=false`).

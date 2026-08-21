@@ -14,7 +14,9 @@ import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/optik_brand_logo.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
+import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_service.dart';
+import '../../shared/widgets/tenant_suspended_page.dart';
 import '../owner/owner_service.dart';
 import '../owner/owner_session.dart';
 import '../owner/owner_shell.dart';
@@ -174,6 +176,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         }
         await TenantService.instance.bindFromProfile(profileRow);
         await BrandService.load();
+        if (await _goSuspendedIfLocked()) return true;
         final ownerProfile = await OwnerService().myProfile();
         OwnerSession.instance.setProfile(ownerProfile);
         if (!mounted) return false;
@@ -195,7 +198,30 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
 
     final ok = await _assertKaryawanAktif(email);
     if (!ok || !mounted) return false;
+    if (await _goSuspendedIfLocked()) return true;
     _goHome();
+    return true;
+  }
+
+  Future<bool> _goSuspendedIfLocked() async {
+    final access = await TenantAccess.load();
+    if (access.ok || access.platform) return false;
+    if (!mounted) return true;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => TenantSuspendedPage(
+          access: access,
+          onSignOut: () async {
+            await signOutQuiet();
+            if (!context.mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginKaryawanPage()),
+              (_) => false,
+            );
+          },
+        ),
+      ),
+    );
     return true;
   }
 
