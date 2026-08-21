@@ -155,12 +155,15 @@ class BrandService {
 }
 
 extension BrandTranslation on String {
-  String brandTr({Map<String, String>? namedArgs}) => tr(
-        this,
-        namedArgs: {
-          'brand': BrandService.name,
-          'assistant': BrandService.assistantName,
-          ...?namedArgs,
-        },
-      );
+  /// Pakai [String.tr] (bukan `tr` top-level) supaya analyzer tidak
+  /// menuntut argumen posisi.
+  String brandTr({Map<String, String>? namedArgs}) {
+    return this.tr(
+      namedArgs: {
+        'brand': BrandService.name,
+        'assistant': BrandService.assistantName,
+        ...?namedArgs,
+      },
+    );
+  }
 }

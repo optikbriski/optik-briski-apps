@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../brand/brand_service.dart';
 
 /// Grade Member:
 /// Basic 0–249 · Silver 250–499 · Gold 500–999 · Platinum 1000–1999 · Diamond 2000+.
@@ -249,7 +248,7 @@ class MemberGradePalette {
   );
 
   /// Diamond — di atas Platinum (2000+): hitam kristal + biru diamond.
-  static final diamond = MemberGradePalette(
+  static const diamond = MemberGradePalette(
     grade: MemberGrade.diamond,
     label: 'Diamond',
     unlockAt: 2000,
@@ -289,7 +288,7 @@ class MemberGradePalette {
       MemberGradeBenefit(
         Icons.card_membership_rounded,
         'Akses early product & event',
-        'Undangan private ${BrandService.name}',
+        'Undangan private & preview merek',
       ),
       MemberGradeBenefit(
         Icons.support_agent_rounded,
