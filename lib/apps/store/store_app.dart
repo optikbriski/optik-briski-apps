@@ -209,22 +209,24 @@ class _StoreHomePageState extends State<StoreHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: RekasaTokens.canvas,
-      body: Column(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: RekasaTokens.skyCanvas),
+        child: Column(
         children: [
           Material(
-            color: RekasaTokens.paper,
+            color: RekasaTokens.paper.withOpacity(0.92),
             elevation: 0,
             child: Container(
-              decoration: const BoxDecoration(
-                color: RekasaTokens.paper,
-                border: Border(
-                  bottom: BorderSide(color: RekasaTokens.inkSoft, width: 2.5),
+              decoration: BoxDecoration(
+                color: RekasaTokens.paper.withOpacity(0.92),
+                border: const Border(
+                  bottom: BorderSide(color: RekasaTokens.sky, width: 1),
                 ),
               ),
               child: SafeArea(
                 bottom: false,
                 child: RekasaPage(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
+                  padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
                   child: Row(
                     children: [
                       const Flexible(
@@ -233,7 +235,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: RekasaMark(height: 34),
+                            child: RekasaMark(height: 44),
                           ),
                         ),
                       ),
@@ -289,6 +291,7 @@ class _StoreHomePageState extends State<StoreHomePage> {
           ),
           const Expanded(child: RekasaStorePage(embedded: true)),
         ],
+      ),
       ),
     );
   }

@@ -216,19 +216,19 @@ class _StoreServiceStripState extends State<StoreServiceStrip> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 18),
+        const SizedBox(height: 28),
         const RekasaEyebrow('Layanan'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         Text(
           'Sudah beli? Kelola merek di sini.',
           style: GoogleFonts.plusJakartaSans(
             fontWeight: FontWeight.w800,
-            fontSize: 20,
+            fontSize: 24,
             color: RekasaTokens.ink,
-            letterSpacing: -0.4,
+            letterSpacing: -0.7,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         LayoutBuilder(
           builder: (context, c) {
             final wide = c.maxWidth >= 720;

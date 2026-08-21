@@ -76,8 +76,8 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
             ? _industries()
             : _plans();
     if (widget.embedded) {
-      return ColoredBox(
-        color: RekasaTokens.canvas,
+      return DecoratedBox(
+        decoration: const BoxDecoration(gradient: RekasaTokens.skyCanvas),
         child: Column(
           children: [
             if (selected != null)
@@ -121,41 +121,41 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
           padding: EdgeInsets.zero,
           children: [
             RekasaPage(
-              padding: const EdgeInsets.fromLTRB(22, 28, 22, 36),
+              padding: const EdgeInsets.fromLTRB(28, 36, 28, 48),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const RekasaEyebrow('Etalase'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 18),
                   Text(
                     'Pilih bidang usaha',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
+                    constraints: const BoxConstraints(maxWidth: 480),
                     child: Text(
-                      'Bukan semua klien pakai POS optik. Satu mesin, paket C/B/A '
-                      'dan nama fitur menyesuaikan bidang yang dipilih.',
+                      'Satu mesin. Paket C/B/A dan nama fitur mengikuti bidang '
+                      'yang dipilih — bukan semua klien pakai POS optik.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 36),
                   if (!wide)
                     for (final i in list)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.only(bottom: 16),
                         child: _industryCard(i),
                       )
                   else
                     for (var i = 0; i < list.length; i += 2)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.only(bottom: 18),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(child: _industryCard(list[i])),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 18),
                             Expanded(
                               child: i + 1 < list.length
                                   ? _industryCard(list[i + 1])
@@ -178,32 +178,28 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
     return RekasaSurface(
       onTap: () => _boot(i.key),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RekasaIconTile(icon: _icon(i.key), size: 52),
-          const SizedBox(width: 16),
+          RekasaIconTile(icon: _icon(i.key), size: 58),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(i.label, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Text(i.blurb, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 16),
+                Text(
+                  'LIHAT PAKET',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: RekasaTokens.inkSoft,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.8,
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 32,
-            height: 32,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: RekasaTokens.wash,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.arrow_forward_rounded,
-              size: 16,
-              color: RekasaTokens.ink,
             ),
           ),
         ],
@@ -216,29 +212,32 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        RekasaPage(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 36),
+            RekasaPage(
+          padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               RekasaEyebrow(ind?.label ?? 'Paket'),
-              const SizedBox(height: 10),
+              const SizedBox(height: 18),
               Text(
                 'Pilih paket',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: 8),
-              Text(
-                ind == null
-                    ? 'Nyalakan fitur yang dipakai, buka Detail, lalu beli.'
-                    : 'Fitur dan harga menyesuaikan bidang ini. '
-                        'Paket A = tertinggi + merek sendiri.',
-                style: Theme.of(context).textTheme.bodyMedium,
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Text(
+                  ind == null
+                      ? 'Nyalakan fitur yang dipakai, buka Detail, lalu beli.'
+                      : 'Fitur dan harga menyesuaikan bidang ini. '
+                          'Paket A = tertinggi + merek sendiri.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               for (final p in _catalog.plans)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.only(bottom: 18),
                   child: RekasaSurface(
                     onTap: () {
                       Navigator.push(
@@ -294,8 +293,8 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                           style: GoogleFonts.plusJakartaSans(
                             color: RekasaTokens.inkSoft,
                             fontWeight: FontWeight.w800,
-                            fontSize: 28,
-                            letterSpacing: -0.8,
+                            fontSize: 34,
+                            letterSpacing: -1.1,
                             height: 1,
                           ),
                         ),
@@ -312,22 +311,14 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            const Spacer(),
-                            Text(
-                              'Pilih fitur',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontWeight: FontWeight.w800,
-                                color: RekasaTokens.ink,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const RekasaIconTile(
-                              icon: Icons.arrow_forward_rounded,
-                              size: 28,
-                            ),
-                          ],
+                        Text(
+                          'PILIH FITUR',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: RekasaTokens.inkSoft,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.8,
+                          ),
                         ),
                       ],
                     ),

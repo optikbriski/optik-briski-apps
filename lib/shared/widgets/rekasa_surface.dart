@@ -3,12 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../brand/rekasa_tokens.dart';
 
-/// Kartu putih — sudut logo, bayangan pelan.
+/// Kartu kertas: rambut sky, bayangan dalam, aksen atas.
 class RekasaSurface extends StatelessWidget {
   const RekasaSurface({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.fromLTRB(22, 22, 22, 20),
     this.onTap,
   });
 
@@ -21,24 +21,33 @@ class RekasaSurface extends StatelessWidget {
     final box = BoxDecoration(
       color: RekasaTokens.paper,
       borderRadius: BorderRadius.circular(RekasaTokens.radiusCard),
-      border: Border.all(color: RekasaTokens.line),
+      border: Border.all(color: RekasaTokens.line, width: 0.8),
       boxShadow: RekasaTokens.lift,
     );
-    if (onTap == null) {
-      return Container(padding: padding, decoration: box, child: child);
-    }
+    final inner = Container(
+      padding: padding,
+      decoration: box,
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(RekasaTokens.radiusCard),
+        border: const Border(
+          top: BorderSide(color: Color(0x998BB4E8), width: 1.2),
+        ),
+      ),
+      child: child,
+    );
+    if (onTap == null) return inner;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(RekasaTokens.radiusCard),
-        child: Ink(padding: padding, decoration: box, child: child),
+        child: inner,
       ),
     );
   }
 }
 
-/// Ubin ikon = geometri logo (kotak rounded, isi biru, glyph putih).
+/// Ubin ikon: kobalt + kilau atas, bukan kotak datar.
 class RekasaIconTile extends StatelessWidget {
   const RekasaIconTile({
     super.key,
@@ -51,22 +60,48 @@ class RekasaIconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final radius = BorderRadius.circular(size * 0.26);
+    return SizedBox(
       width: size,
       height: size,
-      alignment: Alignment.center,
+      child: DecoratedBox(
       decoration: BoxDecoration(
         gradient: RekasaTokens.badgeFill,
-        borderRadius: BorderRadius.circular(size * 0.22),
+        borderRadius: radius,
+        border: Border.all(color: RekasaTokens.paper.withOpacity(0.28)),
         boxShadow: [
           BoxShadow(
-            color: RekasaTokens.inkSoft.withOpacity(0.28),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: RekasaTokens.inkSoft.withOpacity(0.22),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Icon(icon, color: RekasaTokens.paper, size: size * 0.48),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: size * 0.48,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x55FFFFFF), Color(0x00FFFFFF)],
+                  ),
+                ),
+              ),
+            ),
+            Icon(icon, color: RekasaTokens.paper, size: size * 0.44),
+          ],
+        ),
+      ),
+      ),
     );
   }
 }
@@ -99,14 +134,25 @@ class RekasaEyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: GoogleFonts.plusJakartaSans(
-        color: RekasaTokens.inkSoft,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.8,
-      ),
+    return Row(
+      children: [
+        Text(
+          text.toUpperCase(),
+          style: GoogleFonts.plusJakartaSans(
+            color: RekasaTokens.inkSoft,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2.4,
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: SizedBox(
+            height: 1,
+            child: ColoredBox(color: RekasaTokens.sky),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -126,25 +172,26 @@ class RekasaPillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: filled ? RekasaTokens.inkSoft : RekasaTokens.paper,
+      color: filled ? RekasaTokens.inkSoft : Colors.transparent,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: RekasaTokens.inkSoft,
+              color: filled ? RekasaTokens.inkSoft : RekasaTokens.sky,
             ),
           ),
           child: Text(
             label,
             style: GoogleFonts.plusJakartaSans(
               color: filled ? RekasaTokens.paper : RekasaTokens.inkSoft,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              letterSpacing: 0.35,
             ),
           ),
         ),

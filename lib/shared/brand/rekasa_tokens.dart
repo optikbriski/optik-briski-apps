@@ -16,20 +16,20 @@ abstract final class RekasaTokens {
   static const Color danger = Color(0xFFA65D5D);
   static const Color warning = Color(0xFF9A7B3C);
 
-  static const double radiusCard = 22;
-  static const double maxWidth = 1040;
+  static const double radiusCard = 24;
+  static const double maxWidth = 1080;
 
   static List<BoxShadow> get lift => [
         BoxShadow(
-          color: ink.withOpacity(0.07),
-          blurRadius: 28,
-          spreadRadius: -8,
-          offset: const Offset(0, 14),
+          color: ink.withOpacity(0.09),
+          blurRadius: 40,
+          spreadRadius: -12,
+          offset: const Offset(0, 22),
         ),
         BoxShadow(
-          color: ink.withOpacity(0.045),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
+          color: inkSoft.withOpacity(0.06),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
         ),
       ];
 
@@ -39,6 +39,17 @@ abstract final class RekasaTokens {
         colors: [sky, inkSoft, ink],
         stops: [0.0, 0.52, 1.0],
       );
+
+  static const LinearGradient skyCanvas = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFF7FAFE),
+      Color(0xFFD6E5F7),
+      Color(0xFFC4DBF3),
+    ],
+    stops: [0.0, 0.42, 1.0],
+  );
 }
 
 ThemeData buildRekasaStoreTheme() {
@@ -49,10 +60,10 @@ ThemeData buildRekasaStoreTheme() {
   final text = body.copyWith(
     headlineMedium: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.ink,
-      fontSize: 28,
+      fontSize: 36,
       fontWeight: FontWeight.w800,
-      letterSpacing: -0.7,
-      height: 1.12,
+      letterSpacing: -1.2,
+      height: 1.05,
     ),
     headlineSmall: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.ink,
@@ -62,9 +73,9 @@ ThemeData buildRekasaStoreTheme() {
     ),
     titleLarge: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.ink,
-      fontSize: 16.5,
+      fontSize: 17.5,
       fontWeight: FontWeight.w800,
-      letterSpacing: -0.2,
+      letterSpacing: -0.35,
     ),
     titleMedium: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.ink,
@@ -79,9 +90,9 @@ ThemeData buildRekasaStoreTheme() {
     ),
     bodyMedium: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.muted,
-      fontSize: 13.5,
+      fontSize: 14,
       fontWeight: FontWeight.w500,
-      height: 1.45,
+      height: 1.55,
     ),
     labelLarge: GoogleFonts.plusJakartaSans(
       color: RekasaTokens.ink,
@@ -160,9 +171,12 @@ ThemeData buildRekasaStoreTheme() {
         backgroundColor: RekasaTokens.inkSoft,
         foregroundColor: RekasaTokens.paper,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
