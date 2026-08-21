@@ -13,7 +13,7 @@ class StoreBottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
 
-  static const labels = ['Etalase', 'Akun', 'Kontrak', 'Bantuan'];
+  static const labels = ['Etalase', 'Akun', 'Bantuan'];
 
   @override
   Widget build(BuildContext context) {
@@ -40,11 +40,6 @@ class StoreBottomNav extends StatelessWidget {
                 icon: Icon(Icons.person_outline_rounded),
                 selectedIcon: Icon(Icons.person_rounded),
                 label: 'Akun',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.draw_outlined),
-                selectedIcon: Icon(Icons.draw_rounded),
-                label: 'Kontrak',
               ),
               NavigationDestination(
                 icon: Icon(Icons.help_outline_rounded),

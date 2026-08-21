@@ -6,8 +6,9 @@ import '../../shared/widgets/rekasa_surface.dart';
 import 'store_account.dart';
 import 'store_account_login_page.dart';
 import 'store_brand_dashboard_page.dart';
+import 'store_contract_token_page.dart';
 
-/// Portal owner: masuk / dasbor. Kontrak dan bantuan ada di tab bawah.
+/// Portal owner: masuk / dasbor / kontrak. Bantuan ada di tab bawah.
 class StoreAccountHubPage extends StatelessWidget {
   const StoreAccountHubPage({
     super.key,
@@ -69,6 +70,21 @@ class StoreAccountHubPage extends StatelessWidget {
                       ),
                     );
                   }
+                },
+              ),
+              const SizedBox(height: 12),
+              _tile(
+                context,
+                icon: Icons.draw_rounded,
+                title: 'Tanda tangan kontrak',
+                body: 'Punya tautan / kode kontrak dari Rekasa.',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const StoreContractTokenPage(),
+                    ),
+                  );
                 },
               ),
             ],

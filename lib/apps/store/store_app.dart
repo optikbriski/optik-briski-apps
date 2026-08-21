@@ -19,7 +19,6 @@ import '../admin/tenant_admin_page.dart';
 import 'store_account.dart';
 import 'store_account_hub_page.dart';
 import 'store_bottom_nav.dart';
-import 'store_contract_token_page.dart';
 import 'store_help_page.dart';
 
 /// Kulit tipis: etalase + kontrak. Tidak memuat POS / absensi / training.
@@ -292,7 +291,6 @@ class _StoreHomePageState extends State<StoreHomePage> {
               children: [
                 const RekasaStorePage(embedded: true),
                 StoreAccountHubPage(kind: _kind, embedded: true),
-                const StoreContractTokenPage(embedded: true),
                 const StoreHelpPage(embedded: true),
               ],
             ),
