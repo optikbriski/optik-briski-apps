@@ -28,15 +28,18 @@ $$;
 comment on function public.require_member_tenant(uuid) is
   'Fail-closed. Null tidak boleh jatuh ke Optik.';
 
--- 2) Buang default UUID Optik di argumen RPC (param terakhir jika default-nya Optik).
+-- 2) Buang default UUID Optik di argumen RPC.
+-- Postgres tidak punya ALTER FUNCTION ... ALTER PARAMETER n DROP DEFAULT.
 do $$
 declare
   r record;
-  last_def text;
+  v_def text;
+  v_as int;
+  v_head text;
+  v_body text;
 begin
   for r in
-    select p.oid, p.pronargs, p.pronargdefaults,
-           pg_get_expr(p.proargdefaults, 0) as defs
+    select p.oid
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
@@ -44,13 +47,20 @@ begin
       and pg_get_expr(p.proargdefaults, 0)
             like '%00000000-0000-0000-0000-000000000001%'
   loop
-    last_def := split_part(r.defs, ',', r.pronargdefaults);
-    if last_def like '%00000000-0000-0000-0000-000000000001%' then
-      execute format(
-        'alter function %s alter parameter %s drop default',
-        r.oid::regprocedure, r.pronargs
-      );
+    v_def := pg_get_functiondef(r.oid);
+    v_as := strpos(v_def, E'\nAS ');
+    if v_as = 0 then
+      continue;
     end if;
+    v_head := left(v_def, v_as - 1);
+    v_body := substr(v_def, v_as);
+    v_head := regexp_replace(
+      v_head,
+      $re$DEFAULT\s+'00000000-0000-0000-0000-000000000001'(::uuid)?$re$,
+      '',
+      'gi'
+    );
+    execute v_head || v_body;
   end loop;
 end
 $$;
