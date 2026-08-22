@@ -213,6 +213,7 @@ class StockIntegrityService {
   Future<StockLeakReport> runLeakCheck({
     int pageSize = 500,
     StockLeakProgressCallback? onProgress,
+    List<String>? tokoIds,
   }) async {
     void emit(StockLeakProgress p) => onProgress?.call(p);
 
@@ -224,11 +225,14 @@ class StockIntegrityService {
     final allRows = <Map<String, dynamic>>[];
     var offset = 0;
     while (true) {
-      final page = await _client
+      var pageQ = _client
           .from('products')
-          .select('id, sku, toko_id, stock, nama')
-          .order('sku')
-          .range(offset, offset + pageSize - 1);
+          .select('id, sku, toko_id, stock, nama');
+      if (tokoIds != null && tokoIds.isNotEmpty) {
+        pageQ = pageQ.inFilter('toko_id', tokoIds);
+      }
+      final page =
+          await pageQ.order('sku').range(offset, offset + pageSize - 1);
       final rows = List<Map<String, dynamic>>.from(page);
       if (rows.isEmpty) break;
       allRows.addAll(rows);
@@ -255,6 +259,7 @@ class StockIntegrityService {
 
     // Batch ledger — hindari N+1 query per SKU (sangat lambat di dataset besar).
     final ledgerIndex = await _loadLedgerIndex(
+      tokoIds: tokoIds,
       onProgress: (loaded, approx) {
         final pct = 0.12 + (0.48 * (approx.clamp(0.0, 1.0)));
         emit(StockLeakProgress(
@@ -384,7 +389,7 @@ class StockIntegrityService {
       total: total,
       foundLeaks: mismatches.length,
     ));
-    final sold = await _soldBreakdownLast30d();
+    final sold = await _soldBreakdownLast30d(tokoIds: tokoIds);
 
     emit(StockLeakProgress(
       percent: 0.98,
@@ -432,6 +437,7 @@ class StockIntegrityService {
   Future<Map<String, _LedgerAgg>> _loadLedgerIndex({
     required void Function(int loadedRows, double approx) onProgress,
     int pageSize = 1000,
+    List<String>? tokoIds,
   }) async {
     final sums = <String, int>{};
     final byReason = <String, Map<String, int>>{};
@@ -439,10 +445,13 @@ class StockIntegrityService {
     var loaded = 0;
 
     while (true) {
-      final page = await _client
+      var pageQ = _client
           .from('product_stock_ledger')
-          .select('sku, toko_id, qty_delta, reason')
-          .range(offset, offset + pageSize - 1);
+          .select('sku, toko_id, qty_delta, reason');
+      if (tokoIds != null && tokoIds.isNotEmpty) {
+        pageQ = pageQ.inFilter('toko_id', tokoIds);
+      }
+      final page = await pageQ.range(offset, offset + pageSize - 1);
       final rows = List<Map<String, dynamic>>.from(page);
       if (rows.isEmpty) break;
 
@@ -520,7 +529,10 @@ class StockIntegrityService {
     );
   }
 
-  Future<_SoldAgg> _soldBreakdownLast30d({int pageSize = 1000}) async {
+  Future<_SoldAgg> _soldBreakdownLast30d({
+    int pageSize = 1000,
+    List<String>? tokoIds,
+  }) async {
     final since = DateTime.now()
         .toUtc()
         .subtract(const Duration(days: 30))
@@ -529,12 +541,15 @@ class StockIntegrityService {
     final skuByToko = <String, Map<String, int>>{};
     var offset = 0;
     while (true) {
-      final page = await _client
+      var pageQ = _client
           .from('product_stock_ledger')
           .select('toko_id, qty_delta, sku')
           .eq('reason', 'SALE')
-          .gte('created_at', since)
-          .range(offset, offset + pageSize - 1);
+          .gte('created_at', since);
+      if (tokoIds != null && tokoIds.isNotEmpty) {
+        pageQ = pageQ.inFilter('toko_id', tokoIds);
+      }
+      final page = await pageQ.range(offset, offset + pageSize - 1);
       final rows = List<Map<String, dynamic>>.from(page);
       if (rows.isEmpty) break;
       for (final r in rows) {

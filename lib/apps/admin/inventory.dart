@@ -12,9 +12,11 @@ import 'global_notification.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
 import 'verifikasi_terima.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
+import '../../shared/logistics/write_off_rules.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -59,6 +61,17 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   }
 
   Future<void> _showWriteOffDialog() async {
+    final toko = AttendanceAdminScope.tokoOf(widget.profile).toUpperCase();
+    if (!WriteOffRules.bolehWriteOffToko(widget.profile, toko)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Hanya admin toko/cabang ini yang boleh catat stok rusak.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
     final ok = await showWriteOffDialog(
       context: context,
       profile: widget.profile,
@@ -100,10 +113,14 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     );
 
     try {
+      final toko = AttendanceAdminScope.tokoOf(widget.profile);
+      final hub = AttendanceAdminScope.isAdminPusat(widget.profile) ||
+          AttendanceAdminScope.isSuperAdmin(widget.profile);
       final report = await StockIntegrityService().runLeakCheck(
         onProgress: (p) {
           progress.value = p;
         },
+        tokoIds: hub ? null : AttendanceAdminScope.storeIdAliases(toko),
       );
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // tutup progress
@@ -437,14 +454,15 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   },
                 ),
 
-                PremiumListTile(
-                  title: 'Stok Rusak / Write-off',
-                  subtitle:
-                      'Scan produk · potong stok tersedia · jejak WRITE_OFF',
-                  icon: Icons.report_gmailerrorred_rounded,
-                  iconColor: OptikAdminTokens.warning,
-                  onTap: _showWriteOffDialog,
-                ),
+                if (WriteOffRules.bolehBuka(widget.profile))
+                  PremiumListTile(
+                    title: 'Stok Rusak / Write-off',
+                    subtitle:
+                        'Scan produk · potong stok tersedia · jejak WRITE_OFF',
+                    icon: Icons.report_gmailerrorred_rounded,
+                    iconColor: OptikAdminTokens.warning,
+                    onTap: _showWriteOffDialog,
+                  ),
 
                 PremiumListTile(
                   title: 'Cek Kebocoran Stok',

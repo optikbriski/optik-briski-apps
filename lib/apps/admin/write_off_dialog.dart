@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
+import '../../shared/logistics/write_off_rules.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
@@ -18,14 +20,25 @@ Future<bool> showWriteOffDialog({
   required BuildContext context,
   required Map<String, dynamic> profile,
 }) async {
+  final toko = AttendanceAdminScope.tokoOf(profile).toUpperCase();
+  if (!WriteOffRules.bolehWriteOffToko(profile, toko)) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Hanya admin toko/cabang ini yang boleh catat stok rusak.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+    }
+    return false;
+  }
+
   final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
     context: context,
     profile: profile,
     actionLabel: 'catat stok rusak',
   );
   if (!allowed || !context.mounted) return false;
-
-  final toko = (profile['toko_id'] ?? 'PUSAT').toString().toUpperCase();
   final actorNama =
       (profile['nama'] ?? profile['email'] ?? '').toString();
 
@@ -202,15 +215,21 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
 
   String? _validate() {
     if (_product == null) return 'Cari / scan produk dulu.';
-    if (_qty <= 0) return 'Qty rusak harus lebih dari 0.';
+    if (!WriteOffRules.qtyValid(_qty)) {
+      return 'Qty rusak harus lebih dari 0.';
+    }
     if (_available <= 0) {
       return 'Tidak ada stok tersedia (real $_real · booking $_pending).';
     }
-    if (_qty > _available) {
+    if (!WriteOffRules.tersediaCukup(
+      real: _real,
+      reserved: _pending,
+      qty: _qty,
+    )) {
       return 'Qty melebihi tersedia ($_available pcs).';
     }
-    if (_alasanCtrl.text.trim().length < 3) {
-      return 'Alasan wajib diisi (min. 3 karakter).';
+    if (!WriteOffRules.alasanCukup(_alasanCtrl.text)) {
+      return 'Alasan wajib diisi (min. ${WriteOffRules.minAlasanChars} karakter).';
     }
     return null;
   }

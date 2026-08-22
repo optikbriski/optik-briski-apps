@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'product_identity.dart';
 import 'stock_realtime.dart';
+import 'write_off_rules.dart';
 
 /// Reasons allowed by SQL `product_stock_ledger`.
 abstract final class StockReason {
@@ -74,6 +75,9 @@ class StockMutationService {
       throw 'SKU wajib untuk mutasi stok.';
     }
     if (qtyDelta == 0) throw 'qty_delta tidak boleh 0.';
+    if (reason == StockReason.writeOff) {
+      throw 'Stok rusak hanya lewat write_off_stock.';
+    }
 
     final toko = tokoId.trim().toUpperCase();
     final res = await _client.rpc('apply_stock_delta', params: {
@@ -407,7 +411,7 @@ class StockMutationService {
     );
   }
 
-  /// Kurangi stok rusak: potong Real (tidak menembus booking/pending) + ledger WRITE_OFF.
+  /// Kurangi stok rusak lewat RPC 000030 — bukan apply_stock_delta langsung.
   Future<Map<String, dynamic>> writeOff({
     required String tokoId,
     required String sku,
@@ -417,10 +421,13 @@ class StockMutationService {
     String? refId,
     Map<String, dynamic>? meta,
   }) async {
-    if (qty <= 0) throw 'Qty rusak harus lebih dari 0.';
+    if (!WriteOffRules.qtyValid(qty)) {
+      throw 'Qty rusak harus lebih dari 0.';
+    }
     final alasanClean = alasan.trim();
-    if (alasanClean.isEmpty) throw 'Alasan rusak wajib diisi.';
-    if (alasanClean.length < 3) throw 'Alasan terlalu singkat (min. 3 karakter).';
+    if (!WriteOffRules.alasanCukup(alasanClean)) {
+      throw 'Alasan terlalu singkat (min. ${WriteOffRules.minAlasanChars} karakter).';
+    }
 
     final toko = tokoId.trim().toUpperCase();
     final row = await ProductIdentity.findAtToko(
@@ -443,7 +450,11 @@ class StockMutationService {
           '(real $real · booking $pending). '
           'Selesaikan paket Disiapkan / perjalanan dulu jika stok ter-booking.';
     }
-    if (qty > available) {
+    if (!WriteOffRules.tersediaCukup(
+      real: real,
+      reserved: pending,
+      qty: qty,
+    )) {
       throw 'Qty melebihi stok tersedia di $toko '
           '(real $real · booking $pending · tersedia $available · minta $qty).';
     }
@@ -452,24 +463,45 @@ class StockMutationService {
         ? refId!.trim()
         : 'WO-${DateTime.now().millisecondsSinceEpoch}';
 
-    return applyDelta(
-      tokoId: toko,
-      sku: canonicalSku,
-      qtyDelta: -qty,
-      reason: StockReason.writeOff,
-      alasanText: alasanClean,
-      refType: 'write_off',
-      refId: woRef,
-      actorNama: actorNama,
-      meta: {
-        ...?meta,
-        'nama': row['nama'],
-        'stock_before': real,
-        'pending_before': pending,
-        'available_before': available,
-      },
-      allowCreate: false,
-    );
+    try {
+      final res = await _client.rpc('write_off_stock', params: {
+        'p_toko': toko,
+        'p_sku': canonicalSku,
+        'p_qty': qty,
+        'p_alasan': alasanClean,
+        'p_actor_nama': actorNama ?? _actorEmail,
+        'p_ref_id': woRef,
+        'p_meta': {
+          ...?meta,
+          'nama': row['nama'],
+          'stock_before': real,
+          'pending_before': pending,
+          'available_before': available,
+        },
+      });
+      final map = Map<String, dynamic>.from(res as Map);
+      final stockAfter = int.tryParse(
+        '${map['stock_after'] ?? map['real_stock'] ?? map['stock'] ?? ''}',
+      );
+      final pendingAfter = int.tryParse(
+        '${map['pending_stock'] ?? map['reserved_qty'] ?? ''}',
+      );
+      final avail = int.tryParse('${map['available_qty'] ?? ''}') ??
+          (stockAfter != null && pendingAfter != null
+              ? StockQty.available(stockAfter, pendingAfter)
+              : null);
+      _pingRealtime(
+        tokoId: toko,
+        sku: canonicalSku,
+        stock: stockAfter,
+        reservedQty: pendingAfter,
+        availableQty: avail,
+      );
+      return map;
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal catat stok rusak.' : msg;
+    }
   }
 
   /// Revisi stok (stock opname / koreksi): set ke [newStock], delta dihitung otomatis.
