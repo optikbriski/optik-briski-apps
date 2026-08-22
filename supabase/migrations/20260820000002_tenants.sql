@@ -400,21 +400,31 @@ alter table public.app_brand
 
 alter table public.app_brand drop constraint if exists app_brand_singleton;
 
+-- 000001 menyisakan id='default'. Insert uuid yang sama = 2 baris Optik,
+-- lalu app_brand_tenant_uidx gagal (23505). Satu tenant = satu merek.
 update public.app_brand
 set tenant_id = public.default_tenant_id()
-where id = 'default' and tenant_id is null;
+where tenant_id is null;
+
+delete from public.app_brand a
+where a.tenant_id is not null
+  and a.ctid <> (
+    select min(b.ctid)
+    from public.app_brand b
+    where b.tenant_id is not distinct from a.tenant_id
+  );
 
 insert into public.app_brand (id, tenant_id, display_name, short_name, assistant_name)
-values (
+select
   public.default_tenant_id()::text,
   public.default_tenant_id(),
   'Optik B. Riski',
   'OBR',
   'OBRA'
-)
-on conflict (id) do update
-set tenant_id = excluded.tenant_id
-where public.app_brand.tenant_id is null;
+where not exists (
+  select 1 from public.app_brand
+  where tenant_id = public.default_tenant_id()
+);
 
 create unique index if not exists app_brand_tenant_uidx on public.app_brand (tenant_id);
 
@@ -423,7 +433,15 @@ alter table public.member_home_content
 
 update public.member_home_content
 set tenant_id = public.default_tenant_id()
-where id = 'default' and tenant_id is null;
+where tenant_id is null;
+
+delete from public.member_home_content a
+where a.tenant_id is not null
+  and a.ctid <> (
+    select min(b.ctid)
+    from public.member_home_content b
+    where b.tenant_id is not distinct from a.tenant_id
+  );
 
 create unique index if not exists member_home_content_tenant_uidx
   on public.member_home_content (tenant_id);
