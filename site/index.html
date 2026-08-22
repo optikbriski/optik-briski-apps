@@ -83,27 +83,39 @@
 
     <section class="section" id="paket">
       <h2>Paket langganan</h2>
-      <p class="lede">Harga dasar per usaha, sebelum add-on. Pembayaran langganan ke Rekasa.</p>
-      <div class="grid grid-3">
-        <article class="card">
-          <p class="eyebrow">Starter</p>
-          <h3>Paket C</h3>
-          <p class="price">Rp 250.000</p>
-          <p>Kulit Rekasa + kode usaha. Kasir dan data dasar mulai jalan.</p>
-        </article>
-        <article class="card">
-          <p class="eyebrow">Bisnis</p>
-          <h3>Paket B</h3>
-          <p class="price">Rp 450.000</p>
-          <p>Modul operasional lebih lengkap. Masih kulit Rekasa, sekat per usaha.</p>
-        </article>
-        <article class="card">
-          <p class="eyebrow">Pro</p>
-          <h3>Paket A</h3>
-          <p class="price">Rp 750.000</p>
-          <p>Modul penuh bidang itu + APK/web nama dan ikon merek pembeli.</p>
-        </article>
+      <p class="lede">Pilih bidang, klik paket, hidup/matikan fitur, lalu bayar lisensi ke Rekasa lewat Midtrans. Bukan barang fisik.</p>
+      <p class="eyebrow" id="industry-blurb" style="margin:14px 0 10px">Usaha umum</p>
+      <div id="industry-chips" class="chips" role="list"></div>
+      <div id="plan-cards" class="grid grid-3"></div>
+
+      <div id="fitur" class="feature-panel">
+        <h3>Fitur</h3>
+        <p class="muted" id="feature-industry">Pilih paket di atas, lalu nyalakan modul.</p>
+        <div id="feature-list"></div>
       </div>
+
+      <aside class="card checkout" id="checkout">
+        <p class="eyebrow">Checkout lisensi</p>
+        <p class="price" id="quote-total">Rp 250.000</p>
+        <p class="muted" id="quote-break">Dasar paket</p>
+        <form id="checkout-form">
+          <label>Nama usaha / merek
+            <input id="biz-name" name="display_name" autocomplete="organization" required>
+          </label>
+          <label>Kode usaha
+            <input id="biz-slug" name="slug" placeholder="contoh: toko-maju">
+          </label>
+          <label>WA / HP
+            <input id="biz-phone" name="phone" type="tel" autocomplete="tel" required>
+          </label>
+          <label>Email (opsional)
+            <input id="biz-email" name="email" type="email" autocomplete="email">
+          </label>
+          <button type="submit" class="pay-btn" id="pay-btn">Bayar via Midtrans</button>
+        </form>
+        <p class="pay-status" id="pay-status"></p>
+        <p class="muted">QRIS, transfer bank, kartu, GoPay/ShopeePay lewat Midtrans. Uang masuk ke REKASA KARYA INDONESIA — lisensi software, bukan pengiriman barang.</p>
+      </aside>
     </section>
 
     <section class="section" id="badan">
@@ -134,5 +146,8 @@
       </div>
     </div>
   </footer>
+  <script src="config.js"></script>
+  <script src="catalog.js"></script>
+  <script src="store.js"></script>
 </body>
 </html>

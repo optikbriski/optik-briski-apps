@@ -52,3 +52,8 @@ entrypoint = "./functions/provision-owner/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/pos-midtrans-create/index.ts"
+
+[functions.rekasa-midtrans-create]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/rekasa-midtrans-create/index.ts"

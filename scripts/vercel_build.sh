@@ -59,6 +59,23 @@ else
   cp -R site/. build/web/perusahaan/
   rm -rf build/web/perusahaan/.vercel
 fi
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+p = Path("build/web/perusahaan/config.js")
+cfg = {
+    "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
+    "supabaseAnon": os.environ.get("SUPABASE_ANON_KEY", ""),
+    "midtransClientKey": os.environ.get("MIDTRANS_CLIENT_KEY", ""),
+    "midtransProduction": os.environ.get("MIDTRANS_IS_PRODUCTION", "false").lower() == "true",
+    "contactEmail": "rekasakaryaindonesia@gmail.com",
+}
+p.write_text(
+    "window.REKASA_CHECKOUT = " + json.dumps(cfg, indent=2) + ";\n",
+    encoding="utf-8",
+)
+PY
 test -f build/web/perusahaan/index.html
+test -f build/web/perusahaan/store.js
 test -f build/web/perusahaan/sw-kill.js
 echo "OK: konsol Admin di / ; situs Rekasa di /perusahaan/"

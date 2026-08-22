@@ -13,7 +13,9 @@ void main() {
     expect(html, isNot(contains('optikbriski.apps@gmail.com')));
     expect(html, contains('Perseroan Perorangan'));
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
-    expect(html, contains('Paket C'));
+    expect(html, contains('id="plan-cards"'));
+    expect(html, contains('id="feature-list"'));
+    expect(html, contains('Bayar via Midtrans'));
     expect(html, contains('perangkat lunak'));
     expect(html, isNot(contains('PT Biasa')));
     expect(html, isNot(contains('/admin/')));
@@ -22,6 +24,12 @@ void main() {
     expect(File('site/kebijakan.html').existsSync(), isTrue);
     expect(File('site/kontak.html').existsSync(), isTrue);
     expect(File('site/sw-kill.js').existsSync(), isTrue);
+    expect(File('site/store.js').existsSync(), isTrue);
+    expect(File('site/catalog.js').readAsStringSync(), contains('Paket C'));
+    expect(
+      File('supabase/functions/rekasa-midtrans-create/index.ts').existsSync(),
+      isTrue,
+    );
   });
 
   test('host Rekasa diarahkan ke /perusahaan, bukan login Admin', () {
