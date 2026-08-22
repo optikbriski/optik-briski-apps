@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/geofence_geometry.dart';
 import '../../shared/maps/osm_address_search.dart';
 import '../../shared/theme.dart';
@@ -93,15 +94,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
   static const _satelliteNativeZoom = 19;
 
-  bool get _isPusat {
-    final t = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
-    final r = (widget.profile['role'] ?? '').toString().toLowerCase();
-    return t == 'PUSAT' ||
-        t == 'CABANG-PUSAT' ||
-        r == 'owner' ||
-        r == 'admin_pusat' ||
-        r == 'super_admin';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   @override
   void initState() {

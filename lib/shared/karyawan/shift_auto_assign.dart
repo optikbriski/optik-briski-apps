@@ -419,4 +419,48 @@ class ShiftAutoAssignService {
       warnings: warnings,
     );
   }
+
+  /// Setelah approve: isi 7 hari ke depan jika belum ada roster.
+  /// Hari ini kerja (shift 1). Libur = hari ke-7. Tidak menimpa jadwal lama.
+  Future<int> ensureDefaultWeekIfEmpty({
+    required String karyawanId,
+    required String tokoId,
+  }) async {
+    final id = karyawanId.trim();
+    final store = tokoId.trim();
+    if (id.isEmpty || store.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 6));
+    final existing = await _client
+        .from('jadwal_kerja')
+        .select('id')
+        .eq('karyawan_id', id)
+        .gte('tanggal', _dateKey.format(start))
+        .lte('tanggal', _dateKey.format(end))
+        .limit(1);
+    if (existing.isNotEmpty) return 0;
+
+    final settings = await fetchSettings(store);
+    final rows = <Map<String, dynamic>>[];
+    for (var i = 0; i < 7; i++) {
+      final d = start.add(Duration(days: i));
+      final isOff = i == 6;
+      rows.add({
+        'karyawan_id': id,
+        'toko_id': store,
+        'tanggal': _dateKey.format(d),
+        'jam_masuk': isOff ? null : '${settings.shift1Masuk}:00',
+        'jam_pulang': isOff ? null : '${settings.shift1Pulang}:00',
+        'is_libur': isOff,
+        'catatan':
+            isOff ? 'Libur default (baru aktif)' : settings.shift1Label,
+      });
+    }
+    await _client
+        .from('jadwal_kerja')
+        .upsert(rows, onConflict: 'karyawan_id,tanggal');
+    return rows.length;
+  }
 }

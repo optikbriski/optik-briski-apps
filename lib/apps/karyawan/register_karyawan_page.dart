@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/liveness_result.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
+import '../../shared/karyawan/register_conflict.dart';
 import '../../shared/ktp/ktp_capture_page.dart';
 import '../../shared/ktp/ktp_ocr_service.dart';
 import '../../shared/liveness_camera_page.dart';
@@ -572,23 +573,18 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     bool failClosed = false,
   }) async {
     final client = Supabase.instance.client;
+    final tenantId = RegisterConflict.tenantScopeId(TenantService.instance.id);
     try {
       if (email != null && email.isNotEmpty) {
-        final row = await client
-            .from('karyawan')
-            .select('id')
-            .ilike('email', email)
-            .limit(1)
-            .maybeSingle();
+        var q = client.from('karyawan').select('id').ilike('email', email);
+        if (tenantId != null) q = q.eq('tenant_id', tenantId);
+        final row = await q.limit(1).maybeSingle();
         if (row != null) return 'email';
       }
       if (nik != null && nik.isNotEmpty) {
-        final row = await client
-            .from('karyawan')
-            .select('id')
-            .eq('nik', nik)
-            .limit(1)
-            .maybeSingle();
+        var q = client.from('karyawan').select('id').eq('nik', nik);
+        if (tenantId != null) q = q.eq('tenant_id', tenantId);
+        final row = await q.limit(1).maybeSingle();
         if (row != null) return 'nik';
       }
     } on PostgrestException catch (e) {

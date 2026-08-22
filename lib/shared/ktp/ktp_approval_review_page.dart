@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../karyawan/gaji_pokok.dart';
+import '../karyawan/shift_auto_assign.dart';
 import '../theme.dart';
 import '../widgets/admin/admin_premium.dart';
 
@@ -28,6 +32,15 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
   String? _statusKawinChoice;
   String? _alamatChoice;
   bool _saving = false;
+  late final TextEditingController _gajiCtrl = TextEditingController(
+    text: formatGajiPokokInput(widget.karyawan['gaji_pokok']),
+  );
+
+  @override
+  void dispose() {
+    _gajiCtrl.dispose();
+    super.dispose();
+  }
 
   String get _nikOcr => (widget.karyawan['nik_ocr'] ?? '').toString().trim();
   String get _nikEdit => (widget.karyawan['nik'] ?? '').toString().trim();
@@ -200,6 +213,12 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         if (finalAgama.isNotEmpty) 'agama': finalAgama,
         if (finalStatus.isNotEmpty) 'status_perkawinan': finalStatus,
         'status_approval': 'Aktif',
+        'gaji_pokok': parseGajiPokokInput(
+          _gajiCtrl.text,
+          fallback: parseGajiPokokInput(
+            widget.karyawan['gaji_pokok']?.toString(),
+          ),
+        ),
         'approval_choices': choices,
         if (admin?.id != null) 'approved_by': admin!.id,
         'approved_by_name': adminName,
@@ -217,7 +236,25 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           'nama': finalNama,
           'alamat_lengkap': finalAlamatLengkap,
           'status_approval': 'Aktif',
+          'gaji_pokok': parseGajiPokokInput(
+            _gajiCtrl.text,
+            fallback: parseGajiPokokInput(
+              widget.karyawan['gaji_pokok']?.toString(),
+            ),
+          ),
         }).eq('id', _karyawanId);
+      }
+
+      try {
+        final tokoId = (widget.karyawan['toko_id'] ?? '').toString().trim();
+        if (tokoId.isNotEmpty) {
+          await ShiftAutoAssignService().ensureDefaultWeekIfEmpty(
+            karyawanId: _karyawanId,
+            tokoId: tokoId,
+          );
+        }
+      } catch (e) {
+        debugPrint('seed jadwal after approve: $e');
       }
 
       if (!mounted) return;
@@ -477,6 +514,32 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                 }(),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          title: 'Gaji pokok',
+          subtitle: 'Opsional. Kosong = Rp 0. Boleh diisi admin toko saat approve.',
+          child: TextField(
+            controller: _gajiCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(
+              color: OptikAdminTokens.navy,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              prefixText: 'Rp ',
+              prefixStyle: const TextStyle(color: OptikAdminTokens.slate),
+              hintText: '0',
+              hintStyle: const TextStyle(color: OptikAdminTokens.slate),
+              filled: true,
+              fillColor: OptikAdminTokens.bgMid,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),

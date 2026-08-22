@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/responsive.dart';
@@ -31,14 +32,8 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
   String _query = '';
   int _pendingCount = 0;
 
-  bool get _isPusat {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   @override
   void initState() {

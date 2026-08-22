@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -35,14 +36,8 @@ class _JadwalPengajuanApprovalPageState
   /// tokoId → daftar pengajuan pending
   Map<String, List<Map<String, dynamic>>> _byToko = {};
 
-  bool get _isPusat {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   String get _scopeToko =>
       widget.initialTokoId ?? widget.profile['toko_id']?.toString() ?? '';

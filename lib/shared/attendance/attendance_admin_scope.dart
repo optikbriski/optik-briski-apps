@@ -1,7 +1,8 @@
-/// Role scope untuk UX Absensi Admin (monitor vs kiosk).
+/// Role scope untuk UX Absensi Admin (monitor vs kiosk) + HR toko.
 ///
 /// Absensi kiosk (QR + liveness/facematch) ada di **cabang** dan **Pusat**.
-/// Monitor Absensi Pusat hanya **owner** yang boleh lihat/validasi.
+/// admin_toko hanya toko sendiri. Bukan semua cabang. Bukan merek lain.
+/// toko_id PUSAT + role admin_toko ≠ operator pusat.
 class AttendanceAdminScope {
   AttendanceAdminScope._();
 
@@ -20,6 +21,17 @@ class AttendanceAdminScope {
   static bool isAdminToko(Map<String, dynamic> profile) =>
       roleOf(profile) == 'admin_toko';
 
+  static bool isSuperAdmin(Map<String, dynamic> profile) =>
+      roleOf(profile) == 'super_admin';
+
+  /// Owner / admin_pusat / super_admin — semua cabang di tenant sendiri.
+  static bool isPusatOperator(Map<String, dynamic> profile) =>
+      isOwner(profile) || isAdminPusat(profile) || isSuperAdmin(profile);
+
+  /// Picker multi-toko. admin_toko (meski assigned PUSAT) = tidak.
+  static bool canViewAllStores(Map<String, dynamic> profile) =>
+      isPusatOperator(profile);
+
   /// Meta / operasional toko pusat.
   static bool isPusatTokoId(String? tokoId) {
     final t = (tokoId ?? '').trim();
@@ -35,13 +47,19 @@ class AttendanceAdminScope {
     return isPusatTokoId(x) && isPusatTokoId(y);
   }
 
-  /// Boleh buka monitor multi-toko (drill-down).
-  static bool canOpenStoreMonitor(Map<String, dynamic> profile) =>
-      isOwner(profile) || isAdminPusat(profile);
+  /// Manajemen Karyawan: pusat semua toko; admin_toko toko sendiri.
+  static bool canOpenKaryawanManagement(Map<String, dynamic> profile) {
+    if (isPusatOperator(profile)) return true;
+    return isAdminToko(profile) && tokoOf(profile).isNotEmpty;
+  }
 
-  /// Editor geofence toko: hanya owner / admin_pusat (bukan admin_toko cabang).
+  /// Monitor absensi: pusat (scoped) atau admin_toko toko sendiri.
+  static bool canOpenStoreMonitor(Map<String, dynamic> profile) =>
+      canOpenKaryawanManagement(profile);
+
+  /// Editor geofence: pusat semua toko; admin_toko hanya toko sendiri.
   static bool canManageGeofence(Map<String, dynamic> profile) =>
-      isOwner(profile) || isAdminPusat(profile);
+      canOpenKaryawanManagement(profile);
 
   /// Kiosk QR + face match di perangkat toko.
   /// - admin_toko: ya (toko cabang / toko sendiri)
@@ -68,14 +86,14 @@ class AttendanceAdminScope {
   }
 
   /// Boleh lihat/nilai absensi toko ini?
-  /// - owner: semua (cabang + pusat)
+  /// - owner / super_admin: semua (cabang + pusat)
   /// - admin_pusat: hanya cabang (bukan absensi Pusat sendiri)
-  /// - cabang: hanya toko sendiri (kiosk; bukan antrean multi-toko)
+  /// - admin_toko: hanya toko sendiri
   static bool canAccessTokoAttendance(
     Map<String, dynamic> profile,
     String? tokoId,
   ) {
-    if (isOwner(profile)) return true;
+    if (isOwner(profile) || isSuperAdmin(profile)) return true;
     if (isAdminPusat(profile)) return !isPusatTokoId(tokoId);
     final own = tokoOf(profile);
     if (own.isEmpty) return false;
@@ -83,8 +101,9 @@ class AttendanceAdminScope {
   }
 
   /// Filter daftar toko untuk monitor:
-  /// - owner: semua termasuk Pusat
+  /// - owner / super_admin: semua termasuk Pusat
   /// - admin_pusat: semua cabang, exclude PUSAT / CABANG-PUSAT
+  /// - admin_toko: toko sendiri saja
   static List<String> filterTokoForMonitor(
     List<String> allTokoIds,
     Map<String, dynamic> profile,
@@ -93,7 +112,7 @@ class AttendanceAdminScope {
       for (final t in allTokoIds)
         if (t.trim().isNotEmpty) t.trim(),
     ];
-    if (isOwner(profile)) return cleaned;
+    if (isOwner(profile) || isSuperAdmin(profile)) return cleaned;
     if (isAdminPusat(profile)) {
       return [
         for (final t in cleaned)

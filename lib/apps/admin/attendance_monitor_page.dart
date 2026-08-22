@@ -66,6 +66,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       ].where((e) => e.isNotEmpty).toList();
       _tokoOptions =
           AttendanceAdminScope.filterTokoForMonitor(all, widget.profile);
+      if (_tokoOptions.length == 1) {
+        await _loadKaryawanForToko(_tokoOptions.first);
+        return;
+      }
       await _loadTokoCounts();
     } catch (e) {
       if (!mounted) return;

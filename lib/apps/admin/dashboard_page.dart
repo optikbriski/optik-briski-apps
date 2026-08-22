@@ -379,13 +379,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisSpacing: 11,
                         childAspectRatio: ratio,
                         children: [
-                          // Manajemen Karyawan: pusat / owner / admin_pusat (standalone).
+                          // Manajemen Karyawan: pusat semua toko; admin_toko toko sendiri.
                           if (!training &&
-                              (widget.profile['toko_id'] == 'PUSAT' ||
-                                  widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT' ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat'))
+                              AttendanceAdminScope.canOpenKaryawanManagement(
+                                  widget.profile))
                             PremiumMenuTile(
                               title: "dash_menu_management".tr(),
                               icon: Icons.verified_user_rounded,
@@ -504,7 +501,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Geofence: owner + admin_pusat saja (bukan cabang).
+                          // Geofence: pusat semua toko; admin_toko toko sendiri.
                           if (!training &&
                               mod.allows('attendance') &&
                               AttendanceAdminScope.canManageGeofence(
