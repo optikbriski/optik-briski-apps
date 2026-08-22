@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../brand/brand_service.dart';
-
 /// Logo merek (aset lokal; nama merek dari app_brand).
 /// - [OptikLogoTone.color] → `logo-web.png` (biru/merah) untuk latar terang
 /// - [OptikLogoTone.white] → `logo-web-white.png` untuk latar gelap / biru
@@ -57,7 +55,7 @@ class OptikBrandLogo extends StatelessWidget {
       alignment: alignment,
       filterQuality: FilterQuality.high,
       errorBuilder: (_, __, ___) => Text(
-        BrandService.name.toUpperCase(),
+        'OPTIK B. RISKI',
         style: TextStyle(
           color: tone == OptikLogoTone.white
               ? Colors.white

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optik_b_riski/shared/brand/rekasa_public_host.dart';
 import 'package:optik_b_riski/shared/invoice/invoice_link.dart';
 import 'package:optik_b_riski/shared/tenant/tenant_billing.dart';
 
@@ -20,6 +21,19 @@ void main() {
     expect(File('site/syarat.html').existsSync(), isTrue);
     expect(File('site/kebijakan.html').existsSync(), isTrue);
     expect(File('site/kontak.html').existsSync(), isTrue);
+    expect(File('site/sw-kill.js').existsSync(), isTrue);
+  });
+
+  test('host Rekasa diarahkan ke /perusahaan, bukan login Admin', () {
+    expect(isRekasaPublicHost('rekasa-karya-indonesia.vercel.app'), isTrue);
+    expect(shouldRedirectRekasaPublicPath('/'), isTrue);
+    expect(shouldRedirectRekasaPublicPath(null), isTrue);
+    expect(shouldRedirectRekasaPublicPath('/perusahaan/'), isFalse);
+    expect(isRekasaPublicHost('optik-briski-apps.vercel.app'), isFalse);
+
+    final boot = File('web/index.html').readAsStringSync();
+    expect(boot, contains("location.replace('/perusahaan/'"));
+    expect(boot, contains('rekasa-karya-indonesia.vercel.app'));
   });
 
   test('Vercel keeps Admin at / so invoice and contract links still resolve', () {
@@ -28,6 +42,8 @@ void main() {
     expect(vercel, contains('"/(.*)"'));
     expect(vercel, contains('"/index.html"'));
     expect(vercel, contains('rekasa-karya-indonesia.vercel.app'));
+    expect(vercel, contains('"redirects"'));
+    expect(vercel, contains('/perusahaan/sw-kill.js'));
     expect(vercel, isNot(contains('/admin/index.html')));
 
     final build = File('scripts/vercel_build.sh').readAsStringSync();

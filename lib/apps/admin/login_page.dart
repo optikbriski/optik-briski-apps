@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
 import '../../shared/admin/admin_code_login_service.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
@@ -564,7 +565,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      "admin_login_footer".brandTr(),
+                      isBrandedStoreApk
+                          ? '© ${DateTime.now().year} Akses Web Aman'
+                          : "admin_login_footer".brandTr(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

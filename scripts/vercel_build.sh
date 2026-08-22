@@ -53,6 +53,12 @@ flutter build web --release \
 
 test -f build/web/index.html
 mkdir -p build/web/perusahaan
-cp -R site/. build/web/perusahaan/
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --exclude '.vercel' --exclude '.gitignore' site/ build/web/perusahaan/
+else
+  cp -R site/. build/web/perusahaan/
+  rm -rf build/web/perusahaan/.vercel
+fi
 test -f build/web/perusahaan/index.html
+test -f build/web/perusahaan/sw-kill.js
 echo "OK: konsol Admin di / ; situs Rekasa di /perusahaan/"

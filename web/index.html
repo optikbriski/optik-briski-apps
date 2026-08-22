@@ -16,6 +16,30 @@
   -->
   <base href="$FLUTTER_BASE_HREF">
 
+  <script>
+    (function () {
+      var h = (location.hostname || '').toLowerCase();
+      if (h !== 'rekasa-karya-indonesia.vercel.app' &&
+          h !== 'www.rekasakaryaindonesia.com' &&
+          h !== 'rekasakaryaindonesia.com') return;
+      var p = location.pathname || '/';
+      if (p.indexOf('/perusahaan') === 0) return;
+      try {
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) { r.unregister(); });
+          });
+        }
+        if (window.caches) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) { caches.delete(k); });
+          });
+        }
+      } catch (e) {}
+      location.replace('/perusahaan/' + (location.search || '') + (location.hash || ''));
+    })();
+  </script>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Rekasa — etalase paket UMKM, merek toko mengikuti usaha Anda">
