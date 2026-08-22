@@ -1,6 +1,8 @@
 -- =============================================================================
+-- 000007 rev3 — harus ada: execute format('drop function if exists %s'
+-- Kalau baris itu tidak ada, ini file lama. Jangan di-Run.
 -- Sekat sisa nabrak antar merek. Jangan diam-diam pakai tenant Optik.
--- Apply setelah 000001–000006. Jangan di-apply dari agent ke live.
+-- Apply setelah 000001–000006.
 -- =============================================================================
 
 -- 1) Tenant wajib. Null ≠ Optik.
@@ -224,6 +226,13 @@ begin
   ), '[]'::jsonb);
 end;
 $$;
+
+grant execute on function public.list_tenant_stores(uuid)
+  to anon, authenticated, service_role;
+grant execute on function public.member_login(text, text, uuid)
+  to anon, authenticated, service_role;
+grant execute on function public.list_member_sales(text, uuid)
+  to anon, authenticated, service_role;
 
 -- 6) Wrapper invoice tanpa tenant — buang (bocor ke Optik).
 drop function if exists public.get_invoice_hub(text);
