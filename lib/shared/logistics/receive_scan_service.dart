@@ -16,6 +16,8 @@ class ReceiveScanResult {
     this.verifiedByName,
     this.verifiedAt,
     this.becameTransit = false,
+    this.needsPhoto = false,
+    this.moveId,
   });
 
   final bool ok;
@@ -26,6 +28,9 @@ class ReceiveScanResult {
   final DateTime? verifiedAt;
   /// True jika scan mengubah PREPARING/WAITING → TRANSIT (jemput kurir).
   final bool becameTransit;
+  /// Terima butuh foto bukti dulu (000029).
+  final bool needsPhoto;
+  final String? moveId;
 }
 
 /// Scan QR surat jalan:
@@ -89,6 +94,7 @@ class ReceiveScanService {
     required String cabangKaryawan,
     required String verifiedById,
     required String verifiedByName,
+    String? buktiFotoPenerima,
   }) async {
     final payload = parseQrPayload(qrRaw);
     final resi = (payload['resi'] ?? payload['product_name'] ?? '')
@@ -149,6 +155,7 @@ class ReceiveScanService {
       cabangKaryawan: cabangKaryawan,
       verifiedById: verifiedById,
       verifiedByName: verifiedByName,
+      buktiFotoPenerima: buktiFotoPenerima,
     );
   }
 
@@ -158,12 +165,14 @@ class ReceiveScanService {
     required String cabangKaryawan,
     required String verifiedById,
     required String verifiedByName,
+    String? buktiFotoPenerima,
   }) =>
       processLogisticsQr(
         qrRaw: qrRaw,
         cabangKaryawan: cabangKaryawan,
         verifiedById: verifiedById,
         verifiedByName: verifiedByName,
+        buktiFotoPenerima: buktiFotoPenerima,
       );
 
   Future<ReceiveScanResult> _markTransit({
@@ -232,6 +241,7 @@ class ReceiveScanService {
     required String cabangKaryawan,
     required String verifiedById,
     required String verifiedByName,
+    String? buktiFotoPenerima,
   }) async {
     if (tujuanQr != null &&
         tujuanQr.trim().isNotEmpty &&
@@ -300,12 +310,23 @@ class ReceiveScanService {
     }
 
     final moveId = row['id'].toString();
+    final foto = (buktiFotoPenerima ?? '').trim();
+    if (foto.isEmpty || foto == '-') {
+      return ReceiveScanResult(
+        ok: false,
+        resi: resi,
+        needsPhoto: true,
+        moveId: moveId,
+        message: 'Foto terima wajib sebelum stok masuk.',
+      );
+    }
     Map<String, dynamic> out;
     try {
       out = await DoLifecycleService(client: _client).receive(
         moveId: moveId,
         verifiedBy: verifiedById,
         verifiedByName: verifiedByName,
+        buktiFotoPenerima: foto,
       );
     } catch (e) {
       return ReceiveScanResult(

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'qr/hid_scan_intake.dart';
 import 'qr/qr_route.dart';
 import 'responsive.dart';
 import 'logistics/receive_scan_service.dart';
+import 'safe_image_picker.dart';
 import 'theme.dart';
 import 'widgets/admin/admin_premium.dart';
 
@@ -35,6 +38,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
   late final bool _fromUniversalScan;
   final MobileScannerController cameraController = MobileScannerController();
   final _service = ReceiveScanService();
+  final _picker = ImagePicker();
 
   @override
   void initState() {
@@ -82,12 +86,49 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
     }
 
     try {
-      final result = await _service.receiveFromQr(
+      var result = await _service.receiveFromQr(
         qrRaw: dataDariQR,
         cabangKaryawan: widget.cabangKaryawan,
         verifiedById: id,
         verifiedByName: nama,
       );
+      if (result.needsPhoto) {
+        if (!mounted) return;
+        final photo = await pickImageSafe(
+          picker: _picker,
+          context: context,
+          preferredCameraDevice: CameraDevice.rear,
+          imageQuality: 50,
+        );
+        if (photo == null) {
+          _tampilkanDialogHasil(
+            sukses: false,
+            judul: "scan_salah_alamat".tr(),
+            pesan: 'Foto terima wajib sebelum stok masuk.',
+            icon: Icons.photo_camera_rounded,
+            warna: OptikAdminTokens.warning,
+          );
+          return;
+        }
+        final bytes = await photo.readAsBytes();
+        final moveId = (result.moveId ?? 'scan').toString();
+        final path =
+            'konfirmasi/${moveId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final db = Supabase.instance.client;
+        await db.storage.from('attendance_photos').uploadBinary(
+              path,
+              bytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+        final imgUrl = db.storage.from('attendance_photos').getPublicUrl(path);
+        result = await _service.receiveFromQr(
+          qrRaw: dataDariQR,
+          cabangKaryawan: widget.cabangKaryawan,
+          verifiedById: id,
+          verifiedByName: nama,
+          buktiFotoPenerima: imgUrl,
+        );
+      }
 
       if (result.ok) {
         _tampilkanDialogHasil(

@@ -1,7 +1,9 @@
 import 'dart:async'; // ✅ WAJIB: Menghilangkan error merah pada objek Timer periodic
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'verifikasi_terima.dart'; // ✅ SEFOLDER: Otomatis tersambung ke sistem verifikasi terima barang Bos
+import 'verifikasi_terima.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/theme.dart';
 
 // ============================================================================
@@ -38,15 +40,22 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
   // LOGIKA UTAMA: HITUNG BARANG TRANSIT / PENDING YG AKAN MASUK KE TOKO INI
   Future<void> _cekNotifikasi() async {
     try {
+      if (!ReceiveVerificationRules.canOpenIncomingQueue(widget.profile)) {
+        if (mounted) setState(() => pendingCount = 0);
+        return;
+      }
       final tokoSaya = widget.profile['toko_id']?.toString() ?? '';
       if (tokoSaya.isEmpty) return;
 
-      // Tarik ID mutasi barang yang tujuan pengirimannya menuju cabang/pusat aktif saat ini
-      final res = await Supabase.instance.client
+      final aliases = AttendanceAdminScope.storeIdAliases(tokoSaya);
+      var q = Supabase.instance.client
           .from('stock_move_history')
           .select('id')
-          .eq('ke_lokasi', tokoSaya)
           .inFilter('status', ['TRANSIT', 'PENDING']);
+      q = aliases.length == 1
+          ? q.eq('ke_lokasi', aliases.first)
+          : q.inFilter('ke_lokasi', aliases);
+      final res = await q;
 
       if (mounted) {
         setState(() {

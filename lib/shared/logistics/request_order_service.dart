@@ -6,6 +6,7 @@ import '../invoice/invoice_delivery_service.dart';
 import '../invoice/sale_fulfillment_service.dart';
 import 'do_lifecycle_service.dart';
 import 'product_identity.dart';
+import 'receive_verification_rules.dart';
 import 'stock_mutation_service.dart';
 
 /// Pipeline RO Pusat: Approve → Preparing → Shipping → Success
@@ -509,6 +510,16 @@ class RequestOrderService {
     required String stockMoveId,
     String? resi,
   }) async {
+    final move = await _client
+        .from('stock_move_history')
+        .select('status')
+        .eq('id', stockMoveId)
+        .maybeSingle();
+    final moveStatus = (move?['status'] ?? '').toString();
+    if (!ReceiveVerificationRules.canCloseRoFromMove(moveStatus)) {
+      throw 'RO hanya boleh ditutup setelah surat jalan diterima.';
+    }
+
     final successPatch = {
       'status': 'SUCCESS',
       'tracking_status': trackingFor('SUCCESS'),

@@ -7,8 +7,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
@@ -123,6 +125,14 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   }
 
   Future<void> _load() async {
+    if (!ReceiveVerificationRules.canOpenIncomingQueue(widget.profile)) {
+      setState(() {
+        _tasks = [];
+        _loading = false;
+        _error = 'Hanya admin toko/pusat yang boleh buka verifikasi terima.';
+      });
+      return;
+    }
     if (_myToko.isEmpty) {
       setState(() {
         _tasks = [];
@@ -137,11 +147,17 @@ class _IncomingVerificationState extends State<IncomingVerification> {
       _error = null;
     });
     try {
-      final res = await _db
+      final aliases = AttendanceAdminScope.storeIdAliases(_myToko);
+      var q = _db
           .from('stock_move_history')
           .select()
-          .eq('ke_lokasi', _myToko)
-          .inFilter('status', ['TRANSIT', 'PENDING'])
+          .inFilter('status', ['TRANSIT', 'PENDING']);
+      if (aliases.length == 1) {
+        q = q.eq('ke_lokasi', aliases.first);
+      } else {
+        q = q.inFilter('ke_lokasi', aliases);
+      }
+      final res = await q
           .order('created_at', ascending: false)
           .limit(100);
 
@@ -227,8 +243,11 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     }
 
     final row = Map<String, dynamic>.from(fresh);
-    final ke = (row['ke_lokasi'] ?? '').toString().trim().toUpperCase();
-    if (ke.isNotEmpty && _myToko.isNotEmpty && ke != _myToko) {
+    final ke = (row['ke_lokasi'] ?? '').toString().trim();
+    if (ke.isNotEmpty &&
+        _myToko.isNotEmpty &&
+        !AttendanceAdminScope.sameTokoId(ke, _myToko) &&
+        !AttendanceAdminScope.canReceiveStockToko(widget.profile, ke)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Paket ditujukan ke $ke, bukan $_myToko.'),
@@ -247,7 +266,11 @@ class _IncomingVerificationState extends State<IncomingVerification> {
       _load();
       return;
     }
-    if (st != 'TRANSIT' && st != 'PENDING') {
+    if (!ReceiveVerificationRules.canReceiveAtToko(
+      widget.profile,
+      ke,
+      st,
+    )) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
@@ -598,6 +621,11 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                           TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
                 const Spacer(),
+                if (ReceiveVerificationRules.canReceiveAtToko(
+                  widget.profile,
+                  (task['ke_lokasi'] ?? '').toString(),
+                  (task['status'] ?? '').toString(),
+                ))
                 FilledButton.icon(
                   onPressed:
                       _receiving ? null : () => _confirmThenReceive(task),

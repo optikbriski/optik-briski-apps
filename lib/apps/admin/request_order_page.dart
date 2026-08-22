@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
@@ -378,11 +379,13 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                         );
                       },
                     ),
-                    if (trackingResults.any((t) =>
-                        (t['status'] ?? '')
-                            .toString()
-                            .toUpperCase() ==
-                        'SHIPPING')) ...[
+                    if (ReceiveVerificationRules.canOpenIncomingQueue(
+                          widget.profile) &&
+                        trackingResults.any((t) =>
+                            (t['status'] ?? '')
+                                .toString()
+                                .toUpperCase() ==
+                            'SHIPPING')) ...[
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
