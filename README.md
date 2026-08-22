@@ -4,7 +4,7 @@ Satu codebase, satu Supabase. **REKASA KARYA INDONESIA** menjual mesin operasion
 
 **Optik B. Riski** adalah kulit tenant #1 (`brands/optik-briski.json`, `BRAND=optik-briski`). Bukan nama produk. Jangan ganti `applicationId` Optik di file itu.
 
-Debug (milik Rekasa): salin `.vscode/launch.json.example` → `.vscode/launch.json`, lalu pilih **Rekasa Etalase / Admin / Karyawan / Member**. Kulit Optik = pilihan terpisah, bukan default.
+Debug: salin `.vscode/launch.json.example` → `.vscode/launch.json`. Default = **Admin / Karyawan / Member Rekasa**. **Optik B. Riski** tetap ada sebagai kulit pelanggan #1 (jangan hapus `brands/optik-briski.json` / `applicationId`-nya).
 
 - Etalase: `flutter run -t lib/main_store.dart --flavor store --dart-define=APP_FLAVOR=store --dart-define-from-file=.dart_define.admin.json`
 - APK Rekasa (kode usaha): `bash scripts/release_rekasa_ops.sh`

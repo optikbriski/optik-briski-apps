@@ -2,19 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Rekasa Etalase (Debug)",
-      "request": "launch",
-      "type": "dart",
-      "program": "lib/main_store.dart",
-      "toolArgs": [
-        "--flavor",
-        "store",
-        "--dart-define-from-file=.dart_define.admin.json",
-        "--dart-define=APP_FLAVOR=store"
-      ]
-    },
-    {
-      "name": "Rekasa Admin (Debug)",
+      "name": "Admin Rekasa",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_admin.dart",
@@ -26,7 +14,7 @@
       ]
     },
     {
-      "name": "Rekasa Karyawan (Debug)",
+      "name": "Karyawan Rekasa",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_karyawan.dart",
@@ -38,7 +26,7 @@
       ]
     },
     {
-      "name": "Rekasa Member (Debug)",
+      "name": "Member Rekasa",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_member.dart",
@@ -50,7 +38,7 @@
       ]
     },
     {
-      "name": "Optik Admin (kulit)",
+      "name": "Optik Admin (kulit pelanggan)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_admin.dart",
@@ -66,7 +54,7 @@
       ]
     },
     {
-      "name": "Optik Karyawan (kulit)",
+      "name": "Optik Karyawan (kulit pelanggan)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_karyawan.dart",
@@ -82,7 +70,7 @@
       ]
     },
     {
-      "name": "Optik Member (kulit)",
+      "name": "Optik Member (kulit pelanggan)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_member.dart",
