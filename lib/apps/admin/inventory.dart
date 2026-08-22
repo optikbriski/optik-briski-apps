@@ -16,11 +16,12 @@ import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
+import '../../shared/logistics/quick_stock_scan_rules.dart';
+import '../../shared/logistics/quick_stock_scan_service.dart';
 import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/write_off_rules.dart';
-import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -551,24 +552,39 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                 const SizedBox(height: 12),
                 PremiumSectionHeader(label: "inv_quick_tools".tr()),
 
-                PremiumListTile(
-                  title: "inv_quick_scan".tr(),
-                  subtitle: "inv_quick_scan_desc".tr(),
-                  icon: Icons.qr_code_scanner_rounded,
-                  iconColor: OptikAdminTokens.success,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => OptikBRiskiScanner(
-                          onDetect: (code) async {
-                            _handleQuickCheck(context, code);
-                          },
+                if (QuickStockScanRules.bolehBuka(widget.profile))
+                  PremiumListTile(
+                    title: "inv_quick_scan".tr(),
+                    subtitle: "inv_quick_scan_desc".tr(),
+                    icon: Icons.qr_code_scanner_rounded,
+                    iconColor: OptikAdminTokens.success,
+                    onTap: () {
+                      if (!QuickStockScanRules.bolehScanToko(
+                        widget.profile,
+                        AttendanceAdminScope.tokoOf(widget.profile),
+                      )) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Hanya admin toko/cabang ini yang boleh pindai stok.',
+                            ),
+                            backgroundColor: OptikAdminTokens.warning,
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) => OptikBRiskiScanner(
+                            onDetect: (code) async {
+                              _handleQuickCheck(context, code);
+                            },
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
               ],
             ),
     );
@@ -577,40 +593,12 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 // 🔥 FUNGSI CEK DATA STOK REAL-TIME KORPORAT BERBASIS FINANCIAL AUDIT HARGA MODAL & MARGIN PROFIT
   Future<void> _handleQuickCheck(BuildContext context, String code) async {
     try {
-      final parsed = ProductCode.parse(code);
-      final sku = (parsed?.sku ?? ProductCode.resolveSku(code) ?? '').trim();
-      final productId = parsed?.productId;
-      final tokoId = widget.profile['toko_id'];
-
-      Map<String, dynamic>? res;
-      if (productId != null && productId.isNotEmpty) {
-        res = await supabase
-            .from('products')
-            .select()
-            .eq('id', productId)
-            .eq('toko_id', tokoId)
-            .maybeSingle();
-      }
-      if (res == null && sku.isNotEmpty) {
-        res = await supabase
-            .from('products')
-            .select()
-            .eq('sku', sku)
-            .eq('toko_id', tokoId)
-            .maybeSingle();
-      }
-      if (res == null && sku.isNotEmpty) {
-        res = await supabase
-            .from('products')
-            .select()
-            .eq('barcode', sku)
-            .eq('toko_id', tokoId)
-            .maybeSingle();
-      }
+      final product = await QuickStockScanService().lookup(
+        profile: widget.profile,
+        code: code,
+      );
 
       if (!context.mounted) return;
-
-      final product = res;
       if (product != null) {
         int modal =
             int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
@@ -732,6 +720,11 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       }
     } catch (e) {
       debugPrint("❌ Gagal rekonsiliasi data audit item: $e");
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$e'),
+        backgroundColor: OptikAdminTokens.danger,
+      ));
     }
   }
 
