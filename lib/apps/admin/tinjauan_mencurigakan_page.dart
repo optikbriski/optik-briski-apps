@@ -54,6 +54,14 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
 
   Future<void> _bootstrap() async {
     try {
+      if ((_tenantId ?? '').isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Kode usaha belum terverifikasi. Tidak boleh membaca merek lain.';
+        });
+        return;
+      }
       if (_canMonitor) {
         final rows = await Supabase.instance.client
             .from('toko_id')
@@ -138,6 +146,10 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
+    if (!AttendanceAdminScope.canResolveAman(row['status']?.toString())) {
+      _snack('Status sudah berubah. Muat ulang daftar.', OptikAdminTokens.warning);
+      return;
+    }
     final ok = await _confirm(
       title: 'Tandai Aman?',
       body:
@@ -181,6 +193,13 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         rowTenantId: row['tenant_id']?.toString(),
       )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      return;
+    }
+    if (!AttendanceAdminScope.canResolveCurang(row['status']?.toString())) {
+      _snack(
+        'Curang hanya dari antrean mencurigakan. Tidak boleh loncat dari pending.',
+        OptikAdminTokens.warning,
+      );
       return;
     }
     final ok = await _confirm(
@@ -424,6 +443,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                       'Aman = +${AttendanceVerificationConfig.validDayPoints} poin. '
                       'Terbukti curang = ${AttendanceVerificationConfig.cheatingPenaltyPoints} poin '
                       '+ SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
+                      '${AttendanceAdminScope.monitorBannerHint(widget.profile)}. '
                       'Bukan untuk keterlambatan.',
                       style: const TextStyle(
                         color: OptikAdminTokens.slate,

@@ -49,6 +49,34 @@ class AttendanceAdminScope {
     return isPusatTokoId(x) && isPusatTokoId(y);
   }
 
+  /// Filter query toko: PUSAT dan CABANG-PUSAT harus ikut bersama.
+  static List<String> storeIdAliases(String? tokoId) {
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return const [];
+    if (isPusatTokoId(t)) return const ['PUSAT', 'CABANG-PUSAT'];
+    return [t];
+  }
+
+  static List<String> expandStoreIds(Iterable<String> ids) {
+    final out = <String>{};
+    for (final id in ids) {
+      out.addAll(storeIdAliases(id));
+    }
+    return out.toList();
+  }
+
+  /// Tinjauan: pending → aman | mencurigakan. Mencurigakan → aman | curang.
+  static bool canFlagMencurigakan(String? status) =>
+      (status ?? '').trim() == 'pending_review';
+
+  static bool canResolveAman(String? status) {
+    final s = (status ?? '').trim();
+    return s == 'pending_review' || s == 'mencurigakan';
+  }
+
+  static bool canResolveCurang(String? status) =>
+      (status ?? '').trim() == 'mencurigakan';
+
   /// Manajemen Karyawan: pusat semua toko; admin_toko toko sendiri.
   static bool canOpenKaryawanManagement(Map<String, dynamic> profile) {
     if (isPusatOperator(profile)) return true;

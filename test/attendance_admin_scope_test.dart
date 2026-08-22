@@ -129,6 +129,28 @@ void main() {
   test('PUSAT and CABANG-PUSAT are the same store', () {
     expect(AttendanceAdminScope.sameTokoId('PUSAT', 'CABANG-PUSAT'), isTrue);
     expect(AttendanceAdminScope.sameTokoId('CABANG-X', 'CABANG-Y'), isFalse);
+    expect(
+      AttendanceAdminScope.storeIdAliases('PUSAT'),
+      ['PUSAT', 'CABANG-PUSAT'],
+    );
+    expect(AttendanceAdminScope.storeIdAliases('CABANG-X'), ['CABANG-X']);
+    expect(
+      AttendanceAdminScope.expandStoreIds(['PUSAT', 'CABANG-X']),
+      containsAll(['PUSAT', 'CABANG-PUSAT', 'CABANG-X']),
+    );
+  });
+
+  group('tinjauan status machine', () {
+    test('curang only from mencurigakan', () {
+      expect(AttendanceAdminScope.canFlagMencurigakan('pending_review'), isTrue);
+      expect(AttendanceAdminScope.canFlagMencurigakan('mencurigakan'), isFalse);
+      expect(AttendanceAdminScope.canResolveAman('pending_review'), isTrue);
+      expect(AttendanceAdminScope.canResolveAman('mencurigakan'), isTrue);
+      expect(AttendanceAdminScope.canResolveAman('aman'), isFalse);
+      expect(AttendanceAdminScope.canResolveCurang('pending_review'), isFalse);
+      expect(AttendanceAdminScope.canResolveCurang('mencurigakan'), isTrue);
+      expect(AttendanceAdminScope.canResolveCurang('aman'), isFalse);
+    });
   });
 
   group('monitor write + banner', () {
