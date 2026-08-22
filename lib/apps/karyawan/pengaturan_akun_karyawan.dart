@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 
 class PengaturanAkunPage extends StatefulWidget {
@@ -398,7 +399,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
   Widget build(BuildContext context) {
     return KaryawanPremiumScaffold(
       title: "pengaturan_title".tr(),
-      eyebrow: 'OPTIK B. RISKI',
+      eyebrow: BrandService.name.toUpperCase(),
       body: Stack(
         children: [
           ListView(

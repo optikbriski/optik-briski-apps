@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../brand/brand_service.dart';
 import '../config.dart';
-import '../tenant/tenant_service.dart';
+import 'app_brand_mark.dart';
 import 'optik_brand_logo.dart';
 import 'rekasa_mark.dart';
 
@@ -23,15 +23,12 @@ class LoginBrandHeader extends StatelessWidget {
   final Color? nameColor;
   final double nameSize;
 
-  static bool get nameLooksLikeRekasa {
-    final n = BrandService.name.trim().toUpperCase();
-    return n.isEmpty || n == 'REKASA' || n.contains('REKASA KARYA');
-  }
+  static bool get nameLooksLikeRekasa =>
+      LoginBrandLooks.rekasa(BrandService.name);
 
   static bool get showOptikLogo {
     if (!isBrandedStoreApk) return false;
-    if (brandedStoreSlug == TenantService.optikSlug) return true;
-    return BrandService.name.toUpperCase().contains('OPTIK B');
+    return AppBrandMark.showOptikLogo;
   }
 
   /// Nama kulit toko. Null = jangan tulis judul (logo sudah cukup / Rekasa).

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -125,7 +126,7 @@ class _PengaduanPageState extends State<PengaduanPage> {
   Widget build(BuildContext context) {
     return KaryawanPremiumScaffold(
       title: "pengaduan_title".tr(),
-      eyebrow: 'OPTIK B. RISKI',
+      eyebrow: BrandService.name.toUpperCase(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Form(

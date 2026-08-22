@@ -111,11 +111,17 @@ class MemberHomeSnapshot {
     );
   }
 
-  String brandLabel() =>
-      (content?['brand_label'] ?? 'OPTIK B. RISKI').toString().trim();
+  String brandLabel() {
+    final raw = (content?['brand_label'] ?? '').toString().trim();
+    if (raw.isNotEmpty) return raw;
+    return BrandService.name;
+  }
 
-  String greetingGuest() =>
-      (content?['greeting_guest'] ?? 'Hi, Teman Optik!').toString();
+  String greetingGuest() {
+    final raw = (content?['greeting_guest'] ?? '').toString();
+    if (raw.isNotEmpty) return raw;
+    return 'Hi!';
+  }
 
   String greetingSubtitleGuest() => (content?['greeting_subtitle_guest'] ??
           'Login untuk lihat pesanan & garansi')

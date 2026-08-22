@@ -30,7 +30,7 @@ import '../../shared/safe_image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../shared/theme.dart';
 import '../../shared/whatsapp_launcher.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -1891,10 +1891,7 @@ class KaryawanPageState extends State<KaryawanPage>
           ),
           child: AppBar(
             title: _currentIndex == 0
-                ? const OptikBrandLogo(
-                    tone: OptikLogoTone.color,
-                    height: 22,
-                  )
+                ? const AppBrandMark(height: 22)
                 : Text(
                     _currentIndex == 1
                         ? "daftar_tugas_sop".tr()

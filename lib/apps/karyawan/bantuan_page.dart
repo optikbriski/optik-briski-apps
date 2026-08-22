@@ -24,7 +24,7 @@ class BantuanPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return KaryawanPremiumScaffold(
       title: "bantuan_title".tr(),
-      eyebrow: 'OPTIK B. RISKI',
+      eyebrow: BrandService.name.toUpperCase(),
       body: Column(
         children: [
           // 1. HEADER BANTUAN

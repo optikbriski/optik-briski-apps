@@ -8,7 +8,9 @@
       "program": "lib/main_admin.dart",
       "toolArgs": [
         "--dart-define-from-file=.dart_define.admin.json",
-        "--dart-define=APP_FLAVOR=admin"
+        "--dart-define=APP_FLAVOR=admin",
+        "--dart-define=ADMIN_PIN_TENANT=false",
+        "--dart-define=ADMIN_TENANT_SLUG="
       ]
     },
     {
@@ -18,7 +20,9 @@
       "program": "lib/main_karyawan.dart",
       "toolArgs": [
         "--dart-define-from-file=.dart_define.karyawan.json",
-        "--dart-define=APP_FLAVOR=karyawan"
+        "--dart-define=APP_FLAVOR=karyawan",
+        "--dart-define=PIN_STORE_TENANT=false",
+        "--dart-define=KARYAWAN_TENANT_SLUG="
       ]
     },
     {
@@ -28,7 +32,9 @@
       "program": "lib/main_member.dart",
       "toolArgs": [
         "--dart-define-from-file=.dart_define.admin.json",
-        "--dart-define=APP_FLAVOR=member"
+        "--dart-define=APP_FLAVOR=member",
+        "--dart-define=PIN_STORE_TENANT=false",
+        "--dart-define=MEMBER_TENANT_SLUG="
       ]
     },
     {

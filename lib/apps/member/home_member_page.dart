@@ -9,7 +9,8 @@ import '../../shared/member/member_points_grade.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/theme.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import 'member_rating_page.dart';
 import 'pages/member_booking_page.dart';
 import 'pages/member_care_page.dart';
@@ -162,7 +163,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     final loading = _home.loading && snap == null;
     final refreshing = _home.loading && snap != null;
     final name = (session.nama ?? '').trim();
-    final guestHello = snap?.greetingGuest() ?? 'Hi, Teman Optik!';
+    final guestHello = snap?.greetingGuest() ?? 'Hi!';
     final guestSub = snap?.greetingSubtitleGuest() ??
         'Login untuk lihat pesanan & garansi';
     final hello = name.isEmpty ? guestHello : 'Hi, $name!';
@@ -174,7 +175,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             'image_url': '',
           },
         ];
-    final brand = snap?.brandLabel() ?? 'OPTIK B. RISKI';
+    final brand = snap?.brandLabel() ?? BrandService.name;
     final promoTitle = snap?.promoTitle() ?? 'Promo & poin';
     final promoSub = snap?.promoSubtitle() ?? 'Voucher dan saldo poin kamu';
     final sections = snap?.orderedSections() ??
@@ -640,7 +641,7 @@ class _HeroBannerState extends State<_HeroBanner> {
             children: [
               Row(
                 children: [
-                  const OptikBrandLogo.white(height: 26),
+                  const AppBrandMark(height: 26, onDark: true),
                   if (widget.brandLabel.trim().isNotEmpty) ...[
                     const SizedBox(width: 10),
                     Expanded(

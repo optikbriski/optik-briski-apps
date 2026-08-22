@@ -110,6 +110,20 @@ void main() {
     expect(loginIdentityTakenMessage('network timeout'), isNull);
   });
 
+  test('Rekasa shell prefs key is not the Optik pin key', () {
+    expect(
+      TenantService.scopePrefsKey(branded: false),
+      'tenant_scope_v1_rekasa',
+    );
+    expect(
+      TenantService.scopePrefsKey(branded: true, brandedSlug: 'optik-briski'),
+      'tenant_scope_v1_branded_optik-briski',
+    );
+    expect(TenantService.adoptLegacySharedSlug('optik-briski'), isNull);
+    expect(TenantService.adoptLegacySharedSlug('warung-sari'), 'warung-sari');
+    expect(TenantService.adoptLegacySharedSlug(''), isNull);
+  });
+
   test('requireResolved refuses empty slug on shared Rekasa shell', () async {
     TenantService.instance.debugUnbind();
     TenantService.instance.slug = '';

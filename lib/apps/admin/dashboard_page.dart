@@ -14,7 +14,7 @@ import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import 'riwayat_transaksi_page.dart';
 import 'invoice_config_page.dart';
 import 'member_home_content_page.dart';
@@ -237,7 +237,7 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: const OptikBrandLogo.color(height: 34),
+        title: const AppBrandMark(height: 34),
         actions: [
           ListenableBuilder(
             listenable: TrainingMode.instance,

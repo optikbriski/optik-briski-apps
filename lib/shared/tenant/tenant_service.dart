@@ -18,7 +18,26 @@ class TenantService {
   static const optikId = '00000000-0000-0000-0000-000000000001';
   /// Kulit Rekasa sampai kode usaha diisi.
   static const defaultSlug = '';
-  static const _prefsKey = 'tenant_scope_v1';
+  static const _prefsKeyLegacy = 'tenant_scope_v1';
+  static const _prefsKeyRekasa = 'tenant_scope_v1_rekasa';
+
+  /// Prefs kulit bersama ≠ prefs APK Optik yang di-pin.
+  static String scopePrefsKey({
+    bool? branded,
+    String? brandedSlug,
+  }) {
+    final pin = branded ?? isBrandedStoreApk;
+    if (!pin) return _prefsKeyRekasa;
+    final s = (brandedSlug ?? brandedStoreSlug).trim().toLowerCase();
+    return s.isEmpty ? 'tenant_scope_v1_branded' : 'tenant_scope_v1_branded_$s';
+  }
+
+  /// Jangan bawa pin Optik ke launcher Rekasa.
+  static String? adoptLegacySharedSlug(String? raw) {
+    final s = (raw ?? '').trim().toLowerCase();
+    if (s.isEmpty || s == optikSlug) return null;
+    return s;
+  }
 
   String? id;
   String slug = defaultSlug;
@@ -66,7 +85,14 @@ class TenantService {
     slug = '';
     try {
       final prefs = await SharedPreferences.getInstance();
-      final saved = (prefs.getString(_prefsKey) ?? '').trim();
+      var saved = (prefs.getString(scopePrefsKey()) ?? '').trim();
+      if (saved.isEmpty) {
+        final legacy = adoptLegacySharedSlug(prefs.getString(_prefsKeyLegacy));
+        if (legacy != null) {
+          saved = legacy;
+          await prefs.setString(_prefsKeyRekasa, saved);
+        }
+      }
       if (saved.isNotEmpty) slug = saved;
     } catch (_) {}
   }
@@ -109,10 +135,11 @@ class TenantService {
     }
     try {
       final prefs = await SharedPreferences.getInstance();
+      final key = scopePrefsKey();
       if (slug.isEmpty) {
-        await prefs.remove(_prefsKey);
+        await prefs.remove(key);
       } else {
-        await prefs.setString(_prefsKey, slug);
+        await prefs.setString(key, slug);
       }
     } catch (_) {}
   }

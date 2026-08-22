@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/brand/brand_service.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/theme.dart';
 
@@ -222,7 +223,7 @@ class _PengingatPageState extends State<PengingatPage> {
 
     return KaryawanPremiumScaffold(
       title: "pengingat_title".tr(),
-      eyebrow: 'OPTIK B. RISKI',
+      eyebrow: BrandService.name.toUpperCase(),
       actions: [
         IconButton(
           icon: const Icon(Icons.done_all_rounded),
