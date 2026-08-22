@@ -8,6 +8,8 @@ void main() {
   test('situs publik Rekasa siap kolom link Midtrans', () {
     final html = File('site/index.html').readAsStringSync();
     expect(html, contains('REKASA KARYA INDONESIA'));
+    expect(html, contains('rekasakaryaindonesia@gmail.com'));
+    expect(html, isNot(contains('optikbriski.apps@gmail.com')));
     expect(html, contains('Perseroan Perorangan'));
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
     expect(html, contains('Paket C'));
