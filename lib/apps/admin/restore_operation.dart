@@ -1,12 +1,11 @@
-import 'dart:convert'; // ✅ AMAN: Menghilangkan error merah pada jsonEncode
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/product_identity.dart';
-import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/theme.dart';
@@ -106,19 +105,14 @@ class _RestoreOperationState extends State<RestoreOperation> {
 
     try {
       List<Map<String, dynamic>> detailReturn = [];
-      int totalQty = 0;
 
-      final mut = StockMutationService();
       final fromToko =
           (widget.profile['toko_id'] ?? '').toString().toUpperCase();
-      final actor =
-          (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
 
       for (var entry in returnItems.entries) {
         final prod =
             myProducts.firstWhere((p) => p['id'].toString() == entry.key);
         int returQty = entry.value;
-        totalQty += returQty;
         final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
         if (sku == null) {
           throw 'Produk ${prod['nama']} belum punya SKU. Tidak bisa retur.';
@@ -137,10 +131,6 @@ class _RestoreOperationState extends State<RestoreOperation> {
         });
       }
 
-      // Formula pembuatan kode nomor resi retur otomatis
-      String resiRetur =
-          "RET-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}";
-
       if (!mounted) return;
       final kurirPick = await showKurirPickDialog(
         context,
@@ -153,35 +143,19 @@ class _RestoreOperationState extends State<RestoreOperation> {
         return;
       }
 
-      // Potong stok cabang via ledger RETURN_OUT
-      for (final line in detailReturn) {
-        await mut.shipOut(
-          fromToko: fromToko,
-          sku: line['sku'].toString(),
-          qty: line['qty'] as int,
-          reason: StockReason.returnOut,
-          alasanText: 'Retur $resiRetur → PUSAT',
-          refType: 'stock_move',
-          refId: resiRetur,
-          actorNama: actor,
-        );
-      }
-
-      // Catat log ke History Mutasi Barang (Status: PENDING agar divalidasi Pusat)
-      final inserted = await supabase.from('stock_move_history').insert({
-        'product_name': resiRetur,
-        'dari_lokasi': widget.profile['toko_id'],
-        'ke_lokasi': 'PUSAT',
-        'jumlah': totalQty,
-        'tipe': 'RETUR',
-        'status': 'PENDING',
-        'keterangan': jsonEncode(detailReturn),
-        'created_at': DateTime.now().toIso8601String(),
-        if (!kurirPickSkipped(kurirPick)) ...{
-          'kurir_karyawan_id': kurirPick!['id'],
-          'kurir_nama': kurirPick['nama'],
-        },
-      }).select('id').single();
+      final created = await DoLifecycleService().createReturn(
+        dari: fromToko,
+        items: detailReturn,
+        kurirId: kurirPickSkipped(kurirPick)
+            ? null
+            : kurirPick?['id']?.toString(),
+        kurirNama: kurirPickSkipped(kurirPick)
+            ? null
+            : kurirPick?['nama']?.toString(),
+      );
+      final inserted = {
+        'id': created['id'],
+      };
 
       if (mounted) {
         setState(() {
@@ -189,11 +163,16 @@ class _RestoreOperationState extends State<RestoreOperation> {
           qtyControllers.clear();
         });
         if (TrainingMode.instance.isActive) {
-          final outcome =
-              await TrainingApprovalSimulator.simulateStockMoveIfTraining(
-            context,
-            id: inserted['id'],
-          );
+          TrainingApprovalOutcome? outcome;
+          try {
+            outcome =
+                await TrainingApprovalSimulator.simulateStockMoveIfTraining(
+              context,
+              id: inserted['id'],
+            );
+          } catch (_) {
+            outcome = null;
+          }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(

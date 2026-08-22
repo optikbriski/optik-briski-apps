@@ -150,6 +150,13 @@ class AttendanceAdminScope {
   static bool canOpenLogistics(Map<String, dynamic> profile) =>
       canManageInventory(profile);
 
+  /// Terima DO/RO/retur di toko ini. Sama dengan hak mutasi toko tujuan.
+  static bool canReceiveStockToko(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) =>
+      canManageInventoryToko(profile, tokoId);
+
   /// Metadata katalog (nama/harga). Bukan stok. Kasir tidak.
   static bool canEditProductCatalog(Map<String, dynamic> profile) {
     if (isOwner(profile) || isAdminPusat(profile) || isSuperAdmin(profile)) {

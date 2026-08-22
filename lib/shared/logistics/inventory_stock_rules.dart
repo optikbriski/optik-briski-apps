@@ -1,4 +1,6 @@
-/// Aturan stok / logistik — UI/tes. RLS + trigger 000026 yang menahan celah.
+import 'do_lifecycle_rules.dart';
+
+/// Aturan stok / logistik — UI/tes. RLS + trigger 000026/000027.
 abstract final class InventoryStockRules {
   static const movePreparing = 'PREPARING';
   static const moveWaiting = 'WAITING';
@@ -34,28 +36,10 @@ abstract final class InventoryStockRules {
     return s == moveSuccess || s == moveBatal || s == moveRejected;
   }
 
-  /// PREPARING/WAITING → TRANSIT → SUCCESS. PENDING legacy → SUCCESS.
-  /// Tidak boleh SUCCESS → TRANSIT / PREPARING.
-  static bool moveTransitionOk(String? from, String? to) {
-    final a = normMove(from);
-    final b = normMove(to);
-    if (a == b) return true;
-    if (b == moveBatal || b == moveRejected) {
-      return !isMoveTerminal(a) || a == b;
-    }
-    if (isMoveTerminal(a)) return false;
-    if ((a == movePreparing || a == moveWaiting) &&
-        (b == moveTransit || b == movePending)) {
-      return true;
-    }
-    if ((a == moveTransit || a == movePending) && b == moveSuccess) {
-      return true;
-    }
-    if ((a == movePreparing || a == moveWaiting) && b == moveSuccess) {
-      return false;
-    }
-    return false;
-  }
+  /// PREPARING/WAITING → TRANSIT → SUCCESS. PENDING legacy/retur → SUCCESS.
+  /// BATAL hanya sebelum kirim. Tidak boleh PREPARING → PENDING.
+  static bool moveTransitionOk(String? from, String? to) =>
+      DoLifecycleRules.moveTransitionOk(from, to);
 
   /// Cabang tujuan tidak boleh jemput (potong stok Pusat dini).
   static bool canMarkTransit({

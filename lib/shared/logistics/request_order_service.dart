@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../invoice/invoice_delivery_service.dart';
 import '../invoice/sale_fulfillment_service.dart';
+import 'do_lifecycle_service.dart';
 import 'product_identity.dart';
 import 'stock_mutation_service.dart';
 
@@ -460,7 +461,7 @@ class RequestOrderService {
           'ke_lokasi': tokoTujuan,
           'jumlah': qty,
           'tipe': 'REQUEST',
-          'status': 'TRANSIT',
+          'status': 'PREPARING',
           'keterangan':
               'RequestOrder#$id | Invoice ${req['no_invoice'] ?? '-'} | $itemJson',
           'created_at': DateTime.now().toIso8601String(),
@@ -470,32 +471,13 @@ class RequestOrderService {
         .select('id')
         .single();
 
-    final mut = StockMutationService(client: _client);
     final moveId = move['id'].toString();
     try {
-      // Atomik: consum reservasi RO + TRANSFER_OUT real (satu RPC).
-      final consumed = await mut.consumeReservationAndShipOut(
-        kind: StockReserveKind.ro,
-        refType: 'pending_request',
-        refId: id.toString(),
-        tokoId: 'PUSAT',
-        alasanText: 'Kirim RO $resi → $tokoTujuan',
-        ledgerRefType: 'stock_move',
-        ledgerRefId: moveId,
+      await DoLifecycleService(client: _client).markTransit(
+        moveId: moveId,
+        kurirId: kurirId,
+        kurirNama: kurirNm,
       );
-      final items = consumed['items'];
-      if (items is! List || items.isEmpty) {
-        // Legacy APPROVED tanpa baris reservasi — fallback shipOut langsung.
-        await mut.shipOut(
-          fromToko: 'PUSAT',
-          sku: sku,
-          qty: qty,
-          reason: StockReason.transferOut,
-          alasanText: 'Kirim RO $resi → $tokoTujuan (tanpa reservasi)',
-          refType: 'stock_move',
-          refId: moveId,
-        );
-      }
     } catch (e) {
       await _client.from('stock_move_history').delete().eq('id', move['id']);
       rethrow;
@@ -536,9 +518,9 @@ class RequestOrderService {
 
     final byId = await _client
         .from('pending_requests')
-        .select('id, sale_item_id, sale_id')
+        .select('id, sale_item_id, sale_id, status')
         .eq('stock_move_id', stockMoveId)
-        .eq('status', 'SHIPPING');
+        .inFilter('status', ['SHIPPING', 'SUCCESS']);
     if ((byId as List).isNotEmpty) {
       await _client
           .from('pending_requests')
@@ -556,9 +538,9 @@ class RequestOrderService {
 
     final byResi = await _client
         .from('pending_requests')
-        .select('id, sale_item_id, sale_id')
+        .select('id, sale_item_id, sale_id, status')
         .eq('stock_move_resi', resiClean)
-        .eq('status', 'SHIPPING');
+        .inFilter('status', ['SHIPPING', 'SUCCESS']);
     if ((byResi as List).isEmpty) return;
 
     await _client
