@@ -41,6 +41,7 @@ import '../../shared/widgets/leave_page_guard.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/training/training_ops_sync.dart';
+import '../../shared/logistics/inventory_stock_rules.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/finance/gl_posting_service.dart';
 import '../../shared/logistics/request_order_service.dart';
@@ -2611,6 +2612,7 @@ class _SalesPageState extends State<SalesPage> {
             onPressed: () async {
               int qtyNeeded = int.tryParse(qtyPoCtrl.text) ??
                   0; // ✅ Menggunakan nama variabel baru
+              qtyNeeded = InventoryStockRules.clampRequestQty(qtyNeeded);
               if (qtyNeeded <= 0) {
                 _showSnack("Jumlah harus lebih dari 0", OptikAdminTokens.danger);
                 return;

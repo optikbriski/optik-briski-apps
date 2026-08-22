@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../qr/obr_codes.dart';
+import 'inventory_stock_rules.dart';
 import 'request_order_service.dart';
 import 'stock_mutation_service.dart';
 
@@ -77,7 +78,9 @@ class ReceiveScanService {
     final a = (tujuan ?? '').trim().toUpperCase();
     final b = cabangKaryawan.trim().toUpperCase();
     if (a.isEmpty || b.isEmpty) return false;
-    return a == b;
+    if (a == b) return true;
+    const pusat = {'PUSAT', 'CABANG-PUSAT'};
+    return pusat.contains(a) && pusat.contains(b);
   }
 
   /// Entry utama scan logistik (kurir jemput ATAU cabang terima).
@@ -180,11 +183,11 @@ class ReceiveScanService {
     final scanner = cabangPemindai.trim().toUpperCase();
 
     // Cabang tujuan tidak boleh "jemput" — itu memotong stok Pusat terlalu dini.
-    if (scanner.isNotEmpty &&
-        ke.isNotEmpty &&
-        scanner == ke &&
-        scanner != dari &&
-        scanner != 'PUSAT') {
+    if (!InventoryStockRules.canMarkTransit(
+      scannerToko: scanner,
+      dari: dari,
+      ke: ke,
+    )) {
       return ReceiveScanResult(
         ok: false,
         resi: resi,

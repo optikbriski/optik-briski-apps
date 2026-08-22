@@ -574,7 +574,9 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('logistics') &&
-                              mod.allows('logistics'))
+                              mod.allows('logistics') &&
+                              AttendanceAdminScope.canOpenLogistics(
+                                  widget.profile))
                             PremiumMenuTile(
                               title: "dash_menu_logistik".tr(),
                               icon: Icons.local_shipping_rounded,
@@ -594,10 +596,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           if (TrainingCurriculum.allows('master_data') &&
                               mod.allows('master_data') &&
                               (training ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'admin_toko' ||
-                                  widget.profile['toko_id'] == 'PUSAT'))
+                                  AttendanceAdminScope.canEditProductCatalog(
+                                      widget.profile)))
                             PremiumMenuTile(
                               title: "dash_menu_master".tr(),
                               icon: Icons.dataset_rounded,

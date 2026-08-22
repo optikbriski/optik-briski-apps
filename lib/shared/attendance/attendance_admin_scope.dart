@@ -127,6 +127,46 @@ class AttendanceAdminScope {
     return sameTokoId(tokoOf(profile), t);
   }
 
+  /// Mutasi stok / logistik: pusat + admin_toko. Bukan owner etalase. Bukan kasir.
+  static bool canManageInventory(Map<String, dynamic> profile) {
+    if (isOwner(profile)) return false;
+    if (isAdminPusat(profile) || isSuperAdmin(profile)) return true;
+    return isAdminToko(profile) && tokoOf(profile).isNotEmpty;
+  }
+
+  /// Ubah stok toko ini? admin_toko hanya toko sendiri. Bukan cabang orang.
+  static bool canManageInventoryToko(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) {
+    if (!canManageInventory(profile)) return false;
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return false;
+    if (isAdminPusat(profile) || isSuperAdmin(profile)) return true;
+    return sameTokoId(tokoOf(profile), t);
+  }
+
+  /// Hub logistik / inventory. Bukan owner etalase.
+  static bool canOpenLogistics(Map<String, dynamic> profile) =>
+      canManageInventory(profile);
+
+  /// Metadata katalog (nama/harga). Bukan stok. Kasir tidak.
+  static bool canEditProductCatalog(Map<String, dynamic> profile) {
+    if (isOwner(profile) || isAdminPusat(profile) || isSuperAdmin(profile)) {
+      return true;
+    }
+    return isAdminToko(profile) && tokoOf(profile).isNotEmpty;
+  }
+
+  /// RO dari kasir/admin toko sendiri.
+  static bool canRequestRoToko(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) {
+    return canPosCheckoutToko(profile, tokoId) ||
+        canManageInventoryToko(profile, tokoId);
+  }
+
   /// Boleh ubah jadwal/kuota toko ini? Bukan merek lain. Bukan cabang orang.
   static bool canEditTokoJadwal(
     Map<String, dynamic> profile,

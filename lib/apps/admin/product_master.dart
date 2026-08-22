@@ -996,6 +996,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         final updateData = Map<String, dynamic>.from(basePayload);
         updateData['sku'] = sku;
         updateData['barcode'] = sku;
+        updateData.remove('stock');
+        updateData.remove('reserved_qty');
 
         // Revisi stok: minta alasan DULU sebelum commit metadata.
         final tokoRev =
