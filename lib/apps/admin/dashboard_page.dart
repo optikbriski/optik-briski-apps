@@ -522,12 +522,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                           if (!training &&
                               mod.allows('attendance') &&
-                              (widget.profile['toko_id'] == 'PUSAT' ||
-                                  widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT' ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'admin_toko'))
+                              AttendanceAdminScope.canManageJadwal(
+                                  widget.profile))
                             PremiumMenuTile(
                               title: 'Jadwal Kerja',
                               icon: Icons.calendar_month_rounded,

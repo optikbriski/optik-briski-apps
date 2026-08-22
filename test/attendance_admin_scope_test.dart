@@ -56,6 +56,23 @@ void main() {
       final profile = p('admin_toko', 'CABANG-X');
       expect(AttendanceAdminScope.canOpenStoreMonitor(profile), isTrue);
       expect(AttendanceAdminScope.canManageGeofence(profile), isTrue);
+      expect(AttendanceAdminScope.canManageJadwal(profile), isTrue);
+      expect(
+        AttendanceAdminScope.canEditTokoJadwal(profile, 'CABANG-X'),
+        isTrue,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoJadwal(profile, 'CABANG-Y'),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoJadwal(p('kasir', 'CABANG-X'), 'CABANG-X'),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoJadwal(p('admin_pusat', 'PUSAT'), 'PUSAT'),
+        isTrue,
+      );
       expect(
         AttendanceAdminScope.canEditTokoGeofence(profile, 'CABANG-X'),
         isTrue,
@@ -179,6 +196,14 @@ void main() {
       expect(
         AttendanceAdminScope.geofenceBannerHint(p('admin_pusat', 'PUSAT')),
         'Semua toko termasuk Pusat',
+      );
+      expect(
+        AttendanceAdminScope.jadwalBannerHint(p('admin_pusat', 'PUSAT')),
+        'Semua toko termasuk Pusat',
+      );
+      expect(
+        AttendanceAdminScope.jadwalBannerHint(p('admin_toko', 'CABANG-X')),
+        'Toko CABANG-X saja',
       );
       expect(
         AttendanceAdminScope.geofenceBannerHint(p('admin_toko', 'CABANG-X')),

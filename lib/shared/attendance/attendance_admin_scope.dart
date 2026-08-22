@@ -103,6 +103,23 @@ class AttendanceAdminScope {
     return sameTokoId(tokoOf(profile), t);
   }
 
+  /// Roster + kuota shift: pusat semua toko; admin_toko toko sendiri.
+  /// Bukan kasir. Bukan APK toko tanpa role admin.
+  static bool canManageJadwal(Map<String, dynamic> profile) =>
+      canOpenKaryawanManagement(profile);
+
+  /// Boleh ubah jadwal/kuota toko ini? Bukan merek lain. Bukan cabang orang.
+  static bool canEditTokoJadwal(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) {
+    if (!canManageJadwal(profile)) return false;
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return false;
+    if (canViewAllStores(profile)) return true;
+    return sameTokoId(tokoOf(profile), t);
+  }
+
   /// Kiosk QR + face match di perangkat toko.
   /// - admin_toko: ya (toko cabang / toko sendiri)
   /// - owner: ya (kiosk Absensi Pusat)
@@ -227,6 +244,10 @@ class AttendanceAdminScope {
           r,
     ];
   }
+
+  /// Teks banner jadwal — admin_pusat ikut semua toko (termasuk Pusat).
+  static String jadwalBannerHint(Map<String, dynamic> profile) =>
+      geofenceBannerHint(profile);
 
   /// Teks banner geofence — pusat semua toko; admin_toko toko sendiri.
   static String geofenceBannerHint(Map<String, dynamic> profile) {

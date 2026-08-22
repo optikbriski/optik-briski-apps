@@ -3,6 +3,9 @@ import 'dart:math';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
+import '../attendance/jadwal_kerja_rules.dart';
+
 /// Layer toko untuk jaga coverage libur.
 enum OfficeLayer { front, back }
 
@@ -83,11 +86,15 @@ class TokoShiftSettings {
       shift1Label: row['shift1_label']?.toString() ?? 'Shift Pagi',
       shift1Masuk: t(row['shift1_masuk'], '08:30'),
       shift1Pulang: t(row['shift1_pulang'], '17:00'),
-      shift1Kuota: (row['shift1_kuota'] as num?)?.toInt() ?? 3,
+      shift1Kuota: JadwalKerjaRules.clampKuota(
+        (row['shift1_kuota'] as num?)?.toInt() ?? 3,
+      ),
       shift2Label: row['shift2_label']?.toString() ?? 'Shift Siang',
       shift2Masuk: t(row['shift2_masuk'], '13:00'),
       shift2Pulang: t(row['shift2_pulang'], '21:00'),
-      shift2Kuota: (row['shift2_kuota'] as num?)?.toInt() ?? 3,
+      shift2Kuota: JadwalKerjaRules.clampKuota(
+        (row['shift2_kuota'] as num?)?.toInt() ?? 3,
+      ),
       // Abaikan flag lama "semua libur Minggu" — toko buka tiap hari.
       mingguLibur: false,
     );
@@ -98,11 +105,11 @@ class TokoShiftSettings {
         'shift1_label': shift1Label,
         'shift1_masuk': '$shift1Masuk:00',
         'shift1_pulang': '$shift1Pulang:00',
-        'shift1_kuota': shift1Kuota,
+        'shift1_kuota': JadwalKerjaRules.clampKuota(shift1Kuota),
         'shift2_label': shift2Label,
         'shift2_masuk': '$shift2Masuk:00',
         'shift2_pulang': '$shift2Pulang:00',
-        'shift2_kuota': shift2Kuota,
+        'shift2_kuota': JadwalKerjaRules.clampKuota(shift2Kuota),
         'minggu_libur': false,
         'updated_at': DateTime.now().toIso8601String(),
       };
@@ -228,6 +235,11 @@ class ShiftAutoAssignService {
     for (final k in karyawan) {
       final id = k['id']?.toString() ?? '';
       if (id.isEmpty) continue;
+      final rowToko = k['toko_id']?.toString() ?? '';
+      if (rowToko.isNotEmpty &&
+          !AttendanceAdminScope.sameTokoId(rowToko, tokoId)) {
+        continue;
+      }
       final jabatan = k['jabatan']?.toString() ?? '';
       people.add((id: id, jabatan: jabatan, layer: officeLayerOf(jabatan)));
     }
