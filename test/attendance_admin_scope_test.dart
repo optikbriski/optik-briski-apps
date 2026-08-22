@@ -112,6 +112,18 @@ void main() {
         isFalse,
       );
     });
+
+    test('bound tenant mismatch rejects karyawan clock-in', () {
+      expect(AttendanceAdminScope.matchesBoundTenant(null), isFalse);
+      expect(AttendanceAdminScope.matchesBoundTenant(''), isFalse);
+      expect(
+        () => AttendanceAdminScope.assertKaryawanTenant({
+          'id': 'k1',
+          'toko_id': 'CABANG-X',
+        }),
+        returnsNormally,
+      );
+    });
   });
 
   test('PUSAT and CABANG-PUSAT are the same store', () {

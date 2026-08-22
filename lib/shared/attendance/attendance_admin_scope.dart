@@ -92,10 +92,33 @@ class AttendanceAdminScope {
   static String? tenantIdOf(Map<String, dynamic>? profile) {
     final fromProfile = (profile?['tenant_id'] ?? '').toString().trim();
     if (fromProfile.isNotEmpty) return fromProfile;
-    if (TenantService.instance.isBound) {
-      return TenantService.instance.id;
+    return boundTenantIdOrNull();
+  }
+
+  /// UUID usaha yang sudah di-resolve. Null jika belum — jangan panggil boundId.
+  static String? boundTenantIdOrNull() {
+    if (!TenantService.instance.isBound) return null;
+    final id = (TenantService.instance.id ?? '').trim();
+    return id.isEmpty ? null : id;
+  }
+
+  /// Baris absensi vs tenant sesi yang sudah terikat. Belum terikat = jangan lolos.
+  static bool matchesBoundTenant(String? rowTenantId) {
+    final bound = boundTenantIdOrNull();
+    final row = (rowTenantId ?? '').trim();
+    if (bound == null || bound.isEmpty || row.isEmpty) return false;
+    return bound == row;
+  }
+
+  /// Clock-in/out: karyawan harus usaha yang sama. Belum terikat = lewati
+  /// (RLS `current_tenant_id()` tetap memegang).
+  static void assertKaryawanTenant(Map<String, dynamic> karyawan) {
+    final bound = boundTenantIdOrNull();
+    if (bound == null) return;
+    final k = (karyawan['tenant_id'] ?? '').toString().trim();
+    if (k.isEmpty || k != bound) {
+      throw StateError('Akun karyawan bukan milik usaha ini.');
     }
-    return null;
   }
 
   /// Baris absensi milik usaha yang sama. Bukan sekat kulit.

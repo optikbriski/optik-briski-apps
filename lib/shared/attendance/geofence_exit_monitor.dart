@@ -12,6 +12,7 @@ import 'android_battery_optimization.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
+import '../tenant/tenant_service.dart';
 import '../theme.dart';
 import '../brand/brand_service.dart';
 
@@ -758,6 +759,8 @@ class GeofenceExitMonitor {
           'toko_id': tokoId,
           'latitude': lat,
           'longitude': lng,
+          if (TenantService.instance.isBound)
+            'tenant_id': TenantService.instance.boundId,
         });
       } catch (e) {
         debugPrint('geofence_exit_logs insert: $e');

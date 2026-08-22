@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
+import 'attendance_admin_scope.dart';
 import 'attendance_config.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
@@ -48,20 +49,25 @@ class AttendanceService {
   /// Ambil satu karyawan by id (untuk kiosk Absensi Toko).
   Future<Map<String, dynamic>?> fetchKaryawanById(String karyawanId) async {
     if (karyawanId.isEmpty) return null;
-    return _client.from('karyawan').select().eq('id', karyawanId).maybeSingle();
+    var q = _client.from('karyawan').select().eq('id', karyawanId);
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+    if (tenant != null) q = q.eq('tenant_id', tenant);
+    return q.maybeSingle();
   }
 
   /// Daftar karyawan aktif di toko (untuk pilih identitas di perangkat toko).
   Future<List<Map<String, dynamic>>> listKaryawanForToko(String tokoId) async {
     if (tokoId.isEmpty) return const [];
-    final rows = await _client
+    var q = _client
         .from('karyawan')
         .select(
-          'id, nama, jabatan, toko_id, nik, status_approval, '
+          'id, nama, jabatan, toko_id, nik, status_approval, tenant_id, '
           'face_template, face_photo_url, face_enrolled_at, pin_absensi',
         )
-        .eq('toko_id', tokoId)
-        .order('nama');
+        .eq('toko_id', tokoId);
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+    if (tenant != null) q = q.eq('tenant_id', tenant);
+    final rows = await q.order('nama');
     final list = List<Map<String, dynamic>>.from(rows);
     final approved = list.where((k) {
       final st = (k['status_approval'] ?? '').toString().toLowerCase();
@@ -89,14 +95,14 @@ class AttendanceService {
         ascending: false,
       );
     }
-    return _client
+    var q = _client
         .from('attendance_shifts')
         .select()
         .eq('karyawan_id', karyawanId)
-        .eq('status', 'OPEN')
-        .order('masuk_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+        .eq('status', 'OPEN');
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+    if (tenant != null) q = q.eq('tenant_id', tenant);
+    return q.order('masuk_at', ascending: false).limit(1).maybeSingle();
   }
 
   /// Awal hari kalender Asia/Jakarta dalam UTC (untuk filter `created_at`).
@@ -137,14 +143,16 @@ class AttendanceService {
       return false;
     }
 
-    final rows = await _client
+    var q = _client
         .from('attendance_logs')
         .select('id')
         .eq('karyawan_id', karyawanId)
         .eq('tipe', tipe)
         .gte('created_at', start.toIso8601String())
-        .lt('created_at', end.toIso8601String())
-        .limit(1);
+        .lt('created_at', end.toIso8601String());
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+    if (tenant != null) q = q.eq('tenant_id', tenant);
+    final rows = await q.limit(1);
     return List<dynamic>.from(rows).isNotEmpty;
   }
 
@@ -328,6 +336,7 @@ class AttendanceService {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
     if (tokoId.isEmpty) throw 'Toko karyawan belum terisi.';
+    AttendanceAdminScope.assertKaryawanTenant(karyawan);
     TrainingMode.instance.assertSameToko(tokoId);
 
     if (!geo.inside || geo.latitude == null || geo.longitude == null) {
@@ -364,11 +373,13 @@ class AttendanceService {
       clockInUtc: clockAt,
     );
 
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
     final shiftPayload = {
       'karyawan_id': karyawanId,
       'toko_id': tokoId,
       'status': 'OPEN',
       'masuk_at': clockAt.toIso8601String(),
+      if (tenant != null) 'tenant_id': tenant,
     };
 
     final logPayload = <String, dynamic>{
@@ -388,6 +399,7 @@ class AttendanceService {
       'late_seconds': late.lateSeconds,
       'late_penalty_points': late.penaltyPoints,
       if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
+      if (tenant != null) 'tenant_id': tenant,
     };
 
     // Training: local sandbox only (offline OK) — never sync to pusat.
@@ -398,6 +410,32 @@ class AttendanceService {
         'shift_id': shift['id'],
       });
       return late;
+    }
+
+    if (qrTokenId == null || qrTokenId.trim().isEmpty) {
+      throw 'QR Absensi wajib. Scan QR di perangkat toko dulu.';
+    }
+
+    // HP karyawan (bukan kiosk): bukti unlock dulu — trigger shift OPEN memakainya.
+    // Kiosk: unlock sudah dibuat akun karyawan sebelum face match.
+    if (!storeKiosk) {
+      try {
+        await _client.rpc(
+          'create_attendance_geo_unlock',
+          params: {
+            'p_toko_id': tokoId,
+            'p_latitude': geo.latitude,
+            'p_longitude': geo.longitude,
+            'p_accuracy_meters': geo.accuracyMeters,
+            'p_ttl_seconds': 180,
+            'p_qr_token_id': qrTokenId,
+            'p_source': 'qr+gps:masuk',
+          },
+        );
+      } on PostgrestException catch (e) {
+        final m = e.message.trim();
+        throw m.isNotEmpty ? m : 'Gagal verifikasi lokasi absensi.';
+      }
     }
 
     ProdWriteGuard.check('attendance.clockIn.shift');
@@ -614,6 +652,7 @@ class AttendanceService {
   }) async {
     final karyawanId = karyawan['id'] as String;
     final tokoId = (karyawan['toko_id'] ?? '').toString();
+    AttendanceAdminScope.assertKaryawanTenant(karyawan);
     if (tokoId.isNotEmpty) {
       TrainingMode.instance.assertSameToko(tokoId);
     }
@@ -668,6 +707,7 @@ class AttendanceService {
             : '${defaultTargetPlatform.name}-toko-kiosk')
         : defaultTargetPlatform.name;
 
+    final tenant = AttendanceAdminScope.boundTenantIdOrNull();
     final logPayload = <String, dynamic>{
       'shift_id': open['id'],
       'karyawan_id': karyawanId,
@@ -684,6 +724,7 @@ class AttendanceService {
       'liveness_provider': livenessProvider,
       'device_info': deviceInfo,
       if (qrTokenId != null && qrTokenId.isNotEmpty) 'qr_token_id': qrTokenId,
+      if (tenant != null) 'tenant_id': tenant,
     };
 
     if (TrainingMode.instance.isActive) {
@@ -700,10 +741,12 @@ class AttendanceService {
     }
 
     ProdWriteGuard.check('attendance.clockOut.shift');
-    await _client.from('attendance_shifts').update({
+    var closeQ = _client.from('attendance_shifts').update({
       'status': 'CLOSED',
       'pulang_at': DateTime.now().toIso8601String(),
     }).eq('id', open['id']);
+    if (tenant != null) closeQ = closeQ.eq('tenant_id', tenant);
+    await closeQ;
 
     ProdWriteGuard.check('attendance.clockOut.log');
     try {

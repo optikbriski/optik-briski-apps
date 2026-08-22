@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../shared/theme.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/attendance_config.dart';
 import '../../shared/attendance/attendance_geo_unlock_service.dart';
 import '../../shared/attendance/attendance_liveness.dart';
@@ -158,7 +159,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       }
 
       final validated = await _qrService.validatePayload(raw);
-      if (validated.tokoId != tokoId) {
+      if (!AttendanceAdminScope.sameTokoId(validated.tokoId, tokoId)) {
         _snack(
           'attendance_qr_wrong_toko'.tr(namedArgs: {
             'qr': validated.tokoId,
@@ -329,7 +330,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
           return;
         }
         final validated = await _qrService.validatePayload(raw);
-        if (validated.tokoId != tokoId) {
+        if (!AttendanceAdminScope.sameTokoId(validated.tokoId, tokoId)) {
           _snack(
             'attendance_qr_wrong_toko'.tr(namedArgs: {
               'qr': validated.tokoId,
