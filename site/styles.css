@@ -202,25 +202,43 @@ img { max-width: 100%; height: auto; }
   font-weight: 700;
   cursor: pointer;
 }
-.chip.is-on, .plan-card.is-on {
+.chip.is-on {
   background: var(--deep);
   color: #e8f1fb;
   border-color: var(--deep);
 }
+.plan-stack {
+  display: grid;
+  gap: 14px;
+  margin: 10px 0 36px;
+}
 .plan-card {
+  padding: 0;
+  overflow: hidden;
+}
+.plan-head {
+  display: block;
+  width: 100%;
   text-align: left;
   cursor: pointer;
   font: inherit;
   color: inherit;
-  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 22px 22px 20px;
 }
 .plan-card:hover { border-color: var(--mid); }
-.plan-card.is-on .eyebrow,
-.plan-card.is-on p { color: #d6e5f7; }
-.plan-card.is-on .price { color: #fff; }
+.plan-card.is-open {
+  border-color: var(--ink);
+  box-shadow: 0 22px 40px -12px rgba(0, 71, 171, 0.16);
+}
+.plan-body {
+  border-top: 1px solid var(--line);
+  padding: 16px 18px 20px;
+  background: #f4f8fd;
+}
+.plan-include { margin-top: 12px; }
 
-.feature-panel { margin: 8px 0 28px; }
-.feature-panel h3 { margin: 0 0 8px; letter-spacing: -0.03em; }
 .switch-row {
   display: flex;
   align-items: center;
@@ -242,6 +260,10 @@ img { max-width: 100%; height: auto; }
   accent-color: var(--ink);
 }
 
+.plan-body .checkout {
+  margin-top: 8px;
+  padding-top: 8px;
+}
 .checkout label {
   display: block;
   font-size: 13px;

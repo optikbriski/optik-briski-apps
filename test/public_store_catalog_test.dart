@@ -20,9 +20,11 @@ void main() {
   test('situs publik paket bisa diklik dan fitur bisa di-toggle', () {
     final js = File('site/store.js').readAsStringSync();
     expect(js, contains('data-plan'));
+    expect(js, contains('plan-body'));
     expect(js, contains('type = "checkbox"'));
     expect(js, contains('rekasa-midtrans-create'));
     expect(js, contains('snap.pay'));
+    expect(File('site/index.html').readAsStringSync(), isNot(contains('id="fitur"')));
   });
 
   test('harga dan modul situs sama dengan etalase Flutter', () {

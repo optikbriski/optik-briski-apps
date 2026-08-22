@@ -14,7 +14,7 @@ void main() {
     expect(html, contains('Perseroan Perorangan'));
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
     expect(html, contains('id="plan-cards"'));
-    expect(html, contains('id="feature-list"'));
+    expect(html, contains('id="checkout-holder"'));
     expect(html, contains('Bayar via Midtrans'));
     expect(html, contains('perangkat lunak'));
     expect(html, isNot(contains('PT Biasa')));

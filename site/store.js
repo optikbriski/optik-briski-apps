@@ -4,7 +4,7 @@
 
   var state = {
     industry: "umum",
-    plan: "paket_c",
+    plan: null,
     on: {},
     whiteLabel: false
   };
@@ -17,10 +17,11 @@
   }
 
   function planDef() {
-    return cat.plans[state.plan];
+    return cat.plans[state.plan] || cat.plans.paket_c;
   }
 
   function included(key) {
+    if (!state.plan) return false;
     var keys = industry().plans[state.plan] || [];
     return keys.indexOf(key) !== -1;
   }
@@ -71,11 +72,17 @@
     keys.forEach(function (k) {
       state.on[k] = included(k);
     });
-    state.whiteLabel = !!planDef().whiteLabel;
+    state.whiteLabel = !!(planDef() && planDef().whiteLabel);
   }
 
   function el(id) {
     return document.getElementById(id);
+  }
+
+  function parkCheckout() {
+    var holder = el("checkout-holder");
+    var box = el("checkout");
+    if (holder && box && box.parentNode !== holder) holder.appendChild(box);
   }
 
   function renderIndustries() {
@@ -88,36 +95,10 @@
       b.textContent = ind.label;
       b.addEventListener("click", function () {
         state.industry = ind.key;
-        applyPlanDefaults();
+        if (state.plan) applyPlanDefaults();
         render();
       });
       box.appendChild(b);
-    });
-  }
-
-  function renderPlans() {
-    var box = el("plan-cards");
-    box.innerHTML = "";
-    ["paket_c", "paket_b", "paket_a"].forEach(function (key) {
-      var p = cat.plans[key];
-      var names = (industry().plans[key] || []).map(moduleLabel).join(", ");
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "card plan-card" + (state.plan === key ? " is-on" : "");
-      btn.setAttribute("data-plan", key);
-      btn.innerHTML =
-        '<p class="eyebrow">' + p.eyebrow + "</p>" +
-        "<h3>" + p.short + "</h3>" +
-        '<p class="price">' + rp(p.priceIdr) + "</p>" +
-        "<p>" + p.blurb + "</p>" +
-        '<p class="muted" style="margin-top:12px">Termasuk: ' + names + "</p>";
-      btn.addEventListener("click", function () {
-        state.plan = key;
-        applyPlanDefaults();
-        render();
-        el("fitur").scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      box.appendChild(btn);
     });
   }
 
@@ -134,23 +115,23 @@
     input.addEventListener("change", function () {
       onChange(input.checked);
       renderTotals();
-      renderFeatureHints();
     });
     row.appendChild(text);
     row.appendChild(input);
     return row;
   }
 
-  function renderFeatures() {
-    var list = el("feature-list");
-    list.innerHTML = "";
+  function fillOpenBody(body) {
+    var list = document.createElement("div");
+    list.id = "feature-list";
+    list.className = "plan-features";
     var plan = planDef();
     list.appendChild(
       switchRow(
         "wl-toggle",
         "APK & web merek sendiri",
         plan.whiteLabel
-          ? "Termasuk paket tertinggi."
+          ? "Termasuk paket ini."
           : "Add-on " + rp(cat.whiteLabelAddonIdr),
         state.whiteLabel,
         function (v) {
@@ -174,25 +155,76 @@
         )
       );
     });
-    el("feature-industry").textContent = industry().label + " · " + plan.label;
+    body.appendChild(list);
+    var checkout = el("checkout");
+    if (checkout) body.appendChild(checkout);
   }
 
-  function renderFeatureHints() {}
+  function renderPlans() {
+    parkCheckout();
+    var box = el("plan-cards");
+    box.innerHTML = "";
+    ["paket_c", "paket_b", "paket_a"].forEach(function (key) {
+      var p = cat.plans[key];
+      var names = (industry().plans[key] || []).map(moduleLabel).join(", ");
+      var open = state.plan === key;
+      var card = document.createElement("article");
+      card.className = "card plan-card" + (open ? " is-open" : "");
+      card.setAttribute("data-plan", key);
+
+      var head = document.createElement("button");
+      head.type = "button";
+      head.className = "plan-head";
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+      head.innerHTML =
+        '<p class="eyebrow">' + p.eyebrow + (open ? " · terbuka" : "") + "</p>" +
+        "<h3>" + p.short + "</h3>" +
+        '<p class="price">' + rp(p.priceIdr) + "</p>" +
+        "<p>" + p.blurb + "</p>" +
+        '<p class="muted plan-include">Termasuk: ' + names + "</p>";
+      head.addEventListener("click", function () {
+        if (state.plan === key) {
+          state.plan = null;
+          parkCheckout();
+        } else {
+          state.plan = key;
+          applyPlanDefaults();
+        }
+        render();
+        if (state.plan === key) {
+          var opened = box.querySelector('[data-plan="' + key + '"]');
+          if (opened) opened.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+      card.appendChild(head);
+
+      if (open) {
+        var body = document.createElement("div");
+        body.className = "plan-body";
+        fillOpenBody(body);
+        card.appendChild(body);
+      }
+      box.appendChild(card);
+    });
+  }
 
   function renderTotals() {
+    var total = el("quote-total");
+    var brk = el("quote-break");
+    var btn = el("pay-btn");
+    if (!state.plan || !total || !brk || !btn) return;
     var q = quote();
-    el("quote-total").textContent = rp(q.amountIdr);
+    total.textContent = rp(q.amountIdr);
     var bits = ["Dasar " + rp(q.baseIdr)];
     if (q.addOnIdr) bits.push("add-on " + rp(q.addOnIdr));
     if (q.whiteLabelIdr) bits.push("merek sendiri " + rp(q.whiteLabelIdr));
-    el("quote-break").textContent = bits.join(" · ");
-    el("pay-btn").textContent = "Bayar " + rp(q.amountIdr) + " via Midtrans";
+    brk.textContent = bits.join(" · ");
+    btn.textContent = "Bayar " + rp(q.amountIdr) + " via Midtrans";
   }
 
   function render() {
     renderIndustries();
     renderPlans();
-    renderFeatures();
     renderTotals();
     el("industry-blurb").textContent = industry().blurb;
   }
@@ -207,6 +239,7 @@
 
   function status(msg, isErr) {
     var n = el("pay-status");
+    if (!n) return;
     n.textContent = msg || "";
     n.className = "pay-status" + (isErr ? " is-err" : "");
   }
@@ -261,6 +294,10 @@
 
   async function pay(ev) {
     ev.preventDefault();
+    if (!state.plan) {
+      status("Pencet paket dulu.", true);
+      return;
+    }
     var q = quote();
     var cfg = window.REKASA_CHECKOUT || {};
     var name = (el("biz-name").value || "").trim();
@@ -335,7 +372,6 @@
     }
   }
 
-  applyPlanDefaults();
   render();
   el("checkout-form").addEventListener("submit", pay);
   var q = new URLSearchParams(location.search);
