@@ -15,6 +15,7 @@ import 'verifikasi_terima.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
+import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/write_off_rules.dart';
 import '../../shared/qr/product_code.dart';
@@ -82,6 +83,16 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   }
 
   Future<void> _runIntegrityCheck() async {
+    if (!StockLeakRules.bolehBuka(widget.profile)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Hanya admin toko/pusat yang boleh cek kebocoran stok.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
     final progress = ValueNotifier<StockLeakProgress>(
       const StockLeakProgress(
         percent: 0,
@@ -114,8 +125,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 
     try {
       final toko = AttendanceAdminScope.tokoOf(widget.profile).toUpperCase();
-      final hub = AttendanceAdminScope.isAdminPusat(widget.profile) ||
-          AttendanceAdminScope.isSuperAdmin(widget.profile);
+      final hub = StockLeakRules.scanSemuaToko(widget.profile);
       final report = await StockIntegrityService().runLeakCheck(
         onProgress: (p) {
           progress.value = p;
@@ -194,6 +204,16 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   }
 
   Future<void> _reconcileLeak(StockIntegrityIssue issue) async {
+    if (!StockLeakRules.bolehRecognizeToko(widget.profile, issue.tokoId)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Hanya admin toko/cabang ini yang boleh catat selisih stok.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
     final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
       context: context,
       profile: widget.profile,
@@ -251,6 +271,15 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     final alasan = alasanCtrl.text;
     alasanCtrl.dispose();
     if (ok != true || !mounted) return;
+    if (!StockLeakRules.alasanCukup(alasan)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Alasan wajib diisi (min. ${StockLeakRules.minAlasanChars} karakter).',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
 
     try {
       await StockIntegrityService().recognizeVariance(
@@ -270,7 +299,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal catat selisih: $e\n'
-          'Jalankan migrasi recognize_stock_variance (00013 / 00004) di Supabase.',
+          'Jalankan migrasi recognize_stock_variance (000031) di Supabase.',
         ),
         backgroundColor: OptikAdminTokens.danger,
       ));
@@ -464,14 +493,15 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     onTap: _showWriteOffDialog,
                   ),
 
-                PremiumListTile(
-                  title: 'Cek Kebocoran Stok',
-                  subtitle:
-                      'Audit stok vs ledger · paket perjalanan · penjualan POS',
-                  icon: Icons.fact_check_rounded,
-                  iconColor: OptikAdminTokens.success,
-                  onTap: _runIntegrityCheck,
-                ),
+                if (StockLeakRules.bolehBuka(widget.profile))
+                  PremiumListTile(
+                    title: 'Cek Kebocoran Stok',
+                    subtitle:
+                        'Audit stok vs ledger · paket perjalanan · penjualan POS',
+                    icon: Icons.fact_check_rounded,
+                    iconColor: OptikAdminTokens.success,
+                    onTap: _runIntegrityCheck,
+                  ),
 
                 PremiumListTile(
                   title: 'Tracking Logistics',

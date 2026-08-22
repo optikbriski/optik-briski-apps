@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'logistics_tracking_service.dart';
+import 'stock_leak_rules.dart';
 
 class StockIntegrityIssue {
   StockIntegrityIssue({
@@ -582,20 +583,33 @@ class StockIntegrityService {
     required String alasan,
     String? actorNama,
   }) async {
-    if (issue.delta == 0) {
+    if (!StockLeakRules.adaSelisih(issue.delta)) {
       return {'ok': true, 'changed': false};
     }
-    if (alasan.trim().isEmpty) {
-      throw 'Alasan wajib diisi.';
+    if (!StockLeakRules.alasanCukup(alasan)) {
+      throw 'Alasan terlalu singkat (min. ${StockLeakRules.minAlasanChars} karakter).';
     }
-    final res = await _client.rpc('recognize_stock_variance', params: {
-      'p_toko': issue.tokoId,
-      'p_sku': issue.sku,
-      'p_alasan_text': alasan.trim(),
-      'p_actor_id': _client.auth.currentUser?.id,
-      'p_actor_nama': actorNama ?? _client.auth.currentUser?.email,
-    });
-    return Map<String, dynamic>.from(res as Map);
+    try {
+      final res = await _client.rpc('recognize_stock_variance', params: {
+        'p_toko': issue.tokoId.trim().toUpperCase(),
+        'p_sku': issue.sku.trim(),
+        'p_alasan_text': alasan.trim(),
+        'p_actor_id': _client.auth.currentUser?.id,
+        'p_actor_nama': actorNama ?? _client.auth.currentUser?.email,
+      });
+      final map = Map<String, dynamic>.from(res as Map);
+      final before = int.tryParse('${map['stock_before'] ?? map['stock'] ?? ''}');
+      final after = int.tryParse('${map['stock_after'] ?? map['stock'] ?? ''}');
+      if (before != null &&
+          after != null &&
+          !StockLeakRules.stokTetap(stockBefore: before, stockAfter: after)) {
+        throw 'Rekognisi tidak boleh mengubah stok rak.';
+      }
+      return map;
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal catat selisih kebocoran.' : msg;
+    }
   }
 
   @Deprecated('Gunakan runLeakCheck()')
