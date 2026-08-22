@@ -113,7 +113,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     );
 
     try {
-      final toko = AttendanceAdminScope.tokoOf(widget.profile);
+      final toko = AttendanceAdminScope.tokoOf(widget.profile).toUpperCase();
       final hub = AttendanceAdminScope.isAdminPusat(widget.profile) ||
           AttendanceAdminScope.isSuperAdmin(widget.profile);
       final report = await StockIntegrityService().runLeakCheck(
