@@ -1401,9 +1401,10 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       ));
     } on PostgrestException catch (e) {
       if (!mounted) return;
+      final taken = loginIdentityTakenMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          "${"reg_gagal".tr()}${e.message.isNotEmpty ? e.message : e.code ?? ''}",
+          "${"reg_gagal".tr()}${taken ?? (e.message.isNotEmpty ? e.message : e.code ?? '')}",
         ),
         backgroundColor: Colors.redAccent,
         duration: const Duration(seconds: 5),
@@ -1411,8 +1412,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     } catch (error) {
       debugPrint('register submit: $error');
       if (!mounted) return;
+      final taken = loginIdentityTakenMessage(error);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("${"reg_gagal".tr()}$error"),
+        content: Text("${"reg_gagal".tr()}${taken ?? error}"),
         backgroundColor: Colors.redAccent,
         duration: const Duration(seconds: 5),
       ));

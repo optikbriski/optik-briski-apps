@@ -90,6 +90,26 @@ void main() {
     );
   });
 
+  test('login identity SQL is global, not per-tenant', () {
+    final sql = File(
+      'supabase/migrations/20260820000017_login_identity_global.sql',
+    ).readAsStringSync();
+    expect(sql, contains('karyawan_email_global_uidx'));
+    expect(sql, contains('members_email_global_uidx'));
+    expect(sql, contains('members_phone_global_uidx'));
+    expect(sql, contains('profiles_email_global_uidx'));
+    expect(sql, contains('Email sudah dipakai akun merek lain'));
+    expect(sql, contains('drop index if exists public.karyawan_email_tenant_uidx'));
+  });
+
+  test('loginIdentityTakenMessage maps unique-login errors', () {
+    expect(
+      loginIdentityTakenMessage('Email sudah dipakai akun merek lain'),
+      contains('Tidak boleh sama antar merek'),
+    );
+    expect(loginIdentityTakenMessage('network timeout'), isNull);
+  });
+
   test('requireResolved refuses empty slug on shared Rekasa shell', () async {
     TenantService.instance.debugUnbind();
     TenantService.instance.slug = '';

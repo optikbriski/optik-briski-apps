@@ -271,3 +271,20 @@ Map<String, dynamic> withTenant(Map<String, dynamic> params) {
   params['p_tenant_id'] = TenantService.instance.boundId;
   return params;
 }
+
+/// Email / HP login sudah dipakai merek lain (unik global).
+String? loginIdentityTakenMessage(Object error) {
+  final s = error.toString().toLowerCase();
+  if (s.contains('merek lain') ||
+      s.contains('tidak boleh sama antar merek') ||
+      s.contains('karyawan_email_global') ||
+      s.contains('members_email_global') ||
+      s.contains('members_phone_global') ||
+      s.contains('profiles_email_global') ||
+      s.contains('login_email') ||
+      s.contains('login_phone')) {
+    return 'Email atau nomor HP ini sudah dipakai akun lain. '
+        'Tidak boleh sama antar merek.';
+  }
+  return null;
+}
