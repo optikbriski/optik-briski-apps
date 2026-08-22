@@ -108,6 +108,25 @@ class AttendanceAdminScope {
   static bool canManageJadwal(Map<String, dynamic> profile) =>
       canOpenKaryawanManagement(profile);
 
+  /// Kasir POS: admin/kasir usaha ini. Bukan owner etalase. Bukan merek lain.
+  static bool canOpenPos(Map<String, dynamic> profile) {
+    if (isOwner(profile)) return false;
+    if (isPusatOperator(profile) || isAdminToko(profile)) return true;
+    return roleOf(profile) == 'kasir' && tokoOf(profile).isNotEmpty;
+  }
+
+  /// Jual di toko ini? admin_toko/kasir hanya toko sendiri. Bukan cabang orang.
+  static bool canPosCheckoutToko(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) {
+    if (!canOpenPos(profile)) return false;
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return false;
+    if (canViewAllStores(profile)) return true;
+    return sameTokoId(tokoOf(profile), t);
+  }
+
   /// Boleh ubah jadwal/kuota toko ini? Bukan merek lain. Bukan cabang orang.
   static bool canEditTokoJadwal(
     Map<String, dynamic> profile,

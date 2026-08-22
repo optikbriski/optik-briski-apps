@@ -51,7 +51,9 @@ import 'garansi_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/member/member_repository.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/pos_duty_gate.dart';
+import '../../shared/pos/pos_checkout_rules.dart';
 import '../../shared/pos/pos_midtrans.dart';
 
 // ============================================================================
@@ -3379,13 +3381,13 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   int get _totalAkhir {
-    final diskon = _appliedVoucherCode != null
-        ? (_appliedVoucherNominal > 0
-            ? _appliedVoucherNominal
-            : _parseDiskonRpText(discountCtrl.text))
-        : _parseDiskonRpText(discountCtrl.text);
-    final total = _subtotalBelanja - diskon;
-    return total < 0 ? 0 : total;
+    return PosCheckoutRules.totalAkhir(
+      subtotal: _subtotalBelanja,
+      voucherCode: _appliedVoucherCode,
+      voucherNominal: _appliedVoucherNominal > 0
+          ? _appliedVoucherNominal
+          : _parseDiskonRpText(discountCtrl.text),
+    );
   }
 
 // 🎯 FIXED FINAL CONFIG: DATA PELANGGAN KIRI, METADATA + KASIR KANAN, BADGE ATAS QR
@@ -3821,12 +3823,34 @@ class _SalesPageState extends State<SalesPage> {
       _showSnack("pos_err_nama_pelanggan".tr(), OptikAdminTokens.danger);
       return;
     }
+    final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+    if (tenant == null || tenant.isEmpty) {
+      _showSnack(
+        'Kode usaha belum terverifikasi. Tidak boleh jual merek lain.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+    final tokoForGate = (widget.profile['toko_id'] ?? '').toString();
+    if (!AttendanceAdminScope.canPosCheckoutToko(widget.profile, tokoForGate)) {
+      _showSnack(
+        'Hanya kasir toko ini yang boleh checkout.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+
     // Kasir penanggung jawab harus masih bertugas (belom pulang / bukan libur).
     final cashierId = activeCashier?['id']?.toString();
     final cashierNik = activeCashier?['nik']?.toString();
-    if (cashierId != null &&
-        cashierId.isNotEmpty &&
-        (cashierNik ?? '').toUpperCase() != 'TRAINING01') {
+    if (cashierId == null || cashierId.isEmpty) {
+      _showSnack(
+        'Unlock kasir dulu — checkout tanpa petugas ditolak.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+    if ((cashierNik ?? '').toUpperCase() != 'TRAINING01') {
       final dutyBlock = await PosDutyGate.blockReason(
         karyawanId: cashierId,
         nik: cashierNik,
@@ -3848,7 +3872,7 @@ class _SalesPageState extends State<SalesPage> {
         }
       }
 
-      final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+      final tokoId = tokoForGate;
       int total = _totalAkhir;
       final voucherCode = (_appliedVoucherCode ?? '').trim();
       final voucherDiscount = voucherCode.isEmpty

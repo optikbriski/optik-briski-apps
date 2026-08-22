@@ -539,7 +539,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
 
                           if (TrainingCurriculum.allows('pos') &&
-                              mod.allows('pos'))
+                              mod.allows('pos') &&
+                              AttendanceAdminScope.canOpenPos(widget.profile))
                             PremiumMenuTile(
                               title: "POS Cashier",
                               icon: Icons.point_of_sale_rounded,

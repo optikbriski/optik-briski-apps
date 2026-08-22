@@ -73,6 +73,23 @@ void main() {
         AttendanceAdminScope.canEditTokoJadwal(p('admin_pusat', 'PUSAT'), 'PUSAT'),
         isTrue,
       );
+      expect(AttendanceAdminScope.canOpenPos(profile), isTrue);
+      expect(
+        AttendanceAdminScope.canPosCheckoutToko(profile, 'CABANG-X'),
+        isTrue,
+      );
+      expect(
+        AttendanceAdminScope.canPosCheckoutToko(profile, 'CABANG-Y'),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canOpenPos(p('owner', 'PUSAT')),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canPosCheckoutToko(p('kasir', 'CABANG-X'), 'CABANG-X'),
+        isTrue,
+      );
       expect(
         AttendanceAdminScope.canEditTokoGeofence(profile, 'CABANG-X'),
         isTrue,
