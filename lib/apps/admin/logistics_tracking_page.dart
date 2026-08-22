@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_osm_map.dart';
+import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -51,6 +52,14 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   }
 
   Future<void> _load() async {
+    if (!LogisticsTrackingRules.bolehBuka(widget.profile)) {
+      setState(() {
+        _loading = false;
+        _error = 'Hanya admin toko/pusat yang boleh buka tracking logistics.';
+        _moves = [];
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -134,6 +143,20 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   Future<void> _assignKurir() async {
     final move = _selected;
     if (move == null || _busyKurir) return;
+    if (!LogisticsTrackingRules.bolehAssignKurir(
+      profile: widget.profile,
+      dari: move['dari_lokasi']?.toString(),
+      status: move['status']?.toString(),
+    )) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Hanya gudang asal yang boleh set kurir, dan hanya saat paket masih terbuka.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
     final isPusat = _svc.isPusatView(widget.profile);
     final picked = await showKurirPickDialog(
       context,
@@ -607,6 +630,11 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     final isPrep = st == 'PREPARING' || st == 'WAITING';
     final isPending = st == 'PENDING';
     final isDo = tipe == 'DO';
+    final bolehKurir = LogisticsTrackingRules.bolehAssignKurir(
+      profile: widget.profile,
+      dari: m['dari_lokasi']?.toString(),
+      status: st,
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -692,6 +720,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
+              if (bolehKurir)
               FilledButton.icon(
                 onPressed: _busyKurir ? null : _assignKurir,
                 style: FilledButton.styleFrom(

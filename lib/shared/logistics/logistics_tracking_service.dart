@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../attendance/attendance_admin_scope.dart';
 import '../attendance/pos_duty_gate.dart';
-import 'stock_move_report_rules.dart';
+import 'logistics_tracking_rules.dart';
 
 /// Status surat jalan yang masih “di jalan” (bisa dilacak di peta gratis).
 const kLogisticsOpenStatuses = ['PREPARING', 'WAITING', 'TRANSIT', 'PENDING'];
@@ -41,7 +41,7 @@ class LogisticsTrackingService {
       'bukti_foto_penerima, bukti_foto_penerim';
 
   bool isPusatView(Map<String, dynamic> profile) =>
-      StockMoveReportRules.isTenantWideHistoryView(profile);
+      LogisticsTrackingRules.isHub(profile);
 
   /// Surat jalan terbuka untuk tracking Admin.
   Future<List<Map<String, dynamic>>> listOpenMoves({
@@ -53,7 +53,7 @@ class LogisticsTrackingService {
         .select(_openSelect)
         .inFilter('status', kLogisticsOpenStatuses);
 
-    if (!isPusatView(profile)) {
+    if (!LogisticsTrackingRules.isHub(profile)) {
       final myToko = (profile['toko_id'] ?? '').toString().toUpperCase();
       if (myToko.isNotEmpty) {
         final aliases = AttendanceAdminScope.storeIdAliases(myToko);
@@ -137,42 +137,32 @@ class LogisticsTrackingService {
       throw dutyBlock.tr();
     }
 
-    final row = await _db
-        .from('stock_move_history')
-        .select('id, status')
-        .eq('id', id)
-        .maybeSingle();
-    if (row == null) throw 'Surat jalan tidak ditemukan.';
-    final st = (row['status'] ?? '').toString().toUpperCase();
-    if (!StockMoveReportRules.canAssignKurir(st)) {
-      throw 'Tidak bisa set kurir — status ${statusLabel(st)}.';
+    try {
+      await _db.rpc('assign_stock_move_kurir', params: {
+        'p_move_id': id,
+        'p_karyawan_id': kid,
+        'p_nama': nm,
+      });
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal set kurir.' : msg;
     }
-
-    await _db.from('stock_move_history').update({
-      'kurir_karyawan_id': kid,
-      'kurir_nama': nm,
-    }).eq('id', id);
   }
 
   Future<void> clearKurir(String moveId) async {
     final id = moveId.trim();
     if (id.isEmpty) throw 'ID surat jalan kosong.';
 
-    final row = await _db
-        .from('stock_move_history')
-        .select('id, status')
-        .eq('id', id)
-        .maybeSingle();
-    if (row == null) throw 'Surat jalan tidak ditemukan.';
-    final st = (row['status'] ?? '').toString().toUpperCase();
-    if (!StockMoveReportRules.canAssignKurir(st)) {
-      throw 'Tidak bisa hapus kurir — status ${statusLabel(st)}.';
+    try {
+      await _db.rpc('assign_stock_move_kurir', params: {
+        'p_move_id': id,
+        'p_karyawan_id': null,
+        'p_nama': null,
+      });
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal hapus kurir.' : msg;
     }
-
-    await _db.from('stock_move_history').update({
-      'kurir_karyawan_id': null,
-      'kurir_nama': null,
-    }).eq('id', id);
   }
 
   static String tipeLabel(Map<String, dynamic> move) {

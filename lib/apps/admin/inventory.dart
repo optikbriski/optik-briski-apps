@@ -15,6 +15,7 @@ import 'verifikasi_terima.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
+import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/write_off_rules.dart';
@@ -503,22 +504,23 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     onTap: _runIntegrityCheck,
                   ),
 
-                PremiumListTile(
-                  title: 'Tracking Logistics',
-                  subtitle:
-                      'Peta OSM · DO/RO/Retur aktif · pilih kurir · rute toko',
-                  icon: Icons.map_rounded,
-                  iconColor: OptikAdminTokens.warning,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) =>
-                            LogisticsTrackingPage(profile: widget.profile),
-                      ),
-                    );
-                  },
-                ),
+                if (LogisticsTrackingRules.bolehBuka(widget.profile))
+                  PremiumListTile(
+                    title: 'Tracking Logistics',
+                    subtitle:
+                        'Peta OSM · DO/RO/Retur aktif · pilih kurir · rute toko',
+                    icon: Icons.map_rounded,
+                    iconColor: OptikAdminTokens.warning,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) =>
+                              LogisticsTrackingPage(profile: widget.profile),
+                        ),
+                      );
+                    },
+                  ),
 
                 PremiumListTile(
                   title: isPusat
