@@ -31,8 +31,6 @@ import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
-import 'owner_provision_page.dart';
-import 'owner_finance_ops_page.dart';
 import 'tenant_admin_page.dart';
 import 'rekasa_store_orders_page.dart';
 
@@ -367,28 +365,6 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
 
-                          // Buat Owner (franchise) — provision only.
-                          if (!training &&
-                              (widget.profile['toko_id'] == 'PUSAT' ||
-                                  widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT' ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'super_admin'))
-                            PremiumMenuTile(
-                              title: 'Buat Owner',
-                              icon: Icons.workspace_premium_rounded,
-                              color: OptikAdminTokens.navy,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => OwnerProvisionPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
                           if (!training &&
                               isRekasaControlPlane &&
                               (widget.profile['is_platform'] == true ||
@@ -419,29 +395,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => TenantAdminPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Payroll period + mutasi saldo pusat↔toko (Owner monitor sync).
-                          if (!training &&
-                              mod.allows('finance') &&
-                              (widget.profile['toko_id'] == 'PUSAT' ||
-                                  widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT' ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'super_admin'))
-                            PremiumMenuTile(
-                              title: 'Payroll & Saldo Owner',
-                              icon: Icons.account_balance_wallet_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => OwnerFinanceOpsPage(
                                     profile: widget.profile,
                                   ),
                                 ),
