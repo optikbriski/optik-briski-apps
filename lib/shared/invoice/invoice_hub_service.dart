@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
 import '../garansi/garansi_service.dart';
 import '../karyawan/lab_job_service.dart';
 import '../qr/obr_codes.dart';
@@ -48,12 +49,29 @@ class InvoiceHubService {
   Future<Map<String, dynamic>?> _fallbackStaffLoad(String noInvoice) async {
     final user = _db.auth.currentUser;
     if (user == null) return null;
+    final profile = await _db
+        .from('profiles')
+        .select('role, toko_id, tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (profile == null) return null;
     final sale = await _db
         .from('sales')
         .select()
         .eq('no_invoice', noInvoice)
         .maybeSingle();
     if (sale == null) return null;
+    if (!AttendanceAdminScope.canPosCheckoutToko(
+      Map<String, dynamic>.from(profile),
+      sale['toko_id']?.toString(),
+    )) {
+      return null;
+    }
+    final saleTenant = (sale['tenant_id'] ?? '').toString().trim();
+    if (saleTenant.isNotEmpty &&
+        !AttendanceAdminScope.matchesBoundTenant(saleTenant)) {
+      return null;
+    }
     final items = await _db
         .from('sales_items')
         .select(

@@ -20,6 +20,10 @@ class TrainingRpcStubs {
         return _validateAttendanceQr(params);
       case 'get_invoice_hub':
         return _getInvoiceHub(params);
+      case 'settle_invoice_dp':
+        return _settleInvoiceDp(params);
+      case 'mark_invoice_goods_ready':
+        return _markInvoiceGoodsReady(params);
       case 'set_invoice_pembuat':
         return _setInvoicePembuat(params);
       case 'submit_invoice_rating':
@@ -174,6 +178,50 @@ class TrainingRpcStubs {
       'qr_claim_ready': phase == 'CLAIM',
       'training': true,
     };
+  }
+
+  static Future<Map<String, dynamic>> _settleInvoiceDp(
+    Map<String, dynamic>? p,
+  ) async {
+    final saleId = (p?['p_sale_id'] ?? '').toString();
+    final store = TrainingSandboxStore.instance;
+    final sale = await store.selectOne('sales', where: {'id': saleId});
+    if (sale == null) return {'ok': false, 'error': 'Transaksi tidak ditemukan.'};
+    final total = int.tryParse('${sale['total_harga'] ?? 0}') ?? 0;
+    final ready =
+        (sale['tracking_status'] ?? '').toString().toUpperCase() ==
+            'SIAP_PELUNASAN';
+    final updated = {
+      ...sale,
+      'status_pembayaran': 'LUNAS',
+      'dibayarkan': total,
+      'sisa_tagihan': 0,
+      'tracking_status': ready ? 'SIAP_DIAMBIL' : 'PENDING_PO',
+      'metode_pembayaran': (p?['p_metode'] ?? '').toString(),
+      'training': true,
+    };
+    await store.update('sales', updated, where: {'id': saleId});
+    return updated;
+  }
+
+  static Future<Map<String, dynamic>> _markInvoiceGoodsReady(
+    Map<String, dynamic>? p,
+  ) async {
+    final saleId = (p?['p_sale_id'] ?? '').toString();
+    final store = TrainingSandboxStore.instance;
+    final sale = await store.selectOne('sales', where: {'id': saleId});
+    if (sale == null) return {'ok': false, 'error': 'Transaksi tidak ditemukan.'};
+    final sisa = int.tryParse('${sale['sisa_tagihan'] ?? 0}') ?? 0;
+    final isDp =
+        (sale['status_pembayaran']?.toString().toUpperCase() == 'DP') ||
+            sisa > 0;
+    final updated = {
+      ...sale,
+      'tracking_status': isDp ? 'SIAP_PELUNASAN' : 'SIAP_DIAMBIL',
+      'training': true,
+    };
+    await store.update('sales', updated, where: {'id': saleId});
+    return updated;
   }
 
   static Future<Map<String, dynamic>> _setInvoicePembuat(

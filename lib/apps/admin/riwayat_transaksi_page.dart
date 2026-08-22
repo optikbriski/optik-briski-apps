@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/invoice/invoice_delivery_result.dart';
 import '../../shared/invoice/invoice_delivery_service.dart';
 import '../../shared/invoice/invoice_detail_page.dart';
+import '../../shared/invoice/invoice_lifecycle_rules.dart';
 import '../../shared/invoice/invoice_lifecycle_service.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
@@ -72,20 +74,32 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         .format(nominal);
   }
 
-  bool get _isOwnerOrPusat {
-    final role = widget.profile['role']?.toString().toLowerCase() ?? '';
-    final toko =
-        widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-    return role == 'owner' || toko == 'PUSAT';
-  }
+  bool get _canSeeAllStores =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
+
+  bool get _canOpenBoard => AttendanceAdminScope.canOpenPos(widget.profile);
+
+  bool _canActOnToko(String? tokoId) =>
+      AttendanceAdminScope.canPosCheckoutToko(widget.profile, tokoId);
 
   void _inisialisasiHakAksesAplikasi() {
-    if (_isOwnerOrPusat) {
+    if (!_canOpenBoard) {
+      selectedTokoId = null;
+      isLoading = false;
+      return;
+    }
+    if (_canSeeAllStores) {
       selectedTokoId = null;
       _fetchSeluruhDataTransaksiOwner();
     } else {
       selectedTokoId =
-          widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
+          widget.profile['toko_id']?.toString().toUpperCase() ?? '';
+      if (selectedTokoId == null ||
+          selectedTokoId!.isEmpty ||
+          !_canActOnToko(selectedTokoId)) {
+        isLoading = false;
+        return;
+      }
       _fetchDataTransaksiPerCabang(selectedTokoId!);
     }
   }
@@ -94,11 +108,11 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      final res = await supabase
-          .from('sales')
-          .select()
-          .order('created_at', ascending: false);
-      final data = List<Map<String, dynamic>>.from(res);
+      var query = supabase.from('sales').select();
+      final tid = AttendanceAdminScope.boundTenantIdOrNull();
+      if (tid != null) query = query.eq('tenant_id', tid);
+      final res = await query.order('created_at', ascending: false);
+      final data = _visibleSales(List<Map<String, dynamic>>.from(res));
       final cabang = data
           .map((e) => e['toko_id']?.toString().toUpperCase() ?? 'PUSAT')
           .toSet()
@@ -122,12 +136,15 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     if (!mounted) return false;
     if (!silent) setState(() => isLoading = true);
     try {
-      final res = await supabase
-          .from('sales')
-          .select()
-          .eq('toko_id', tokoId)
-          .order('created_at', ascending: false);
-      final data = List<Map<String, dynamic>>.from(res);
+      if (!_canActOnToko(tokoId)) {
+        _fail('Bukan kasir toko ini.');
+        return false;
+      }
+      var query = supabase.from('sales').select().eq('toko_id', tokoId);
+      final tid = AttendanceAdminScope.boundTenantIdOrNull();
+      if (tid != null) query = query.eq('tenant_id', tid);
+      final res = await query.order('created_at', ascending: false);
+      final data = _visibleSales(List<Map<String, dynamic>>.from(res));
       final garansiMap = await _loadGaransiAktifMap(data);
       if (!mounted) return false;
       setState(() {
@@ -206,29 +223,28 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
   // --- Klasifikasi: DP / PENDING / READY / CLEAR ---
 
-  static bool isDp(Map<String, dynamic> sale) {
-    final pay = (sale['status_pembayaran'] ?? '').toString().toUpperCase();
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    return pay == 'DP' || sisa > 0;
+  List<Map<String, dynamic>> _visibleSales(List<Map<String, dynamic>> rows) {
+    return rows.where((s) {
+      final rowTenant = (s['tenant_id'] ?? '').toString().trim();
+      if (rowTenant.isNotEmpty &&
+          !AttendanceAdminScope.matchesBoundTenant(rowTenant)) {
+        return false;
+      }
+      return _canActOnToko(s['toko_id']?.toString());
+    }).toList();
   }
 
-  static bool isClear(Map<String, dynamic> sale) {
-    final tracking =
-        (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
-    return sale['diambil_at'] != null || tracking == 'DIAMBIL';
-  }
+  static bool isDp(Map<String, dynamic> sale) =>
+      InvoiceLifecycleRules.isDp(sale);
 
-  static bool isReady(Map<String, dynamic> sale) {
-    if (isDp(sale) || isClear(sale)) return false;
-    final tracking =
-        (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
-    return tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
-  }
+  static bool isClear(Map<String, dynamic> sale) =>
+      InvoiceLifecycleRules.isClear(sale);
 
-  static bool isPending(Map<String, dynamic> sale) {
-    if (isDp(sale) || isClear(sale) || isReady(sale)) return false;
-    return true;
-  }
+  static bool isReady(Map<String, dynamic> sale) =>
+      InvoiceLifecycleRules.isReady(sale);
+
+  static bool isPending(Map<String, dynamic> sale) =>
+      InvoiceLifecycleRules.isPending(sale);
 
   static _PayBucket bucketOf(Map<String, dynamic> sale) {
     if (isDp(sale)) return _PayBucket.dp;
@@ -438,7 +454,11 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     if (_busy) return;
     final saleId = trx['id']?.toString();
     if (saleId == null) return;
-    final sisa = int.tryParse(trx['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    if (!_canActOnToko(trx['toko_id']?.toString() ?? selectedTokoId)) {
+      _fail('Bukan kasir toko nota ini.');
+      return;
+    }
+    final sisa = InvoiceLifecycleRules.remainingFromRow(trx);
     final wasReady = _dpQrIssued(trx);
     final metode = await _pickMetode(sisa, alreadyReady: wasReady);
     if (metode == null || !mounted) return;
@@ -508,6 +528,10 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     if (_busy) return;
     final saleId = trx['id']?.toString();
     if (saleId == null) return;
+    if (!_canActOnToko(trx['toko_id']?.toString() ?? selectedTokoId)) {
+      _fail('Bukan kasir toko nota ini.');
+      return;
+    }
     final toko = selectedTokoId;
     if (toko == null) {
       _fail('Cabang belum dipilih — buka ulang dari daftar cabang.');
@@ -1029,7 +1053,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   }
 
   bool _handleBack() {
-    if (selectedTokoId != null && _isOwnerOrPusat) {
+    if (selectedTokoId != null && _canSeeAllStores) {
       FocusManager.instance.primaryFocus?.unfocus();
       _clearSearch();
       setState(() {
@@ -1049,7 +1073,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         : '${selectedTokoId!} · ${_bucketTitle(_selectedBucket)}';
 
     return PopScope(
-      canPop: selectedTokoId == null || !_isOwnerOrPusat,
+      canPop: selectedTokoId == null || !_canSeeAllStores,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         _handleBack();
@@ -1094,9 +1118,25 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
             ? const Center(
                 child: CircularProgressIndicator(color: OptikAdminTokens.ice),
               )
-            : selectedTokoId == null
-                ? _buildStage1LayarCabang()
-                : _buildBoard(),
+            : !_canOpenBoard
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Owner etalase tidak mengoperasikan board kasir. '
+                        'DP · PENDING · READY · CLEAR hanya untuk kasir / admin toko.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: OptikAdminTokens.textMuted,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  )
+                : selectedTokoId == null
+                    ? _buildStage1LayarCabang()
+                    : _buildBoard(),
       ),
     );
   }

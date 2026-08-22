@@ -557,7 +557,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           // Request Order: only via Logistics hub (not a dashboard tile).
 
                           if (TrainingCurriculum.allows('history_dp') &&
-                              mod.allows('history_dp'))
+                              mod.allows('history_dp') &&
+                              AttendanceAdminScope.canOpenPos(widget.profile))
                             PremiumMenuTile(
                               title: "DP · PENDING · READY · CLEAR",
                               icon: Icons.history_edu,

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_link.dart';
 import 'sale_fulfillment_service.dart';
 
@@ -209,7 +210,12 @@ class InvoiceLifecycleService {
     );
   }
 
-  /// Pelunasan sisa (1x) + jurnal finance + langsung LUNAS ready.
+  Future<Map<String, dynamic>> _saleFromRpc(String fn, dynamic res) {
+    if (res is Map) return Map<String, dynamic>.from(res);
+    throw 'Respons $fn tidak valid.';
+  }
+
+  /// Pelunasan sisa (1x) lewat RPC: nominal dari baris nota, bukan dari HP.
   Future<Map<String, dynamic>> _settleDpCore({
     required Map<String, dynamic> sale,
     required String saleId,
@@ -217,70 +223,24 @@ class InvoiceLifecycleService {
     required String staffNik,
     required String staffNama,
   }) async {
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    final dibayar = int.tryParse(sale['dibayarkan']?.toString() ?? '0') ?? 0;
-    final total = int.tryParse(sale['total_harga']?.toString() ?? '0') ?? 0;
-    final bayarPelunasan = sisa > 0 ? sisa : (total - dibayar).clamp(0, total);
-    if (bayarPelunasan <= 0) throw 'Tidak ada sisa tagihan untuk dilunasi.';
-
     final metode = metodePembayaran.trim();
     if (metode.isEmpty) throw 'Metode pembayaran wajib.';
-
-    final now = DateTime.now();
-    final lunasToken = newToken();
+    if (InvoiceLifecycleRules.remainingFromRow(sale) <= 0) {
+      throw 'Tidak ada sisa tagihan untuk dilunasi.';
+    }
 
     try {
-      // SETTLE-* agar kas harian menghitung pelunasan, tanpa double-count omzet POS.
-      final settleRef =
-          'SETTLE-${sale['no_invoice']}-${now.millisecondsSinceEpoch}';
-      await _db.from('finance_transactions').insert({
-        'toko_id': sale['toko_id'],
-        'tanggal_transaksi': now.toIso8601String().split('T').first,
-        'jenis_transaksi': 'PEMASUKAN',
-        'kategori': 'Pelunasan Kasir',
-        'deskripsi':
-            'Pelunasan ${sale['no_invoice']} · ${sale['nama_pelanggan'] ?? ''} · oleh $staffNama ($staffNik)',
-        'nominal': bayarPelunasan,
-        'status_pembayaran': 'LUNAS',
-        'metode_pembayaran': metode,
-        'nama_kasir': staffNama,
-        'status_konfirmasi': 'APPROVED',
-        'referensi_id': settleRef,
-        'updated_at': now.toIso8601String(),
+      final res = await _db.rpc('settle_invoice_dp', params: {
+        'p_sale_id': saleId,
+        'p_metode': metode,
+        'p_staff_nik': staffNik,
+        'p_staff_nama': staffNama,
       });
-    } catch (e) {
-      throw 'Gagal catat finance pelunasan — sales tidak diubah. Detail: $e';
+      return _saleFromRpc('settle_invoice_dp', res);
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal pelunasan DP.' : msg;
     }
-
-    final tracking =
-        (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
-    // Board READY (SIAP_DIAMBIL) hanya jika admin sudah Barang Ready (SIAP_PELUNASAN).
-    final dpAlreadyReady = tracking == 'SIAP_PELUNASAN';
-
-    try {
-      await _db.from('sales').update({
-        'status_pembayaran': 'LUNAS',
-        'dibayarkan': dibayar + bayarPelunasan,
-        'sisa_tagihan': 0,
-        // Sudah Barang Ready → SIAP_DIAMBIL (board: READY) + QR ambil.
-        // Belum ready → PENDING_PO (board: PENDING) sampai admin Barang Ready.
-        'tracking_status': dpAlreadyReady ? 'SIAP_DIAMBIL' : 'PENDING_PO',
-        'metode_pembayaran': metode,
-        'lunas_at': now.toUtc().toIso8601String(),
-        'qr_dp_used_at': now.toUtc().toIso8601String(),
-        'qr_dp_used_by': staffNik,
-        if (dpAlreadyReady) 'qr_lunas_token': lunasToken,
-        if (dpAlreadyReady) 'qr_lunas_used_at': null,
-        if (dpAlreadyReady) 'qr_lunas_used_by': null,
-      }).eq('id', saleId);
-    } catch (e) {
-      throw 'Finance sudah tercatat, tetapi update sales gagal. '
-          'Hubungi admin segera (invoice ${sale['no_invoice']}). Detail: $e';
-    }
-
-    final updated =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
-    return Map<String, dynamic>.from(updated ?? sale);
   }
 
   /// Admin: barang ready — DP → QR pelunasan; lunas → QR pengambilan.
@@ -311,60 +271,30 @@ class InvoiceLifecycleService {
       }
     }
 
-    // Tandai line READY (partial atau semua pending RO).
-    await _fulfillment.markLinesReady(
-      saleId: saleId,
-      saleItemIds: saleItemIds,
-    );
-
-    final by = [
-      if ((staffNama ?? '').trim().isNotEmpty) staffNama!.trim(),
-      if (staffNik.trim().isNotEmpty) staffNik.trim(),
-    ].join(' · ');
-
-    if (isDp) {
-      // DP: SIAP_PELUNASAN + (re)issue QR pelunasan.
-      final existing = (sale['qr_dp_token'] ?? '').toString().trim();
-      final reuse = tracking == 'SIAP_PELUNASAN' &&
-          existing.length >= 8 &&
-          sale['qr_dp_used_at'] == null;
-      final dpToken = reuse ? existing : newToken();
-      await _db.from('sales').update({
-        'tracking_status': 'SIAP_PELUNASAN',
-        'qr_dp_token': dpToken,
-        'qr_dp_used_at': null,
-        'qr_dp_used_by': null,
-        if (by.isNotEmpty) 'nama_kasir': sale['nama_kasir'] ?? by,
-      }).eq('id', saleId);
-      final updated =
-          await _db.from('sales').select().eq('id', saleId).maybeSingle();
-      return Map<String, dynamic>.from(updated ?? sale);
+    final ids = (saleItemIds ?? [])
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    try {
+      final res = await _db.rpc('mark_invoice_goods_ready', params: {
+        'p_sale_id': saleId,
+        'p_staff_nik': staffNik,
+        'p_staff_nama': staffNama,
+        if (ids.isNotEmpty) 'p_item_ids': ids,
+      });
+      final out = _saleFromRpc('mark_invoice_goods_ready', res);
+      if (!isDp) {
+        final track =
+            (out['tracking_status'] ?? '').toString().trim().toUpperCase();
+        if (track != 'SIAP_DIAMBIL' && track != 'CLEAR') {
+          throw 'Gagal set READY (SIAP_DIAMBIL) untuk nota ini. Coba lagi.';
+        }
+      }
+      return out;
+    } on PostgrestException catch (e) {
+      final msg = e.message.trim();
+      throw msg.isEmpty ? 'Gagal tandai Barang Ready.' : msg;
     }
-
-    // LUNAS pending → board READY (SIAP_DIAMBIL) + pastikan QR LUNAS aktif.
-    // Satu update atomik agar tidak tertahan di PENDING_PO setelah recompute.
-    final existingLunas = (sale['qr_lunas_token'] ?? '').toString().trim();
-    final lunasToken = (existingLunas.length >= 8 &&
-            sale['qr_lunas_used_at'] == null)
-        ? existingLunas
-        : newToken();
-    await _db.from('sales').update({
-      'tracking_status': 'SIAP_DIAMBIL',
-      'qr_lunas_token': lunasToken,
-      'qr_lunas_used_at': null,
-      'qr_lunas_used_by': null,
-      if (by.isNotEmpty) 'nama_kasir': sale['nama_kasir'] ?? by,
-    }).eq('id', saleId);
-
-    final updated =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
-    final out = Map<String, dynamic>.from(updated ?? sale);
-    final track =
-        (out['tracking_status'] ?? '').toString().trim().toUpperCase();
-    if (track != 'SIAP_DIAMBIL' && track != 'CLEAR') {
-      throw 'Gagal set READY (SIAP_DIAMBIL) untuk nota ini. Coba lagi.';
-    }
-    return out;
   }
 
   /// Alias lama → [markGoodsReadyAndIssueCustomerQr] (lunas pending).
