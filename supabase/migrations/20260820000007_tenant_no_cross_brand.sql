@@ -1,8 +1,6 @@
 -- =============================================================================
--- 000007 rev3 — harus ada: execute format('drop function if exists %s'
--- Kalau baris itu tidak ada, ini file lama. Jangan di-Run.
--- Sekat sisa nabrak antar merek. Jangan diam-diam pakai tenant Optik.
--- Apply setelah 000001–000006.
+-- 000007 rev4 — default Optik diganti DEFAULT NULL, bukan dihapus.
+-- Kalau baris pertama masih rev3 / tidak ada DEFAULT NULL, file lama.
 -- =============================================================================
 
 -- 1) Tenant wajib. Null ≠ Optik.
@@ -30,8 +28,8 @@ $$;
 comment on function public.require_member_tenant(uuid) is
   'Fail-closed. Null tidak boleh jatuh ke Optik.';
 
--- 2) Buang default UUID Optik di argumen RPC.
--- CREATE OR REPLACE tidak boleh menghapus DEFAULT (42P13) — DROP dulu.
+-- 2) Default UUID Optik → NULL. Jangan hapus DEFAULT di parameter terakhir
+-- kalau parameter sebelumnya masih DEFAULT (42P13 urutan default).
 do $$
 declare
   r record;
@@ -61,7 +59,13 @@ begin
     v_head := regexp_replace(
       v_head,
       $re$DEFAULT\s+'00000000-0000-0000-0000-000000000001'(::[\w.]+)?$re$,
-      '',
+      'DEFAULT NULL',
+      'gi'
+    );
+    v_body := regexp_replace(
+      v_body,
+      $re$coalesce\(\s*(p_tenant_id|p_tenant)\s*,\s*public\.default_tenant_id\(\)\s*\)$re$,
+      'public.require_member_tenant(\1)',
       'gi'
     );
     execute format('drop function if exists %s', v_sig);
@@ -233,6 +237,63 @@ grant execute on function public.member_login(text, text, uuid)
   to anon, authenticated, service_role;
 grant execute on function public.list_member_sales(text, uuid)
   to anon, authenticated, service_role;
+
+drop function if exists public.member_register(text, text, text, text, date, uuid);
+create function public.member_register(
+  p_phone text,
+  p_password text,
+  p_nama text default null,
+  p_email text default null,
+  p_tanggal_lahir date default null,
+  p_tenant_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_phone text := public.wa_digits(p_phone);
+  v_email text := nullif(lower(trim(coalesce(p_email, ''))), '');
+  v_pass text := coalesce(p_password, '');
+  v_member public.members%rowtype;
+  v_tenant uuid := public.require_member_tenant(p_tenant_id);
+begin
+  if v_phone is null or length(v_phone) < 10 then
+    return jsonb_build_object('ok', false, 'error', 'Nomor HP tidak valid');
+  end if;
+  if length(v_pass) < 6 then
+    return jsonb_build_object('ok', false, 'error', 'Password minimal 6 karakter');
+  end if;
+  if exists (
+    select 1 from public.members m
+    where m.tenant_id = v_tenant and m.phone_e164 = v_phone
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'Nomor HP sudah terdaftar di usaha ini. Silakan masuk.');
+  end if;
+  if v_email is not null and exists (
+    select 1 from public.members m
+    where m.tenant_id = v_tenant and lower(trim(m.email)) = v_email
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'Email sudah terdaftar di usaha ini. Silakan masuk.');
+  end if;
+
+  insert into public.members (
+    tenant_id, phone_e164, phone_raw, nama, email, tanggal_lahir, password_hash
+  ) values (
+    v_tenant, v_phone, trim(p_phone),
+    nullif(trim(coalesce(p_nama, '')), ''),
+    v_email, p_tanggal_lahir,
+    crypt(v_pass, gen_salt('bf'))
+  )
+  returning * into v_member;
+
+  return jsonb_build_object('ok', true, 'member', public.member_public_row(v_member));
+end;
+$$;
+
+grant execute on function public.member_register(text, text, text, text, date, uuid)
+  to anon, authenticated;
 
 -- 6) Wrapper invoice tanpa tenant — buang (bocor ke Optik).
 drop function if exists public.get_invoice_hub(text);
