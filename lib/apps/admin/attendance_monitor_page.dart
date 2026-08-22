@@ -90,6 +90,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       _error = null;
     });
     try {
+      if (_tokoOptions.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _tokoCounts = {};
+          _loading = false;
+        });
+        return;
+      }
       final rows = await _svc.listByStatus(
         statuses: const [
           AttendanceVerificationStatus.pendingReview,
@@ -97,6 +105,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           AttendanceVerificationStatus.mencurigakan,
           AttendanceVerificationStatus.curang,
         ],
+        tokoIds: _tokoOptions,
         dayStart: _dayStart,
         dayEnd: _dayEnd,
         limit: 500,
@@ -232,6 +241,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       await _svc.markAman(
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
         notes: 'Valid — cocok dengan foto terdaftar',
       );
       if (!mounted) return;
@@ -270,6 +280,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     try {
       await _svc.markMencurigakan(
         verificationId: row['id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;
@@ -461,9 +472,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               padding: const EdgeInsets.all(12),
               borderRadius: 14,
               child: Text(
-                AttendanceAdminScope.isOwner(widget.profile)
-                    ? 'Hari ${_dayFmt.format(_day)} · Owner: semua toko termasuk Pusat'
-                    : 'Hari ${_dayFmt.format(_day)} · Cabang saja (tanpa absensi Pusat)',
+                'Hari ${_dayFmt.format(_day)} · '
+                    '${AttendanceAdminScope.monitorBannerHint(widget.profile)}',
                 style: const TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 13,

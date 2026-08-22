@@ -91,6 +91,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       final rows = await _svc.listByStatus(
         statuses: [AttendanceVerificationStatus.mencurigakan],
         tokoId: toko,
+        tokoIds: toko == null ? _tokoOptions : null,
       );
       final filtered =
           AttendanceAdminScope.filterVerificationRows(rows, widget.profile);
@@ -145,6 +146,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       await _svc.markAman(
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
         notes: 'Aman setelah tinjauan lanjut',
       );
       if (!mounted) return;

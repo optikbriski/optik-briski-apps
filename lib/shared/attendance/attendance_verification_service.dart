@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
+import 'attendance_admin_scope.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_verification_config.dart';
 
@@ -69,6 +70,7 @@ class AttendanceVerificationService {
   Future<List<Map<String, dynamic>>> listByStatus({
     required List<String> statuses,
     String? tokoId,
+    List<String>? tokoIds,
     DateTime? dayStart,
     DateTime? dayEnd,
     int limit = 100,
@@ -88,6 +90,13 @@ class AttendanceVerificationService {
     }
     if (tokoId != null && tokoId.isNotEmpty) {
       q = q.eq('toko_id', tokoId);
+    } else if (tokoIds != null) {
+      final cleaned = [
+        for (final t in tokoIds)
+          if (t.trim().isNotEmpty) t.trim(),
+      ];
+      if (cleaned.isEmpty) return const [];
+      q = q.inFilter('toko_id', cleaned);
     }
     if (dayStart != null) {
       q = q.gte('created_at', dayStart.toUtc().toIso8601String());
@@ -106,9 +115,11 @@ class AttendanceVerificationService {
   Future<void> markAman({
     required String verificationId,
     required String karyawanId,
+    required String tokoId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markAman');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
     final uid = _client.auth.currentUser?.id;
     final now = DateTime.now();
     final tanggal = _jakartaDayKey(now);
@@ -131,6 +142,7 @@ class AttendanceVerificationService {
           'poin_awarded': awarded,
         })
         .eq('id', verificationId)
+        .eq('toko_id', store)
         .inFilter('status', [
           AttendanceVerificationStatus.pendingReview,
           AttendanceVerificationStatus.mencurigakan,
@@ -177,9 +189,11 @@ class AttendanceVerificationService {
   /// Flag ke antrean tinjauan lanjut (belum hukuman).
   Future<void> markMencurigakan({
     required String verificationId,
+    required String tokoId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markMencurigakan');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
     final uid = _client.auth.currentUser?.id;
     final updated = await _client
         .from('attendance_verifications')
@@ -190,6 +204,7 @@ class AttendanceVerificationService {
           'reviewed_at': DateTime.now().toIso8601String(),
         })
         .eq('id', verificationId)
+        .eq('toko_id', store)
         .eq('status', AttendanceVerificationStatus.pendingReview)
         .select('id');
 
@@ -206,6 +221,7 @@ class AttendanceVerificationService {
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markCurang');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
     final uid = _client.auth.currentUser?.id;
     final penalty = AttendanceVerificationConfig.cheatingPenaltyPoints;
     final now = DateTime.now();
@@ -228,6 +244,7 @@ class AttendanceVerificationService {
           'poin_awarded': penalty,
         })
         .eq('id', verificationId)
+        .eq('toko_id', store)
         .eq('status', AttendanceVerificationStatus.mencurigakan)
         .select('id');
 
@@ -252,7 +269,7 @@ class AttendanceVerificationService {
     try {
       await _client.from('surat_peringatan').insert({
         'karyawan_id': karyawanId,
-        'toko_id': tokoId,
+        'toko_id': store,
         'tingkat': AttendanceVerificationConfig.cheatingSpTingkat,
         'alasan': alasan,
         'sumber': AttendanceVerificationConfig.sumberSpCurang,

@@ -134,4 +134,25 @@ class AttendanceAdminScope {
         if (canAccessTokoAttendance(profile, r['toko_id']?.toString())) r,
     ];
   }
+
+  /// Teks banner monitor — jangan samakan admin_toko dengan admin_pusat.
+  static String monitorBannerHint(Map<String, dynamic> profile) {
+    if (isAdminToko(profile)) {
+      final own = tokoOf(profile);
+      return own.isEmpty ? 'Toko sendiri' : 'Toko $own saja';
+    }
+    if (isOwner(profile) || isSuperAdmin(profile)) {
+      return 'Semua toko termasuk Pusat';
+    }
+    return 'Cabang saja (tanpa absensi Pusat)';
+  }
+
+  /// Aksi Valid/Curang wajib bawa toko_id — jangan andalkan RLS saja.
+  static String requireTokoId(String? tokoId) {
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) {
+      throw StateError('toko_id wajib untuk aksi monitor absensi.');
+    }
+    return t;
+  }
 }

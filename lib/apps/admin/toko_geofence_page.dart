@@ -555,10 +555,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
 
-      if (!_isPusat) {
-        final my = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
+      if (!AttendanceAdminScope.canViewAllStores(widget.profile)) {
         list = list
-            .where((t) => (t['id'] ?? '').toString().toUpperCase() == my)
+            .where(
+              (t) => AttendanceAdminScope.sameTokoId(
+                widget.profile['toko_id']?.toString(),
+                t['id']?.toString(),
+              ),
+            )
             .toList();
       }
 
@@ -866,6 +870,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   Future<void> _save() async {
     final id = _selectedTokoId;
     if (id == null) return;
+    if (!AttendanceAdminScope.canViewAllStores(widget.profile) &&
+        !AttendanceAdminScope.sameTokoId(
+          widget.profile['toko_id']?.toString(),
+          id,
+        )) {
+      _toast('Hanya boleh atur geofence toko sendiri.', OptikAdminTokens.danger);
+      return;
+    }
 
     if (_mode == _FenceDrawMode.circle) {
       if (_lat == null || _lng == null) {

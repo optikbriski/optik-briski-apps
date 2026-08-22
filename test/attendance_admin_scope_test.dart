@@ -82,4 +82,26 @@ void main() {
     expect(AttendanceAdminScope.sameTokoId('PUSAT', 'CABANG-PUSAT'), isTrue);
     expect(AttendanceAdminScope.sameTokoId('CABANG-X', 'CABANG-Y'), isFalse);
   });
+
+  group('monitor write + banner', () {
+    test('requireTokoId rejects empty', () {
+      expect(() => AttendanceAdminScope.requireTokoId(''), throwsStateError);
+      expect(AttendanceAdminScope.requireTokoId('CABANG-X'), 'CABANG-X');
+    });
+
+    test('banner is store-specific for admin_toko', () {
+      expect(
+        AttendanceAdminScope.monitorBannerHint(p('admin_toko', 'CABANG-X')),
+        'Toko CABANG-X saja',
+      );
+      expect(
+        AttendanceAdminScope.monitorBannerHint(p('owner', 'PUSAT')),
+        'Semua toko termasuk Pusat',
+      );
+      expect(
+        AttendanceAdminScope.monitorBannerHint(p('admin_pusat', 'PUSAT')),
+        'Cabang saja (tanpa absensi Pusat)',
+      );
+    });
+  });
 }

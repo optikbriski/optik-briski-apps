@@ -89,6 +89,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
       final rows = await _svc.listByStatus(
         statuses: [AttendanceVerificationStatus.pendingReview],
         tokoId: toko,
+        tokoIds: toko == null ? _tokoOptions : null,
       );
       final filtered =
           AttendanceAdminScope.filterVerificationRows(rows, widget.profile);
@@ -143,6 +144,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
       await _svc.markAman(
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
         notes: 'Valid — cocok dengan foto terdaftar',
       );
       if (!mounted) return;
@@ -181,6 +183,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
     try {
       await _svc.markMencurigakan(
         verificationId: row['id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;
