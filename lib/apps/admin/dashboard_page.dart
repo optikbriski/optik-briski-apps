@@ -8,6 +8,7 @@ import 'product_master.dart';
 import 'buku_besar.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
+import '../../shared/finance/omzet_masuk.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
@@ -41,8 +42,12 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
+enum _OmzetPeriode { hariIni, bulanIni }
+
 class _DashboardPageState extends State<DashboardPage> {
   int _omzetHariIni = 0;
+  int _omzetBulanIni = 0;
+  _OmzetPeriode _omzetPeriode = _OmzetPeriode.hariIni;
   bool isStatsLoading = true;
   String? _fotoProfileUrl;
   bool _trainingBusy = false;
@@ -155,28 +160,39 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 3. AMBIL STATISTIK JURNAL OMZET TOKO HARI INI
+  // 3. Omzet real: uang yang sudah masuk (bukan sisa DP / nota batal).
   Future<void> _fetchTodayStats() async {
     if (!mounted) return;
     setState(() => isStatsLoading = true);
     try {
       await TenantModules.instance.load();
-      final today = DateTime.now().toIso8601String().split('T')[0];
-      final res = await Supabase.instance.client
-          .from('sales')
-          .select('total_harga')
-          .eq('toko_id', widget.profile['toko_id'] ?? 'KOSONG')
-          .gte('created_at', '${today}T00:00:00')
-          .lte('created_at', '${today}T23:59:59');
+      final now = DateTime.now();
+      final bulan = omzetRangeLokal(bulanIni: true, now: now);
+      final hari = omzetRangeLokal(bulanIni: false, now: now);
+      final rows = await _fetchSalesOmzet(
+        start: bulan.start,
+        endExclusive: bulan.endExclusive,
+      );
 
-      int total = 0;
-      for (var item in res) {
-        total += (item['total_harga'] ?? 0) as int;
+      var hariIni = 0;
+      var bulanIni = 0;
+      for (final item in rows) {
+        final masuk = uangMasukDariSale(item);
+        if (masuk <= 0) continue;
+        bulanIni += masuk;
+        if (saleDalamRentangLokal(
+          item,
+          start: hari.start,
+          endExclusive: hari.endExclusive,
+        )) {
+          hariIni += masuk;
+        }
       }
 
       if (mounted) {
         setState(() {
-          _omzetHariIni = total;
+          _omzetHariIni = hariIni;
+          _omzetBulanIni = bulanIni;
           isStatsLoading = false;
         });
       }
@@ -186,6 +202,33 @@ class _DashboardPageState extends State<DashboardPage> {
         setState(() => isStatsLoading = false);
       }
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchSalesOmzet({
+    required DateTime start,
+    required DateTime endExclusive,
+  }) async {
+    const pageSize = 1000;
+    final tokoId = widget.profile['toko_id'] ?? 'KOSONG';
+    final startIso = start.toUtc().toIso8601String();
+    final endIso = endExclusive.toUtc().toIso8601String();
+    final out = <Map<String, dynamic>>[];
+    var from = 0;
+    while (true) {
+      final page = await Supabase.instance.client
+          .from('sales')
+          .select('total_harga, sisa_tagihan, status_pembayaran, created_at')
+          .eq('toko_id', tokoId)
+          .gte('created_at', startIso)
+          .lt('created_at', endIso)
+          .order('created_at')
+          .range(from, from + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(page as List);
+      out.addAll(rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return out;
   }
 
   @override
@@ -825,10 +868,151 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildOmzetCard() {
-    return PremiumStatCard(
-      label: "dash_penjualan_hari_ini".tr(),
-      value: _formatRupiah(_omzetHariIni),
-      loading: isStatsLoading,
+    final bulan = _omzetPeriode == _OmzetPeriode.bulanIni;
+    final label = bulan
+        ? 'dash_penjualan_bulan_ini'.tr()
+        : 'dash_penjualan_hari_ini'.tr();
+    final value = _formatRupiah(bulan ? _omzetBulanIni : _omzetHariIni);
+    return PremiumPanel(
+      padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+      borderRadius: 20,
+      showAccentBar: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: OptikAdminTokens.ice.withOpacity(0.35),
+              border: Border.all(color: OptikAdminTokens.ice),
+            ),
+            child: const Icon(
+              Icons.trending_up_rounded,
+              color: OptikAdminTokens.navy,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label.toUpperCase(),
+                        style: TextStyle(
+                          color: OptikAdminTokens.slate.withOpacity(0.9),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildOmzetPeriodeToggle(),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                isStatsLoading
+                    ? const SizedBox(
+                        height: 28,
+                        width: 28,
+                        child: CircularProgressIndicator(
+                          color: OptikAdminTokens.navy,
+                          strokeWidth: 2.2,
+                        ),
+                      )
+                    : Text(
+                        value,
+                        style: const TextStyle(
+                          color: OptikAdminTokens.navy,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.8,
+                          height: 1.0,
+                        ),
+                      ),
+                const SizedBox(height: 6),
+                Text(
+                  'dash_omzet_uang_masuk'.tr(),
+                  style: const TextStyle(
+                    color: OptikAdminTokens.slate,
+                    fontSize: 11.5,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOmzetPeriodeToggle() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _omzetPeriodeChip(
+          label: 'dash_omzet_periode_hari'.tr(),
+          selected: _omzetPeriode == _OmzetPeriode.hariIni,
+          onTap: () {
+            if (_omzetPeriode == _OmzetPeriode.hariIni) return;
+            setState(() => _omzetPeriode = _OmzetPeriode.hariIni);
+          },
+        ),
+        const SizedBox(width: 6),
+        _omzetPeriodeChip(
+          label: 'dash_omzet_periode_bulan'.tr(),
+          selected: _omzetPeriode == _OmzetPeriode.bulanIni,
+          onTap: () {
+            if (_omzetPeriode == _OmzetPeriode.bulanIni) return;
+            setState(() => _omzetPeriode = _OmzetPeriode.bulanIni);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _omzetPeriodeChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: selected
+                ? OptikAdminTokens.navy
+                : OptikAdminTokens.ice.withOpacity(0.28),
+            border: Border.all(
+              color: selected
+                  ? OptikAdminTokens.navy
+                  : OptikAdminTokens.ice,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.1,
+              color: selected ? OptikAdminTokens.snow : OptikAdminTokens.navy,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
