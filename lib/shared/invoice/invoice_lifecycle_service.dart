@@ -210,7 +210,7 @@ class InvoiceLifecycleService {
     );
   }
 
-  Future<Map<String, dynamic>> _saleFromRpc(String fn, dynamic res) {
+  Map<String, dynamic> _saleFromRpc(String fn, dynamic res) {
     if (res is Map) return Map<String, dynamic>.from(res);
     throw 'Respons $fn tidak valid.';
   }
