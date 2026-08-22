@@ -76,6 +76,18 @@ void main() {
     expect(sql, contains('raise exception'));
     expect(sql, contains('jangan memakai data usaha lain'));
     expect(sql, isNot(contains('return public.default_tenant_id()')));
+    final noOracle = File(
+      'supabase/migrations/20260820000016_no_anon_optik_oracle.sql',
+    ).readAsStringSync();
+    expect(noOracle, contains('where b.tenant_id = public.current_tenant_id()'));
+    expect(
+      noOracle,
+      contains('revoke all on function public.default_tenant_id() from anon'),
+    );
+    expect(
+      noOracle,
+      isNot(contains('coalesce(public.current_tenant_id(), public.default_tenant_id())')),
+    );
   });
 
   test('requireResolved refuses empty slug on shared Rekasa shell', () async {
