@@ -538,33 +538,51 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     }
   }
 
+  String? get _tenantId => AttendanceAdminScope.tenantIdOf(widget.profile);
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final rows = await _db
+      if ((_tenantId ?? '').isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error =
+              'Kode usaha belum terverifikasi. Tidak boleh mengatur geofence merek lain.';
+        });
+        return;
+      }
+      if (!AttendanceAdminScope.canManageGeofence(widget.profile)) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Hanya admin toko/cabang yang boleh mengatur geofence.';
+        });
+        return;
+      }
+      var q = _db
           .from('toko_id')
           .select(
-            'id, toko_id, latitude, longitude, radius_meters, '
+            'id, toko_id, tenant_id, latitude, longitude, radius_meters, '
             'geofence_mode, geofence_polygon',
-          )
-          .order('id');
+          );
+      q = q.eq('tenant_id', _tenantId!);
+      final rows = await q.order('id');
       var list = (rows as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
 
-      if (!AttendanceAdminScope.canViewAllStores(widget.profile)) {
-        list = list
-            .where(
-              (t) => AttendanceAdminScope.sameTokoId(
-                widget.profile['toko_id']?.toString(),
-                t['id']?.toString(),
-              ),
-            )
-            .toList();
-      }
+      list = [
+        for (final t in list)
+          if (AttendanceAdminScope.canEditTokoGeofence(
+            widget.profile,
+            t['id']?.toString(),
+          ))
+            t,
+      ];
 
       if (!mounted) return;
       final firstId = list.isNotEmpty ? list.first['id']?.toString() : null;
@@ -870,12 +888,15 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   Future<void> _save() async {
     final id = _selectedTokoId;
     if (id == null) return;
-    if (!AttendanceAdminScope.canViewAllStores(widget.profile) &&
-        !AttendanceAdminScope.sameTokoId(
-          widget.profile['toko_id']?.toString(),
-          id,
-        )) {
+    if (!AttendanceAdminScope.canEditTokoGeofence(widget.profile, id)) {
       _toast('Hanya boleh atur geofence toko sendiri.', OptikAdminTokens.danger);
+      return;
+    }
+    if ((_tenantId ?? '').isEmpty) {
+      _toast(
+        'Kode usaha belum terverifikasi. Tidak boleh mengatur geofence merek lain.',
+        OptikAdminTokens.danger,
+      );
       return;
     }
 
@@ -919,7 +940,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         }
       }
 
-      await _db.from('toko_id').update(patch).eq('id', id);
+      var saveQ = _db.from('toko_id').update(patch).eq('id', id);
+      saveQ = saveQ.eq('tenant_id', _tenantId!);
+      final updated = await saveQ.select('id');
+      if (List<dynamic>.from(updated).isEmpty) {
+        throw 'Geofence tidak tersimpan. Toko bukan milik usaha ini.';
+      }
 
       for (var i = 0; i < _tokoList.length; i++) {
         if (_tokoList[i]['id']?.toString() == id) {
@@ -1109,7 +1135,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: 'Geofence Toko',
-        subtitle: 'Peta detail · koordinat GPS (WGS84)',
+        subtitle:
+            '${AttendanceAdminScope.geofenceBannerHint(widget.profile)} · GPS WGS84',
         actions: [
           IconButton(
             tooltip: 'Muat ulang',

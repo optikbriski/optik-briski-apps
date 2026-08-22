@@ -57,6 +57,22 @@ void main() {
       expect(AttendanceAdminScope.canOpenStoreMonitor(profile), isTrue);
       expect(AttendanceAdminScope.canManageGeofence(profile), isTrue);
       expect(
+        AttendanceAdminScope.canEditTokoGeofence(profile, 'CABANG-X'),
+        isTrue,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoGeofence(profile, 'CABANG-Y'),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoGeofence(p('kasir', 'CABANG-X'), 'CABANG-X'),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canEditTokoGeofence(p('owner', 'PUSAT'), 'CABANG-Y'),
+        isTrue,
+      );
+      expect(
         AttendanceAdminScope.filterTokoForMonitor(
           ['PUSAT', 'CABANG-X', 'CABANG-Y'],
           profile,
@@ -160,6 +176,14 @@ void main() {
     });
 
     test('banner is store-specific for admin_toko', () {
+      expect(
+        AttendanceAdminScope.geofenceBannerHint(p('admin_pusat', 'PUSAT')),
+        'Semua toko termasuk Pusat',
+      );
+      expect(
+        AttendanceAdminScope.geofenceBannerHint(p('admin_toko', 'CABANG-X')),
+        'Toko CABANG-X saja',
+      );
       expect(
         AttendanceAdminScope.monitorBannerHint(p('admin_toko', 'CABANG-X')),
         'Toko CABANG-X saja',

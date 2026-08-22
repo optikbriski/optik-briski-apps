@@ -91,6 +91,18 @@ class AttendanceAdminScope {
   static bool canManageGeofence(Map<String, dynamic> profile) =>
       canOpenKaryawanManagement(profile);
 
+  /// Boleh simpan geofence toko ini? Bukan merek lain. Bukan cabang orang.
+  static bool canEditTokoGeofence(
+    Map<String, dynamic> profile,
+    String? tokoId,
+  ) {
+    if (!canManageGeofence(profile)) return false;
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return false;
+    if (canViewAllStores(profile)) return true;
+    return sameTokoId(tokoOf(profile), t);
+  }
+
   /// Kiosk QR + face match di perangkat toko.
   /// - admin_toko: ya (toko cabang / toko sendiri)
   /// - owner: ya (kiosk Absensi Pusat)
@@ -214,6 +226,15 @@ class AttendanceAdminScope {
         ))
           r,
     ];
+  }
+
+  /// Teks banner geofence — pusat semua toko; admin_toko toko sendiri.
+  static String geofenceBannerHint(Map<String, dynamic> profile) {
+    if (isAdminToko(profile)) {
+      final own = tokoOf(profile);
+      return own.isEmpty ? 'Toko sendiri' : 'Toko $own saja';
+    }
+    return 'Semua toko termasuk Pusat';
   }
 
   /// Teks banner monitor — jangan samakan admin_toko dengan admin_pusat.
