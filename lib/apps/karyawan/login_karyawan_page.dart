@@ -11,7 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/login_brand_header.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
 import '../../shared/tenant/tenant_billing.dart';
@@ -580,17 +580,9 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                           absorbing: _isLoading,
                           child: Column(
                             children: [
-                              const OptikBrandLogo.color(height: 56),
-                              const SizedBox(height: 10),
-                              Text(
-                                BrandService.name,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: OptikKaryawanTokens.navyMid,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.3,
-                                ),
+                              const LoginBrandHeader(
+                                logoHeight: 56,
+                                nameColor: OptikKaryawanTokens.navyMid,
                               ),
                               const SizedBox(height: 8),
                               Text(

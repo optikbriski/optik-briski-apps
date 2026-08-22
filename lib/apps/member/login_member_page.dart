@@ -8,7 +8,7 @@ import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/login_brand_header.dart';
 import 'member_forgot_password_page.dart';
 import 'member_register_page.dart';
 
@@ -187,34 +187,24 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 12),
-                        const Center(child: OptikBrandLogo.color(height: 48)),
+                        const Center(
+                          child: LoginBrandHeader(
+                            logoHeight: 48,
+                            nameColor: OptikMemberTokens.blueDeep,
+                            nameSize: 28,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         ValueListenableBuilder<int>(
                           valueListenable: BrandService.revision,
-                          builder: (_, __, ___) => Column(
-                            children: [
-                              Text(
-                                BrandService.name,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: OptikMemberTokens.blueDeep,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.15,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Login Member ${BrandService.name} — nota, garansi, dan promo toko.',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: OptikMemberTokens.inkMuted,
-                                  fontSize: 14.5,
-                                  height: 1.45,
-                                ),
-                              ),
-                            ],
+                          builder: (_, __, ___) => Text(
+                            'Login Member ${BrandService.name} — nota, garansi, dan promo toko.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: OptikMemberTokens.inkMuted,
+                              fontSize: 14.5,
+                              height: 1.45,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 28),

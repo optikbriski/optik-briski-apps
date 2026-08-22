@@ -10,7 +10,7 @@ import '../../shared/brand/brand_service.dart';
 import '../../shared/admin/admin_code_login_service.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/login_brand_header.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -341,17 +341,9 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const OptikBrandLogo.color(height: 58),
-                    const SizedBox(height: 10),
-                    Text(
-                      BrandService.name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: OptikAdminTokens.navy,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                        letterSpacing: -0.3,
-                      ),
+                    const LoginBrandHeader(
+                      logoHeight: 58,
+                      nameColor: OptikAdminTokens.navy,
                     ),
                     const SizedBox(height: 10),
                     Text(
