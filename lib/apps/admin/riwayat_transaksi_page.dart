@@ -7,6 +7,7 @@ import '../../shared/invoice/invoice_delivery_result.dart';
 import '../../shared/invoice/invoice_delivery_service.dart';
 import '../../shared/invoice/invoice_detail_page.dart';
 import '../../shared/invoice/invoice_lifecycle_service.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -652,9 +653,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         final tokoId = listCabangUnik[index];
         final c = _counts(_salesForToko(tokoId));
         return PremiumListTile(
-          title: tokoId == 'PUSAT'
-              ? 'OPTIK B. RISKI - PUSAT'
-              : 'OPTIK B. RISKI - $tokoId',
+          title: BrandService.defaultShopName(tokoId),
           subtitle:
               'DP ${c.dp} · PENDING ${c.pending} · READY ${c.ready} · CLEAR ${c.clear}',
           icon: Icons.store_rounded,

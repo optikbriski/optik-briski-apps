@@ -120,7 +120,7 @@ class MemberHomeSnapshot {
   String greetingGuest() {
     final raw = (content?['greeting_guest'] ?? '').toString();
     if (raw.isNotEmpty) return raw;
-    return 'Hi!';
+    return BrandService.guestHelloFallback();
   }
 
   String greetingSubtitleGuest() => (content?['greeting_subtitle_guest'] ??

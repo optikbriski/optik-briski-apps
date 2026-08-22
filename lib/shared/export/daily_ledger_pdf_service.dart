@@ -164,7 +164,7 @@ class DailyLedgerPdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'OPTIK B. RISKI',
+                    BrandService.name,
                     style: pw.TextStyle(
                       fontSize: 14,
                       fontWeight: pw.FontWeight.bold,

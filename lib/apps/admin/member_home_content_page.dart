@@ -47,6 +47,11 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   /// true = Simpan sudah dikunci; tunggu tombol Update untuk push ke APK.
   bool _pendingUpdate = false;
   String? _selectedSectionKey;
+
+  String get _defaultBrandLabel => BrandService.name;
+  String get _defaultGuestHello => BrandService.guestHelloFallback();
+  String get _bannerBrand =>
+      _brand.text.trim().isEmpty ? _defaultBrandLabel : _brand.text.trim();
   String? _error;
 
   static const _defaultSections = [
@@ -202,9 +207,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           row == null ? <String, dynamic>{} : Map<String, dynamic>.from(row);
 
       final brand =
-          (data['brand_label'] ?? 'OPTIK B. RISKI').toString();
+          (data['brand_label'] ?? _defaultBrandLabel).toString();
       final greeting =
-          (data['greeting_guest'] ?? 'Hi, Teman Optik!').toString();
+          (data['greeting_guest'] ?? _defaultGuestHello).toString();
       final greetingSub = (data['greeting_subtitle_guest'] ??
               'Login untuk lihat pesanan & garansi')
           .toString();
@@ -480,9 +485,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           ? 'default'
           : TenantService.instance.boundId,
       'tenant_id': TenantService.instance.boundId,
-      'brand_label': _brand.text.trim().isEmpty
-          ? 'OPTIK B. RISKI'
-          : _brand.text.trim(),
+      'brand_label': _bannerBrand,
       'slides': slides,
       'greeting_guest': _greeting.text.trim(),
       'greeting_subtitle_guest': _greetingSub.text.trim(),
@@ -1150,9 +1153,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
             p['show_on_member'] != false)
         .toList();
     return _MemberHomePhonePreview(
-      brand: _brand.text.trim().isEmpty ? 'OPTIK B. RISKI' : _brand.text.trim(),
+      brand: _bannerBrand,
       greeting: _greeting.text.trim().isEmpty
-          ? 'Hi, Teman Optik!'
+          ? _defaultGuestHello
           : _greeting.text.trim(),
       greetingSub: _greetingSub.text.trim().isEmpty
           ? 'Login untuk lihat pesanan & garansi'
@@ -1686,9 +1689,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         return [
           TextField(
             controller: _brand,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Label brand di banner',
-              hintText: 'OPTIK B. RISKI',
+              hintText: _defaultBrandLabel,
             ),
           ),
           const SizedBox(height: 14),
@@ -1953,9 +1956,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               ),
               TextField(
                 controller: _brand,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Label brand',
-                  hintText: 'OPTIK B. RISKI',
+                  hintText: _defaultBrandLabel,
                 ),
               ),
             ],
@@ -2008,9 +2011,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 ),
                 const SizedBox(height: 8),
                 _BannerApkMock(
-                  brand: _brand.text.trim().isEmpty
-                      ? 'OPTIK B. RISKI'
-                      : _brand.text.trim(),
+                  brand: _bannerBrand,
                   title: _slides[i].titleCtrl.text,
                   subtitle: _slides[i].subtitleCtrl.text,
                   imageUrl: _slides[i].imageUrl,

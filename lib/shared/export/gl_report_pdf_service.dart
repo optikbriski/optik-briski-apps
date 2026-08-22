@@ -125,7 +125,7 @@ class GlReportPdfService {
         header: (_) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            pw.Text('OPTIK B. RISKI',
+            pw.Text(BrandService.name,
                 style: pw.TextStyle(
                     fontSize: 14,
                     fontWeight: pw.FontWeight.bold,

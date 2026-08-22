@@ -21,7 +21,7 @@ class AppBrandMark extends StatelessWidget {
     if (isBrandedStoreApk && brandedStoreSlug == TenantService.optikSlug) {
       return true;
     }
-    return BrandService.name.toUpperCase().contains('OPTIK B');
+    return AppBrand.looksLikeOptikName(BrandService.name);
   }
 
   @override

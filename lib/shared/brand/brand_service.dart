@@ -18,7 +18,7 @@ class AppBrand {
   final String shortName;
   final String assistantName;
 
-  /// Hanya fallback APK merek sendiri (Paket A). Optik = kulit, bukan platform.
+  /// Kulit Optik saja. Jangan dipakai merek baru.
   static const fallback = AppBrand(
     displayName: 'Optik B. Riski',
     shortName: 'OBR',
@@ -32,8 +32,23 @@ class AppBrand {
     assistantName: 'Asisten',
   );
 
+  static bool looksLikeOptikName(String name) =>
+      name.toUpperCase().contains('OPTIK B');
+
+  /// APK merek sendiri: slug-nya, kecuali kulit Optik.
+  static AppBrand fallbackForSlug(String slug) {
+    final s = slug.trim().toLowerCase();
+    if (s.isEmpty) return rekasaShell;
+    if (s == TenantService.optikSlug) return fallback;
+    return AppBrand(
+      displayName: slug.trim(),
+      shortName: s,
+      assistantName: 'Asisten',
+    );
+  }
+
   static AppBrand get shellFallback =>
-      isBrandedStoreApk ? fallback : rekasaShell;
+      isBrandedStoreApk ? fallbackForSlug(brandedStoreSlug) : rekasaShell;
 }
 
 class BrandService {
@@ -45,6 +60,13 @@ class BrandService {
   static String get name => _current.displayName;
   static String get shortName => _current.shortName;
   static String get assistantName => _current.assistantName;
+
+  static bool get currentIsOptikSkin =>
+      (isBrandedStoreApk && brandedStoreSlug == TenantService.optikSlug) ||
+      AppBrand.looksLikeOptikName(name);
+
+  static String guestHelloFallback() =>
+      currentIsOptikSkin ? 'Hi, Teman Optik!' : 'Hi!';
 
   /// Naik setiap [load] selesai supaya judul jendela/tab rebuild.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);

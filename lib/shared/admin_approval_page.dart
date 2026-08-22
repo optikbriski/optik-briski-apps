@@ -8,6 +8,7 @@ import 'attendance/attendance_admin_scope.dart';
 import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
+import 'brand/brand_service.dart';
 import 'theme.dart';
 import 'widgets/admin/admin_premium.dart';
 
@@ -351,7 +352,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                   color: OptikAdminTokens.navy, size: 24),
               const SizedBox(width: 8),
               Text(
-                "judul_aplikasi".tr(),
+                BrandService.name,
                 style: const TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 18,

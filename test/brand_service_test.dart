@@ -16,4 +16,21 @@ void main() {
     expect(BrandService.shortName, 'RKS');
     expect(BrandService.assistantName, 'Asisten');
   });
+
+  test('new branded slug does not inherit the Optik fallback', () {
+    final warung = AppBrand.fallbackForSlug('warung-sari');
+    expect(warung.displayName, 'warung-sari');
+    expect(AppBrand.looksLikeOptikName(warung.displayName), isFalse);
+    expect(AppBrand.fallbackForSlug('optik-briski').displayName, 'Optik B. Riski');
+    expect(AppBrand.fallbackForSlug('').displayName, 'Rekasa');
+  });
+
+  test('guest hello is generic unless the running brand is Optik', () {
+    BrandService.bind(AppBrand.rekasaShell);
+    expect(BrandService.guestHelloFallback(), 'Hi!');
+    BrandService.bind(AppBrand.fallbackForSlug('klinik-sari'));
+    expect(BrandService.guestHelloFallback(), 'Hi!');
+    BrandService.bind(AppBrand.fallback);
+    expect(BrandService.guestHelloFallback(), 'Hi, Teman Optik!');
+  });
 }

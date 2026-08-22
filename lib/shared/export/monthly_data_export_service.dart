@@ -883,7 +883,7 @@ class MonthlyDataExportService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'OPTIK B. RISKI',
+                BrandService.name,
                 style: pw.TextStyle(
                   color: PdfColors.white,
                   fontSize: 28,
@@ -1063,7 +1063,7 @@ class MonthlyDataExportService {
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
             pw.Text(
-              'OPTIK B. RISKI',
+              BrandService.name,
               style: pw.TextStyle(
                 fontSize: 9,
                 fontWeight: pw.FontWeight.bold,
