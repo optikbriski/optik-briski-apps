@@ -7,9 +7,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
+import '../../shared/logistics/stock_move_report_rules.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
@@ -54,14 +56,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
     return t == 'NULL' ? '' : t;
   }
 
-  String get _myRole =>
-      widget.profile['role']?.toString().toLowerCase().trim() ?? '';
-
   bool get _isPusatView =>
-      _myToko == 'PUSAT' ||
-      _myRole == 'super_admin' ||
-      _myRole == 'owner' ||
-      _myRole == 'admin_pusat';
+      StockMoveReportRules.isTenantWideHistoryView(widget.profile);
 
   /// Klasifikasi: do | ro | retur | other
   String _moveKind(dynamic item) {
@@ -255,29 +251,36 @@ class _StockMoveReportState extends State<StockMoveReport> {
 
       final List response;
       if (!_isPusatView && _myToko.isNotEmpty) {
+        final aliases = AttendanceAdminScope.storeIdAliases(_myToko);
+        final orFilter = aliases
+            .expand((t) => ['dari_lokasi.eq.$t', 'ke_lokasi.eq.$t'])
+            .join(',');
         response = await supabase
             .from('stock_move_history')
             .select()
             .gte('created_at', since)
-            .or('dari_lokasi.eq.$_myToko,ke_lokasi.eq.$_myToko')
+            .or(orFilter)
+            .order('created_at', ascending: false)
+            .limit(400) as List;
+      } else if (_isPusatView) {
+        response = await supabase
+            .from('stock_move_history')
+            .select()
+            .gte('created_at', since)
             .order('created_at', ascending: false)
             .limit(400) as List;
       } else {
-        response = await supabase
-            .from('stock_move_history')
-            .select()
-            .gte('created_at', since)
-            .order('created_at', ascending: false)
-            .limit(400) as List;
+        response = const [];
       }
       if (!mounted) return;
 
       var targetScope = List<dynamic>.from(response);
       if (!_isPusatView && _myToko.isNotEmpty) {
         targetScope = targetScope.where((item) {
-          final ke = (item['ke_lokasi'] ?? '').toString().toUpperCase();
-          final dari = (item['dari_lokasi'] ?? '').toString().toUpperCase();
-          return ke == _myToko || dari == _myToko;
+          final ke = (item['ke_lokasi'] ?? '').toString();
+          final dari = (item['dari_lokasi'] ?? '').toString();
+          return AttendanceAdminScope.sameTokoId(ke, _myToko) ||
+              AttendanceAdminScope.sameTokoId(dari, _myToko);
         }).toList();
       }
 
@@ -1178,16 +1181,21 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final status = (item['status'] ?? 'PENDING').toString().toUpperCase();
     final kind = _moveKind(item);
     final kindColor = _kindColor(kind);
-    final amITheReceiver =
-        (item['ke_lokasi'] ?? '').toString().toUpperCase() == myToko;
-    final amITheSender =
-        (item['dari_lokasi'] ?? '').toString().toUpperCase() == myToko;
+    final ke = (item['ke_lokasi'] ?? '').toString();
+    final dari = (item['dari_lokasi'] ?? '').toString();
+    final amITheReceiver = AttendanceAdminScope.sameTokoId(ke, myToko);
+    final amITheSender = AttendanceAdminScope.sameTokoId(dari, myToko);
     final kurir = (item['kurir_nama'] ?? '').toString().trim();
     final when = _formatWhen(item['created_at']);
     final statusColor = _statusAccent(status);
     final canOpenPreparing = kind == 'do' &&
         (status == 'PREPARING' || status == 'WAITING') &&
         (amITheSender || _isPusatView);
+    final canReceive = StockMoveReportRules.canReceiveFromReport(
+      profile: widget.profile,
+      ke: ke,
+      status: status,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1293,8 +1301,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         style: TextStyle(
                             fontSize: 11.5, fontWeight: FontWeight.w800)),
                   ),
-                if ((status == 'TRANSIT' || status == 'PENDING') &&
-                    amITheReceiver) ...[
+                if (canReceive) ...[
                   if (canOpenPreparing) const SizedBox(width: 6),
                   FilledButton.icon(
                     onPressed: _receiving ? null : () => _confirmTerima(item),

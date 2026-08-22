@@ -1,7 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
 import '../attendance/pos_duty_gate.dart';
+import 'stock_move_report_rules.dart';
 
 /// Status surat jalan yang masih “di jalan” (bisa dilacak di peta gratis).
 const kLogisticsOpenStatuses = ['PREPARING', 'WAITING', 'TRANSIT', 'PENDING'];
@@ -38,14 +40,8 @@ class LogisticsTrackingService {
       'verified_by_name, verified_at, bukti_foto_pengirim, bukti_foto_kurir, '
       'bukti_foto_penerima, bukti_foto_penerim';
 
-  bool isPusatView(Map<String, dynamic> profile) {
-    final toko = (profile['toko_id'] ?? '').toString().toUpperCase();
-    final role = (profile['role'] ?? '').toString().toLowerCase();
-    return toko == 'PUSAT' ||
-        role == 'super_admin' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool isPusatView(Map<String, dynamic> profile) =>
+      StockMoveReportRules.isTenantWideHistoryView(profile);
 
   /// Surat jalan terbuka untuk tracking Admin.
   Future<List<Map<String, dynamic>>> listOpenMoves({
@@ -60,8 +56,10 @@ class LogisticsTrackingService {
     if (!isPusatView(profile)) {
       final myToko = (profile['toko_id'] ?? '').toString().toUpperCase();
       if (myToko.isNotEmpty) {
-        // Filter di server agar cabang tidak menarik seluruh antrian pusat.
-        q = q.or('ke_lokasi.eq.$myToko,dari_lokasi.eq.$myToko');
+        final aliases = AttendanceAdminScope.storeIdAliases(myToko);
+        q = q.or(aliases
+            .expand((t) => ['ke_lokasi.eq.$t', 'dari_lokasi.eq.$t'])
+            .join(','));
       }
     }
 
@@ -146,7 +144,7 @@ class LogisticsTrackingService {
         .maybeSingle();
     if (row == null) throw 'Surat jalan tidak ditemukan.';
     final st = (row['status'] ?? '').toString().toUpperCase();
-    if (!kLogisticsOpenStatuses.contains(st)) {
+    if (!StockMoveReportRules.canAssignKurir(st)) {
       throw 'Tidak bisa set kurir — status ${statusLabel(st)}.';
     }
 
@@ -167,7 +165,7 @@ class LogisticsTrackingService {
         .maybeSingle();
     if (row == null) throw 'Surat jalan tidak ditemukan.';
     final st = (row['status'] ?? '').toString().toUpperCase();
-    if (!kLogisticsOpenStatuses.contains(st)) {
+    if (!StockMoveReportRules.canAssignKurir(st)) {
       throw 'Tidak bisa hapus kurir — status ${statusLabel(st)}.';
     }
 
