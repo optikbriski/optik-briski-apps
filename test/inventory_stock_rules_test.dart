@@ -117,6 +117,10 @@ void main() {
         InventoryStockRules.roTransitionOk('SUCCESS', 'PREPARING'),
         isFalse,
       );
+      expect(
+        InventoryStockRules.roTransitionOk('SHIPPING', 'REJECTED'),
+        isFalse,
+      );
     });
 
     test('qty request 1–999', () {

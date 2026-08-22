@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/logistics/receive_verification_rules.dart';
+import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
@@ -94,6 +95,17 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
 
   Future<void> _kirimKePusatMassal() async {
     if (_sending) return;
+    if (!RequestOrderRules.bolehKirimKePusat(
+      profile: widget.profile,
+      tokoId: _tokoId,
+      status: 'PENDING',
+    )) {
+      _showSnack(
+        'Hanya kasir/admin toko ini yang boleh kirim RO ke Pusat.',
+        OptikAdminTokens.warning,
+      );
+      return;
+    }
     if (pendingRequestsList.isEmpty) {
       _showSnack(
         'Tidak ada antrian Request Order hari ini.',
@@ -146,7 +158,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
           pendingRequestsList.map((e) => e['id']).whereType<Object>().toList();
 
       // Training: TrainingHttpClient sandboxes this (no cabang↔pusat sync).
-      await _svc.sendToHq(idsToUpdate);
+      await _svc.sendToHq(idsToUpdate, tokoId: _tokoId);
 
       if (TrainingMode.instance.isActive && mounted) {
         final sim = await TrainingApprovalSimulator.showIfTraining(
@@ -251,6 +263,16 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     if (_isPusat) {
       return const PremiumScaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (!RequestOrderRules.bolehBukaCabang(widget.profile)) {
+      return const PremiumScaffold(
+        appBar: PremiumAppBar(title: 'Request Order Cabang'),
+        body: PremiumEmptyState(
+          message: 'Hanya kasir/admin toko ini yang boleh buka antrian RO.',
+          icon: Icons.lock_outline_rounded,
+        ),
       );
     }
 
@@ -453,7 +475,15 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                onPressed: (_sending || isLoading) ? null : _kirimKePusatMassal,
+                onPressed: (_sending ||
+                        isLoading ||
+                        !RequestOrderRules.bolehKirimKePusat(
+                          profile: widget.profile,
+                          tokoId: _tokoId,
+                          status: 'PENDING',
+                        ))
+                    ? null
+                    : _kirimKePusatMassal,
               ),
             ),
             const SizedBox(height: 12),

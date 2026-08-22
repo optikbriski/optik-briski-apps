@@ -81,7 +81,10 @@ abstract final class InventoryStockRules {
     final b = normRo(to);
     if (a == b) return true;
     if (b == roRejected) {
-      return a != roSuccess;
+      return a == roPending ||
+          a == roSent ||
+          a == roApproved ||
+          a == roPreparing;
     }
     const forward = {
       roPending: [roSent, roPreparing, roApproved],

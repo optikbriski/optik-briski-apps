@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
@@ -118,6 +119,15 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Future<void> _load() async {
+    if (!RequestOrderRules.bolehProsesPusat(widget.profile)) {
+      setState(() {
+        _loading = false;
+        _error = 'Hanya gudang Pusat yang boleh proses Request Order.';
+        _pipeline = [];
+        _history = [];
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -355,6 +365,12 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Future<void> _confirmReject(Map<String, dynamic> req) async {
+    if (!RequestOrderRules.bolehTolak(
+      profile: widget.profile,
+      status: req['status']?.toString(),
+    )) {
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -386,6 +402,12 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
   }
 
   Future<void> _confirmShip(Map<String, dynamic> req) async {
+    if (!RequestOrderRules.bolehKirim(
+      profile: widget.profile,
+      status: req['status']?.toString(),
+    )) {
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -981,9 +1003,20 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     final status = (req['status'] ?? '').toString().toUpperCase();
     final color = _statusColor(status);
     final qty = req['qty_request'];
-    final canApprove = tabIndex == 0;
-    final canShip = tabIndex == 1;
-    final showReject = tabIndex == 0 || tabIndex == 1;
+    final canApprove = tabIndex == 0 &&
+        RequestOrderRules.bolehApprove(
+          profile: widget.profile,
+          status: status,
+        );
+    final canShip = tabIndex == 1 &&
+        RequestOrderRules.bolehKirim(
+          profile: widget.profile,
+          status: status,
+        );
+    final showReject = RequestOrderRules.bolehTolak(
+      profile: widget.profile,
+      status: status,
+    );
     final availLow = snap != null &&
         canApprove &&
         snap.available < ((req['qty_request'] as num?)?.toInt() ?? 0);

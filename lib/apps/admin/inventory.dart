@@ -16,6 +16,7 @@ import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
+import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/write_off_rules.dart';
@@ -522,26 +523,30 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     },
                   ),
 
-                PremiumListTile(
-                  title: isPusat
-                      ? 'Request Order Pusat'
-                      : 'Request Order Cabang',
-                  subtitle: isPusat
-                      ? 'Approval → Disiapkan → Perjalanan → Diterima'
-                      : 'Kirim antrian ke Pusat · lacak · terima di Verifikasi',
-                  icon: Icons.assignment_turned_in_rounded,
-                  iconColor: OptikAdminTokens.trainingSoft,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (c) => isPusat
-                            ? RequestOrderPusatPage(profile: widget.profile)
-                            : RequestOrderPage(profile: widget.profile),
-                      ),
-                    );
-                  },
-                ),
+                if (RequestOrderRules.bolehProsesPusat(widget.profile) ||
+                    RequestOrderRules.bolehBukaCabang(widget.profile))
+                  PremiumListTile(
+                    title: RequestOrderRules.bolehProsesPusat(widget.profile)
+                        ? 'Request Order Pusat'
+                        : 'Request Order Cabang',
+                    subtitle: RequestOrderRules.bolehProsesPusat(widget.profile)
+                        ? 'Approval → Disiapkan → Perjalanan → Diterima'
+                        : 'Kirim antrian ke Pusat · lacak · terima di Verifikasi',
+                    icon: Icons.assignment_turned_in_rounded,
+                    iconColor: OptikAdminTokens.trainingSoft,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (c) =>
+                              RequestOrderRules.bolehProsesPusat(widget.profile)
+                                  ? RequestOrderPusatPage(
+                                      profile: widget.profile)
+                                  : RequestOrderPage(profile: widget.profile),
+                        ),
+                      );
+                    },
+                  ),
 
                 const SizedBox(height: 12),
                 PremiumSectionHeader(label: "inv_quick_tools".tr()),
