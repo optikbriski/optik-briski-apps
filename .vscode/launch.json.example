@@ -7,8 +7,6 @@
       "type": "dart",
       "program": "lib/main_admin.dart",
       "toolArgs": [
-        "--flavor",
-        "admin",
         "--dart-define-from-file=.dart_define.admin.json",
         "--dart-define=APP_FLAVOR=admin"
       ]
@@ -19,8 +17,6 @@
       "type": "dart",
       "program": "lib/main_karyawan.dart",
       "toolArgs": [
-        "--flavor",
-        "karyawan",
         "--dart-define-from-file=.dart_define.karyawan.json",
         "--dart-define=APP_FLAVOR=karyawan"
       ]
@@ -31,8 +27,6 @@
       "type": "dart",
       "program": "lib/main_member.dart",
       "toolArgs": [
-        "--flavor",
-        "member",
         "--dart-define-from-file=.dart_define.admin.json",
         "--dart-define=APP_FLAVOR=member"
       ]
@@ -43,14 +37,10 @@
       "type": "dart",
       "program": "lib/main_admin.dart",
       "toolArgs": [
-        "--flavor",
-        "admin",
         "--dart-define-from-file=.dart_define.admin.json",
         "--dart-define=APP_FLAVOR=admin",
         "--dart-define=ADMIN_TENANT_SLUG=optik-briski",
-        "--dart-define=ADMIN_PIN_TENANT=true",
-        "-PstoreApplicationId=com.optikbriski.admin",
-        "-PstoreAppName=Optik Admin"
+        "--dart-define=ADMIN_PIN_TENANT=true"
       ]
     },
     {
@@ -59,14 +49,10 @@
       "type": "dart",
       "program": "lib/main_karyawan.dart",
       "toolArgs": [
-        "--flavor",
-        "karyawan",
         "--dart-define-from-file=.dart_define.karyawan.json",
         "--dart-define=APP_FLAVOR=karyawan",
         "--dart-define=KARYAWAN_TENANT_SLUG=optik-briski",
-        "--dart-define=PIN_STORE_TENANT=true",
-        "-PstoreApplicationId=com.example.toko_kacamata_natan",
-        "-PstoreAppName=Optik Karyawan"
+        "--dart-define=PIN_STORE_TENANT=true"
       ]
     },
     {
@@ -75,14 +61,10 @@
       "type": "dart",
       "program": "lib/main_member.dart",
       "toolArgs": [
-        "--flavor",
-        "member",
         "--dart-define-from-file=.dart_define.admin.json",
         "--dart-define=APP_FLAVOR=member",
         "--dart-define=MEMBER_TENANT_SLUG=optik-briski",
-        "--dart-define=PIN_STORE_TENANT=true",
-        "-PstoreApplicationId=com.optikbriski.member",
-        "-PstoreAppName=Optik B. Riski"
+        "--dart-define=PIN_STORE_TENANT=true"
       ]
     }
   ]
