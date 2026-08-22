@@ -71,12 +71,13 @@ class AttendanceVerificationService {
     required List<String> statuses,
     String? tokoId,
     List<String>? tokoIds,
+    String? tenantId,
     DateTime? dayStart,
     DateTime? dayEnd,
     int limit = 100,
   }) async {
     var q = _client.from('attendance_verifications').select(
-      'id, shift_id, log_id, karyawan_id, toko_id, status, '
+      'id, shift_id, log_id, karyawan_id, toko_id, tenant_id, status, '
       'capture_photo_url, enrolled_photo_url, match_score, '
       'liveness_ok, liveness_confidence, liveness_provider, '
       'notes, reviewed_by, reviewed_at, poin_awarded, created_at, '
@@ -88,6 +89,11 @@ class AttendanceVerificationService {
     } else if (statuses.isNotEmpty) {
       q = q.inFilter('status', statuses);
     }
+    final tenant = (tenantId ?? AttendanceAdminScope.tenantIdOf(null) ?? '')
+        .trim();
+    if (tenant.isEmpty) return const [];
+    q = q.eq('tenant_id', tenant);
+
     if (tokoId != null && tokoId.isNotEmpty) {
       q = q.eq('toko_id', tokoId);
     } else if (tokoIds != null) {
@@ -116,10 +122,12 @@ class AttendanceVerificationService {
     required String verificationId,
     required String karyawanId,
     required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markAman');
     final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
     final uid = _client.auth.currentUser?.id;
     final now = DateTime.now();
     final tanggal = _jakartaDayKey(now);
@@ -143,6 +151,7 @@ class AttendanceVerificationService {
         })
         .eq('id', verificationId)
         .eq('toko_id', store)
+        .eq('tenant_id', tenant)
         .inFilter('status', [
           AttendanceVerificationStatus.pendingReview,
           AttendanceVerificationStatus.mencurigakan,
@@ -190,10 +199,12 @@ class AttendanceVerificationService {
   Future<void> markMencurigakan({
     required String verificationId,
     required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markMencurigakan');
     final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
     final uid = _client.auth.currentUser?.id;
     final updated = await _client
         .from('attendance_verifications')
@@ -205,6 +216,7 @@ class AttendanceVerificationService {
         })
         .eq('id', verificationId)
         .eq('toko_id', store)
+        .eq('tenant_id', tenant)
         .eq('status', AttendanceVerificationStatus.pendingReview)
         .select('id');
 
@@ -218,10 +230,12 @@ class AttendanceVerificationService {
     required String verificationId,
     required String karyawanId,
     required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markCurang');
     final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
     final uid = _client.auth.currentUser?.id;
     final penalty = AttendanceVerificationConfig.cheatingPenaltyPoints;
     final now = DateTime.now();
@@ -245,6 +259,7 @@ class AttendanceVerificationService {
         })
         .eq('id', verificationId)
         .eq('toko_id', store)
+        .eq('tenant_id', tenant)
         .eq('status', AttendanceVerificationStatus.mencurigakan)
         .select('id');
 
@@ -444,6 +459,16 @@ class AttendanceVerificationService {
     return s.contains('23505') ||
         s.contains('duplicate') ||
         s.contains('unique');
+  }
+
+  String _requireTenant(String? tenantId) {
+    final t = (tenantId ?? AttendanceAdminScope.tenantIdOf(null) ?? '').trim();
+    if (t.isEmpty) {
+      throw StateError(
+        'Tenant usaha wajib. Jangan memakai data merek lain.',
+      );
+    }
+    return t;
   }
 
   /// Notifikasi ke auth user karyawan (`notifikasi.user_id` → auth.users).

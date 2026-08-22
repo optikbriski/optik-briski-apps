@@ -39,6 +39,9 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
   bool get _allStores =>
       AttendanceAdminScope.canViewAllStores(widget.profile);
 
+  String? get _tenantId =>
+      AttendanceAdminScope.tenantIdOf(widget.profile);
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +93,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         statuses: [AttendanceVerificationStatus.pendingReview],
         tokoId: toko,
         tokoIds: toko == null ? _tokoOptions : null,
+        tenantId: _tenantId,
       );
       final filtered =
           AttendanceAdminScope.filterVerificationRows(rows, widget.profile);
@@ -125,7 +129,10 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -145,6 +152,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
         tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Valid — cocok dengan foto terdaftar',
       );
       if (!mounted) return;
@@ -166,7 +174,10 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -184,6 +195,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
       await _svc.markMencurigakan(
         verificationId: row['id'].toString(),
         tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;

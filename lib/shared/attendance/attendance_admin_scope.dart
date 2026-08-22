@@ -1,3 +1,5 @@
+import '../tenant/tenant_service.dart';
+
 /// Role scope untuk UX Absensi Admin (monitor vs kiosk) + HR toko.
 ///
 /// Absensi kiosk (QR + liveness/facematch) ada di **cabang** dan **Pusat**.
@@ -85,14 +87,37 @@ class AttendanceAdminScope {
     return isPusatTokoId(tokoOf(profile));
   }
 
+  /// Tenant sesi monitor. Kulit Rekasa / Optik tidak mengganti ini.
+  /// Kosong = belum terikat usaha → jangan baca merek lain.
+  static String? tenantIdOf(Map<String, dynamic>? profile) {
+    final fromProfile = (profile?['tenant_id'] ?? '').toString().trim();
+    if (fromProfile.isNotEmpty) return fromProfile;
+    if (TenantService.instance.isBound) {
+      return TenantService.instance.id;
+    }
+    return null;
+  }
+
+  /// Baris absensi milik usaha yang sama. Bukan sekat kulit.
+  static bool sameTenant(Map<String, dynamic> profile, String? rowTenantId) {
+    final a = tenantIdOf(profile);
+    final b = (rowTenantId ?? '').trim();
+    if (a == null || a.isEmpty || b.isEmpty) return false;
+    return a == b;
+  }
+
   /// Boleh lihat/nilai absensi toko ini?
-  /// - owner / super_admin: semua (cabang + pusat)
+  /// - owner / super_admin: semua (cabang + pusat) **di tenant sendiri**
   /// - admin_pusat: hanya cabang (bukan absensi Pusat sendiri)
   /// - admin_toko: hanya toko sendiri
   static bool canAccessTokoAttendance(
     Map<String, dynamic> profile,
-    String? tokoId,
-  ) {
+    String? tokoId, {
+    String? rowTenantId,
+  }) {
+    if (rowTenantId != null && !sameTenant(profile, rowTenantId)) {
+      return false;
+    }
     if (isOwner(profile) || isSuperAdmin(profile)) return true;
     if (isAdminPusat(profile)) return !isPusatTokoId(tokoId);
     final own = tokoOf(profile);
@@ -131,7 +156,12 @@ class AttendanceAdminScope {
   ) {
     return [
       for (final r in rows)
-        if (canAccessTokoAttendance(profile, r['toko_id']?.toString())) r,
+        if (canAccessTokoAttendance(
+          profile,
+          r['toko_id']?.toString(),
+          rowTenantId: r['tenant_id']?.toString(),
+        ))
+          r,
     ];
   }
 

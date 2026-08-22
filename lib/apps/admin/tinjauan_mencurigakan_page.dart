@@ -41,6 +41,9 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
   bool get _allStores =>
       AttendanceAdminScope.canViewAllStores(widget.profile);
 
+  String? get _tenantId =>
+      AttendanceAdminScope.tenantIdOf(widget.profile);
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +95,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         statuses: [AttendanceVerificationStatus.mencurigakan],
         tokoId: toko,
         tokoIds: toko == null ? _tokoOptions : null,
+        tenantId: _tenantId,
       );
       final filtered =
           AttendanceAdminScope.filterVerificationRows(rows, widget.profile);
@@ -127,7 +131,10 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -147,6 +154,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
         tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Aman setelah tinjauan lanjut',
       );
       if (!mounted) return;
@@ -168,7 +176,10 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -189,6 +200,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
         tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Terbukti curang pada verifikasi wajah absensi',
       );
       if (!mounted) return;

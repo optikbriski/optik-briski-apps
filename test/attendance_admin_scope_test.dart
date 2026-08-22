@@ -78,6 +78,42 @@ void main() {
     });
   });
 
+  group('tenant is the isolation unit, not skin', () {
+    test('owner cannot access another brand row', () {
+      final owner = {
+        'role': 'owner',
+        'toko_id': 'PUSAT',
+        'tenant_id': '00000000-0000-0000-0000-000000000001',
+      };
+      expect(
+        AttendanceAdminScope.canAccessTokoAttendance(
+          owner,
+          'CABANG-X',
+          rowTenantId: '00000000-0000-0000-0000-000000000099',
+        ),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canAccessTokoAttendance(
+          owner,
+          'CABANG-X',
+          rowTenantId: '00000000-0000-0000-0000-000000000001',
+        ),
+        isTrue,
+      );
+    });
+
+    test('missing tenant is fail-closed', () {
+      expect(
+        AttendanceAdminScope.sameTenant(
+          {'role': 'owner', 'toko_id': 'PUSAT'},
+          '00000000-0000-0000-0000-000000000001',
+        ),
+        isFalse,
+      );
+    });
+  });
+
   test('PUSAT and CABANG-PUSAT are the same store', () {
     expect(AttendanceAdminScope.sameTokoId('PUSAT', 'CABANG-PUSAT'), isTrue);
     expect(AttendanceAdminScope.sameTokoId('CABANG-X', 'CABANG-Y'), isFalse);
