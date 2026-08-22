@@ -29,7 +29,7 @@ comment on function public.require_member_tenant(uuid) is
   'Fail-closed. Null tidak boleh jatuh ke Optik.';
 
 -- 2) Buang default UUID Optik di argumen RPC.
--- Postgres tidak punya ALTER FUNCTION ... ALTER PARAMETER n DROP DEFAULT.
+-- CREATE OR REPLACE tidak boleh menghapus DEFAULT (42P13) — DROP dulu.
 do $$
 declare
   r record;
@@ -37,6 +37,7 @@ declare
   v_as int;
   v_head text;
   v_body text;
+  v_sig text;
 begin
   for r in
     select p.oid
@@ -47,6 +48,7 @@ begin
       and pg_get_expr(p.proargdefaults, 0)
             like '%00000000-0000-0000-0000-000000000001%'
   loop
+    v_sig := r.oid::regprocedure::text;
     v_def := pg_get_functiondef(r.oid);
     v_as := strpos(v_def, E'\nAS ');
     if v_as = 0 then
@@ -56,11 +58,16 @@ begin
     v_body := substr(v_def, v_as);
     v_head := regexp_replace(
       v_head,
-      $re$DEFAULT\s+'00000000-0000-0000-0000-000000000001'(::uuid)?$re$,
+      $re$DEFAULT\s+'00000000-0000-0000-0000-000000000001'(::[\w.]+)?$re$,
       '',
       'gi'
     );
+    execute format('drop function if exists %s', v_sig);
     execute v_head || v_body;
+    execute format(
+      'grant execute on function %s to anon, authenticated, service_role',
+      v_sig
+    );
   end loop;
 end
 $$;
@@ -104,6 +111,10 @@ alter table public.members alter column tenant_id drop default;
 alter table public.toko_id alter column tenant_id drop default;
 
 -- 5) RPC Member 000002: pakai require_member_tenant (bukan coalesce Optik).
+drop function if exists public.list_tenant_stores(uuid);
+drop function if exists public.member_login(text, text, uuid);
+drop function if exists public.list_member_sales(text, uuid);
+
 create or replace function public.list_tenant_stores(p_tenant_id uuid)
 returns jsonb
 language plpgsql
