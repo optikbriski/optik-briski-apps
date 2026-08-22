@@ -76,7 +76,10 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
           icon: const Icon(Icons.notifications_active_rounded,
               color: OptikAdminTokens.warning, size: 22),
           onPressed: () {
-            // ✅ NAVIGASI AKTIF: Langsung diarahkan menuju screen verifikasi terima paket
+            if (!ReceiveVerificationRules.canOpenIncomingQueue(
+                widget.profile)) {
+              return;
+            }
             Navigator.push(
               context,
               MaterialPageRoute(
