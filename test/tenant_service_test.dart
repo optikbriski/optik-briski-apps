@@ -69,6 +69,15 @@ void main() {
     expect(isBrandedStoreApk, isFalse);
   });
 
+  test('fail-closed SQL exists after tenant isolation migrations', () {
+    final sql = File(
+      'supabase/migrations/20260820000015_tenant_fail_closed.sql',
+    ).readAsStringSync();
+    expect(sql, contains('raise exception'));
+    expect(sql, contains('jangan memakai data usaha lain'));
+    expect(sql, isNot(contains('return public.default_tenant_id()')));
+  });
+
   test('requireResolved refuses empty slug on shared Rekasa shell', () async {
     TenantService.instance.debugUnbind();
     TenantService.instance.slug = '';
