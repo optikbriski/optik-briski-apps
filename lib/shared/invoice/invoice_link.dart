@@ -17,6 +17,7 @@ import '../qr/obr_codes.dart';
 class InvoiceLink {
   static const String httpsBase = 'https://optik-briski-apps.vercel.app/i';
   static const String appScheme = 'optikbriski';
+  static const String rekasaAppScheme = 'rekasa';
   static const String appHost = 'invoice';
 
   /// QR cetak untuk pelanggan — wajib [token] untuk aksi lifecycle.
@@ -171,7 +172,7 @@ class InvoiceLink {
 
     final appUri = Uri.tryParse(s);
     if (appUri != null &&
-        appUri.scheme == appScheme &&
+        (appUri.scheme == appScheme || appUri.scheme == rekasaAppScheme) &&
         (appUri.host == appHost || appUri.pathSegments.contains(appHost))) {
       final segs = appUri.pathSegments.where((e) => e.isNotEmpty).toList();
       if (segs.isNotEmpty) {

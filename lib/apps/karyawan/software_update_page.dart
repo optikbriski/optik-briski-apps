@@ -5,6 +5,7 @@ import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/app_update_service.dart';
+import '../../shared/brand/brand_service.dart';
 
 class SoftwareUpdatePage extends StatefulWidget {
   const SoftwareUpdatePage({super.key, this.autoStartDownload = false});
@@ -217,8 +218,8 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             title: const Text('Izin instalasi diperlukan'),
-            content: const Text(
-              'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal → aktifkan untuk Optik B. Riski, lalu coba lagi.\n\nApp yang terpasang tidak rusak.',
+            content: Text(
+              'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal → aktifkan untuk ${BrandService.name}, lalu coba lagi.\n\nApp yang terpasang tidak rusak.',
             ),
             actions: [
               TextButton(
@@ -317,7 +318,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                             const Icon(Icons.check_circle_outline_rounded,
                                 size: 64, color: OptikKaryawanTokens.success),
                             const SizedBox(height: 20),
-                            Text("update_up_to_date".tr(),
+                            Text("update_up_to_date".brandTr(),
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                     color: OptikKaryawanTokens.ink,

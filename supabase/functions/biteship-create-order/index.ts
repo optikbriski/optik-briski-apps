@@ -2,6 +2,7 @@
 declare const Deno: any;
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
 
 /**
  * Buat order Biteship saat barang jadi / admin tekan Kirim.
@@ -55,6 +56,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
+    const brand = (await loadBrand(db)).displayName;
 
     // Auth: pastikan caller staff cabang / pusat
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -195,7 +197,7 @@ Deno.serve(async (req: Request) => {
       ? storePhoneRaw
       : (Deno.env.get("BITESHIP_ORIGIN_PHONE") ?? "080000000000");
     const originName = String(
-      storeInv?.shop_name || toko?.toko_id || order.toko_id || "Optik B. Riski",
+      storeInv?.shop_name || toko?.toko_id || order.toko_id || brand,
     );
     const originAddress = String(
       storeInv?.address || originName,
@@ -206,7 +208,7 @@ Deno.serve(async (req: Request) => {
     const createBody = {
       shipper_contact_name: originName,
       shipper_contact_phone: storePhone,
-      shipper_organization: "Optik B. Riski",
+      shipper_organization: brand,
       origin_contact_name: originName,
       origin_contact_phone: storePhone,
       origin_address: originAddress,

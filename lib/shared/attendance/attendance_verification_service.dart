@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
+import 'attendance_admin_scope.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_verification_config.dart';
 
@@ -69,12 +70,14 @@ class AttendanceVerificationService {
   Future<List<Map<String, dynamic>>> listByStatus({
     required List<String> statuses,
     String? tokoId,
+    List<String>? tokoIds,
+    String? tenantId,
     DateTime? dayStart,
     DateTime? dayEnd,
     int limit = 100,
   }) async {
     var q = _client.from('attendance_verifications').select(
-      'id, shift_id, log_id, karyawan_id, toko_id, status, '
+      'id, shift_id, log_id, karyawan_id, toko_id, tenant_id, status, '
       'capture_photo_url, enrolled_photo_url, match_score, '
       'liveness_ok, liveness_confidence, liveness_provider, '
       'notes, reviewed_by, reviewed_at, poin_awarded, created_at, '
@@ -86,8 +89,22 @@ class AttendanceVerificationService {
     } else if (statuses.isNotEmpty) {
       q = q.inFilter('status', statuses);
     }
+    final tenant = (tenantId ?? AttendanceAdminScope.tenantIdOf(null) ?? '')
+        .trim();
+    if (tenant.isEmpty) return const [];
+    q = q.eq('tenant_id', tenant);
+
     if (tokoId != null && tokoId.isNotEmpty) {
-      q = q.eq('toko_id', tokoId);
+      final aliases = AttendanceAdminScope.storeIdAliases(tokoId);
+      if (aliases.length == 1) {
+        q = q.eq('toko_id', aliases.first);
+      } else {
+        q = q.inFilter('toko_id', aliases);
+      }
+    } else if (tokoIds != null) {
+      final cleaned = AttendanceAdminScope.expandStoreIds(tokoIds);
+      if (cleaned.isEmpty) return const [];
+      q = q.inFilter('toko_id', cleaned);
     }
     if (dayStart != null) {
       q = q.gte('created_at', dayStart.toUtc().toIso8601String());
@@ -106,9 +123,24 @@ class AttendanceVerificationService {
   Future<void> markAman({
     required String verificationId,
     required String karyawanId,
+    required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markAman');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
+    final row = await _requireReviewCase(
+      verificationId: verificationId,
+      karyawanId: karyawanId,
+      tokoId: store,
+      tenantId: tenant,
+      allowedStatuses: const [
+        AttendanceVerificationStatus.pendingReview,
+        AttendanceVerificationStatus.mencurigakan,
+      ],
+    );
+    final caseKaryawan = row['karyawan_id'].toString();
     final uid = _client.auth.currentUser?.id;
     final now = DateTime.now();
     final tanggal = _jakartaDayKey(now);
@@ -131,6 +163,7 @@ class AttendanceVerificationService {
           'poin_awarded': awarded,
         })
         .eq('id', verificationId)
+        .eq('tenant_id', tenant)
         .inFilter('status', [
           AttendanceVerificationStatus.pendingReview,
           AttendanceVerificationStatus.mencurigakan,
@@ -147,7 +180,7 @@ class AttendanceVerificationService {
         throw 'Log absen tidak ditemukan — poin telat tidak bisa ditulis.';
       }
       await _insertPoinLog(
-        karyawanId: karyawanId,
+        karyawanId: caseKaryawan,
         tanggal: tanggal,
         poin: lateInfo.penaltyPoints,
         refId: AttendanceLatePenalty.refIdForLog(logId),
@@ -155,7 +188,7 @@ class AttendanceVerificationService {
       );
     } else {
       await _insertPoinLog(
-        karyawanId: karyawanId,
+        karyawanId: caseKaryawan,
         tanggal: tanggal,
         poin: ontimePoints,
         refId: 'absen-valid-$verificationId',
@@ -164,7 +197,7 @@ class AttendanceVerificationService {
     }
 
     await _notifyKaryawan(
-      karyawanId: karyawanId,
+      karyawanId: caseKaryawan,
       judul: 'Absensi wajah aman',
       isi: wasLate
           ? 'Verifikasi disetujui. Poin telat ${lateInfo.penaltyPoints} '
@@ -177,9 +210,19 @@ class AttendanceVerificationService {
   /// Flag ke antrean tinjauan lanjut (belum hukuman).
   Future<void> markMencurigakan({
     required String verificationId,
+    required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markMencurigakan');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
+    await _requireReviewCase(
+      verificationId: verificationId,
+      tokoId: store,
+      tenantId: tenant,
+      allowedStatuses: const [AttendanceVerificationStatus.pendingReview],
+    );
     final uid = _client.auth.currentUser?.id;
     final updated = await _client
         .from('attendance_verifications')
@@ -190,6 +233,7 @@ class AttendanceVerificationService {
           'reviewed_at': DateTime.now().toIso8601String(),
         })
         .eq('id', verificationId)
+        .eq('tenant_id', tenant)
         .eq('status', AttendanceVerificationStatus.pendingReview)
         .select('id');
 
@@ -203,9 +247,21 @@ class AttendanceVerificationService {
     required String verificationId,
     required String karyawanId,
     required String tokoId,
+    String? tenantId,
     String? notes,
   }) async {
     ProdWriteGuard.check('verifikasi.markCurang');
+    final store = AttendanceAdminScope.requireTokoId(tokoId);
+    final tenant = _requireTenant(tenantId);
+    final row = await _requireReviewCase(
+      verificationId: verificationId,
+      karyawanId: karyawanId,
+      tokoId: store,
+      tenantId: tenant,
+      allowedStatuses: const [AttendanceVerificationStatus.mencurigakan],
+    );
+    final caseKaryawan = row['karyawan_id'].toString();
+    final caseToko = (row['toko_id'] ?? store).toString();
     final uid = _client.auth.currentUser?.id;
     final penalty = AttendanceVerificationConfig.cheatingPenaltyPoints;
     final now = DateTime.now();
@@ -216,7 +272,7 @@ class AttendanceVerificationService {
             '(bukan keterlambatan).'
         : notes.trim();
 
-    final logId = await _logIdForVerification(verificationId);
+    final logId = (row['log_id'] ?? '').toString().trim();
 
     final updated = await _client
         .from('attendance_verifications')
@@ -228,6 +284,7 @@ class AttendanceVerificationService {
           'poin_awarded': penalty,
         })
         .eq('id', verificationId)
+        .eq('tenant_id', tenant)
         .eq('status', AttendanceVerificationStatus.mencurigakan)
         .select('id');
 
@@ -237,13 +294,13 @@ class AttendanceVerificationService {
 
     // Curang saja — jangan digabung dengan telat / ontime.
     await _removePoinForAbsenEvent(
-      karyawanId: karyawanId,
+      karyawanId: caseKaryawan,
       verificationId: verificationId,
-      logId: logId,
+      logId: logId.isEmpty ? null : logId,
     );
 
     await _insertPoinLog(
-      karyawanId: karyawanId,
+      karyawanId: caseKaryawan,
       tanggal: tanggal,
       poin: penalty,
       refId: refId,
@@ -251,8 +308,8 @@ class AttendanceVerificationService {
 
     try {
       await _client.from('surat_peringatan').insert({
-        'karyawan_id': karyawanId,
-        'toko_id': tokoId,
+        'karyawan_id': caseKaryawan,
+        'toko_id': caseToko,
         'tingkat': AttendanceVerificationConfig.cheatingSpTingkat,
         'alasan': alasan,
         'sumber': AttendanceVerificationConfig.sumberSpCurang,
@@ -268,7 +325,7 @@ class AttendanceVerificationService {
     }
 
     await _notifyKaryawan(
-      karyawanId: karyawanId,
+      karyawanId: caseKaryawan,
       judul: 'SP ${AttendanceVerificationConfig.cheatingSpTingkat} — Absensi',
       isi: 'Terbukti curang pada verifikasi wajah. '
           'Hanya poin curang $penalty + SP '
@@ -427,6 +484,49 @@ class AttendanceVerificationService {
     return s.contains('23505') ||
         s.contains('duplicate') ||
         s.contains('unique');
+  }
+
+  Future<Map<String, dynamic>> _requireReviewCase({
+    required String verificationId,
+    required String tokoId,
+    required String tenantId,
+    required List<String> allowedStatuses,
+    String? karyawanId,
+  }) async {
+    final row = await _client
+        .from('attendance_verifications')
+        .select('id, karyawan_id, toko_id, tenant_id, status, log_id')
+        .eq('id', verificationId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+    if (row == null) {
+      throw 'Kasus tinjauan tidak ditemukan di usaha ini.';
+    }
+    if (!AttendanceAdminScope.sameTokoId(row['toko_id']?.toString(), tokoId)) {
+      throw 'Kasus tinjauan bukan toko ini.';
+    }
+    if ((row['tenant_id'] ?? '').toString().trim() != tenantId) {
+      throw 'Kasus tinjauan bukan milik usaha ini.';
+    }
+    if (karyawanId != null &&
+        karyawanId.trim().isNotEmpty &&
+        (row['karyawan_id'] ?? '').toString() != karyawanId) {
+      throw 'Karyawan tidak cocok dengan kasus tinjauan.';
+    }
+    if (!allowedStatuses.contains((row['status'] ?? '').toString())) {
+      throw 'Status sudah berubah. Muat ulang daftar.';
+    }
+    return row;
+  }
+
+  String _requireTenant(String? tenantId) {
+    final t = (tenantId ?? AttendanceAdminScope.tenantIdOf(null) ?? '').trim();
+    if (t.isEmpty) {
+      throw StateError(
+        'Tenant usaha wajib. Jangan memakai data merek lain.',
+      );
+    }
+    return t;
   }
 
   /// Notifikasi ke auth user karyawan (`notifikasi.user_id` → auth.users).

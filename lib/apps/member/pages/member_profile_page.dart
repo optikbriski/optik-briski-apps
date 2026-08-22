@@ -24,6 +24,7 @@ import 'member_option_picker.dart';
 import 'member_points_page.dart';
 import 'member_reorder_page.dart';
 import 'member_software_update_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Tab Akun — daftar menu; isi detail dibuka setelah diklik.
 /// Layout: mode HP (1 kolom) vs mode tablet (grid 2 kolom).
@@ -240,7 +241,7 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
             eyebrow: 'Penting',
             icon: Icons.info_outline_rounded,
             description:
-                'Kehilangan kacamata bukan tanggung jawab Optik B. Riski. '
+                'Kehilangan kacamata bukan tanggung jawab ${BrandService.name}. '
                 'Gunakan riwayat nota/resep di app untuk membantu pesan ulang di toko — tanpa janji ganti rugi.',
             bullets: [
               if (showResep) 'Buka Resep & pesan ulang dari menu ini',

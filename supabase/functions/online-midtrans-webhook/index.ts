@@ -37,11 +37,21 @@ Deno.serve(async (req: Request) => {
       const url = new URL(req.url);
       const devPay = url.searchParams.get("dev_pay");
       if (devPay && !serverKey.trim()) {
-        const { data, error } = await db.rpc("fulfill_online_order_payment", {
-          p_midtrans_order_id: devPay,
-          p_payment_method: "DEV_MOCK",
-          p_gross_amount: null,
-        });
+        const rpcName = String(devPay).startsWith("POS-")
+          ? "fulfill_pos_payment"
+          : "fulfill_online_order_payment";
+        const params = String(devPay).startsWith("POS-")
+          ? {
+            p_midtrans_order_id: devPay,
+            p_payment_type: "DEV_MOCK",
+            p_gross_amount: null,
+          }
+          : {
+            p_midtrans_order_id: devPay,
+            p_payment_method: "DEV_MOCK",
+            p_gross_amount: null,
+          };
+        const { data, error } = await db.rpc(rpcName, params);
         if (error) throw error;
         return new Response(JSON.stringify(data), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -108,6 +118,22 @@ Deno.serve(async (req: Request) => {
       transactionStatus === "settlement";
 
     if (transactionStatus === "expire" || transactionStatus === "cancel") {
+      if (orderId.startsWith("POS-")) {
+        await db
+          .from("pos_payments")
+          .update({
+            status: transactionStatus === "cancel" ? "cancelled" : "expired",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("midtrans_order_id", orderId)
+          .eq("status", "pending");
+        return new Response(
+          JSON.stringify({ ok: true, skipped: transactionStatus }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
       // Ambil id lalu cancel_pending (lepas ONLINE_HOLD) — fallback update status.
       const { data: row } = await db
         .from("online_orders")
@@ -151,11 +177,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const gross = Math.round(parseFloat(grossAmount) || 0);
-    const { data, error } = await db.rpc("fulfill_online_order_payment", {
-      p_midtrans_order_id: orderId,
-      p_payment_method: paymentType || "Midtrans",
-      p_gross_amount: gross > 0 ? gross : null,
-    });
+    const isPos = orderId.startsWith("POS-");
+    const { data, error } = await db.rpc(
+      isPos ? "fulfill_pos_payment" : "fulfill_online_order_payment",
+      isPos
+        ? {
+          p_midtrans_order_id: orderId,
+          p_payment_type: paymentType || "Midtrans",
+          p_gross_amount: gross > 0 ? gross : null,
+        }
+        : {
+          p_midtrans_order_id: orderId,
+          p_payment_method: paymentType || "Midtrans",
+          p_gross_amount: gross > 0 ? gross : null,
+        },
+    );
     if (error) throw error;
 
     return new Response(JSON.stringify(data), {

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../training/training_mode.dart';
 import '../training/training_sandbox_store.dart';
+import 'attendance_admin_scope.dart';
 import 'geofence_geometry.dart';
 
 class GeofenceCheckResult {
@@ -257,11 +258,10 @@ class GeofenceService {
         );
         if (cached != null) return cached;
         try {
-          final remote = await _client
-              .from('toko_id')
-              .select(cols)
-              .eq('id', id)
-              .maybeSingle();
+          var remoteQ = _client.from('toko_id').select(cols).eq('id', id);
+          final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+          if (tenant != null) remoteQ = remoteQ.eq('tenant_id', tenant);
+          final remote = await remoteQ.maybeSingle();
           if (remote != null) {
             await TrainingSandboxStore.instance.insert(
               'toko_id',
@@ -274,7 +274,10 @@ class GeofenceService {
         }
         return null;
       }
-      return _client.from('toko_id').select(cols).eq('id', id).maybeSingle();
+      var q = _client.from('toko_id').select(cols).eq('id', id);
+      final tenant = AttendanceAdminScope.boundTenantIdOrNull();
+      if (tenant != null) q = q.eq('tenant_id', tenant);
+      return q.maybeSingle();
     }
 
     final primary = await fetch(tokoId);

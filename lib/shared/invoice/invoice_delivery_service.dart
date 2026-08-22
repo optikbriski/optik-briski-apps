@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../member/member_realtime.dart';
 import '../qr/obr_codes.dart';
+import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'invoice_delivery_result.dart';
 import 'invoice_link.dart';
@@ -185,13 +186,13 @@ class InvoiceDeliveryService {
     };
 
     final body = '$headline\n$tip';
-    await _db.rpc('create_member_order_alert', params: {
+    await _db.rpc('create_member_order_alert', params: withTenant({
       'p_no_invoice': invoice.trim(),
       'p_phone': digits,
       'p_title': title,
       'p_body': body,
       'p_kind': kind,
-    });
+    }));
 
     // Dorong APK Member secara instan (Broadcast), tidak menunggu poll.
     await MemberRealtime.broadcastOrderUpdate(

@@ -1,0 +1,87 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Admin Rekasa",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=admin",
+        "--dart-define=ADMIN_PIN_TENANT=false",
+        "--dart-define=ADMIN_TENANT_SLUG="
+      ]
+    },
+    {
+      "name": "Karyawan Rekasa",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_karyawan.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.karyawan.json",
+        "--dart-define=APP_FLAVOR=karyawan",
+        "--dart-define=PIN_STORE_TENANT=false",
+        "--dart-define=KARYAWAN_TENANT_SLUG="
+      ]
+    },
+    {
+      "name": "Member Rekasa",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_member.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=member",
+        "--dart-define=PIN_STORE_TENANT=false",
+        "--dart-define=MEMBER_TENANT_SLUG="
+      ]
+    },
+    {
+      "name": "Rekasa Company (katalog)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_store.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=store"
+      ]
+    },
+    {
+      "name": "Optik Admin (kulit pelanggan)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=admin",
+        "--dart-define=ADMIN_TENANT_SLUG=optik-briski",
+        "--dart-define=ADMIN_PIN_TENANT=true"
+      ]
+    },
+    {
+      "name": "Optik Karyawan (kulit pelanggan)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_karyawan.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.karyawan.json",
+        "--dart-define=APP_FLAVOR=karyawan",
+        "--dart-define=KARYAWAN_TENANT_SLUG=optik-briski",
+        "--dart-define=PIN_STORE_TENANT=true"
+      ]
+    },
+    {
+      "name": "Optik Member (kulit pelanggan)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_member.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=member",
+        "--dart-define=MEMBER_TENANT_SLUG=optik-briski",
+        "--dart-define=PIN_STORE_TENANT=true"
+      ]
+    }
+  ]
+}

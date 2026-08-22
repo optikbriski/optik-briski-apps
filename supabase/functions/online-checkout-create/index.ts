@@ -2,6 +2,7 @@
 declare const Deno: any;
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +21,17 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
+    const tenantId = String(body.tenant_id ?? "").trim();
+    if (!tenantId) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "tenant_id / kode usaha wajib" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+    const brand = (await loadBrand(db, tenantId)).displayName;
 
     const {
       phone,
@@ -65,6 +77,7 @@ Deno.serve(async (req: Request) => {
         p_shipping_voucher_discount: shipping_voucher_discount ?? 0,
         p_product_promo_code: product_promo_code ?? null,
         p_product_promo_discount: product_promo_discount ?? 0,
+        p_tenant_id: tenantId,
       },
     );
 
@@ -179,7 +192,7 @@ Deno.serve(async (req: Request) => {
               id: "ORDER",
               price: gross,
               quantity: 1,
-              name: "Pesanan Optik B. Riski",
+              name: `Pesanan ${brand}`,
             }];
           }
           return items;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Logo resmi Optik B. Riski.
+/// Logo merek (aset lokal; nama merek dari app_brand).
 /// - [OptikLogoTone.color] → `logo-web.png` (biru/merah) untuk latar terang
 /// - [OptikLogoTone.white] → `logo-web-white.png` untuk latar gelap / biru
 enum OptikLogoTone { color, white }

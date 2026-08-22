@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/brand/brand_service.dart';
 import '../../../shared/member/member_help_bot_intent.dart';
 import '../../../shared/member/member_help_bot_service.dart';
 import '../../../shared/member/member_help_nearest_store.dart';
@@ -166,7 +167,7 @@ class _MemberBantuanBotPageState extends State<MemberBantuanBotPage> {
         ..clear()
         ..add(
           _ChatMsg(
-            text: 'member_help_welcome_for_store'.tr(
+            text: 'member_help_welcome_for_store'.brandTr(
               namedArgs: {'store': _storeChipLabel(store)},
             ),
             fromUser: false,

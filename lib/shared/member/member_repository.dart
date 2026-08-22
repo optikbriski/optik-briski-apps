@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../invoice/invoice_hub_service.dart';
 import '../invoice/invoice_settings_service.dart';
 import '../maps/osm_address_search.dart';
+import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'member_catalog_kategori.dart';
 import 'member_points_grade.dart';
@@ -45,17 +46,17 @@ class MemberRepository {
   final SupabaseClient _db;
 
   Future<Map<String, dynamic>> requestOtp(String phone) async {
-    final res = await _db.rpc('member_request_otp', params: {
+    final res = await _db.rpc('member_request_otp', params: withTenant({
       'p_phone': phone.trim(),
-    });
+    }));
     return Map<String, dynamic>.from(res as Map);
   }
 
   Future<Map<String, dynamic>> verifyOtp(String phone, String code) async {
-    final res = await _db.rpc('member_verify_otp', params: {
+    final res = await _db.rpc('member_verify_otp', params: withTenant({
       'p_phone': phone.trim(),
       'p_code': code.trim(),
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     final member = map['member'];
     if (member is Map) {
@@ -69,10 +70,10 @@ class MemberRepository {
     required String identifier,
     required String password,
   }) async {
-    final res = await _db.rpc('member_login', params: {
+    final res = await _db.rpc('member_login', params: withTenant({
       'p_identifier': identifier.trim(),
       'p_password': password,
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     if (map['ok'] == true && map['member'] is Map) {
       await MemberSession.instance
@@ -88,14 +89,14 @@ class MemberRepository {
     String? email,
     DateTime? tanggalLahir,
   }) async {
-    final res = await _db.rpc('member_register', params: {
+    final res = await _db.rpc('member_register', params: withTenant({
       'p_phone': phone.trim(),
       'p_password': password,
       'p_nama': nama?.trim(),
       'p_email': email?.trim(),
       'p_tanggal_lahir':
           tanggalLahir?.toIso8601String().substring(0, 10),
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     if (map['ok'] == true && map['member'] is Map) {
       await MemberSession.instance
@@ -127,13 +128,13 @@ class MemberRepository {
     String? nama,
   }) async {
     try {
-      final res = await _db.rpc('member_save_register_draft', params: {
+      final res = await _db.rpc('member_save_register_draft', params: withTenant({
         'p_phone': phone.trim(),
         'p_password': password,
         'p_nama': nama?.trim(),
         'p_email': email.trim().isEmpty ? null : email.trim(),
         'p_tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};
@@ -164,7 +165,10 @@ class MemberRepository {
     try {
       final res = await _db.functions.invoke(
         'member-send-channel-otp',
-        body: body,
+        body: {
+          ...body,
+          'tenant_id': TenantService.instance.boundId,
+        },
       );
       if (res.data is Map) {
         return Map<String, dynamic>.from(res.data as Map);
@@ -190,10 +194,10 @@ class MemberRepository {
     );
     if (draft['ok'] != true) return draft;
     try {
-      final issued = await _db.rpc('member_issue_register_otp', params: {
+      final issued = await _db.rpc('member_issue_register_otp', params: withTenant({
         'p_phone': phone.trim(),
         'p_channel': channel,
-      });
+      }));
       if (issued is Map) {
         final m = Map<String, dynamic>.from(issued);
         return {
@@ -216,11 +220,11 @@ class MemberRepository {
     required String code,
   }) async {
     try {
-      final res = await _db.rpc('member_check_register_otp', params: {
+      final res = await _db.rpc('member_check_register_otp', params: withTenant({
         'p_phone': phone.trim(),
         'p_channel': channel,
         'p_code': code.trim(),
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'verified': false, 'error': '$e'};
@@ -238,13 +242,13 @@ class MemberRepository {
     String? nama,
   }) async {
     try {
-      final res = await _db.rpc('member_finalize_register_with_profile', params: {
+      final res = await _db.rpc('member_finalize_register_with_profile', params: withTenant({
         'p_phone': phone.trim(),
         'p_password': password,
         'p_nama': nama?.trim(),
         'p_email': email.trim().isEmpty ? null : email.trim(),
         'p_tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (_) {
       // Fallback kalau RPC with_profile belum di-deploy
@@ -257,9 +261,9 @@ class MemberRepository {
       );
       if (draft['ok'] != true) return draft;
       try {
-        final res = await _db.rpc('member_finalize_register', params: {
+        final res = await _db.rpc('member_finalize_register', params: withTenant({
           'p_phone': phone.trim(),
-        });
+        }));
         if (res is Map) return Map<String, dynamic>.from(res);
       } catch (e) {
         return {'ok': false, 'error': '$e'};
@@ -269,9 +273,9 @@ class MemberRepository {
   }
 
   Future<Map<String, dynamic>> requestPasswordReset(String identifier) async {
-    final res = await _db.rpc('member_request_password_reset', params: {
+    final res = await _db.rpc('member_request_password_reset', params: withTenant({
       'p_identifier': identifier.trim(),
-    });
+    }));
     return Map<String, dynamic>.from(res as Map);
   }
 
@@ -280,11 +284,11 @@ class MemberRepository {
     required String code,
     required String newPassword,
   }) async {
-    final res = await _db.rpc('member_reset_password', params: {
+    final res = await _db.rpc('member_reset_password', params: withTenant({
       'p_identifier': identifier.trim(),
       'p_code': code.trim(),
       'p_new_password': newPassword,
-    });
+    }));
     final map = Map<String, dynamic>.from(res as Map);
     if (map['ok'] == true && map['member'] is Map) {
       await MemberSession.instance
@@ -304,7 +308,7 @@ class MemberRepository {
     String? locale,
   }) async {
     try {
-      final res = await _db.rpc('member_upsert_profile', params: {
+      final res = await _db.rpc('member_upsert_profile', params: withTenant({
         'p_phone': phone,
         'p_nama': nama,
         'p_email': email,
@@ -313,7 +317,7 @@ class MemberRepository {
         'p_tanggal_lahir': tanggalLahir?.toIso8601String().substring(0, 10),
         'p_font_scale': fontScale,
         'p_locale': locale,
-      });
+      }));
       if (res is Map) {
         await MemberSession.instance
             .applyMember(Map<String, dynamic>.from(res));
@@ -327,9 +331,9 @@ class MemberRepository {
 
   Future<List<Map<String, dynamic>>> listSales(String phone) async {
     try {
-      dynamic res = await _db.rpc('list_member_sales', params: {
+      dynamic res = await _db.rpc('list_member_sales', params: withTenant({
         'p_phone': phone,
-      });
+      }));
       if (res is String && res.isNotEmpty) {
         try {
           res = jsonDecode(res);
@@ -372,9 +376,9 @@ class MemberRepository {
 
   Future<List<Map<String, dynamic>>> listGaransi(String phone) async {
     if (phone.trim().isEmpty) return const [];
-    dynamic res = await _db.rpc('list_member_garansi', params: {
+    dynamic res = await _db.rpc('list_member_garansi', params: withTenant({
       'p_phone': phone,
-    });
+    }));
     if (res is String && res.isNotEmpty) {
       try {
         res = jsonDecode(res);
@@ -390,9 +394,9 @@ class MemberRepository {
   Future<List<Map<String, dynamic>>> listResep(String phone) async {
     if (phone.trim().isEmpty) return const [];
     try {
-      dynamic res = await _db.rpc('list_member_resep', params: {
+      dynamic res = await _db.rpc('list_member_resep', params: withTenant({
         'p_phone': phone,
-      });
+      }));
       if (res is String && res.isNotEmpty) {
         try {
           res = jsonDecode(res);
@@ -445,9 +449,9 @@ class MemberRepository {
   Future<List<Map<String, dynamic>>> listRatings(String phone) async {
     if (phone.trim().isEmpty) return const [];
     try {
-      dynamic res = await _db.rpc('list_member_ratings', params: {
+      dynamic res = await _db.rpc('list_member_ratings', params: withTenant({
         'p_phone': phone,
-      });
+      }));
       if (res is String && res.isNotEmpty) {
         try {
           res = jsonDecode(res);
@@ -511,19 +515,15 @@ class MemberRepository {
     }
   }
 
-  /// Konten beranda Member (CMS Admin Pusat). Null = pakai default hardcode.
+  /// Konten beranda Member (CMS). Null = pakai default hardcode.
   /// Error jaringan/DB dibiarkan throw agar [fetchHomeBundle] bisa set partialError.
   Future<Map<String, dynamic>?> homeContent() async {
-    final row = await _db
-        .from('member_home_content')
-        .select(
-          'brand_label, slides, greeting_guest, greeting_subtitle_guest, '
-          'promo_title, promo_subtitle, sections, feature_flags',
-        )
-        .eq('id', 'default')
-        .maybeSingle();
-    if (row == null) return null;
-    return Map<String, dynamic>.from(row);
+    final res = await _db.rpc(
+      'get_member_home_content',
+      params: withTenant({}),
+    );
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return null;
   }
 
   Future<({T value, bool ok})> _safeHomeTracked<T>(
@@ -641,14 +641,18 @@ class MemberRepository {
   Future<List<Map<String, dynamic>>> _listPromosOrThrow({
     bool forMember = true,
   }) async {
-    var q = _db.from('member_promos').select().eq('active', true);
-    if (forMember) q = q.eq('show_on_member', true);
-    final rows = await q.order('sort_order').order('created_at');
+    dynamic res = await _db.rpc('list_member_promos', params: withTenant({
+      'p_for_member': forMember,
+    }));
+    if (res is String && res.isNotEmpty) {
+      try {
+        res = jsonDecode(res);
+      } catch (_) {}
+    }
+    if (res is! List) return const [];
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
-    return (rows as List)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .where((p) {
+    return res.map((e) => Map<String, dynamic>.from(e as Map)).where((p) {
       final left = p['quantity_remaining'];
       if (left != null && (int.tryParse('$left') ?? 0) <= 0) return false;
       final untilRaw = p['valid_until'];
@@ -674,11 +678,11 @@ class MemberRepository {
       // Always send p_after so PostgREST picks the 2-arg overload
       // (1-arg + 2-arg overloads → PGRST203 when only p_phone is sent).
       // Epoch fallback keeps the key present even if a client strips JSON null.
-      final params = <String, dynamic>{
+      final params = withTenant(<String, dynamic>{
         'p_phone': digits,
         'p_after': after?.toUtc().toIso8601String() ??
             '1970-01-01T00:00:00.000Z',
-      };
+      });
       final res = await _db.rpc('list_member_order_alerts', params: params);
       if (res is List) {
         return res
@@ -696,10 +700,10 @@ class MemberRepository {
     String channel = 'pos',
   }) async {
     try {
-      final res = await _db.rpc('lookup_member_promo', params: {
+      final res = await _db.rpc('lookup_member_promo', params: withTenant({
         'p_code': code.trim(),
         'p_channel': channel,
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};
@@ -725,14 +729,14 @@ class MemberRepository {
       };
     }
     try {
-      final res = await _db.rpc('redeem_member_promo', params: {
+      final res = await _db.rpc('redeem_member_promo', params: withTenant({
         'p_code': code.trim(),
         'p_sale_id': hasSale ? saleId!.trim() : null,
         'p_phone': (phone ?? '').trim().isEmpty ? null : phone!.trim(),
         'p_discount_applied': discountApplied,
         'p_online_order_id': hasOnline ? onlineOrderId!.trim() : null,
         'p_channel': channel,
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};
@@ -751,12 +755,12 @@ class MemberRepository {
     try {
       final toko = (tokoId ?? '').trim().toUpperCase();
       // Frame/Lensa/Lainnya → server p_kategori (Lainnya = not Frame/Lensa).
-      final res = await _db.rpc('list_member_catalog', params: {
+      final res = await _db.rpc('list_member_catalog', params: withTenant({
         'p_kategori': memberCatalogServerKategoriParam(kategori),
         'p_q': (search == null || search.trim().isEmpty) ? null : search.trim(),
         'p_limit': limit,
         if (toko.isNotEmpty && toko != 'PUSAT') 'p_toko': toko,
-      });
+      }));
       if (res is List) {
         return res.map((e) {
           final m = Map<String, dynamic>.from(e as Map);
@@ -771,53 +775,8 @@ class MemberRepository {
         }).toList();
       }
     } catch (_) {}
-    // Fallback jika RPC belum di-deploy (butuh RLS authenticated).
-    try {
-      var filter = _db
-          .from('products')
-          .select(
-            'id, sku, barcode, nama, kategori, sub_kategori, warna, '
-            'jenis_lensa, harga, harga_jual, image_url, foto_url, '
-            'stock, reserved_qty',
-          )
-          .eq('toko_id', 'PUSAT');
-      // Case-insensitive exact match (RPC uses lower(trim(...))).
-      // Lainnya: exclude Frame/Lensa at query level when possible.
-      final wantKat = memberCatalogServerKategoriParam(kategori);
-      if (wantKat == 'Lainnya') {
-        filter = filter
-            .not('kategori', 'ilike', 'Frame')
-            .not('kategori', 'ilike', 'Lensa');
-      } else if (wantKat != null) {
-        filter = filter.ilike('kategori', wantKat);
-      }
-      if (search != null && search.trim().isNotEmpty) {
-        final s = search.trim();
-        filter = filter.or('nama.ilike.%$s%,sku.ilike.%$s%,barcode.ilike.%$s%');
-      }
-      final rows = await filter.order('nama').limit(limit);
-      return (rows as List).map((e) {
-        final m = Map<String, dynamic>.from(e as Map);
-        final core = int.tryParse('${m['harga'] ?? 0}') ?? 0;
-        final jual = int.tryParse('${m['harga_jual'] ?? m['harga'] ?? 0}') ?? 0;
-        m['harga'] = jual > 0 ? jual : core;
-        if (core > jual && jual > 0) {
-          m['harga_asli'] = core;
-        }
-        m['image_url'] = (m['image_url']?.toString().trim().isNotEmpty == true)
-            ? m['image_url']
-            : m['foto_url'];
-        final stock = int.tryParse('${m['stock'] ?? 0}') ?? 0;
-        final reserved = int.tryParse('${m['reserved_qty'] ?? 0}') ?? 0;
-        m['available_qty'] = stock > reserved ? stock - reserved : 0;
-        return m;
-      }).where((m) {
-        if (wantKat == null) return true;
-        return memberCatalogMatchesKategori(m['kategori'], wantKat);
-      }).toList();
-    } catch (_) {
-      return const [];
-    }
+    // Jangan fallback ke produk PUSAT Optik — itu bocor katalog tenant lain.
+    return const [];
   }
 
   Future<int> pointsBalance(String memberId) async {
@@ -973,7 +932,7 @@ class MemberRepository {
   }) async {
     // Wajib lewat RPC: window 7 hari Jakarta, ownership, maks 1×, reject open request.
     // Jangan fallback insert langsung — itu bypass enforcement server.
-    await _db.rpc('submit_member_garansi_klaim', params: {
+    await _db.rpc('submit_member_garansi_klaim', params: withTenant({
       'p_phone': phone,
       'p_kartu_id': kartuId,
       'p_toko_id': tokoId,
@@ -982,7 +941,7 @@ class MemberRepository {
       'p_sale_id': saleId,
       'p_member_id': memberId,
       'p_foto_url': fotoUrl,
-    });
+    }));
   }
 
   /// Riwayat / pengajuan klaim Member (phone-scoped).
@@ -990,9 +949,9 @@ class MemberRepository {
   /// (jangan anggap "tidak ada pengajuan" saat status tidak diketahui).
   Future<List<Map<String, dynamic>>> listClaimRequests(String phone) async {
     if (phone.trim().isEmpty) return const [];
-    dynamic res = await _db.rpc('list_member_claim_requests', params: {
+    dynamic res = await _db.rpc('list_member_claim_requests', params: withTenant({
       'p_phone': phone,
-    });
+    }));
     if (res is String && res.isNotEmpty) {
       try {
         res = jsonDecode(res);
@@ -1089,7 +1048,7 @@ class MemberRepository {
   Future<List<Map<String, dynamic>>> listOnlineStores() async {
     List<Map<String, dynamic>> stores = const [];
     try {
-      dynamic res = await _db.rpc('list_online_selling_stores');
+      dynamic res = await _db.rpc('list_online_selling_stores', params: withTenant({}));
       // RPC returns jsonb — kadang List, kadang String JSON.
       if (res is String) {
         res = jsonDecode(res);
@@ -1179,10 +1138,10 @@ class MemberRepository {
     required String courier,
   }) async {
     try {
-      final res = await _db.rpc('quote_online_delivery', params: {
+      final res = await _db.rpc('quote_online_delivery', params: withTenant({
         'p_toko_id': tokoId,
         'p_courier': courier,
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};
@@ -1831,10 +1790,10 @@ class MemberRepository {
     List<String>? skus,
   }) async {
     try {
-      final res = await _db.rpc('list_branch_sellable', params: {
+      final res = await _db.rpc('list_branch_sellable', params: withTenant({
         'p_toko_id': tokoId,
         'p_skus': skus,
-      });
+      }));
       if (res is List) {
         return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
@@ -1887,6 +1846,7 @@ class MemberRepository {
           'product_promo_code': productPromoCode,
           'product_promo_discount': productPromoDiscount,
           'items': items,
+          'tenant_id': TenantService.instance.boundId,
         },
       );
       final data = res.data;
@@ -1908,7 +1868,7 @@ class MemberRepository {
       }
       // Debug only: RPC + DEV snap bila Edge belum deploy.
       try {
-        final created = await _db.rpc('create_online_order', params: {
+        final created = await _db.rpc('create_online_order', params: withTenant({
           'p_phone': phone,
           'p_member_id': memberId,
           'p_customer_name': customerName,
@@ -1928,7 +1888,7 @@ class MemberRepository {
           'p_shipping_voucher_discount': shippingVoucherDiscount,
           'p_product_promo_code': productPromoCode,
           'p_product_promo_discount': productPromoDiscount,
-        });
+        }));
         if (created is Map) {
           final m = Map<String, dynamic>.from(created);
           if (m['ok'] != true) return m;
@@ -1962,10 +1922,10 @@ class MemberRepository {
     required String onlineOrderId,
   }) async {
     try {
-      final res = await _db.rpc('get_online_order_for_member', params: {
+      final res = await _db.rpc('get_online_order_for_member', params: withTenant({
         'p_phone': phone,
         'p_online_order_id': onlineOrderId,
-      });
+      }));
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {
       return {'ok': false, 'error': '$e'};
@@ -1976,9 +1936,9 @@ class MemberRepository {
   /// Daftar `online_orders` Member (termasuk pending bayar). RPC expire 15m dulu.
   Future<List<Map<String, dynamic>>> listOnlineOrders(String phone) async {
     try {
-      dynamic res = await _db.rpc('list_member_online_orders', params: {
+      dynamic res = await _db.rpc('list_member_online_orders', params: withTenant({
         'p_phone': phone.trim(),
-      });
+      }));
       if (res is String && res.isNotEmpty) {
         try {
           res = jsonDecode(res);
@@ -1995,46 +1955,8 @@ class MemberRepository {
     } catch (e) {
       debugPrint('listOnlineOrders rpc: $e');
     }
-
-    // Fallback: expire server dulu, lalu soft-mark UI dari expires_at (15 menit).
-    try {
-      try {
-        await _db.rpc('expire_all_stale_stock_holds');
-      } catch (_) {
-        try {
-          await _db.rpc('expire_stale_online_orders');
-        } catch (_) {}
-      }
-      final digits = normalizeWaNumber(phone);
-      if (digits.isEmpty) return const [];
-      final alt = digits.startsWith('62') ? '0${digits.substring(2)}' : digits;
-      final rows = await _db
-          .from('online_orders')
-          .select()
-          .or('phone_e164.eq.$digits,phone_e164.eq.$alt')
-          .order('created_at', ascending: false)
-          .limit(40);
-      final now = DateTime.now().toUtc();
-      final out = <Map<String, dynamic>>[];
-      for (final raw in (rows as List)) {
-        final m = Map<String, dynamic>.from(raw as Map);
-        final st = (m['status'] ?? '').toString();
-        final exp = DateTime.tryParse('${m['expires_at'] ?? ''}');
-        final created = DateTime.tryParse('${m['created_at']}');
-        final deadline = exp?.toUtc() ??
-            created?.toUtc().add(const Duration(minutes: 15));
-        if (st == 'pending_payment' &&
-            deadline != null &&
-            deadline.isBefore(now)) {
-          m['status'] = 'expired';
-        }
-        out.add(m);
-      }
-      return out;
-    } catch (e) {
-      debugPrint('listOnlineOrders fallback: $e');
-      return const [];
-    }
+    // Jangan query tabel by HP saja — itu menembus sekat tenant.
+    return const [];
   }
 
   /// Member batalkan pending sendiri → lepas ONLINE_HOLD.
@@ -2046,11 +1968,11 @@ class MemberRepository {
     try {
       final res = await _db.rpc(
         'cancel_pending_online_order_for_member',
-        params: {
+        params: withTenant({
           'p_phone': phone.trim(),
           'p_online_order_id': onlineOrderId,
           'p_reason': reason,
-        },
+        }),
       );
       if (res is Map) return Map<String, dynamic>.from(res);
     } catch (e) {

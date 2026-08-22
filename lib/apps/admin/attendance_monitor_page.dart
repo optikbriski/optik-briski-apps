@@ -47,6 +47,9 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   List<Map<String, dynamic>> _karyawanRows = [];
   Map<String, dynamic>? _selectedRow;
 
+  String? get _tenantId =>
+      AttendanceAdminScope.tenantIdOf(widget.profile);
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +69,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       ].where((e) => e.isNotEmpty).toList();
       _tokoOptions =
           AttendanceAdminScope.filterTokoForMonitor(all, widget.profile);
+      if (_tokoOptions.length == 1) {
+        await _loadKaryawanForToko(_tokoOptions.first);
+        return;
+      }
       await _loadTokoCounts();
     } catch (e) {
       if (!mounted) return;
@@ -86,6 +93,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       _error = null;
     });
     try {
+      if (_tokoOptions.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _tokoCounts = {};
+          _loading = false;
+        });
+        return;
+      }
       final rows = await _svc.listByStatus(
         statuses: const [
           AttendanceVerificationStatus.pendingReview,
@@ -93,6 +108,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           AttendanceVerificationStatus.mencurigakan,
           AttendanceVerificationStatus.curang,
         ],
+        tokoIds: _tokoOptions,
+        tenantId: _tenantId,
         dayStart: _dayStart,
         dayEnd: _dayEnd,
         limit: 500,
@@ -140,6 +157,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           AttendanceVerificationStatus.curang,
         ],
         tokoId: tokoId,
+        tenantId: _tenantId,
         dayStart: _dayStart,
         dayEnd: _dayEnd,
         limit: 200,
@@ -208,7 +226,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     if (row == null || _acting) return;
     if (row['status'] != AttendanceVerificationStatus.pendingReview) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -228,6 +249,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       await _svc.markAman(
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Valid — cocok dengan foto terdaftar',
       );
       if (!mounted) return;
@@ -249,7 +272,10 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     if (row == null || _acting) return;
     if (row['status'] != AttendanceVerificationStatus.pendingReview) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
       return;
     }
@@ -266,6 +292,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
     try {
       await _svc.markMencurigakan(
         verificationId: row['id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;
@@ -457,9 +485,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               padding: const EdgeInsets.all(12),
               borderRadius: 14,
               child: Text(
-                AttendanceAdminScope.isOwner(widget.profile)
-                    ? 'Hari ${_dayFmt.format(_day)} · Owner: semua toko termasuk Pusat'
-                    : 'Hari ${_dayFmt.format(_day)} · Cabang saja (tanpa absensi Pusat)',
+                'Hari ${_dayFmt.format(_day)} · '
+                    '${AttendanceAdminScope.monitorBannerHint(widget.profile)}',
                 style: const TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 13,

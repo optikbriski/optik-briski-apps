@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/attendance/jadwal_kerja_rules.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/responsive.dart';
@@ -31,14 +33,8 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
   String _query = '';
   int _pendingCount = 0;
 
-  bool get _isPusat {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   @override
   void initState() {
@@ -58,23 +54,42 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
       _error = null;
     });
     try {
+      final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+      if (tenant == null || tenant.isEmpty) {
+        throw 'Kode usaha belum terverifikasi. Tidak boleh mengatur jadwal merek lain.';
+      }
+      if (!AttendanceAdminScope.canManageJadwal(widget.profile)) {
+        throw 'Hanya admin toko/cabang yang boleh mengatur jadwal kerja.';
+      }
       if (_isPusat) {
         final rows = await Supabase.instance.client
             .from('toko_id')
-            .select('id, toko_id')
+            .select('id, toko_id, tenant_id')
+            .eq('tenant_id', tenant)
             .order('id');
-        _cabang = List<Map<String, dynamic>>.from(rows);
+        _cabang = [
+          for (final r in List<Map<String, dynamic>>.from(rows))
+            if (AttendanceAdminScope.canEditTokoJadwal(
+              widget.profile,
+              r['id']?.toString(),
+            ))
+              r,
+        ];
       } else {
         final tokoId = widget.profile['toko_id']?.toString() ?? '';
+        if (!AttendanceAdminScope.canEditTokoJadwal(widget.profile, tokoId)) {
+          throw 'Admin toko hanya boleh mengatur jadwal toko sendiri.';
+        }
         final row = await Supabase.instance.client
             .from('toko_id')
-            .select('id, toko_id')
+            .select('id, toko_id, tenant_id')
             .eq('id', tokoId)
+            .eq('tenant_id', tenant)
             .maybeSingle();
         _cabang = row != null
             ? [row]
             : [
-                {'id': tokoId, 'toko_id': tokoId},
+                {'id': tokoId, 'toko_id': tokoId, 'tenant_id': tenant},
               ];
         _selectedTokoId = tokoId;
       }
@@ -188,6 +203,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
               : _selectedTokoId == null
                   ? _buildCabangList()
                   : _JadwalCabangEditor(
+                      profile: widget.profile,
                       tokoId: _selectedTokoId!,
                       tokoLabel: _namaCabang(
                         _cabang.firstWhere(
@@ -318,11 +334,13 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
 
 class _JadwalCabangEditor extends StatefulWidget {
   const _JadwalCabangEditor({
+    required this.profile,
     required this.tokoId,
     required this.tokoLabel,
     this.onOpenApproval,
   });
 
+  final Map<String, dynamic> profile;
   final String tokoId;
   final String tokoLabel;
   final VoidCallback? onOpenApproval;
@@ -402,16 +420,31 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
     _load();
   }
 
+  void _assertCanEdit() {
+    if (!AttendanceAdminScope.canEditTokoJadwal(
+      widget.profile,
+      widget.tokoId,
+    )) {
+      throw 'Hanya admin toko/cabang yang boleh mengubah jadwal toko ini.';
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      _assertCanEdit();
+      final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+      if (tenant == null || tenant.isEmpty) {
+        throw 'Kode usaha belum terverifikasi. Tidak boleh mengatur jadwal merek lain.';
+      }
       final karyawanRows = await Supabase.instance.client
           .from('karyawan')
-          .select('id, nama, jabatan, toko_id, status_approval')
+          .select('id, nama, jabatan, toko_id, status_approval, tenant_id')
           .eq('toko_id', widget.tokoId)
+          .eq('tenant_id', tenant)
           .order('nama');
 
       final list = List<Map<String, dynamic>>.from(karyawanRows)
@@ -747,10 +780,12 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     try {
+                      _assertCanEdit();
                       await Supabase.instance.client
                           .from('jadwal_kerja')
                           .delete()
                           .eq('karyawan_id', kid)
+                          .eq('toko_id', widget.tokoId)
                           .eq('tanggal', key);
                       if (ctx.mounted) Navigator.pop(ctx, true);
                     } catch (e) {
@@ -791,8 +826,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   if (!isLibur) {
                     final m = masukCtrl.text.trim();
                     final p = pulangCtrl.text.trim();
-                    if (!RegExp(r'^\d{2}:\d{2}$').hasMatch(m) ||
-                        !RegExp(r'^\d{2}:\d{2}$').hasMatch(p)) {
+                    if (!JadwalKerjaRules.isValidTime(m) ||
+                        !JadwalKerjaRules.isValidTime(p)) {
                       messenger.showSnackBar(
                         SnackBar(
                           backgroundColor: OptikAdminTokens.warning,
@@ -809,6 +844,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                     }
                   }
                   try {
+                    _assertCanEdit();
                     await Supabase.instance.client.from('jadwal_kerja').upsert({
                       'karyawan_id': kid,
                       'toko_id': widget.tokoId,
@@ -1005,7 +1041,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
     if (ok != true) return;
     if (!mounted) return;
 
-    bool validTime(String t) => RegExp(r'^\d{2}:\d{2}$').hasMatch(t.trim());
+    bool validTime(String t) => JadwalKerjaRules.isValidTime(t);
     if (!validTime(s1Masuk.text) ||
         !validTime(s1Pulang.text) ||
         !validTime(s2Masuk.text) ||
@@ -1030,16 +1066,21 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       shift1Label: s1Label.text.trim().isEmpty ? 'Shift Pagi' : s1Label.text.trim(),
       shift1Masuk: s1Masuk.text.trim(),
       shift1Pulang: s1Pulang.text.trim(),
-      shift1Kuota: int.tryParse(s1Kuota.text.trim()) ?? 0,
+      shift1Kuota: JadwalKerjaRules.clampKuota(
+        int.tryParse(s1Kuota.text.trim()) ?? 0,
+      ),
       shift2Label: s2Label.text.trim().isEmpty ? 'Shift Sore' : s2Label.text.trim(),
       shift2Masuk: s2Masuk.text.trim(),
       shift2Pulang: s2Pulang.text.trim(),
-      shift2Kuota: int.tryParse(s2Kuota.text.trim()) ?? 0,
+      shift2Kuota: JadwalKerjaRules.clampKuota(
+        int.tryParse(s2Kuota.text.trim()) ?? 0,
+      ),
       // Toko tidak tutup Minggu — kolom DB tetap false.
       mingguLibur: false,
     );
 
     try {
+      _assertCanEdit();
       await _assignService.saveSettings(next);
       setState(() => _shiftSettings = next);
       if (!mounted) return;
@@ -1172,6 +1213,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
 
     setState(() => _busy = true);
     try {
+      _assertCanEdit();
       final result = await _assignService.autoRandom(
         tokoId: widget.tokoId,
         karyawan: _karyawan,
@@ -1264,6 +1306,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
     if (confirm != true) return;
 
     try {
+      _assertCanEdit();
       await Supabase.instance.client.from('jadwal_kerja').upsert(
             _defaultRowsForKaryawan(kid),
             onConflict: 'karyawan_id,tanggal',
@@ -1347,6 +1390,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
     if (confirm != true) return;
 
     try {
+      _assertCanEdit();
       final rows = <Map<String, dynamic>>[];
       for (final k in _karyawan) {
         rows.addAll(_defaultRowsForKaryawan(k['id']?.toString() ?? ''));

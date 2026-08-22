@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Flutter Web (Admin) for Vercel Git / CLI builds.
+# Flutter Web (Admin) di / — tautan nota /i/… dan ?kontrak= tetap hidup.
+# Situs perusahaan Rekasa (Midtrans) di /perusahaan/
 # Set in Vercel → Project → Settings → Environment Variables (Production + Preview):
 #   SUPABASE_URL
 #   SUPABASE_ANON_KEY
@@ -41,12 +42,40 @@ else
   echo "WARN: GOOGLE_MAPS_API_KEY not set — Geofence Google Map akan gagal load di web."
 fi
 
+# Konsol Rekasa: jangan pin merek. Web per merek: scripts/release_brand_web.sh
 flutter build web --release \
   -t lib/main_admin.dart \
   --dart-define=APP_FLAVOR=admin \
+  --dart-define=ADMIN_PIN_TENANT=false \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
 
 test -f build/web/index.html
-echo "OK: build/web ready"
+mkdir -p build/web/perusahaan
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --exclude '.vercel' --exclude '.gitignore' site/ build/web/perusahaan/
+else
+  cp -R site/. build/web/perusahaan/
+  rm -rf build/web/perusahaan/.vercel
+fi
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+p = Path("build/web/perusahaan/config.js")
+cfg = {
+    "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
+    "supabaseAnon": os.environ.get("SUPABASE_ANON_KEY", ""),
+    "midtransClientKey": os.environ.get("MIDTRANS_CLIENT_KEY", ""),
+    "midtransProduction": os.environ.get("MIDTRANS_IS_PRODUCTION", "false").lower() == "true",
+    "contactEmail": "rekasakaryaindonesia@gmail.com",
+}
+p.write_text(
+    "window.REKASA_CHECKOUT = " + json.dumps(cfg, indent=2) + ";\n",
+    encoding="utf-8",
+)
+PY
+test -f build/web/perusahaan/index.html
+test -f build/web/perusahaan/store.js
+test -f build/web/perusahaan/sw-kill.js
+echo "OK: konsol Admin di / ; situs Rekasa di /perusahaan/"

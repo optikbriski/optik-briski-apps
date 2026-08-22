@@ -220,7 +220,8 @@ class QrRouter {
     }
     final uri = Uri.tryParse(s);
     return uri != null &&
-        uri.scheme == InvoiceLink.appScheme &&
+        (uri.scheme == InvoiceLink.appScheme ||
+            uri.scheme == InvoiceLink.rekasaAppScheme) &&
         (uri.host == InvoiceLink.appHost ||
             uri.pathSegments.contains(InvoiceLink.appHost));
   }

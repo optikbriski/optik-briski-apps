@@ -38,15 +38,30 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
   bool get _canMonitor =>
       AttendanceAdminScope.canOpenStoreMonitor(widget.profile);
 
+  bool get _allStores =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
+
+  String? get _tenantId =>
+      AttendanceAdminScope.tenantIdOf(widget.profile);
+
   @override
   void initState() {
     super.initState();
-    _tokoFilter = _canMonitor ? null : widget.profile['toko_id']?.toString();
+    _tokoFilter =
+        _allStores ? null : widget.profile['toko_id']?.toString();
     _bootstrap();
   }
 
   Future<void> _bootstrap() async {
     try {
+      if ((_tenantId ?? '').isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Kode usaha belum terverifikasi. Tidak boleh membaca merek lain.';
+        });
+        return;
+      }
       if (_canMonitor) {
         final rows = await Supabase.instance.client
             .from('toko_id')
@@ -82,11 +97,13 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
 
       final toko = _tokoFilter?.isNotEmpty == true
           ? _tokoFilter
-          : (_canMonitor ? null : widget.profile['toko_id']?.toString());
+          : (_allStores ? null : widget.profile['toko_id']?.toString());
 
       final rows = await _svc.listByStatus(
         statuses: [AttendanceVerificationStatus.mencurigakan],
         tokoId: toko,
+        tokoIds: toko == null ? _tokoOptions : null,
+        tenantId: _tenantId,
       );
       final filtered =
           AttendanceAdminScope.filterVerificationRows(rows, widget.profile);
@@ -122,8 +139,15 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      return;
+    }
+    if (!AttendanceAdminScope.canResolveAman(row['status']?.toString())) {
+      _snack('Status sudah berubah. Muat ulang daftar.', OptikAdminTokens.warning);
       return;
     }
     final ok = await _confirm(
@@ -141,6 +165,8 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       await _svc.markAman(
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
+        tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Aman setelah tinjauan lanjut',
       );
       if (!mounted) return;
@@ -162,8 +188,18 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     final row = _selected;
     if (row == null || _acting) return;
     if (!AttendanceAdminScope.canAccessTokoAttendance(
-        widget.profile, row['toko_id']?.toString())) {
+        widget.profile,
+        row['toko_id']?.toString(),
+        rowTenantId: row['tenant_id']?.toString(),
+      )) {
       _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      return;
+    }
+    if (!AttendanceAdminScope.canResolveCurang(row['status']?.toString())) {
+      _snack(
+        'Curang hanya dari antrean mencurigakan. Tidak boleh loncat dari pending.',
+        OptikAdminTokens.warning,
+      );
       return;
     }
     final ok = await _confirm(
@@ -183,6 +219,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
         verificationId: row['id'].toString(),
         karyawanId: row['karyawan_id'].toString(),
         tokoId: (row['toko_id'] ?? '').toString(),
+        tenantId: _tenantId,
         notes: 'Terbukti curang pada verifikasi wajah absensi',
       );
       if (!mounted) return;
@@ -266,8 +303,14 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
     );
   }
 
-  String get _tokoFilterLabel =>
-      _tokoFilter == null || _tokoFilter!.isEmpty ? 'Semua toko' : _tokoFilter!;
+  String get _tokoFilterLabel {
+    if (_tokoFilter != null && _tokoFilter!.isNotEmpty) return _tokoFilter!;
+    if (!_allStores) {
+      final own = widget.profile['toko_id']?.toString() ?? '';
+      return own.isEmpty ? 'Toko sendiri' : own;
+    }
+    return 'Semua toko';
+  }
 
   Future<void> _pickTokoFilter() async {
     if (!_canMonitor) return;
@@ -278,8 +321,8 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
       subtitle: 'Pilih cabang untuk antrean tinjauan',
       headerIcon: Icons.storefront_rounded,
       searchHint: 'Cari kode toko…',
-      clearLabel: 'Semua toko',
-      clearSubtitle: 'Tampilkan seluruh antrean',
+      clearLabel: _allStores ? 'Semua toko' : null,
+      clearSubtitle: _allStores ? 'Tampilkan seluruh antrean' : null,
       clearIcon: Icons.apps_rounded,
       selected: _tokoFilter,
       options: [
@@ -400,6 +443,7 @@ class _TinjauanMencurigakanPageState extends State<TinjauanMencurigakanPage> {
                       'Aman = +${AttendanceVerificationConfig.validDayPoints} poin. '
                       'Terbukti curang = ${AttendanceVerificationConfig.cheatingPenaltyPoints} poin '
                       '+ SP ${AttendanceVerificationConfig.cheatingSpTingkat}. '
+                      '${AttendanceAdminScope.monitorBannerHint(widget.profile)}. '
                       'Bukan untuk keterlambatan.',
                       style: const TextStyle(
                         color: OptikAdminTokens.slate,

@@ -53,13 +53,25 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="optikbriski" android:host="login-callback" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="rekasa" android:host="login-callback" />
+            </intent-filter>
 
-            <!-- Hub QR invoice: optikbriski://invoice/{no_invoice} -->
+            <!-- Hub QR invoice: kulit Optik + kulit Rekasa -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="optikbriski" android:host="invoice" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="rekasa" android:host="invoice" />
             </intent-filter>
         </activity>
         <meta-data

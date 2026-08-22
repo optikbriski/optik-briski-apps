@@ -1,17 +1,12 @@
-# toko_kacamata_natan
+# Rekasa
 
-A new Flutter project.
+Satu codebase, satu Supabase. **REKASA KARYA INDONESIA** menjual mesin operasional UMKM.
 
-## Getting Started
+**Optik B. Riski** adalah kulit tenant #1 (`brands/optik-briski.json`, `BRAND=optik-briski`). Bukan nama produk. Jangan ganti `applicationId` Optik di file itu.
 
-This project is a starting point for a Flutter application.
+Debug: `.vscode/launch.json` — **Admin / Karyawan / Member Rekasa** (kasir & operasi toko) plus **Rekasa Company (katalog)** (etalase paket, bukan POS). **Optik B. Riski** tetap sebagai kulit pelanggan #1 (jangan hapus `brands/optik-briski.json` / `applicationId`-nya).
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Etalase Mac/debug: pilih **Rekasa Company (katalog)** — tanpa `--flavor` (Xcode hanya punya scheme Runner).
+- Etalase Android release: `bash scripts/release_rekasa_store.sh`
+- APK Rekasa (kode usaha): `bash scripts/release_rekasa_ops.sh`
+- APK Optik (kulit): `BRAND=optik-briski bash scripts/release_admin_apk.sh`

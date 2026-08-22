@@ -6,8 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
 import '../../shared/admin/admin_code_login_service.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/tenant/tenant_modules.dart';
+import '../../shared/tenant/tenant_service.dart';
+import '../../shared/widgets/login_brand_header.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -110,11 +114,31 @@ class _LoginPageState extends State<LoginPage> {
       'admin_pusat',
       'admin_toko',
       'super_admin',
+      'platform',
     };
+    final isPlat = profile['is_platform'] == true ||
+        profile['is_platform'] == 'true' ||
+        assignedRole == 'platform';
+    if (isBrandedStoreApk &&
+        !TenantService.instance.storeMatchesApk(
+          profile['tenant_id']?.toString(),
+        )) {
+      await client.auth.signOut();
+      throw 'Akun ini bukan admin ${BrandService.name}.';
+    }
+    if (!isPlat &&
+        !isRekasaControlPlane &&
+        !TenantService.instance.sessionAllowsAccount(
+          profile['tenant_id']?.toString(),
+        )) {
+      await client.auth.signOut();
+      throw 'Akun ini bukan admin ${BrandService.name}.';
+    }
+
     if (!adminRoles.contains(assignedRole)) {
       await client.auth.signOut();
       throw 'Role "$assignedRole" tidak diizinkan di Admin. '
-          'Set role di Table Editor: owner / admin_pusat / admin_toko.';
+          'Set role di Table Editor: owner / admin_pusat / admin_toko / platform.';
     }
 
     if (assignedTokoId.isEmpty) {
@@ -149,6 +173,10 @@ class _LoginPageState extends State<LoginPage> {
       merged['login_via_karyawan_jabatan'] = actor.jabatan;
       merged['login_via_audit_id'] = actor.auditId;
     }
+
+    await TenantService.instance.bindFromProfile(merged);
+    await BrandService.load();
+    await TenantModules.instance.load();
 
     if (!mounted) return;
     if (actor != null && actor.isPresent) {
@@ -322,7 +350,10 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const OptikBrandLogo.color(height: 58),
+                    const LoginBrandHeader(
+                      logoHeight: 58,
+                      nameColor: OptikAdminTokens.navy,
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       "admin_login_subtitle".tr().toUpperCase(),
@@ -542,7 +573,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 18),
                     Text(
-                      "admin_login_footer".tr(),
+                      isBrandedStoreApk
+                          ? '© ${DateTime.now().year} Akses Web Aman'
+                          : "admin_login_footer".brandTr(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

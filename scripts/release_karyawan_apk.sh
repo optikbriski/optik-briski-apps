@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
-# Build APK Karyawan (split per-ABI = lebih kecil, kualitas sama) + petunjuk publish.
+# Build APK Karyawan. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
+# shellcheck source=scripts/brand_env.sh
+source "$ROOT/scripts/brand_env.sh"
 OUT_DIR="build/app/outputs/flutter-apk"
-DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
-DEST_ARM32="build/optik-karyawan-${VERSION}-armeabi-v7a.apk"
+if [[ "$STORE_SLUG" == "optik-briski" ]]; then
+  DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
+  DEST_ARM32="build/optik-karyawan-${VERSION}-armeabi-v7a.apk"
+else
+  DEST_ARM64="build/${STORE_SLUG}-karyawan-${VERSION}.apk"
+  DEST_ARM32="build/${STORE_SLUG}-karyawan-${VERSION}-armeabi-v7a.apk"
+fi
 
-echo "==> Build Karyawan APK v${VERSION} (split per-ABI, tanpa x86 emulator)"
-DEFINE_ARGS=(--dart-define=APP_FLAVOR=karyawan)
+echo "==> Build Karyawan APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG})"
+DEFINE_ARGS=(
+  --dart-define=APP_FLAVOR=karyawan
+  --dart-define=KARYAWAN_TENANT_SLUG="${KARYAWAN_TENANT_SLUG:-$STORE_SLUG}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-false}"
+)
 if [[ -f .dart_define.karyawan.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.karyawan.json)
 else
@@ -27,11 +38,18 @@ FLUTTER_ARGS=(
   --obfuscate --split-debug-info=build/app/outputs/symbols
   "${DEFINE_ARGS[@]}"
 )
+if [[ -n "${STORE_KARYAWAN_APPLICATION_ID:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreApplicationId="$STORE_KARYAWAN_APPLICATION_ID")
+fi
+if [[ -n "${STORE_KARYAWAN_APP_NAME:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreAppName="$STORE_KARYAWAN_APP_NAME")
+fi
 flutter "${FLUTTER_ARGS[@]}"
 
 # HP modern (2018+) hampir semua arm64 — ini yang dibagikan.
 ARM64_SRC=""
 for candidate in \
+  "$OUT_DIR/app-arm64-v8a-karyawan-release.apk" \
   "$OUT_DIR/app-karyawan-arm64-v8a-release.apk" \
   "$OUT_DIR/app-arm64-v8a-release.apk"; do
   if [[ -f "$candidate" ]]; then ARM64_SRC="$candidate"; break; fi
@@ -46,6 +64,7 @@ cp -f "$ARM64_SRC" "$DEST_ARM64"
 bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
 # HP lama 32-bit (opsional)
 for candidate in \
+  "$OUT_DIR/app-armeabi-v7a-karyawan-release.apk" \
   "$OUT_DIR/app-karyawan-armeabi-v7a-release.apk" \
   "$OUT_DIR/app-armeabi-v7a-release.apk"; do
   if [[ -f "$candidate" ]]; then
@@ -65,7 +84,7 @@ echo ""
 echo "Langkah publish update (tanpa kirim link ke karyawan):"
 echo "1. Supabase → Storage → bucket public 'app-releases' (jika belum)"
 echo "2. Upload file: $DEST_ARM64"
-echo "   Nama wajib: optik-karyawan-${VERSION}.apk"
+echo "Nama wajib: ${STORE_SLUG}-karyawan-${VERSION}.apk"
 echo "3. Setelah migration auto-sync: selesai — versi_app terisi otomatis."
 echo "   Atau: bash scripts/publish_karyawan_apk.sh (upload + mengandalkan trigger)"
 echo ""

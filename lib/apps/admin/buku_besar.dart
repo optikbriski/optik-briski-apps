@@ -18,6 +18,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
 import '../../shared/export/daily_ledger_pdf_service.dart';
 import '../../shared/finance/gl_posting_service.dart';
+import '../../shared/brand/brand_service.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -1321,7 +1322,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       itemBuilder: (context, index) {
         final tokoId = listCabangUnik[index];
         return PremiumListTile(
-          title: 'Optik B. Riski · ${_tokoLabel(tokoId)}',
+          title: '${BrandService.name} · ${_tokoLabel(tokoId)}',
           subtitle: 'Buka jurnal keuangan cabang',
           icon: Icons.store_rounded,
           iconColor: OptikAdminTokens.navy,

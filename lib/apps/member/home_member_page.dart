@@ -7,8 +7,10 @@ import '../../shared/member/member_home_models.dart';
 import '../../shared/member/member_inbox_unread.dart';
 import '../../shared/member/member_points_grade.dart';
 import '../../shared/member/member_session.dart';
+import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/theme.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import 'member_rating_page.dart';
 import 'pages/member_booking_page.dart';
 import 'pages/member_care_page.dart';
@@ -42,6 +44,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     MemberCart.instance.addListener(_onCart);
     MemberSession.instance.addListener(_onSession);
     MemberInboxUnread.instance.addListener(_onInboxUnread);
+    TenantModules.instance.addListener(_onHome);
     MemberCart.instance.ensureLoaded();
     _home.ensureLoaded();
     MemberInboxUnread.instance.refresh();
@@ -53,6 +56,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     MemberCart.instance.removeListener(_onCart);
     MemberSession.instance.removeListener(_onSession);
     MemberInboxUnread.instance.removeListener(_onInboxUnread);
+    TenantModules.instance.removeListener(_onHome);
     super.dispose();
   }
 
@@ -159,7 +163,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     final loading = _home.loading && snap == null;
     final refreshing = _home.loading && snap != null;
     final name = (session.nama ?? '').trim();
-    final guestHello = snap?.greetingGuest() ?? 'Hi, Teman Optik!';
+    final guestHello = snap?.greetingGuest() ?? 'Hi!';
     final guestSub = snap?.greetingSubtitleGuest() ??
         'Login untuk lihat pesanan & garansi';
     final hello = name.isEmpty ? guestHello : 'Hi, $name!';
@@ -171,7 +175,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             'image_url': '',
           },
         ];
-    final brand = snap?.brandLabel() ?? 'OPTIK B. RISKI';
+    final brand = snap?.brandLabel() ?? BrandService.name;
     final promoTitle = snap?.promoTitle() ?? 'Promo & poin';
     final promoSub = snap?.promoSubtitle() ?? 'Voucher dan saldo poin kamu';
     final sections = snap?.orderedSections() ??
@@ -257,6 +261,7 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
             ),
           ),
           onGaransi: () => _open(const MemberWarrantyListPage()),
+          showGaransi: TenantModules.instance.allows('warranty'),
         );
       } else if (key == 'promo') {
         block = _PromoSection(
@@ -301,7 +306,8 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
         );
       } else if (key == 'services_main') {
         final mainItems = <Widget>[];
-        if (flag('katalog')) {
+        if (flag('katalog') &&
+            TenantModules.instance.allows('online_orders')) {
           mainItems.add(Expanded(
             child: _BigServiceButton(
               icon: Icons.storefront_rounded,
@@ -635,7 +641,7 @@ class _HeroBannerState extends State<_HeroBanner> {
             children: [
               Row(
                 children: [
-                  const OptikBrandLogo.white(height: 26),
+                  const AppBrandMark(height: 26, onDark: true),
                   if (widget.brandLabel.trim().isNotEmpty) ...[
                     const SizedBox(width: 10),
                     Expanded(
@@ -707,6 +713,7 @@ class _GreetingCard extends StatelessWidget {
     required this.onPoints,
     required this.onOrders,
     required this.onGaransi,
+    this.showGaransi = true,
   });
 
   final String hello;
@@ -721,6 +728,7 @@ class _GreetingCard extends StatelessWidget {
   final VoidCallback onPoints;
   final VoidCallback onOrders;
   final VoidCallback onGaransi;
+  final bool showGaransi;
 
   @override
   Widget build(BuildContext context) {
@@ -806,14 +814,15 @@ class _GreetingCard extends StatelessWidget {
                   onTap: onOrders,
                 ),
               ),
-              Expanded(
-                child: _RoundStat(
-                  icon: Icons.verified_user_outlined,
-                  label: 'Garansi',
-                  value: loading ? '…' : '$garansiCount',
-                  onTap: onGaransi,
+              if (showGaransi)
+                Expanded(
+                  child: _RoundStat(
+                    icon: Icons.verified_user_outlined,
+                    label: 'Garansi',
+                    value: loading ? '…' : '$garansiCount',
+                    onTap: onGaransi,
+                  ),
                 ),
-              ),
             ],
           ),
         ],

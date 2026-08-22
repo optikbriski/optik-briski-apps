@@ -8,6 +8,7 @@ import 'attendance/attendance_admin_scope.dart';
 import 'ktp/ktp_approval_review_page.dart';
 import 'liveness_camera_page.dart';
 import 'responsive.dart';
+import 'brand/brand_service.dart';
 import 'theme.dart';
 import 'widgets/admin/admin_premium.dart';
 
@@ -44,14 +45,15 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     'Menunggu Persetujuan',
   ];
 
-  // Cek apakah admin pusat atau owner agar bisa memantau seluruh cabang
-  bool get _isPusat {
-    final cabang = widget.cabangAdmin.toUpperCase();
-    return cabang == 'PUSAT' ||
-        cabang == 'CABANG-PUSAT' ||
-        widget.roleAdmin == 'owner' ||
-        widget.roleAdmin == 'admin_pusat';
-  }
+  /// Semua cabang: owner / admin_pusat / super_admin.
+  /// admin_toko (meski assigned PUSAT) hanya toko sendiri.
+  bool get _isPusat => AttendanceAdminScope.canViewAllStores(
+        widget.profile ??
+            <String, dynamic>{
+              'role': widget.roleAdmin,
+              'toko_id': widget.cabangAdmin,
+            },
+      );
 
   @override
   void initState() {
@@ -238,10 +240,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           data['tanggal_mulai'] != null
               ? data['tanggal_mulai'].toString().split('T')[0]
               : '-'),
-      if (_isPusat)
-        _buildInfoRow("appr_pin_absensi".tr(),
-            data['pin_absensi']?.toString() ?? '-',
-            tone: _InfoTone.sensitive),
+      _buildInfoRow("appr_pin_absensi".tr(),
+          data['pin_absensi']?.toString() ?? '-',
+          tone: _InfoTone.sensitive),
       _buildInfoRow(
         "appr_status".tr(),
         data['status_approval'] ?? '-',
@@ -251,11 +252,14 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
     final payroll = _buildDataSection("appr_data_payroll".tr(), [
       _buildInfoRow("hr_reg_bank".tr(), data['nama_bank'] ?? 'BCA'),
       _buildInfoRow("appr_no_rekening".tr(), data['no_rekening'] ?? '-'),
+      _buildInfoRow(
+        'Gaji pokok',
+        (data['gaji_pokok'] ?? 0).toString(),
+      ),
     ]);
     final darurat = _buildDataSection("hr_kontak_darurat".tr(), [
       _buildInfoRow("appr_nama_kontak".tr(), data['darurat_nama'] ?? '-'),
-      if (_isPusat)
-        _buildInfoRow("hr_reg_wa_darurat".tr(), data['darurat_wa'] ?? '-'),
+      _buildInfoRow("hr_reg_wa_darurat".tr(), data['darurat_wa'] ?? '-'),
     ]);
 
     if (isMobile) {
@@ -351,7 +355,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                   color: OptikAdminTokens.navy, size: 24),
               const SizedBox(width: 8),
               Text(
-                "judul_aplikasi".tr(),
+                BrandService.name,
                 style: const TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 18,

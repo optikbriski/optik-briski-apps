@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import '../../shared/member/member_repository.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/config.dart';
+import '../../shared/tenant/tenant_modules.dart';
+import '../../shared/tenant/tenant_service.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/login_brand_header.dart';
 import 'member_forgot_password_page.dart';
 import 'member_register_page.dart';
 
@@ -20,6 +24,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   final _repo = MemberRepository();
   final _idCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   bool _busy = false;
   bool _obscure = true;
 
@@ -27,6 +32,7 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
   void dispose() {
     _idCtrl.dispose();
     _passCtrl.dispose();
+    _slugCtrl.dispose();
     super.dispose();
   }
 
@@ -41,6 +47,11 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
     setState(() => _busy = true);
     try {
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? null : _slugCtrl.text,
+      );
+      await BrandService.load();
+      await TenantModules.instance.load();
       final res = await _repo.loginWithPassword(identifier: id, password: pass);
       if (!mounted) return;
       if (res['ok'] != true) {
@@ -71,7 +82,24 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
     }
   }
 
-  void _guest() {
+  Future<void> _guest() async {
+    if (!isBrandedStoreApk) {
+      try {
+        await TenantService.instance.requireResolved(slug: _slugCtrl.text);
+        await BrandService.load();
+        await TenantModules.instance.load();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: OptikMemberTokens.danger,
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 
@@ -159,27 +187,24 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(height: 12),
-                        const Center(child: OptikBrandLogo.color(height: 48)),
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Selamat datang',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: OptikMemberTokens.blueDeep,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
-                            letterSpacing: -0.4,
+                        const Center(
+                          child: LoginBrandHeader(
+                            logoHeight: 48,
+                            nameColor: OptikMemberTokens.blueDeep,
+                            nameSize: 28,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Login untuk pengalaman Member yang lebih lengkap dan praktis.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: OptikMemberTokens.inkMuted,
-                            fontSize: 14.5,
-                            height: 1.45,
+                        const SizedBox(height: 16),
+                        ValueListenableBuilder<int>(
+                          valueListenable: BrandService.revision,
+                          builder: (_, __, ___) => Text(
+                            'Login Member ${BrandService.name} — nota, garansi, dan promo toko.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: OptikMemberTokens.inkMuted,
+                              fontSize: 14.5,
+                              height: 1.45,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -278,6 +303,35 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                                 ],
                               ),
                               const SizedBox(height: 18),
+                              if (!isBrandedStoreApk) ...[
+                                TextField(
+                                  controller: _slugCtrl,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (v) {
+                                    TenantService.instance.persistSlug(v);
+                                  },
+                                  onSubmitted: (_) async {
+                                    await TenantService.instance
+                                        .persistSlug(_slugCtrl.text);
+                                    await BrandService.load();
+                                    if (mounted) setState(() {});
+                                  },
+                                  decoration: _fieldDec(
+                                    label: 'Kode usaha',
+                                    icon: Icons.storefront_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'APK Rekasa dipakai banyak toko. Kode usaha memisahkan data merek.',
+                                  style: TextStyle(
+                                    color: OptikMemberTokens.inkMuted.withOpacity(0.95),
+                                    fontSize: 12,
+                                    height: 1.35,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                               TextField(
                                 controller: _idCtrl,
                                 keyboardType: TextInputType.emailAddress,
@@ -312,13 +366,21 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
+                                    if (!isBrandedStoreApk) {
+                                      await TenantService.instance
+                                          .persistSlug(_slugCtrl.text);
+                                    }
+                                    if (!context.mounted) return;
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
                                             MemberForgotPasswordPage(
                                           initialIdentifier:
                                               _idCtrl.text.trim(),
+                                          initialSlug: isBrandedStoreApk
+                                              ? null
+                                              : _slugCtrl.text.trim(),
                                         ),
                                       ),
                                     );
@@ -369,7 +431,12 @@ class _LoginMemberPageState extends State<LoginMemberPage> {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                onPressed: () {
+                                onPressed: () async {
+                                  if (!isBrandedStoreApk) {
+                                    await TenantService.instance
+                                        .persistSlug(_slugCtrl.text);
+                                  }
+                                  if (!context.mounted) return;
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) =>

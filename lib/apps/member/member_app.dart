@@ -5,12 +5,16 @@ import '../../shared/member/member_notification_payload.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/theme.dart';
+import '../../shared/tenant/tenant_billing.dart';
+import '../../shared/tenant/tenant_service.dart';
+import '../../shared/widgets/tenant_suspended_page.dart';
 import 'login_member_page.dart';
 import 'member_shell.dart';
 import 'member_update_coordinator.dart';
 import 'pages/member_invoice_hub_page.dart';
 import 'pages/member_online_order_page.dart';
 import 'pages/member_orders_list_page.dart';
+import '../../shared/brand/brand_chrome.dart';
 
 class MemberApp extends StatefulWidget {
   const MemberApp({super.key});
@@ -93,7 +97,8 @@ class _MemberAppState extends State<MemberApp> {
     // bisa mereset Navigator stack. Login/logout pakai named routes.
     return MaterialApp(
       navigatorKey: _navKey,
-      title: 'Optik B. Riski — Member',
+      title: BrandChrome.windowTitle,
+      onGenerateTitle: (_) => BrandChrome.windowTitle,
       debugShowCheckedModeBanner: false,
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
@@ -104,13 +109,28 @@ class _MemberAppState extends State<MemberApp> {
               backgroundColor: OptikMemberTokens.canvas,
               body: Center(child: CircularProgressIndicator()),
             )
-          : (MemberSession.instance.isLoggedIn
-              ? const MemberShell()
-              : const LoginMemberPage()),
+          : _memberHome(),
       routes: {
-        '/home': (_) => const MemberShell(),
+        '/home': (_) => _memberHome(loggedIn: true),
         '/login': (_) => const LoginMemberPage(),
       },
     );
+  }
+
+  Widget _memberHome({bool? loggedIn}) {
+    final reason = TenantService.instance.lastResolveReason;
+    if (reason == 'suspend' || reason == 'trial') {
+      return TenantSuspendedPage(
+        access: TenantAccessSnapshot(
+          ok: false,
+          reason: reason,
+          error: TenantService.instance.lastResolveError,
+          displayName: TenantService.instance.displayName,
+          slug: TenantService.instance.slug,
+        ),
+      );
+    }
+    final inSession = loggedIn ?? MemberSession.instance.isLoggedIn;
+    return inSession ? const MemberShell() : const LoginMemberPage();
   }
 }

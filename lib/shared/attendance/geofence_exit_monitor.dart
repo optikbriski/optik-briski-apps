@@ -12,7 +12,9 @@ import 'android_battery_optimization.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
+import '../tenant/tenant_service.dart';
 import '../theme.dart';
+import '../brand/brand_service.dart';
 
 /// Pantau lokasi karyawan saat shift OPEN; notifikasi lokal jika keluar area
 /// atau GPS/izin lokasi dimatikan.
@@ -247,13 +249,13 @@ class GeofenceExitMonitor {
               fontSize: 16,
             ),
           ),
-          content: const Text(
+          content: Text(
             'Agar pantauan lokasi tetap jalan saat layar mati, nonaktifkan '
-            'optimasi baterai untuk Optik B. Riski (pilih “Tidak dioptimalkan” '
+            'optimasi baterai untuk ${BrandService.name} (pilih “Tidak dioptimalkan” '
             '/ “Tidak ada batasan”).\n\n'
             'Ini tidak membuat app kebal force-stop — hanya mengurangi '
             'pematian otomatis oleh sistem.',
-            style: TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
+            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
           ),
           actions: [
             TextButton(
@@ -757,6 +759,8 @@ class GeofenceExitMonitor {
           'toko_id': tokoId,
           'latitude': lat,
           'longitude': lng,
+          if (TenantService.instance.isBound)
+            'tenant_id': TenantService.instance.boundId,
         });
       } catch (e) {
         debugPrint('geofence_exit_logs insert: $e');

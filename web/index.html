@@ -16,29 +16,54 @@
   -->
   <base href="$FLUTTER_BASE_HREF">
 
+  <script>
+    (function () {
+      var h = (location.hostname || '').toLowerCase();
+      if (h !== 'rekasa-karya-indonesia.vercel.app' &&
+          h !== 'www.rekasakaryaindonesia.com' &&
+          h !== 'rekasakaryaindonesia.com') return;
+      var p = location.pathname || '/';
+      if (p.indexOf('/perusahaan') === 0) return;
+      try {
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) { r.unregister(); });
+          });
+        }
+        if (window.caches) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) { caches.delete(k); });
+          });
+        }
+      } catch (e) {}
+      location.replace('/perusahaan/' + (location.search || '') + (location.hash || ''));
+    })();
+  </script>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Optik B. Riski — Sempurnakan Mata Anda">
+  <meta name="description" content="Rekasa — etalase paket UMKM, merek toko mengikuti usaha Anda">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Optik B. Riski">
-  <link rel="apple-touch-icon" href="logo-web.png">
+  <meta name="apple-mobile-web-app-title" content="Rekasa">
+  <link rel="apple-touch-icon" href="rekasa-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="logo-web.png"/>
+  <link rel="icon" type="image/png" href="rekasa-icon.png"/>
 
-  <title>Optik B. Riski</title>
+  <title>Rekasa</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #F7FAFF; }
+    html, body { height: 100%; margin: 0; background: #D6E5F7; }
     .obr-boot {
       position: fixed; inset: 0; display: flex; align-items: center;
-      justify-content: center; background: #F7FAFF; z-index: 9999;
+      justify-content: center; gap: 14px; background: #D6E5F7; z-index: 9999;
       transition: opacity .25s ease;
     }
-    .obr-boot img { height: 44px; width: auto; }
+    .obr-boot .rks-lockup-img { height: 56px; width: auto; display: block; }
     .obr-boot.dark { background: #0B1220; }
+    .obr-boot.dark .rks-lockup-img { filter: brightness(1.35); }
   </style>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.css" />
@@ -55,7 +80,7 @@
 </head>
 <body>
   <div class="obr-boot" id="obr-boot">
-    <img src="logo-web.png" alt="Optik B. Riski" />
+    <img class="rks-lockup-img" src="rekasa-lockup.png" alt="REKASA KARYA INDONESIA">
   </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.

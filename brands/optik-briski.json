@@ -1,0 +1,11 @@
+{
+  "slug": "optik-briski",
+  "displayName": "Optik B. Riski",
+  "pinTenant": true,
+  "memberAppName": "Optik B. Riski",
+  "karyawanAppName": "Optik Karyawan",
+  "memberApplicationId": "com.optikbriski.member",
+  "karyawanApplicationId": "com.example.toko_kacamata_natan",
+  "adminAppName": "Optik Admin",
+  "adminApplicationId": "com.optikbriski.admin"
+}

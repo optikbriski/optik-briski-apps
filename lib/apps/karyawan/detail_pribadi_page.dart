@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -255,7 +256,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
 
     return KaryawanPremiumScaffold(
       title: 'profil_title'.tr(),
-      eyebrow: 'OPTIK B. RISKI',
+      eyebrow: BrandService.name.toUpperCase(),
       actions: [
         IconButton(
           tooltip: 'Kunci lagi',

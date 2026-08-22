@@ -7,9 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
-import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
@@ -457,9 +457,6 @@ class _StockMoveReportState extends State<StockMoveReport> {
       final imgUrl =
           supabase.storage.from('attendance_photos').getPublicUrl(path);
 
-      final myToko = _myToko.isNotEmpty ? _myToko : 'PUSAT';
-      final rawItems = (fresh['keterangan'] ?? '').toString();
-
       final verifierId = widget.profile['id']?.toString() ??
           widget.profile['user_id']?.toString() ??
           supabase.auth.currentUser?.id ??
@@ -468,29 +465,14 @@ class _StockMoveReportState extends State<StockMoveReport> {
           widget.profile['full_name']?.toString() ??
           'Admin';
 
-      final tipe = (fresh['tipe'] ?? '').toString().toUpperCase();
       final resiName = (fresh['product_name'] ?? '').toString();
-      final isReturn =
-          tipe == 'RETUR' || resiName.toUpperCase().startsWith('RET-');
 
-      await StockMutationService().receiveItemsFromMoveKeterangan(
-        tokoId: myToko,
-        keterangan: rawItems,
-        jumlahFlat: int.tryParse(fresh['jumlah']?.toString() ?? '0') ?? 0,
-        reason: StockReason.transferIn,
-        refType: 'stock_move',
-        refId: moveId,
-        actorNama: verifierName,
-        isReturn: isReturn,
+      await DoLifecycleService().receive(
+        moveId: moveId,
+        verifiedBy: verifierId,
+        verifiedByName: verifierName,
+        buktiFotoPenerima: imgUrl,
       );
-
-      await supabase.from('stock_move_history').update({
-        'status': 'SUCCESS',
-        'bukti_foto_penerima': imgUrl,
-        'verified_by': verifierId,
-        'verified_by_name': verifierName,
-        'verified_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', moveId);
 
       try {
         await RequestOrderService().markSuccessFromMove(

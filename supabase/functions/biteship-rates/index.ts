@@ -1,6 +1,9 @@
 // @ts-ignore
 declare const Deno: any;
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
+
 /**
  * Proxy Rates API Biteship (cek ongkir).
  * Secret: BITESHIP_API_KEY (biteship_test... / biteship_live...)
@@ -99,10 +102,16 @@ Deno.serve(async (req: Request) => {
     const couriers = (body.couriers as string | undefined)?.trim() ||
       mapCourierFilter(body.courier as string | undefined);
 
+    const brandDb = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const brand = (await loadBrand(brandDb)).displayName;
+
     const rawItems = Array.isArray(body.items) ? body.items : [];
     const items = (rawItems.length > 0 ? rawItems : [{
       name: "Paket Optik",
-      description: "Belanja Online Optik B. Riski",
+      description: `Belanja Online ${brand}`,
       value: Number(body.order_value) || 100000,
       weight: Number(body.weight) || 500,
       quantity: 1,

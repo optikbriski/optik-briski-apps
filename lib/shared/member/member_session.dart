@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../whatsapp_launcher.dart';
+import '../tenant/tenant_service.dart';
 import 'member_shop_address.dart';
 
 /// Sesi Member lokal (HP terverifikasi OTP).
@@ -16,6 +17,7 @@ class MemberSession extends ChangeNotifier {
   String? phoneE164;
   String? phoneRaw;
   String? memberId;
+  String? tenantId;
   String? nama;
   String? email;
   String? alamat;
@@ -53,6 +55,7 @@ class MemberSession extends ChangeNotifier {
         phoneE164 = m['phone_e164']?.toString();
         phoneRaw = m['phone_raw']?.toString();
         memberId = m['id']?.toString();
+        tenantId = m['tenant_id']?.toString();
         nama = m['nama']?.toString();
         email = m['email']?.toString();
         alamat = m['alamat']?.toString();
@@ -63,15 +66,28 @@ class MemberSession extends ChangeNotifier {
       } catch (_) {}
     }
     loaded = true;
+    if (!TenantService.instance.memberMatchesApk(tenantId)) {
+      await logout();
+      return;
+    }
     // Alamat dulu, baru notify — UI jangan sempat baca bucket akun lama.
     await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
+    if ((tenantId ?? '').trim().isNotEmpty) {
+      await TenantService.instance.bindFromMember({'tenant_id': tenantId});
+    }
     notifyListeners();
   }
 
   Future<void> applyMember(Map<String, dynamic> member) async {
+    if (!TenantService.instance.memberMatchesApk(member['tenant_id']?.toString())) {
+      throw StateError(
+        'Akun ini bukan member ${TenantService.instance.displayName ?? TenantService.instance.slug}.',
+      );
+    }
     phoneE164 = member['phone_e164']?.toString();
     phoneRaw = member['phone_raw']?.toString() ?? phoneRaw;
     memberId = member['id']?.toString();
+    tenantId = member['tenant_id']?.toString() ?? tenantId;
     nama = member['nama']?.toString();
     email = member['email']?.toString();
     alamat = member['alamat']?.toString();
@@ -81,6 +97,9 @@ class MemberSession extends ChangeNotifier {
     locale = member['locale']?.toString() ?? locale;
     await _persist();
     await MemberShopAddress.instance.syncOwner(shopAddressOwnerKey);
+    if ((tenantId ?? '').trim().isNotEmpty) {
+      await TenantService.instance.bindFromMember({'tenant_id': tenantId});
+    }
     notifyListeners();
   }
 
@@ -118,6 +137,7 @@ class MemberSession extends ChangeNotifier {
     phoneE164 = null;
     phoneRaw = null;
     memberId = null;
+    tenantId = null;
     nama = null;
     email = null;
     alamat = null;
@@ -144,6 +164,7 @@ class MemberSession extends ChangeNotifier {
       _prefsKey,
       jsonEncode({
         'id': memberId,
+        'tenant_id': tenantId,
         'phone_e164': phoneE164,
         'phone_raw': phoneRaw,
         'nama': nama,

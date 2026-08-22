@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../brand/brand_service.dart';
 
 /// Footer nota otomatis per status board: DP · PENDING · READY · CLEAR.
 /// Klasifikasi selaras [RiwayatTransaksiPage] agar tidak tertukar.
@@ -134,23 +135,23 @@ class InvoiceStatusFooters {
 abstract final class InvoiceStatusFooter {
   InvoiceStatusFooter._();
 
-  static const dpDefault = '''
-Terima kasih telah mempercayakan kebutuhan kacamata Anda kepada Optik B. Riski.
+  static String get dpDefault => '''
+Terima kasih telah mempercayakan kebutuhan kacamata Anda kepada ${BrandService.name}.
 Uang muka (DP) sudah kami catat. Sisa tagihan dilunasi saat pengambilan barang.
 Simpan nota & QR ini sebagai bukti identitas pesanan sampai barang diambil.''';
 
-  static const pendingDefault = '''
-Terima kasih atas kesabaran Anda sementara pesanan diproses di Optik B. Riski.
+  static String get pendingDefault => '''
+Terima kasih atas kesabaran Anda sementara pesanan diproses di ${BrandService.name}.
 Barang belum siap diambil — QR pengambilan aktif setelah status Ready.
 Pantau status lewat QR invoice, atau hubungi WhatsApp cabang bila perlu.''';
 
-  static const readyDefault = '''
-Terima kasih telah menunggu. Pesanan Anda di Optik B. Riski sudah Ready.
+  static String get readyDefault => '''
+Terima kasih telah menunggu. Pesanan Anda di ${BrandService.name} sudah Ready.
 Silakan ambil di cabang dengan menunjukkan QR invoice; lunasi sisa tagihan jika ada.
 Mohon cek frame & lensa di toko sebelum meninggalkan cabang.''';
 
-  static const clearDefault = '''
-Terima kasih atas kepercayaan penuh Anda hingga transaksi selesai di Optik B. Riski.
+  static String get clearDefault => '''
+Terima kasih atas kepercayaan penuh Anda hingga transaksi selesai di ${BrandService.name}.
 Nota ini bukti pengambilan barang — simpan untuk garansi, klaim, atau reorder resep yang sama.
 Klaim garansi hanya diproses dengan membawa nota sesuai ketentuan toko.''';
 

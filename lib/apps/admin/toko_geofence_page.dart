@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/geofence_geometry.dart';
 import '../../shared/maps/osm_address_search.dart';
 import '../../shared/theme.dart';
@@ -93,15 +94,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
   static const _satelliteNativeZoom = 19;
 
-  bool get _isPusat {
-    final t = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
-    final r = (widget.profile['role'] ?? '').toString().toLowerCase();
-    return t == 'PUSAT' ||
-        t == 'CABANG-PUSAT' ||
-        r == 'owner' ||
-        r == 'admin_pusat' ||
-        r == 'super_admin';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   @override
   void initState() {
@@ -544,29 +538,51 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     }
   }
 
+  String? get _tenantId => AttendanceAdminScope.tenantIdOf(widget.profile);
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final rows = await _db
+      if ((_tenantId ?? '').isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error =
+              'Kode usaha belum terverifikasi. Tidak boleh mengatur geofence merek lain.';
+        });
+        return;
+      }
+      if (!AttendanceAdminScope.canManageGeofence(widget.profile)) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Hanya admin toko/cabang yang boleh mengatur geofence.';
+        });
+        return;
+      }
+      var q = _db
           .from('toko_id')
           .select(
-            'id, toko_id, latitude, longitude, radius_meters, '
+            'id, toko_id, tenant_id, latitude, longitude, radius_meters, '
             'geofence_mode, geofence_polygon',
-          )
-          .order('id');
+          );
+      q = q.eq('tenant_id', _tenantId!);
+      final rows = await q.order('id');
       var list = (rows as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
 
-      if (!_isPusat) {
-        final my = (widget.profile['toko_id'] ?? '').toString().toUpperCase();
-        list = list
-            .where((t) => (t['id'] ?? '').toString().toUpperCase() == my)
-            .toList();
-      }
+      list = [
+        for (final t in list)
+          if (AttendanceAdminScope.canEditTokoGeofence(
+            widget.profile,
+            t['id']?.toString(),
+          ))
+            t,
+      ];
 
       if (!mounted) return;
       final firstId = list.isNotEmpty ? list.first['id']?.toString() : null;
@@ -872,6 +888,17 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   Future<void> _save() async {
     final id = _selectedTokoId;
     if (id == null) return;
+    if (!AttendanceAdminScope.canEditTokoGeofence(widget.profile, id)) {
+      _toast('Hanya boleh atur geofence toko sendiri.', OptikAdminTokens.danger);
+      return;
+    }
+    if ((_tenantId ?? '').isEmpty) {
+      _toast(
+        'Kode usaha belum terverifikasi. Tidak boleh mengatur geofence merek lain.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
 
     if (_mode == _FenceDrawMode.circle) {
       if (_lat == null || _lng == null) {
@@ -913,7 +940,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         }
       }
 
-      await _db.from('toko_id').update(patch).eq('id', id);
+      var saveQ = _db.from('toko_id').update(patch).eq('id', id);
+      saveQ = saveQ.eq('tenant_id', _tenantId!);
+      final updated = await saveQ.select('id');
+      if (List<dynamic>.from(updated).isEmpty) {
+        throw 'Geofence tidak tersimpan. Toko bukan milik usaha ini.';
+      }
 
       for (var i = 0; i < _tokoList.length; i++) {
         if (_tokoList[i]['id']?.toString() == id) {
@@ -1103,7 +1135,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: 'Geofence Toko',
-        subtitle: 'Peta detail · koordinat GPS (WGS84)',
+        subtitle:
+            '${AttendanceAdminScope.geofenceBannerHint(widget.profile)} · GPS WGS84',
         actions: [
           IconButton(
             tooltip: 'Muat ulang',

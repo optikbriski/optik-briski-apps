@@ -1,0 +1,13 @@
+{
+  "slug": "rekasa",
+  "displayName": "Rekasa",
+  "pinTenant": false,
+  "memberAppName": "Rekasa Member",
+  "karyawanAppName": "Rekasa Karyawan",
+  "adminAppName": "Rekasa Admin",
+  "storefrontAppName": "Rekasa",
+  "memberApplicationId": "com.rekasa.member",
+  "karyawanApplicationId": "com.rekasa.karyawan",
+  "adminApplicationId": "com.rekasa.admin",
+  "storefrontApplicationId": "com.rekasa.store"
+}

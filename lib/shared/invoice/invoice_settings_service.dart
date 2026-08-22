@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../brand/brand_service.dart';
 import 'invoice_status_footer.dart';
 
 /// Konfigurasi layout nota per cabang (`invoice_settings`).
@@ -157,36 +158,17 @@ class InvoiceSettingsService {
     return t.isEmpty ? 'PUSAT' : t;
   }
 
-  /// Banner struk default per cabang: `OPTIK B. RISKI PUSAT` / `OPTIK B. RISKI CIKARANG`.
-  static String defaultShopName(String? tokoId) {
-    final id = normalizeTokoId(tokoId);
-    if (id == 'PUSAT') return 'OPTIK B. RISKI PUSAT';
-    var label = id;
-    if (label.startsWith('CABANG-')) {
-      label = label.substring('CABANG-'.length);
-    } else if (label.startsWith('CABANG_')) {
-      label = label.substring('CABANG_'.length);
-    } else if (label.startsWith('CABANG ')) {
-      label = label.substring('CABANG '.length);
-    }
-    label = label.replaceAll('_', ' ').replaceAll('-', ' ').trim();
-    while (label.contains('  ')) {
-      label = label.replaceAll('  ', ' ');
-    }
-    if (label.isEmpty) label = id;
-    return 'OPTIK B. RISKI $label';
-  }
+  /// Banner struk default per cabang dari merek Supabase + kode toko.
+  static String defaultShopName(String? tokoId) =>
+      BrandService.defaultShopName(tokoId);
 
   /// Ganti nama toko generik/Pusat pada cabang → nama sesuai kode cabang.
   static InvoiceSettings withBranchShopName(InvoiceSettings settings) {
     final id = normalizeTokoId(settings.tokoId);
     final desired = defaultShopName(id);
-    final current = settings.shopName.trim().toUpperCase();
-    final looksGeneric = current.isEmpty ||
-        current == 'OPTIK B. RISKI' ||
-        current == 'OPTIK B. RISKI PUSAT' ||
-        (id != 'PUSAT' && current.contains('PUSAT'));
-    if (!looksGeneric) return settings;
+    if (!BrandService.looksGenericShopName(settings.shopName, id)) {
+      return settings;
+    }
     return settings.copyWith(shopName: desired);
   }
 
@@ -246,7 +228,7 @@ class InvoiceSettingsService {
 
   /// Cabang → PUSAT → default tunggal.
   /// Footer cabang: awal wajib sama PUSAT (inherit), bisa di-adjust nanti.
-  /// Nama toko cabang: `OPTIK B. RISKI {CABANG}`, bukan ikut teks PUSAT.
+  /// Nama toko cabang: `{MEREK} {CABANG}` dari app_brand, bukan ikut teks PUSAT.
   Future<InvoiceSettings> fetchForToko(String? tokoId) async {
     final id = normalizeTokoId(tokoId);
     final own = await _fetchRow(id);

@@ -288,7 +288,7 @@ class MemberGradePalette {
       MemberGradeBenefit(
         Icons.card_membership_rounded,
         'Akses early product & event',
-        'Undangan private Optik B. Riski',
+        'Undangan private & preview merek',
       ),
       MemberGradeBenefit(
         Icons.support_agent_rounded,
@@ -303,7 +303,7 @@ class MemberGradePalette {
     ],
   );
 
-  static const all = [basic, silver, gold, platinum, diamond];
+  static final all = [basic, silver, gold, platinum, diamond];
 
   static MemberGradePalette of(MemberGrade g) {
     switch (g) {

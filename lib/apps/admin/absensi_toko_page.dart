@@ -275,6 +275,17 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         return;
       }
 
+      final sessionTenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+      final karyawanTenant = (full['tenant_id'] ?? '').toString().trim();
+      if (sessionTenant == null ||
+          sessionTenant.isEmpty ||
+          karyawanTenant.isEmpty ||
+          sessionTenant != karyawanTenant) {
+        _snack('Akun karyawan bukan milik usaha ini.', OptikAdminTokens.danger);
+        await _returnToQr(consume: true);
+        return;
+      }
+
       final karyawanToko = (full['toko_id'] ?? '').toString();
       if (karyawanToko.isNotEmpty &&
           _tokoId != null &&

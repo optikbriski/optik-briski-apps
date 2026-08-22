@@ -41,6 +41,7 @@ import '../../shared/widgets/leave_page_guard.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/training/training_ops_sync.dart';
+import '../../shared/logistics/inventory_stock_rules.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/finance/gl_posting_service.dart';
 import '../../shared/logistics/request_order_service.dart';
@@ -51,7 +52,10 @@ import 'garansi_page.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/member/member_repository.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/pos_duty_gate.dart';
+import '../../shared/pos/pos_checkout_rules.dart';
+import '../../shared/pos/pos_midtrans.dart';
 
 // ============================================================================
 // MODUL 4: SALES / TERMINAL KASIR & STRUK NOTA DIGITAL (FULL SYSTEM)
@@ -2608,6 +2612,7 @@ class _SalesPageState extends State<SalesPage> {
             onPressed: () async {
               int qtyNeeded = int.tryParse(qtyPoCtrl.text) ??
                   0; // ✅ Menggunakan nama variabel baru
+              qtyNeeded = InventoryStockRules.clampRequestQty(qtyNeeded);
               if (qtyNeeded <= 0) {
                 _showSnack("Jumlah harus lebih dari 0", OptikAdminTokens.danger);
                 return;
@@ -3378,13 +3383,13 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   int get _totalAkhir {
-    final diskon = _appliedVoucherCode != null
-        ? (_appliedVoucherNominal > 0
-            ? _appliedVoucherNominal
-            : _parseDiskonRpText(discountCtrl.text))
-        : _parseDiskonRpText(discountCtrl.text);
-    final total = _subtotalBelanja - diskon;
-    return total < 0 ? 0 : total;
+    return PosCheckoutRules.totalAkhir(
+      subtotal: _subtotalBelanja,
+      voucherCode: _appliedVoucherCode,
+      voucherNominal: _appliedVoucherNominal > 0
+          ? _appliedVoucherNominal
+          : _parseDiskonRpText(discountCtrl.text),
+    );
   }
 
 // 🎯 FIXED FINAL CONFIG: DATA PELANGGAN KIRI, METADATA + KASIR KANAN, BADGE ATAS QR
@@ -3820,12 +3825,34 @@ class _SalesPageState extends State<SalesPage> {
       _showSnack("pos_err_nama_pelanggan".tr(), OptikAdminTokens.danger);
       return;
     }
+    final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+    if (tenant == null || tenant.isEmpty) {
+      _showSnack(
+        'Kode usaha belum terverifikasi. Tidak boleh jual merek lain.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+    final tokoForGate = (widget.profile['toko_id'] ?? '').toString();
+    if (!AttendanceAdminScope.canPosCheckoutToko(widget.profile, tokoForGate)) {
+      _showSnack(
+        'Hanya kasir toko ini yang boleh checkout.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+
     // Kasir penanggung jawab harus masih bertugas (belom pulang / bukan libur).
     final cashierId = activeCashier?['id']?.toString();
     final cashierNik = activeCashier?['nik']?.toString();
-    if (cashierId != null &&
-        cashierId.isNotEmpty &&
-        (cashierNik ?? '').toUpperCase() != 'TRAINING01') {
+    if (cashierId == null || cashierId.isEmpty) {
+      _showSnack(
+        'Unlock kasir dulu — checkout tanpa petugas ditolak.',
+        OptikAdminTokens.danger,
+      );
+      return;
+    }
+    if ((cashierNik ?? '').toUpperCase() != 'TRAINING01') {
       final dutyBlock = await PosDutyGate.blockReason(
         karyawanId: cashierId,
         nik: cashierNik,
@@ -3847,7 +3874,7 @@ class _SalesPageState extends State<SalesPage> {
         }
       }
 
-      final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+      final tokoId = tokoForGate;
       int total = _totalAkhir;
       final voucherCode = (_appliedVoucherCode ?? '').trim();
       final voucherDiscount = voucherCode.isEmpty
@@ -3931,6 +3958,43 @@ class _SalesPageState extends State<SalesPage> {
       // Tanpa QR hanya jika DP, atau LUNAS tanpa satu pun item READY.
       final paymentConfirmOnly = isDpCheckout || !canPickupPartial;
 
+      String? posMidtransOrderId;
+      if (PosMidtrans.usesGateway(paymentMethod)) {
+        final charge = isDpCheckout ? bayar : total;
+        if (charge <= 0) {
+          if (mounted) {
+            setState(() => isProcessing = false);
+            _showSnack(
+              'Nominal Midtrans tidak valid',
+              OptikAdminTokens.warning,
+            );
+          }
+          return;
+        }
+        final paid = await PosMidtrans.chargeAndWait(
+          context: context,
+          amountIdr: charge,
+          purpose: 'sale',
+          tokoId: tokoId.toString(),
+          invoiceNo: noInvoice,
+          customerName: nameCtrl.text.trim(),
+          phone: phoneCtrl.text.trim(),
+        );
+        if (!mounted) return;
+        if (!paid.ok || !paid.settled) {
+          setState(() => isProcessing = false);
+          _showSnack(
+            paid.error ?? 'Pembayaran Midtrans dibatalkan',
+            OptikAdminTokens.warning,
+          );
+          return;
+        }
+        posMidtransOrderId = paid.midtransOrderId;
+        if ((paid.paymentType ?? '').trim().isNotEmpty) {
+          paymentMethod = PosMidtrans.labelForType(paid.paymentType!);
+        }
+      }
+
       debugPrint(
           "DEBUG KASIR ID: ${activeCashier?['id'] ?? widget.profile['id']}");
 
@@ -3974,6 +4038,9 @@ class _SalesPageState extends State<SalesPage> {
           .single();
 
       final saleId = saleRes['id'];
+      if (posMidtransOrderId != null && posMidtransOrderId.isNotEmpty) {
+        unawaited(PosMidtrans.linkSale(posMidtransOrderId, saleId.toString()));
+      }
       // Snapshot sebelum proses lanjut — daftar tidak boleh berubah di tengah checkout.
       final terlibatIds = _terlibatIdsForCheckout();
       if (terlibatIds.isEmpty) {

@@ -4,7 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'brand/brand_chrome.dart';
+import 'brand/brand_service.dart';
 import 'config.dart';
+import 'tenant/tenant_modules.dart';
+import 'tenant/tenant_service.dart';
 import 'training/training_http_client.dart';
 
 final supabase = Supabase.instance.client;
@@ -43,6 +47,20 @@ Future<void> bootstrapApp({
     publishableKey: supabasePublishableKey,
     httpClient: TrainingHttpClient(),
   );
+  await TenantService.instance.loadLocal();
+  if (isRekasaStorefront) {
+    BrandService.bind(AppBrand.rekasaShell);
+    TenantModules.instance.sealStorefront();
+  } else if (isBrandedStoreApk) {
+    await TenantService.instance.bindBrandedStoreApk();
+    await BrandService.load();
+    await TenantModules.instance.load();
+  } else {
+    await TenantService.instance.ensureResolved();
+    await BrandService.load();
+    await TenantModules.instance.load();
+  }
+  BrandChrome.attach();
 
   runApp(
     EasyLocalization(

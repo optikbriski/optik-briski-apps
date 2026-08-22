@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build APK Member (split per-ABI) — max 50 MB, tanpa potong fitur/kualitas.
+# Build APK Member. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
 # Shrink hanya buang aset junk + model ML Kit yang tidak dipakai mode accurate.
 # Bentuk (referensi wajah/frame) memakai aset foto + overlay — tanpa scan kamera.
 set -euo pipefail
@@ -8,15 +8,26 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
+# shellcheck source=scripts/brand_env.sh
+source "$ROOT/scripts/brand_env.sh"
 # Flutter flavor output: build/app/outputs/flutter-apk/app-member-*.apk
 OUT_DIR="build/app/outputs/flutter-apk"
-DEST_ARM64="build/optik-member-${VERSION}.apk"
-DEST_ARM32="build/optik-member-${VERSION}-armeabi-v7a.apk"
+if [[ "$STORE_SLUG" == "optik-briski" ]]; then
+  DEST_ARM64="build/optik-member-${VERSION}.apk"
+  DEST_ARM32="build/optik-member-${VERSION}-armeabi-v7a.apk"
+else
+  DEST_ARM64="build/${STORE_SLUG}-member-${VERSION}.apk"
+  DEST_ARM32="build/${STORE_SLUG}-member-${VERSION}-armeabi-v7a.apk"
+fi
 # WA menampilkan MB desimal (1000). Target ketat: < 50.000.000 byte.
 LIMIT=$((50 * 1000 * 1000))
 
-echo "==> Build Member APK v${VERSION} (split per-ABI, tanpa x86)"
-DEFINE_ARGS=(--dart-define=APP_FLAVOR=member)
+echo "==> Build Member APK v${VERSION} merek ${STORE_DISPLAY_NAME} (${STORE_SLUG})"
+DEFINE_ARGS=(
+  --dart-define=APP_FLAVOR=member
+  --dart-define=MEMBER_TENANT_SLUG="${MEMBER_TENANT_SLUG:-$STORE_SLUG}"
+  --dart-define=PIN_STORE_TENANT="${STORE_PIN_TENANT:-false}"
+)
 if [[ -f .dart_define.member.json ]]; then
   DEFINE_ARGS+=(--dart-define-from-file=.dart_define.member.json)
 else
@@ -32,6 +43,12 @@ FLUTTER_ARGS=(
   --obfuscate --split-debug-info=build/app/outputs/symbols-member
   "${DEFINE_ARGS[@]}"
 )
+if [[ -n "${STORE_MEMBER_APPLICATION_ID:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreApplicationId="$STORE_MEMBER_APPLICATION_ID")
+fi
+if [[ -n "${STORE_MEMBER_APP_NAME:-}" ]]; then
+  FLUTTER_ARGS+=(-PstoreAppName="$STORE_MEMBER_APP_NAME")
+fi
 flutter "${FLUTTER_ARGS[@]}"
 
 ARM64_SRC=""

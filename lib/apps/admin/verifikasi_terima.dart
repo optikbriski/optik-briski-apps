@@ -7,9 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
-import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -287,10 +287,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           );
       final imgUrl = _db.storage.from('attendance_photos').getPublicUrl(path);
 
-      final tipe = (row['tipe'] ?? '').toString().toUpperCase();
       final resiName = (row['product_name'] ?? '').toString();
-      final isReturn =
-          tipe == 'RETUR' || resiName.toUpperCase().startsWith('RET-');
       final kind = _moveKind(row);
       final verifierName = (widget.profile['nama'] ??
               widget.profile['full_name'] ??
@@ -301,24 +298,12 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           _db.auth.currentUser?.id ??
           '';
 
-      await StockMutationService().receiveItemsFromMoveKeterangan(
-        tokoId: _myToko,
-        keterangan: row['keterangan']?.toString() ?? '',
-        jumlahFlat: int.tryParse(row['jumlah']?.toString() ?? '0') ?? 0,
-        reason: StockReason.transferIn,
-        refType: 'stock_move',
-        refId: moveId,
-        actorNama: verifierName,
-        isReturn: isReturn,
+      await DoLifecycleService(client: _db).receive(
+        moveId: moveId,
+        verifiedBy: verifierId,
+        verifiedByName: verifierName,
+        buktiFotoPenerima: imgUrl,
       );
-
-      await _db.from('stock_move_history').update({
-        'status': 'SUCCESS',
-        'bukti_foto_penerima': imgUrl,
-        'verified_by': verifierId,
-        'verified_by_name': verifierName,
-        'verified_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', moveId);
 
       // RO: sync pending_requests → SUCCESS + sales_items READY.
       if (kind == 'ro') {

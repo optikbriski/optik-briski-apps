@@ -13,6 +13,7 @@ import '../member_widgets.dart';
 import 'member_invoice_hub_page.dart';
 import 'member_midtrans_pay_page.dart';
 import 'member_orders_list_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Detail pesanan online (`online_orders`) — pending bayar / tanpa nota / resume Snap.
 class MemberOnlineOrderPage extends StatefulWidget {
@@ -272,7 +273,7 @@ class _MemberOnlineOrderPageState extends State<MemberOnlineOrderPage> {
             ? widget.onlineOrderId.substring(0, 8)
             : widget.onlineOrderId);
     final msg =
-        'Halo Optik B. Riski, saya cek status pesanan online $ref (cabang $toko).';
+        'Halo ${BrandService.name}, saya cek status pesanan online $ref (cabang $toko).';
     if (phone.isEmpty) {
       await openAdminWhatsApp(message: msg);
       return;

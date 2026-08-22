@@ -58,6 +58,7 @@ class ProductCode {
     if (s.startsWith('OBR')) return null; // ATT/INV/DO/RO/CUS/PROD handled elsewhere
     if (s.contains('://') && s.contains('/i/')) return null;
     if (s.startsWith('optikbriski://invoice/')) return null;
+    if (s.startsWith('rekasa://invoice/')) return null;
     return s;
   }
 }

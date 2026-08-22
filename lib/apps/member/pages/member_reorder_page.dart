@@ -9,6 +9,7 @@ import '../../../shared/theme.dart';
 import '../../../shared/whatsapp_launcher.dart';
 import '../member_widgets.dart';
 import 'member_invoice_hub_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Fitur 9 — riwayat resep dari nota / pesan ulang via WA toko.
 /// Read-only: tidak ada add/edit/delete resep di Member (sumber = POS invoice).
@@ -68,7 +69,7 @@ class _MemberReorderPageState extends State<MemberReorderPage> {
     final settings = await _repo.storeSettings(toko);
     final phone = (settings?['phone'] ?? '').toString();
     final msg =
-        'Halo Optik B. Riski, saya ingin pesan ulang mirip nota ${row['no_invoice']}: '
+        'Halo ${BrandService.name}, saya ingin pesan ulang mirip nota ${row['no_invoice']}: '
         '${row['nama_produk']}. Resep: ${row['detail_resep'] ?? '-'}';
     if (phone.trim().isEmpty) {
       await openAdminWhatsApp(message: msg);

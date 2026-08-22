@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../qr/obr_codes.dart';
+import 'do_lifecycle_service.dart';
+import 'inventory_stock_rules.dart';
 import 'request_order_service.dart';
-import 'stock_mutation_service.dart';
 
 class ReceiveScanResult {
   const ReceiveScanResult({
@@ -77,7 +78,9 @@ class ReceiveScanService {
     final a = (tujuan ?? '').trim().toUpperCase();
     final b = cabangKaryawan.trim().toUpperCase();
     if (a.isEmpty || b.isEmpty) return false;
-    return a == b;
+    if (a == b) return true;
+    const pusat = {'PUSAT', 'CABANG-PUSAT'};
+    return pusat.contains(a) && pusat.contains(b);
   }
 
   /// Entry utama scan logistik (kurir jemput ATAU cabang terima).
@@ -180,11 +183,11 @@ class ReceiveScanService {
     final scanner = cabangPemindai.trim().toUpperCase();
 
     // Cabang tujuan tidak boleh "jemput" — itu memotong stok Pusat terlalu dini.
-    if (scanner.isNotEmpty &&
-        ke.isNotEmpty &&
-        scanner == ke &&
-        scanner != dari &&
-        scanner != 'PUSAT') {
+    if (!InventoryStockRules.canMarkTransit(
+      scannerToko: scanner,
+      dari: dari,
+      ke: ke,
+    )) {
       return ReceiveScanResult(
         ok: false,
         resi: resi,
@@ -195,97 +198,31 @@ class ReceiveScanService {
       );
     }
 
-    // RO: stok sudah dipotong saat ship dari Pusat — cukup flip status.
-    if (isRo) {
-      final moveId = row['id'].toString();
-      final patch = <String, dynamic>{'status': 'TRANSIT'};
-      final existingKurir = (row['kurir_karyawan_id'] ?? '').toString().trim();
-      if (existingKurir.isEmpty && kurirId.trim().isNotEmpty) {
-        patch['kurir_karyawan_id'] = kurirId.trim();
-        patch['kurir_nama'] = kurirNama.trim();
-      }
-      await _client.from('stock_move_history').update(patch).eq('id', moveId);
+    final moveId = row['id'].toString();
+    try {
+      final out = await DoLifecycleService(client: _client).markTransit(
+        moveId: moveId,
+        kurirId: kurirId,
+        kurirNama: kurirNama,
+      );
+      final already = out['already_transit'] == true;
+      final label = isRo ? ' (RO)' : '';
       return ReceiveScanResult(
         ok: true,
         resi: resi,
-        becameTransit: true,
+        becameTransit: !already,
         verifiedByName: kurirNama,
-        message: 'Resi $resi (RO) sekarang TRANSIT. Kurir: $kurirNama',
+        message: already
+            ? 'Resi $resi$label sudah TRANSIT.'
+            : 'Resi $resi$label sekarang TRANSIT. Kurir: $kurirNama',
       );
-    }
-
-    // DO: foto packing wajib sebelum jemput.
-    final packing = (row['bukti_foto_pengirim'] ?? '').toString().trim();
-    if (packing.isEmpty || packing == '-') {
-      return ReceiveScanResult(
-        ok: false,
-        resi: resi,
-        message:
-            'Foto packing belum ada. Tim gudang harus foto & tampilkan QR '
-            'perjalanan dulu di halaman Disiapkan.',
-      );
-    }
-
-    final moveId = row['id'].toString();
-    final mut = StockMutationService(client: _client);
-    var didCutStock = false;
-    try {
-      final consumed = await mut.consumeReservationAndShipOut(
-        kind: StockReserveKind.doPreparing,
-        refType: 'stock_move',
-        refId: moveId,
-        tokoId: dari.isEmpty ? 'PUSAT' : dari,
-        alasanText: 'DO $resi → TRANSIT',
-        ledgerRefType: 'stock_move',
-        ledgerRefId: moveId,
-        actorNama: kurirNama,
-      );
-      final items = (consumed['items'] as List?) ?? const [];
-      if (items.isNotEmpty) {
-        didCutStock = true;
-      } else {
-        // Reservation kosong: kemungkinan sudah di-consume sebelumnya
-        // (retry setelah status gagal update). JANGAN potong Real lagi.
-        // Hanya selesaikan flip status → TRANSIT.
-        didCutStock = false;
-      }
     } catch (e) {
       return ReceiveScanResult(
         ok: false,
         resi: resi,
-        message: 'Gagal potong stok saat TRANSIT: $e',
+        message: 'Gagal set TRANSIT: $e',
       );
     }
-
-    final patch = <String, dynamic>{'status': 'TRANSIT'};
-    final existingKurir = (row['kurir_karyawan_id'] ?? '').toString().trim();
-    if (existingKurir.isEmpty && kurirId.trim().isNotEmpty) {
-      patch['kurir_karyawan_id'] = kurirId.trim();
-      patch['kurir_nama'] = kurirNama.trim();
-    }
-    try {
-      await _client.from('stock_move_history').update(patch).eq('id', moveId);
-    } catch (e) {
-      return ReceiveScanResult(
-        ok: false,
-        resi: resi,
-        message: didCutStock
-            ? 'Stok sudah dipotong tapi status gagal jadi TRANSIT: $e. '
-                'Scan ulang — sistem tidak akan potong stok dua kali.'
-            : 'Gagal set TRANSIT: $e',
-      );
-    }
-
-    return ReceiveScanResult(
-      ok: true,
-      resi: resi,
-      becameTransit: true,
-      verifiedByName: kurirNama,
-      message: didCutStock
-          ? 'Resi $resi sekarang TRANSIT (stok dipotong). Kurir: $kurirNama'
-          : 'Resi $resi sekarang TRANSIT (stok sudah dipotong sebelumnya). '
-              'Kurir: $kurirNama',
-    );
   }
 
   Future<ReceiveScanResult> _receiveRow({
@@ -362,28 +299,40 @@ class ReceiveScanService {
       );
     }
 
-    final now = DateTime.now().toUtc();
     final moveId = row['id'].toString();
+    Map<String, dynamic> out;
+    try {
+      out = await DoLifecycleService(client: _client).receive(
+        moveId: moveId,
+        verifiedBy: verifiedById,
+        verifiedByName: verifiedByName,
+      );
+    } catch (e) {
+      return ReceiveScanResult(
+        ok: false,
+        resi: resi,
+        message: '$e',
+      );
+    }
 
-    final tipe = (row['tipe'] ?? '').toString().toUpperCase();
-    final isReturn = tipe == 'RETUR' || resi.toUpperCase().startsWith('RET-');
-    await StockMutationService(client: _client).receiveItemsFromMoveKeterangan(
-      tokoId: cabangKaryawan.trim().toUpperCase(),
-      keterangan: row['keterangan']?.toString() ?? '',
-      jumlahFlat: int.tryParse(row['jumlah']?.toString() ?? '0') ?? 0,
-      reason: StockReason.transferIn,
-      refType: 'stock_move',
-      refId: moveId,
-      actorNama: verifiedByName,
-      isReturn: isReturn,
-    );
-
-    await _client.from('stock_move_history').update({
-      'status': 'SUCCESS',
-      'verified_by': verifiedById,
-      'verified_by_name': verifiedByName,
-      'verified_at': now.toIso8601String(),
-    }).eq('id', moveId);
+    if (out['already_done'] == true) {
+      final atRaw = out['verified_at']?.toString();
+      DateTime? at;
+      if (atRaw != null && atRaw.isNotEmpty) {
+        at = DateTime.tryParse(atRaw)?.toLocal();
+      }
+      final by = out['verified_by_name']?.toString();
+      return ReceiveScanResult(
+        ok: false,
+        alreadyDone: true,
+        resi: resi,
+        verifiedByName: by,
+        verifiedAt: at,
+        message: by != null && by.isNotEmpty
+            ? 'Sudah diterima oleh $by${at != null ? ' pada ${_fmt(at)}' : ''}.'
+            : 'Paket ini sudah berstatus SUCCESS sebelumnya.',
+      );
+    }
 
     var roNote = '';
     try {
@@ -395,13 +344,18 @@ class ReceiveScanService {
       roNote = ' RO/QR sync: $e';
     }
 
+    final atRaw = out['verified_at']?.toString();
+    final at = atRaw != null && atRaw.isNotEmpty
+        ? DateTime.tryParse(atRaw)?.toLocal()
+        : DateTime.now();
     return ReceiveScanResult(
       ok: true,
       resi: resi,
       verifiedByName: verifiedByName,
-      verifiedAt: now.toLocal(),
+      verifiedAt: at,
       message:
-          'Resi $resi diterima. Stok toko diperbarui. Petugas: $verifiedByName · ${_fmt(now.toLocal())}.$roNote',
+          'Resi $resi diterima. Stok toko diperbarui. Petugas: $verifiedByName'
+          '${at != null ? ' · ${_fmt(at)}' : ''}.$roNote',
     );
   }
 

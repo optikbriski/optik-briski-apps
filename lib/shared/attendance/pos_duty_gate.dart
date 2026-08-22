@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../tenant/tenant_service.dart';
 import '../training/training_mode.dart';
+import 'attendance_admin_scope.dart';
 import 'attendance_service.dart';
 
 /// Gate POS / Logistics / scan NIK admin: hanya karyawan yang sedang bertugas.
@@ -29,7 +31,15 @@ abstract final class PosDutyGate {
 
     // Satu-satunya bukti "sedang kerja": shift OPEN (hasil absen masuk).
     final open = await svc.fetchOpenShift(karyawanId);
-    if (open != null) return null;
+    if (open != null) {
+      if (TenantService.instance.isBound) {
+        final shiftTenant = (open['tenant_id'] ?? '').toString().trim();
+        if (!AttendanceAdminScope.matchesBoundTenant(shiftTenant)) {
+          return 'pos_duty_belum_masuk';
+        }
+      }
+      return null;
+    }
 
     final sudahPulang = await svc.hasAttendanceLogToday(
       karyawanId: karyawanId,
@@ -53,6 +63,9 @@ abstract final class PosDutyGate {
         .eq('status', 'OPEN');
     if (tid.isNotEmpty) {
       q = q.eq('toko_id', tid);
+    }
+    if (TenantService.instance.isBound) {
+      q = q.eq('tenant_id', TenantService.instance.boundId);
     }
     final rows = await q;
     return {

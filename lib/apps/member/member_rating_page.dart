@@ -2,6 +2,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/brand/brand_service.dart';
 import '../../shared/invoice/invoice_hub_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/invoice/invoice_rating_card.dart';
@@ -103,7 +104,7 @@ class _MemberRatingPageState extends State<MemberRatingPage>
   Future<void> _loadHub(String raw) async {
     final inv = InvoiceLink.parse(raw) ?? raw.trim();
     if (inv.isEmpty) {
-      setState(() => _hubError = 'invoice_hub_not_invoice'.tr());
+      setState(() => _hubError = 'invoice_hub_not_invoice'.brandTr());
       return;
     }
     if (!MemberSession.instance.isLoggedIn || _phone.isEmpty) {

@@ -5,11 +5,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
+import '../../../shared/brand/brand_service.dart';
+import '../../../shared/tenant/tenant_service.dart';
 
 export 'member_notifications_page.dart';
 export 'member_profile_page.dart';
 
-/// Semua cabang Optik B. Riski (fitur 7 + 12) + rekomendasi GPS terdekat.
+/// Semua cabang tenant (fitur 7 + 12) + rekomendasi GPS terdekat.
 class MemberStoresPage extends StatefulWidget {
   const MemberStoresPage({
     super.key,
@@ -57,10 +59,10 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
       final client = Supabase.instance.client;
       final geoById = <String, Map<String, dynamic>>{};
       try {
-        final geoRows = await client
-            .from('toko_id')
-            .select('id, latitude, longitude')
-            .order('id');
+        final geoRows = await client.rpc(
+          'list_tenant_stores',
+          params: withTenant({}),
+        );
         for (final raw in (geoRows as List)) {
           final m = Map<String, dynamic>.from(raw as Map);
           final id = (m['id'] ?? '').toString().trim().toUpperCase();
@@ -86,7 +88,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         rows = geoById.keys
             .map((id) => {
                   'toko_id': id,
-                  'shop_name': 'Optik B. Riski',
+                  'shop_name': BrandService.name,
                   'address': '',
                   'phone': '',
                 })
@@ -128,16 +130,16 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
       'list_member_help_stores',
     ]) {
       try {
-        final raw = await client.rpc(name);
+        final raw = await client.rpc(name, params: withTenant({}));
         final list = _parseStoreDirectoryRpc(raw);
         if (list.isNotEmpty) return list;
       } catch (_) {}
     }
-    return const [];
+    return [];
   }
 
   List<Map<String, dynamic>> _parseStoreDirectoryRpc(dynamic raw) {
-    if (raw is! List) return const [];
+    if (raw is! List) return [];
     return raw
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
@@ -209,7 +211,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         setState(() {
           _locating = false;
           _locationHint =
-              'Izin lokasi diblokir. Buka Pengaturan HP → izinkan lokasi untuk Optik B. Riski.';
+              'Izin lokasi diblokir. Buka Pengaturan HP → izinkan lokasi untuk ${BrandService.name}.';
         });
         return;
       }
@@ -276,7 +278,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
   Future<void> _openMaps(Map<String, dynamic> store) async {
     final lat = (store['latitude'] as num?)?.toDouble();
     final lng = (store['longitude'] as num?)?.toDouble();
-    final name = (store['shop_name'] ?? 'Optik B. Riski').toString();
+    final name = (store['shop_name'] ?? BrandService.name).toString();
     final addr = (store['address'] ?? '').toString();
     final Uri uri;
     if (lat != null && lng != null) {
@@ -284,7 +286,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
         'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
       );
     } else {
-      final q = Uri.encodeComponent('$name $addr Optik B Riski');
+      final q = Uri.encodeComponent('$name $addr ${BrandService.name}');
       uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$q');
     }
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -305,7 +307,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
 
   Widget _storeCard(Map<String, dynamic> s, {bool highlighted = false}) {
     final id = (s['toko_id'] ?? '').toString();
-    final name = (s['shop_name'] ?? 'Optik B. Riski').toString();
+    final name = (s['shop_name'] ?? BrandService.name).toString();
     final addr = (s['address'] ?? '').toString();
     final phone = (s['phone'] ?? '').toString();
     final review = (s['google_review_url'] ?? '').toString();
@@ -455,7 +457,7 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
                     onPressed: () => _openWa(
                       phone,
                       message:
-                          'Halo Optik B. Riski ($id), saya ingin bertanya.',
+                          'Halo ${BrandService.name} ($id), saya ingin bertanya.',
                     ),
                     icon: const Icon(Icons.support_agent_outlined, size: 18),
                     label: const Text('Tanya'),
@@ -556,11 +558,11 @@ class _MemberStoresPageState extends State<MemberStoresPage> {
           ),
         ] else ...[
           const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Semua cabang Optik B. Riski — aktifkan GPS untuk rekomendasi terdekat.',
-              style: TextStyle(
+              'Semua cabang ${BrandService.name} — aktifkan GPS untuk rekomendasi terdekat.',
+              style: const TextStyle(
                 color: OptikMemberTokens.inkMuted,
                 fontSize: 12.5,
                 height: 1.35,

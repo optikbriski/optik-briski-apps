@@ -11,7 +11,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/theme.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/login_brand_header.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
+import '../../shared/tenant/tenant_billing.dart';
+import '../../shared/tenant/tenant_modules.dart';
+import '../../shared/tenant/tenant_service.dart';
+import '../../shared/widgets/tenant_suspended_page.dart';
 import '../owner/owner_service.dart';
 import '../owner/owner_session.dart';
 import '../owner/owner_shell.dart';
@@ -31,8 +37,10 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
+  final _slugFocus = FocusNode();
 
   bool _isObscure = true;
   bool _isLoading = false;
@@ -77,8 +85,10 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     _anim.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _slugCtrl.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
+    _slugFocus.dispose();
     super.dispose();
   }
 
@@ -149,7 +159,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     try {
       profileRow = await Supabase.instance.client
           .from('profiles')
-          .select('id, role, toko_id, email')
+          .select('id, role, toko_id, email, tenant_id, is_platform')
           .eq('id', userId)
           .maybeSingle();
     } catch (e) {
@@ -159,6 +169,16 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     final role = (profileRow?['role'] ?? '').toString().toLowerCase();
     if (role == 'owner') {
       try {
+        if (!_tenantMatchesLogin(profileRow?['tenant_id']?.toString())) {
+          await Supabase.instance.client.auth.signOut();
+          if (!mounted) return false;
+          _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
+          return false;
+        }
+        await TenantService.instance.bindFromProfile(profileRow);
+        await BrandService.load();
+        await TenantModules.instance.load();
+        if (await _goSuspendedIfLocked()) return true;
         final ownerProfile = await OwnerService().myProfile();
         OwnerSession.instance.setProfile(ownerProfile);
         if (!mounted) return false;
@@ -180,7 +200,30 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
 
     final ok = await _assertKaryawanAktif(email);
     if (!ok || !mounted) return false;
+    if (await _goSuspendedIfLocked()) return true;
     _goHome();
+    return true;
+  }
+
+  Future<bool> _goSuspendedIfLocked() async {
+    final access = await TenantAccess.load();
+    if (access.ok || access.platform) return false;
+    if (!mounted) return true;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => TenantSuspendedPage(
+          access: access,
+          onSignOut: () async {
+            await signOutQuiet();
+            if (!context.mounted) return;
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginKaryawanPage()),
+              (_) => false,
+            );
+          },
+        ),
+      ),
+    );
     return true;
   }
 
@@ -191,7 +234,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     try {
       userData = await Supabase.instance.client
           .from('karyawan')
-          .select('status_approval')
+          .select('status_approval, tenant_id, toko_id')
           .ilike('email', email)
           .limit(1)
           .maybeSingle();
@@ -225,6 +268,18 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
       );
       return false;
     }
+    if (!_tenantMatchesLogin(userData['tenant_id']?.toString())) {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return false;
+      _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
+      return false;
+    }
+    await TenantService.instance.bindFromProfile({
+      'tenant_id': userData['tenant_id'],
+      'toko_id': userData['toko_id'],
+    });
+    await BrandService.load();
+    await TenantModules.instance.load();
     return true;
   }
 
@@ -347,6 +402,10 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     final password = _passwordCtrl.text;
 
     try {
+      if (!isBrandedStoreApk) {
+        await TenantService.instance.requireResolved(slug: _slugCtrl.text);
+        await BrandService.load();
+      }
       final res = await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
@@ -372,6 +431,9 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         email: userEmail,
       );
       if (!routed || !mounted) return;
+    } on StateError catch (e) {
+      if (!mounted) return;
+      _snack(e.message, color: Colors.orange);
     } on AuthException catch (e) {
       if (!mounted) return;
       final msg = e.message.toLowerCase();
@@ -411,6 +473,10 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const OwnerShell()),
     );
+  }
+
+  bool _tenantMatchesLogin(String? tenantId) {
+    return TenantService.instance.sessionAllowsAccount(tenantId);
   }
 
   String? _validateEmail(String? v) {
@@ -509,8 +575,11 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                           absorbing: _isLoading,
                           child: Column(
                             children: [
-                              const OptikBrandLogo.color(height: 56),
-                              const SizedBox(height: 12),
+                              const LoginBrandHeader(
+                                logoHeight: 56,
+                                nameColor: OptikKaryawanTokens.navyMid,
+                              ),
+                              const SizedBox(height: 8),
                               Text(
                                 "sub_judul_portal".tr().toUpperCase(),
                                 textAlign: TextAlign.center,
@@ -679,6 +748,23 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                             ],
                                           ),
                                           const SizedBox(height: 22),
+                                          if (!isBrandedStoreApk) ...[
+                                            _buildField(
+                                              controller: _slugCtrl,
+                                              focusNode: _slugFocus,
+                                              label: 'Kode usaha',
+                                              icon: Icons.storefront_outlined,
+                                              textInputAction:
+                                                  TextInputAction.next,
+                                              validator: (v) =>
+                                                  (v == null || v.trim().isEmpty)
+                                                      ? 'Isi kode usaha'
+                                                      : null,
+                                              onFieldSubmitted: (_) =>
+                                                  _emailFocus.requestFocus(),
+                                            ),
+                                            const SizedBox(height: 12),
+                                          ],
                                           _buildField(
                                             controller: _emailCtrl,
                                             focusNode: _emailFocus,
@@ -892,7 +978,15 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                               GestureDetector(
                                                 onTap: _isLoading
                                                     ? null
-                                                    : () {
+                                                    : () async {
+                                                        if (!isBrandedStoreApk) {
+                                                          await TenantService
+                                                              .instance
+                                                              .persistSlug(
+                                                            _slugCtrl.text,
+                                                          );
+                                                        }
+                                                        if (!mounted) return;
                                                         Navigator.push(
                                                           context,
                                                           MaterialPageRoute(

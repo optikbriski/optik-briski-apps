@@ -1,0 +1,222 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+/// Palet etalase = Figma Cobalt sky. Bukan navy/es Optik.
+abstract final class RekasaTokens {
+  static const Color sky = Color(0xFF8BB4E8);
+  static const Color inkSoft = Color(0xFF2B6BC4);
+  static const Color ink = Color(0xFF0047AB);
+  static const Color inkDeep = Color(0xFF001F4D);
+  static const Color canvas = Color(0xFFD6E5F7);
+  static const Color paper = Color(0xFFFFFFFF);
+  static const Color muted = Color(0xFF4E7BB8);
+  static const Color line = Color(0x668BB4E8);
+  static const Color lineStrong = Color(0x998BB4E8);
+  static const Color wash = Color(0x4D8BB4E8);
+  static const Color danger = Color(0xFFA65D5D);
+  static const Color warning = Color(0xFF9A7B3C);
+
+  static const double radiusCard = 24;
+  static const double maxWidth = 1080;
+
+  static List<BoxShadow> get lift => [
+        BoxShadow(
+          color: ink.withOpacity(0.09),
+          blurRadius: 40,
+          spreadRadius: -12,
+          offset: const Offset(0, 22),
+        ),
+        BoxShadow(
+          color: inkSoft.withOpacity(0.06),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
+        ),
+      ];
+
+  static LinearGradient get badgeFill => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [sky, inkSoft, ink],
+        stops: [0.0, 0.52, 1.0],
+      );
+
+  static const LinearGradient skyCanvas = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFF7FAFE),
+      Color(0xFFD6E5F7),
+      Color(0xFFC4DBF3),
+    ],
+    stops: [0.0, 0.42, 1.0],
+  );
+}
+
+ThemeData buildRekasaStoreTheme() {
+  final body = GoogleFonts.plusJakartaSansTextTheme().apply(
+    bodyColor: RekasaTokens.ink,
+    displayColor: RekasaTokens.ink,
+  );
+  final text = body.copyWith(
+    headlineMedium: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 36,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -1.2,
+      height: 1.05,
+    ),
+    headlineSmall: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 20,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.3,
+    ),
+    titleLarge: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 17.5,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.35,
+    ),
+    titleMedium: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 14.5,
+      fontWeight: FontWeight.w700,
+    ),
+    bodyLarge: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      height: 1.45,
+    ),
+    bodyMedium: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.muted,
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      height: 1.55,
+    ),
+    labelLarge: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.ink,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w700,
+    ),
+    labelSmall: GoogleFonts.plusJakartaSans(
+      color: RekasaTokens.muted,
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.6,
+    ),
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+    textTheme: text,
+    scaffoldBackgroundColor: RekasaTokens.canvas,
+    colorScheme: const ColorScheme.light(
+      primary: RekasaTokens.inkSoft,
+      secondary: RekasaTokens.sky,
+      surface: RekasaTokens.paper,
+      error: RekasaTokens.danger,
+      onPrimary: RekasaTokens.paper,
+      onSecondary: RekasaTokens.paper,
+      onSurface: RekasaTokens.ink,
+      onError: RekasaTokens.paper,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      foregroundColor: RekasaTokens.ink,
+      titleTextStyle: GoogleFonts.plusJakartaSans(
+        color: RekasaTokens.ink,
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.2,
+      ),
+    ),
+    dividerTheme: const DividerThemeData(color: RekasaTokens.line, space: 1),
+    dialogTheme: DialogThemeData(
+      backgroundColor: RekasaTokens.paper,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: RekasaTokens.line),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: RekasaTokens.ink,
+      contentTextStyle: GoogleFonts.plusJakartaSans(color: RekasaTokens.paper),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: RekasaTokens.paper,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.sky),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.sky),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: RekasaTokens.inkSoft, width: 1.2),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: RekasaTokens.inkSoft,
+        foregroundColor: RekasaTokens.paper,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: RekasaTokens.ink,
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: RekasaTokens.paper,
+      elevation: 0,
+      height: 68,
+      indicatorColor: RekasaTokens.wash,
+      labelTextStyle: WidgetStateProperty.resolveWith((s) {
+        final on = s.contains(WidgetState.selected);
+        return GoogleFonts.plusJakartaSans(
+          fontSize: 11,
+          fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+          letterSpacing: 0.15,
+          color: on ? RekasaTokens.inkSoft : RekasaTokens.muted,
+        );
+      }),
+      iconTheme: WidgetStateProperty.resolveWith((s) {
+        final on = s.contains(WidgetState.selected);
+        return IconThemeData(
+          color: on ? RekasaTokens.inkSoft : RekasaTokens.muted,
+          size: 24,
+        );
+      }),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) {
+        return s.contains(WidgetState.selected) ? RekasaTokens.paper : RekasaTokens.paper;
+      }),
+      trackColor: WidgetStateProperty.resolveWith((s) {
+        return s.contains(WidgetState.selected)
+            ? RekasaTokens.ink
+            : RekasaTokens.lineStrong;
+      }),
+    ),
+  );
+}

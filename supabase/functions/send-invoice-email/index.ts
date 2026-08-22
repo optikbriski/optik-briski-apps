@@ -1,6 +1,9 @@
 // @ts-ignore
 declare const Deno: any;
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { loadBrand } from "../_shared/brand.ts";
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -39,8 +42,13 @@ Deno.serve(async (req: Request) => {
       throw new Error("RESEND_API_KEY belum terpasang di Secrets Supabase!");
     }
 
+    const brandDb = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const brand = (await loadBrand(brandDb)).displayName;
     const from = Deno.env.get("RESEND_FROM") ||
-      "Optik B. Riski <onboarding@resend.dev>";
+      `${brand} <onboarding@resend.dev>`;
     const phase = String(qrPhase || "").toUpperCase();
     const wantQr = includeQr !== false;
     const phaseLabel =
@@ -67,8 +75,8 @@ Deno.serve(async (req: Request) => {
       }`
       : "";
     const subject = qrImg
-      ? `Nota ${invoice} · QR ${phaseLabel} — Optik B. Riski`
-      : `Nota ${invoice} · ${phaseLabel} — Optik B. Riski`;
+      ? `Nota ${invoice} · QR ${phaseLabel} — ${brand}`
+      : `Nota ${invoice} · ${phaseLabel} — ${brand}`;
 
     const emailPayload: Record<string, unknown> = {
       from,
@@ -77,7 +85,7 @@ Deno.serve(async (req: Request) => {
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; border: 1px solid #e8eef8; border-radius: 14px; color: #0f172a; background: #ffffff;">
           <div style="text-align: center; margin-bottom: 20px;">
-            <h2 style="margin: 0; color: #0B3D8C; font-size: 22px; letter-spacing: 0.5px;">OPTIK B. RISKI</h2>
+            <h2 style="margin: 0; color: #0B3D8C; font-size: 22px; letter-spacing: 0.5px;">${brand.toUpperCase()}</h2>
             <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-transform: uppercase;">Nota digital</p>
           </div>
 

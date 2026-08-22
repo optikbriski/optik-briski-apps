@@ -13,6 +13,7 @@ import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/brand/brand_service.dart';
 
 /// Admin: ekspor laporan operasional ke PDF premium per rentang tanggal.
 class MonthlyExportPage extends StatefulWidget {
@@ -346,7 +347,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             ),
         ],
         text:
-            'Optik B. Riski laporan $shareLabel · Salinan ke-${result.salinanKe}',
+            '${BrandService.name} laporan $shareLabel · Salinan ke-${result.salinanKe}',
       );
 
       if (!mounted) return;
@@ -554,7 +555,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'export_pdf_note'.tr(),
+              'export_pdf_note'.brandTr(),
               style: TextStyle(
                 color: OptikAdminTokens.navy.withOpacity(0.45),
                 fontSize: 11.5,

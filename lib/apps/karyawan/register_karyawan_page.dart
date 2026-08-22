@@ -13,11 +13,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/liveness_result.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
+import '../../shared/karyawan/register_conflict.dart';
 import '../../shared/ktp/ktp_capture_page.dart';
 import '../../shared/ktp/ktp_ocr_service.dart';
 import '../../shared/liveness_camera_page.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import 'login_karyawan_page.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
+import '../../shared/tenant/tenant_service.dart';
 
 // MESIN AUTO-CAPSLOCK AWAL KATA
 class CapitalizeEachWordFormatter extends TextInputFormatter {
@@ -57,6 +61,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // CONTROLLER FORM DATA DIRI
   final formKey = GlobalKey<FormState>();
   final _nikCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController(text: TenantService.instance.slug);
   final _namaCtrl = TextEditingController();
   final _alamatKtpCtrl = TextEditingController();
   final _ttlCtrl = TextEditingController();
@@ -241,6 +246,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     _otpTimer?.cancel();
     _ttlCtrl.removeListener(_sinkronUmurDariTtl);
     _nikCtrl.dispose();
+    _slugCtrl.dispose();
     _namaCtrl.dispose();
     _alamatKtpCtrl.dispose();
     _ttlCtrl.dispose();
@@ -567,23 +573,18 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     bool failClosed = false,
   }) async {
     final client = Supabase.instance.client;
+    final tenantId = RegisterConflict.tenantScopeId(TenantService.instance.id);
     try {
       if (email != null && email.isNotEmpty) {
-        final row = await client
-            .from('karyawan')
-            .select('id')
-            .ilike('email', email)
-            .limit(1)
-            .maybeSingle();
+        var q = client.from('karyawan').select('id').ilike('email', email);
+        if (tenantId != null) q = q.eq('tenant_id', tenantId);
+        final row = await q.limit(1).maybeSingle();
         if (row != null) return 'email';
       }
       if (nik != null && nik.isNotEmpty) {
-        final row = await client
-            .from('karyawan')
-            .select('id')
-            .eq('nik', nik)
-            .limit(1)
-            .maybeSingle();
+        var q = client.from('karyawan').select('id').eq('nik', nik);
+        if (tenantId != null) q = q.eq('tenant_id', tenantId);
+        final row = await q.limit(1).maybeSingle();
         if (row != null) return 'nik';
       }
     } on PostgrestException catch (e) {
@@ -757,13 +758,22 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
   // FUNGSI TARIK DAFTAR CABANG MASTER DARI DATABASE
   Future<void> _fetchDaftarToko() async {
     try {
-      final data = await Supabase.instance.client
-          .from('toko_id')
-          .select('id, toko_id')
-          .order('toko_id', ascending: true);
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? brandedStoreSlug : _slugCtrl.text,
+      );
+      final data = await Supabase.instance.client.rpc(
+        'list_tenant_stores',
+        params: withTenant({}),
+      );
+      final list = <Map<String, dynamic>>[];
+      if (data is List) {
+        for (final e in data) {
+          if (e is Map) list.add(Map<String, dynamic>.from(e));
+        }
+      }
       if (mounted) {
         setState(() {
-          _listToko = List<Map<String, dynamic>>.from(data);
+          _listToko = list;
           _isLoadingToko = false;
         });
       }
@@ -1269,6 +1279,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
         'jabatan': (jabatan ?? '').trim(),
         'cabang': namaCabangTeks,
         'toko_id': _cabang,
+        'tenant_id': TenantService.instance.boundId,
         'pin_absensi': pinCtrl.text.trim(),
         'alamat_lengkap': alamatDomisili,
         'nama_bank': namaBankCtrl.text.trim().toUpperCase(),
@@ -1386,9 +1397,10 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
       ));
     } on PostgrestException catch (e) {
       if (!mounted) return;
+      final taken = loginIdentityTakenMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          "${"reg_gagal".tr()}${e.message.isNotEmpty ? e.message : e.code ?? ''}",
+          "${"reg_gagal".tr()}${taken ?? (e.message.isNotEmpty ? e.message : e.code ?? '')}",
         ),
         backgroundColor: Colors.redAccent,
         duration: const Duration(seconds: 5),
@@ -1396,8 +1408,9 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
     } catch (error) {
       debugPrint('register submit: $error');
       if (!mounted) return;
+      final taken = loginIdentityTakenMessage(error);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("${"reg_gagal".tr()}$error"),
+        content: Text("${"reg_gagal".tr()}${taken ?? error}"),
         backgroundColor: Colors.redAccent,
         duration: const Duration(seconds: 5),
       ));
@@ -1455,7 +1468,7 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                             ),
                           ),
                           Text(
-                            'Optik B. Riski · Onboarding karyawan',
+                            '${BrandService.name} · Onboarding karyawan',
                             style: TextStyle(
                               color: OptikKaryawanTokens.muted.withOpacity(0.95),
                               fontSize: 11.5,
@@ -2393,6 +2406,23 @@ class _RegisterKaryawanPageState extends State<RegisterKaryawanPage> {
                           value == null ? "reg_err_jabatan".tr() : null,
                     ),
                     const SizedBox(height: 15),
+
+                    if (!isBrandedStoreApk) ...[
+                    TextFormField(
+                      controller: _slugCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: _premiumDecoration(
+                        'Kode usaha',
+                        Icons.storefront_outlined,
+                        null,
+                      ),
+                      onFieldSubmitted: (_) => _fetchDaftarToko(),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Isi kode usaha'
+                          : null,
+                    ),
+                    const SizedBox(height: 15),
+                    ],
 
                     // CABANG — searchable (banyak toko)
                     FormField<String>(

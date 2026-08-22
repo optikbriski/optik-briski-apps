@@ -7,6 +7,7 @@ import '../../../shared/app_update_service.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
 import '../member_widgets.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Update APK Member — putih–biru, unduh aman, pasang tetap konfirmasi.
 class MemberSoftwareUpdatePage extends StatefulWidget {
@@ -279,11 +280,11 @@ class _MemberSoftwareUpdatePageState extends State<MemberSoftwareUpdatePage> {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            content: const Text(
+            content: Text(
               'Buka Pengaturan → Akses khusus → Instal aplikasi tidak dikenal '
-              '→ aktifkan untuk Optik B. Riski Member, lalu coba lagi.\n\n'
+              '→ aktifkan untuk ${BrandService.name} Member, lalu coba lagi.\n\n'
               'App yang terpasang tidak rusak.',
-              style: TextStyle(
+              style: const TextStyle(
                 color: OptikMemberTokens.inkSecondary,
                 height: 1.4,
               ),

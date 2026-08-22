@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/brand/brand_service.dart';
+import '../../shared/config.dart';
 import '../../shared/member/member_repository.dart';
+import '../../shared/tenant/tenant_modules.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 import 'pages/member_date_picker.dart';
 
@@ -17,6 +21,7 @@ class MemberRegisterPage extends StatefulWidget {
 
 class _MemberRegisterPageState extends State<MemberRegisterPage> {
   final _repo = MemberRepository();
+  final _slug = TextEditingController(text: TenantService.instance.slug);
   final _nama = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
@@ -48,7 +53,7 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
     super.initState();
     _waOtp.addListener(_onWaOtpChanged);
     _emailOtp.addListener(_onEmailOtpChanged);
-    for (final c in [_nama, _phone, _email, _pass, _pass2]) {
+    for (final c in [_slug, _nama, _phone, _email, _pass, _pass2]) {
       c.addListener(() => setState(() {}));
     }
   }
@@ -59,6 +64,7 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
     _emailDebounce?.cancel();
     _waOtp.removeListener(_onWaOtpChanged);
     _emailOtp.removeListener(_onEmailOtpChanged);
+    _slug.dispose();
     _nama.dispose();
     _phone.dispose();
     _email.dispose();
@@ -157,6 +163,18 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       return;
     }
+    try {
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? null : _slug.text,
+      );
+      await TenantModules.instance.load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: OptikMemberTokens.danger),
+      );
+      return;
+    }
     setState(() {
       if (channel == 'wa') {
         _sendingWa = true;
@@ -216,6 +234,10 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
     if (!_canCreate) return;
     setState(() => _busyCreate = true);
     try {
+      await TenantService.instance.requireResolved(
+        slug: isBrandedStoreApk ? null : _slug.text,
+      );
+      await TenantModules.instance.load();
       final res = await _repo.finalizeRegister(
         phone: _phone.text.trim(),
         password: _pass.text,
@@ -279,10 +301,10 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
                       icon: const Icon(Icons.arrow_back_rounded,
                           color: OptikMemberTokens.blueDeep),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Daftar Member',
-                        style: TextStyle(
+                        'Daftar Member ${BrandService.name}',
+                        style: const TextStyle(
                           color: OptikMemberTokens.blueDeep,
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
@@ -336,6 +358,14 @@ class _MemberRegisterPageState extends State<MemberRegisterPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (!isBrandedStoreApk) ...[
+                            _field(
+                              controller: _slug,
+                              label: 'Kode usaha',
+                              icon: Icons.storefront_outlined,
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           _field(
                             controller: _nama,
                             label: 'Nama lengkap',

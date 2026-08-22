@@ -4,7 +4,42 @@
   "outputDirectory": "build/web",
   "framework": null,
   "installCommand": "echo 'Flutter install handled in build script'",
+  "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "rekasa-karya-indonesia.vercel.app"
+        }
+      ],
+      "destination": "/perusahaan/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/flutter_service_worker.js",
+      "has": [
+        {
+          "type": "host",
+          "value": "rekasa-karya-indonesia.vercel.app"
+        }
+      ],
+      "destination": "/perusahaan/sw-kill.js"
+    },
+    {
+      "source": "/perusahaan",
+      "destination": "/perusahaan/index.html"
+    },
+    {
+      "source": "/perusahaan/",
+      "destination": "/perusahaan/index.html"
+    },
+    {
+      "source": "/perusahaan/paket",
+      "destination": "/perusahaan/paket.html"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
@@ -13,6 +48,15 @@
   "headers": [
     {
       "source": "/flutter_service_worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
       "headers": [
         {
           "key": "Cache-Control",

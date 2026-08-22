@@ -6,6 +6,7 @@ import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
 import 'member_claim_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 /// Preferensi centang S&K klaim garansi.
 enum ClaimTermsMode {
@@ -73,19 +74,19 @@ class ClaimTermsPrefs {
   }
 }
 
-const _claimTermsText = '''
+String get _claimTermsText => '''
 SYARAT & KETENTUAN KLAIM GARANSI
-Optik B. Riski
+${BrandService.name}
 
 Dengan melanjutkan, Anda menyatakan telah membaca dan menyetujui ketentuan berikut:
 
 1. Masa garansi aktif 7 hari sejak barang diambil di toko (hari diambil sampai hari ke-7; kartu berstatus Aktif). Lebih dari 7 hari → garansi mati dan tidak bisa klaim.
-2. Klaim garansi WAJIB datang langsung ke toko Optik B. Riski yang ditentukan.
+2. Klaim garansi WAJIB datang langsung ke toko ${BrandService.name} yang ditentukan.
 3. Barang yang diklaim HARUS dibawa lengkap (frame/lensa sesuai nota) untuk dicek petugas.
 4. Keputusan diterima / ditolak hanya setelah pemeriksaan fisik oleh petugas toko.
 5. Maksimal 1× klaim per transaksi pembelian.
 6. Garansi tidak berlaku untuk kerusakan karena benturan, terjatuh, kelalaian, atau disengaja.
-7. Modifikasi / perbaikan di luar Optik B. Riski membatalkan garansi.
+7. Modifikasi / perbaikan di luar ${BrandService.name} membatalkan garansi.
 8. Kehilangan kacamata bukan tanggung jawab toko dan tidak termasuk klaim garansi.
 9. Data klaim di app hanya untuk antrean & dokumentasi; bukan jaminan ganti rugi otomatis.
 10. Petugas berhak meminta nota, kartu garansi, dan identitas terkait pembelian.

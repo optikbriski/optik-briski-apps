@@ -4,6 +4,7 @@ import '../../../shared/garansi/garansi_service.dart';
 import '../../../shared/theme.dart';
 import '../member_widgets.dart';
 import 'member_warranty_list_page.dart';
+import '../../../shared/brand/brand_service.dart';
 
 class MemberCarePage extends StatelessWidget {
   const MemberCarePage({super.key});
@@ -41,7 +42,7 @@ class MemberCarePage extends StatelessWidget {
         'Yang bisa membatalkan garansi',
         [
           'Kerusakan karena benturan / terjatuh / disengaja.',
-          'Modifikasi sendiri di luar Optik B. Riski.',
+          'Modifikasi sendiri di luar ${BrandService.name}.',
           'Kehilangan kacamata — bukan tanggung jawab toko.',
         ],
       ),

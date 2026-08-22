@@ -5,6 +5,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun storeProp(name: String): String =
+    (project.findProperty(name) as String?)?.trim().orEmpty()
+
 android {
     namespace = "com.example.toko_kacamata_natan"
     compileSdk = flutter.compileSdkVersion
@@ -39,17 +42,33 @@ compileOptions {
     productFlavors {
         create("karyawan") {
             dimension = "app"
-            // Tetap ID lama supaya update Karyawan yang sudah terpasang tidak putus.
-            applicationId = "com.example.toko_kacamata_natan"
+            // Default Rekasa. Kulit Optik: -PstoreApplicationId dari brands/optik-briski.json
+            // Jangan ganti ID Optik di file merek itu.
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.rekasa.karyawan" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("member") {
             dimension = "app"
-            // ID baru → install berdampingan, bukan overwrite Karyawan.
-            applicationId = "com.optikbriski.member"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.rekasa.member" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
         create("admin") {
             dimension = "app"
-            applicationId = "com.optikbriski.admin"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.rekasa.admin" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
+        }
+        create("store") {
+            dimension = "app"
+            val id = storeProp("storeApplicationId")
+            applicationId = id.ifEmpty { "com.rekasa.store" }
+            val name = storeProp("storeAppName")
+            if (name.isNotEmpty()) resValue("string", "app_name", name)
         }
     }
 
@@ -73,6 +92,14 @@ androidComponents {
     onVariants(selector().withFlavor("app" to "member")) { variant ->
         variant.packaging.jniLibs.excludes.add("**/libmlkit_google_ocr_pipeline.so")
         variant.packaging.resources.excludes.add("**/mlkit-google-ocr-models/**")
+    }
+    // Etalase Rekasa: bukan kasir — buang ML Kit / OCR native.
+    onVariants(selector().withFlavor("app" to "store")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libmlkit_google_ocr_pipeline.so")
+        variant.packaging.jniLibs.excludes.add("**/libmlkit*.so")
+        variant.packaging.jniLibs.excludes.add("**/libbarhopper_v3.so")
+        variant.packaging.resources.excludes.add("**/mlkit-google-ocr-models/**")
+        variant.packaging.resources.excludes.add("**/mlkit*/**")
     }
 }
 

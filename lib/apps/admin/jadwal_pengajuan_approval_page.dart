@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -35,14 +36,8 @@ class _JadwalPengajuanApprovalPageState
   /// tokoId → daftar pengajuan pending
   Map<String, List<Map<String, dynamic>>> _byToko = {};
 
-  bool get _isPusat {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      AttendanceAdminScope.canViewAllStores(widget.profile);
 
   String get _scopeToko =>
       widget.initialTokoId ?? widget.profile['toko_id']?.toString() ?? '';
@@ -59,10 +54,21 @@ class _JadwalPengajuanApprovalPageState
       _error = null;
     });
     try {
+      final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
+      if (tenant == null || tenant.isEmpty) {
+        throw 'Kode usaha belum terverifikasi. Tidak boleh memutus pengajuan merek lain.';
+      }
+      if (!AttendanceAdminScope.canManageJadwal(widget.profile)) {
+        throw 'Hanya admin toko/cabang yang boleh memutus pengajuan jadwal.';
+      }
       // Admin pusat: lihat semua cabang yang ada pengajuan.
       // Admin cabang / filter cabang: hanya toko itu.
       final allPusat = _isPusat &&
           (widget.initialTokoId == null || widget.initialTokoId!.isEmpty);
+      if (!allPusat &&
+          !AttendanceAdminScope.canEditTokoJadwal(widget.profile, _scopeToko)) {
+        throw 'Admin toko hanya boleh memutus pengajuan toko sendiri.';
+      }
       _items = await _svc.listPending(
         tokoId: _scopeToko,
         allToko: allPusat,
@@ -74,6 +80,14 @@ class _JadwalPengajuanApprovalPageState
             .where((e) => e['toko_id']?.toString() == widget.initialTokoId)
             .toList();
       }
+      _items = [
+        for (final e in _items)
+          if (AttendanceAdminScope.canEditTokoJadwal(
+            widget.profile,
+            e['toko_id']?.toString(),
+          ))
+            e,
+      ];
       _byToko = _groupByToko(_items);
     } catch (e) {
       _error = '$e';
@@ -252,6 +266,8 @@ class _JadwalPengajuanApprovalPageState
         id: item['id'].toString(),
         approve: approve,
         note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+        profile: widget.profile,
+        tokoId: item['toko_id']?.toString(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

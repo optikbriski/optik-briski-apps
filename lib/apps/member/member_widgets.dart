@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/theme.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import 'member_layout.dart';
 
 /// Scaffold putih–biru premium — dipakai di semua halaman Member.
@@ -125,7 +125,7 @@ class MemberHeroHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const OptikBrandLogo.white(height: 28),
+                  const AppBrandMark(height: 28, onDark: true),
                   const SizedBox(height: 10),
                   Text(
                     title,

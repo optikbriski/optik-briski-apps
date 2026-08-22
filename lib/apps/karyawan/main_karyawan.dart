@@ -30,13 +30,15 @@ import '../../shared/safe_image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../shared/theme.dart';
 import '../../shared/whatsapp_launcher.dart';
-import '../../shared/widgets/optik_brand_logo.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/scanner_penerimaan_page.dart';
 import '../member/pages/member_face_shape_page.dart';
+import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_modules.dart';
 
 // VARIABEL GLOBAL UNTUK MENYIMPAN FOTO
 Uint8List? fotoKaryawanGlobal;
@@ -332,7 +334,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
                     _showPremiumSnackbar(
                       'Izin instalasi diperlukan',
-                      'Aktifkan “Instal aplikasi tidak dikenal” untuk Optik B. Riski di Pengaturan.',
+                      'Aktifkan “Instal aplikasi tidak dikenal” untuk ${BrandService.name} di Pengaturan.',
                       Colors.orange,
                     );
                   } else {
@@ -1889,10 +1891,7 @@ class KaryawanPageState extends State<KaryawanPage>
           ),
           child: AppBar(
             title: _currentIndex == 0
-                ? const OptikBrandLogo(
-                    tone: OptikLogoTone.color,
-                    height: 22,
-                  )
+                ? const AppBrandMark(height: 22)
                 : Text(
                     _currentIndex == 1
                         ? "daftar_tugas_sop".tr()
@@ -2348,6 +2347,15 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Future<void> _bukaAbsensi() async {
+    if (!TenantModules.instance.allows('attendance')) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Absensi tidak aktif di paket usaha ini.'),
+        ),
+      );
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AbsensiPage()),
@@ -2381,7 +2389,7 @@ class KaryawanPageState extends State<KaryawanPage>
       await openAdminWhatsApp(
         client: Supabase.instance.client,
         message:
-            'Halo Admin Optik B. Riski, saya $_namaKaryawan ($_cabangKaryawan) butuh bantuan.',
+            'Halo Admin ${BrandService.name}, saya $_namaKaryawan ($_cabangKaryawan) butuh bantuan.',
       );
     } catch (e) {
       if (!mounted) return;
@@ -4791,11 +4799,12 @@ class KaryawanPageState extends State<KaryawanPage>
               children: [
                 _buildMenuProfil(Icons.person_rounded,
                     "menu_detail_profil".tr(), "sub_detail_profil".tr(), true),
-                _buildMenuProfil(
-                    Icons.face_retouching_natural_rounded,
-                    'Absensi',
-                    'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
-                    true),
+                if (TenantModules.instance.allows('attendance'))
+                  _buildMenuProfil(
+                      Icons.face_retouching_natural_rounded,
+                      'Absensi',
+                      'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
+                      true),
                 _buildMenuProfil(
                     Icons.face_outlined,
                     'Bentuk Wajah',
