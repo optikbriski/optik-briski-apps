@@ -2,45 +2,99 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Admin (Debug)",
+      "name": "Rekasa Etalase (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_store.dart",
+      "toolArgs": [
+        "--flavor",
+        "store",
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=store"
+      ]
+    },
+    {
+      "name": "Rekasa Admin (Debug)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_admin.dart",
       "toolArgs": [
-        "--dart-define",
-        "SUPABASE_URL=YOUR_SUPABASE_URL",
-        "--dart-define",
-        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
-        "--dart-define",
-        "APP_FLAVOR=admin"
+        "--flavor",
+        "admin",
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=admin"
       ]
     },
     {
-      "name": "Karyawan (Debug)",
+      "name": "Rekasa Karyawan (Debug)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_karyawan.dart",
       "toolArgs": [
-        "--dart-define",
-        "SUPABASE_URL=YOUR_SUPABASE_URL",
-        "--dart-define",
-        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
-        "--dart-define",
-        "APP_FLAVOR=karyawan"
+        "--flavor",
+        "karyawan",
+        "--dart-define-from-file=.dart_define.karyawan.json",
+        "--dart-define=APP_FLAVOR=karyawan"
       ]
     },
     {
-      "name": "Member (Debug)",
+      "name": "Rekasa Member (Debug)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main_member.dart",
       "toolArgs": [
-        "--dart-define",
-        "SUPABASE_URL=YOUR_SUPABASE_URL",
-        "--dart-define",
-        "SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY",
-        "--dart-define",
-        "APP_FLAVOR=member"
+        "--flavor",
+        "member",
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=member"
+      ]
+    },
+    {
+      "name": "Optik Admin (kulit)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "toolArgs": [
+        "--flavor",
+        "admin",
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=admin",
+        "--dart-define=ADMIN_TENANT_SLUG=optik-briski",
+        "--dart-define=ADMIN_PIN_TENANT=true",
+        "-PstoreApplicationId=com.optikbriski.admin",
+        "-PstoreAppName=Optik Admin"
+      ]
+    },
+    {
+      "name": "Optik Karyawan (kulit)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_karyawan.dart",
+      "toolArgs": [
+        "--flavor",
+        "karyawan",
+        "--dart-define-from-file=.dart_define.karyawan.json",
+        "--dart-define=APP_FLAVOR=karyawan",
+        "--dart-define=KARYAWAN_TENANT_SLUG=optik-briski",
+        "--dart-define=PIN_STORE_TENANT=true",
+        "-PstoreApplicationId=com.example.toko_kacamata_natan",
+        "-PstoreAppName=Optik Karyawan"
+      ]
+    },
+    {
+      "name": "Optik Member (kulit)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_member.dart",
+      "toolArgs": [
+        "--flavor",
+        "member",
+        "--dart-define-from-file=.dart_define.admin.json",
+        "--dart-define=APP_FLAVOR=member",
+        "--dart-define=MEMBER_TENANT_SLUG=optik-briski",
+        "--dart-define=PIN_STORE_TENANT=true",
+        "-PstoreApplicationId=com.optikbriski.member",
+        "-PstoreAppName=Optik B. Riski"
       ]
     }
   ]
