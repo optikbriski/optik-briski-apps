@@ -2,18 +2,22 @@
   var cat = window.REKASA_CATALOG;
   if (!cat) return;
 
+  var page = document.body.getAttribute("data-page") || "beranda";
+  var params = new URLSearchParams(location.search);
   var state = {
-    industry: "umum",
-    plan: null,
+    industry: params.get("bidang") || "umum",
+    plan: params.get("plan") || null,
     on: {},
     whiteLabel: false
   };
+  if (!cat.plans[state.plan]) state.plan = page === "paket" ? "paket_c" : null;
+  if (!industry()) state.industry = "umum";
 
   function industry() {
     for (var i = 0; i < cat.industries.length; i++) {
       if (cat.industries[i].key === state.industry) return cat.industries[i];
     }
-    return cat.industries[cat.industries.length - 1];
+    return null;
   }
 
   function planDef() {
@@ -22,12 +26,13 @@
 
   function included(key) {
     if (!state.plan) return false;
-    var keys = industry().plans[state.plan] || [];
+    var keys = (industry() || {}).plans;
+    keys = keys ? keys[state.plan] || [] : [];
     return keys.indexOf(key) !== -1;
   }
 
   function visibleKeys() {
-    var hide = industry().hide || [];
+    var hide = (industry() && industry().hide) || [];
     var out = [];
     Object.keys(cat.modules).forEach(function (k) {
       if (hide.indexOf(k) === -1) out.push(k);
@@ -36,7 +41,7 @@
   }
 
   function moduleLabel(key) {
-    var labels = industry().labels || {};
+    var labels = (industry() && industry().labels) || {};
     return labels[key] || cat.modules[key].label;
   }
 
@@ -79,14 +84,26 @@
     return document.getElementById(id);
   }
 
-  function parkCheckout() {
-    var holder = el("checkout-holder");
-    var box = el("checkout");
-    if (holder && box && box.parentNode !== holder) holder.appendChild(box);
+  function paketHref(planKey, industryKey) {
+    return (
+      "paket.html?plan=" +
+      encodeURIComponent(planKey) +
+      "&bidang=" +
+      encodeURIComponent(industryKey || state.industry)
+    );
+  }
+
+  function syncUrl() {
+    if (page !== "paket") return;
+    var u = new URL(location.href);
+    u.searchParams.set("plan", state.plan);
+    u.searchParams.set("bidang", state.industry);
+    history.replaceState({}, "", u.pathname + u.search + u.hash);
   }
 
   function renderIndustries() {
     var box = el("industry-chips");
+    if (!box) return;
     box.innerHTML = "";
     cat.industries.forEach(function (ind) {
       var b = document.createElement("button");
@@ -95,10 +112,36 @@
       b.textContent = ind.label;
       b.addEventListener("click", function () {
         state.industry = ind.key;
-        if (state.plan) applyPlanDefaults();
+        if (page === "paket") applyPlanDefaults();
         render();
+        syncUrl();
       });
       box.appendChild(b);
+    });
+    if (el("industry-blurb")) el("industry-blurb").textContent = industry().blurb;
+  }
+
+  function renderHomePlans() {
+    var box = el("plan-cards");
+    if (!box) return;
+    box.innerHTML = "";
+    ["paket_c", "paket_b", "paket_a"].forEach(function (key) {
+      var p = cat.plans[key];
+      var names = ((industry() && industry().plans[key]) || [])
+        .map(moduleLabel)
+        .join(", ");
+      var a = document.createElement("a");
+      a.className = "card plan-card plan-link";
+      a.setAttribute("data-plan", key);
+      a.href = paketHref(key);
+      a.innerHTML =
+        '<p class="eyebrow">' + p.eyebrow + "</p>" +
+        "<h3>" + p.short + "</h3>" +
+        '<p class="price">' + rp(p.priceIdr) + "</p>" +
+        "<p>" + p.blurb + "</p>" +
+        '<p class="muted plan-include">Termasuk: ' + names + "</p>" +
+        '<p class="plan-go">Buka halaman paket →</p>';
+      box.appendChild(a);
     });
   }
 
@@ -121,16 +164,49 @@
     return row;
   }
 
-  function fillOpenBody(body) {
-    var list = document.createElement("div");
-    list.id = "feature-list";
-    list.className = "plan-features";
-    var plan = planDef();
+  function renderPaketSwitch() {
+    var box = el("plan-switch");
+    if (!box) return;
+    box.innerHTML = "";
+    ["paket_c", "paket_b", "paket_a"].forEach(function (key) {
+      var a = document.createElement("a");
+      a.className = "chip" + (state.plan === key ? " is-on" : "");
+      a.href = paketHref(key);
+      a.textContent = cat.plans[key].short;
+      a.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        state.plan = key;
+        applyPlanDefaults();
+        render();
+        syncUrl();
+      });
+      box.appendChild(a);
+    });
+  }
+
+  function renderPaketPage() {
+    var p = planDef();
+    var names = ((industry() && industry().plans[state.plan]) || [])
+      .map(moduleLabel)
+      .join(", ");
+    if (el("paket-title")) el("paket-title").textContent = p.label;
+    document.title = p.label + " — REKASA KARYA INDONESIA";
+    var hero = el("plan-hero");
+    if (hero) {
+      hero.innerHTML =
+        '<p class="eyebrow">' + p.eyebrow + " · " + industry().label + "</p>" +
+        '<p class="price">' + rp(p.priceIdr) + "</p>" +
+        "<p>" + p.blurb + "</p>" +
+        '<p class="muted plan-include">Termasuk: ' + names + "</p>";
+    }
+    var list = el("feature-list");
+    if (!list) return;
+    list.innerHTML = "";
     list.appendChild(
       switchRow(
         "wl-toggle",
         "APK & web merek sendiri",
-        plan.whiteLabel
+        p.whiteLabel
           ? "Termasuk paket ini."
           : "Add-on " + rp(cat.whiteLabelAddonIdr),
         state.whiteLabel,
@@ -155,64 +231,13 @@
         )
       );
     });
-    body.appendChild(list);
-    var checkout = el("checkout");
-    if (checkout) body.appendChild(checkout);
-  }
-
-  function renderPlans() {
-    parkCheckout();
-    var box = el("plan-cards");
-    box.innerHTML = "";
-    ["paket_c", "paket_b", "paket_a"].forEach(function (key) {
-      var p = cat.plans[key];
-      var names = (industry().plans[key] || []).map(moduleLabel).join(", ");
-      var open = state.plan === key;
-      var card = document.createElement("article");
-      card.className = "card plan-card" + (open ? " is-open" : "");
-      card.setAttribute("data-plan", key);
-
-      var head = document.createElement("button");
-      head.type = "button";
-      head.className = "plan-head";
-      head.setAttribute("aria-expanded", open ? "true" : "false");
-      head.innerHTML =
-        '<p class="eyebrow">' + p.eyebrow + (open ? " · terbuka" : "") + "</p>" +
-        "<h3>" + p.short + "</h3>" +
-        '<p class="price">' + rp(p.priceIdr) + "</p>" +
-        "<p>" + p.blurb + "</p>" +
-        '<p class="muted plan-include">Termasuk: ' + names + "</p>";
-      head.addEventListener("click", function () {
-        if (state.plan === key) {
-          state.plan = null;
-          parkCheckout();
-        } else {
-          state.plan = key;
-          applyPlanDefaults();
-        }
-        render();
-        if (state.plan === key) {
-          var opened = box.querySelector('[data-plan="' + key + '"]');
-          if (opened) opened.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      });
-      card.appendChild(head);
-
-      if (open) {
-        var body = document.createElement("div");
-        body.className = "plan-body";
-        fillOpenBody(body);
-        card.appendChild(body);
-      }
-      box.appendChild(card);
-    });
   }
 
   function renderTotals() {
     var total = el("quote-total");
     var brk = el("quote-break");
     var btn = el("pay-btn");
-    if (!state.plan || !total || !brk || !btn) return;
+    if (!total || !brk || !btn) return;
     var q = quote();
     total.textContent = rp(q.amountIdr);
     var bits = ["Dasar " + rp(q.baseIdr)];
@@ -224,9 +249,13 @@
 
   function render() {
     renderIndustries();
-    renderPlans();
-    renderTotals();
-    el("industry-blurb").textContent = industry().blurb;
+    if (page === "paket") {
+      renderPaketSwitch();
+      renderPaketPage();
+      renderTotals();
+    } else {
+      renderHomePlans();
+    }
   }
 
   function selectedModules() {
@@ -294,10 +323,6 @@
 
   async function pay(ev) {
     ev.preventDefault();
-    if (!state.plan) {
-      status("Pencet paket dulu.", true);
-      return;
-    }
     var q = quote();
     var cfg = window.REKASA_CHECKOUT || {};
     var name = (el("biz-name").value || "").trim();
@@ -372,10 +397,11 @@
     }
   }
 
+  if (page === "paket") applyPlanDefaults();
   render();
-  el("checkout-form").addEventListener("submit", pay);
-  var q = new URLSearchParams(location.search);
-  if (q.get("bayar") === "selesai") {
+  var form = el("checkout-form");
+  if (form) form.addEventListener("submit", pay);
+  if (page === "paket" && params.get("bayar") === "selesai") {
     status("Pembayaran Midtrans selesai. Cek email untuk aktivasi lisensi.");
   }
 })();

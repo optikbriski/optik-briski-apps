@@ -213,31 +213,24 @@ img { max-width: 100%; height: auto; }
   margin: 10px 0 36px;
 }
 .plan-card {
-  padding: 0;
+  padding: 22px 22px 20px;
   overflow: hidden;
 }
-.plan-head {
-  display: block;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
+a.plan-link {
+  text-decoration: none;
   color: inherit;
-  background: transparent;
-  border: 0;
-  padding: 22px 22px 20px;
+  display: block;
 }
-.plan-card:hover { border-color: var(--mid); }
-.plan-card.is-open {
-  border-color: var(--ink);
-  box-shadow: 0 22px 40px -12px rgba(0, 71, 171, 0.16);
-}
-.plan-body {
-  border-top: 1px solid var(--line);
-  padding: 16px 18px 20px;
-  background: #f4f8fd;
+a.plan-link:hover { border-color: var(--mid); }
+.plan-go {
+  margin-top: 16px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
 }
 .plan-include { margin-top: 12px; }
+.plan-page .price { margin-top: 8px; }
+.plan-features { margin: 18px 0 8px; }
 
 .switch-row {
   display: flex;

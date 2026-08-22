@@ -125,7 +125,7 @@ Deno.serve(async (req: Request) => {
         "true";
     const clientKey = Deno.env.get("MIDTRANS_CLIENT_KEY") ?? "";
     const finish =
-      "https://rekasa-karya-indonesia.vercel.app/perusahaan/?bayar=selesai";
+      "https://rekasa-karya-indonesia.vercel.app/perusahaan/paket.html?bayar=selesai";
 
     if (!serverKey.trim()) {
       return new Response(

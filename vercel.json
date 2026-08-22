@@ -37,6 +37,10 @@
       "destination": "/perusahaan/index.html"
     },
     {
+      "source": "/perusahaan/paket",
+      "destination": "/perusahaan/paket.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

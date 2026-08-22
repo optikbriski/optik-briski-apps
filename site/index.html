@@ -24,7 +24,7 @@
   }
   </script>
 </head>
-<body>
+<body data-page="beranda">
   <header class="wrap nav">
     <a class="mark" href="index.html" aria-label="REKASA KARYA INDONESIA">
       <span class="mark-type">
@@ -34,7 +34,7 @@
     </a>
     <nav class="nav-links">
       <a href="#produk">Produk</a>
-      <a href="#paket">Paket</a>
+      <a href="paket.html">Paket</a>
       <a href="#badan">Badan hukum</a>
       <a href="kontak.html">Kontak</a>
       <a href="syarat.html">Syarat</a>
@@ -83,34 +83,10 @@
 
     <section class="section" id="paket">
       <h2>Paket langganan</h2>
-      <p class="lede">Pilih bidang, lalu pencet paket. Fitur dan bayar keluar di dalam paket itu — bukan di bawah halaman.</p>
+      <p class="lede">Pilih bidang, lalu pencet paket. Anda pindah ke halaman paket — fitur dan bayar tidak di beranda.</p>
       <p class="eyebrow" id="industry-blurb" style="margin:14px 0 10px">Usaha umum</p>
       <div id="industry-chips" class="chips" role="list"></div>
-      <div id="plan-cards" class="plan-stack"></div>
-      <div id="checkout-holder" hidden>
-        <div class="checkout" id="checkout">
-          <p class="eyebrow">Checkout lisensi</p>
-          <p class="price" id="quote-total">Rp 250.000</p>
-          <p class="muted" id="quote-break">Dasar paket</p>
-          <form id="checkout-form">
-            <label>Nama usaha / merek
-              <input id="biz-name" name="display_name" autocomplete="organization" required>
-            </label>
-            <label>Kode usaha
-              <input id="biz-slug" name="slug" placeholder="contoh: toko-maju">
-            </label>
-            <label>WA / HP
-              <input id="biz-phone" name="phone" type="tel" autocomplete="tel" required>
-            </label>
-            <label>Email (opsional)
-              <input id="biz-email" name="email" type="email" autocomplete="email">
-            </label>
-            <button type="submit" class="pay-btn" id="pay-btn">Bayar via Midtrans</button>
-          </form>
-          <p class="pay-status" id="pay-status"></p>
-          <p class="muted">QRIS, transfer bank, kartu, GoPay/ShopeePay lewat Midtrans. Uang masuk ke REKASA KARYA INDONESIA — lisensi software, bukan pengiriman barang.</p>
-        </div>
-      </div>
+      <div id="plan-cards" class="grid grid-3"></div>
     </section>
 
     <section class="section" id="badan">

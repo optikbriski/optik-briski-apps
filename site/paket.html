@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paket langganan — REKASA KARYA INDONESIA</title>
+  <meta name="description" content="Pilih fitur paket lisensi REKASA KARYA INDONESIA lalu bayar via Midtrans. Bukan barang fisik.">
+  <link rel="icon" type="image/png" href="rekasa-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="paket">
+  <header class="wrap nav">
+    <a class="mark" href="index.html" aria-label="REKASA KARYA INDONESIA">
+      <span class="mark-type"><strong>REKASA</strong><span>KARYA INDONESIA</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html">Beranda</a>
+      <a href="paket.html">Paket</a>
+      <a href="kontak.html">Kontak</a>
+      <a href="syarat.html">Syarat</a>
+      <a href="kebijakan.html">Kebijakan</a>
+    </nav>
+  </header>
+
+  <main class="wrap page">
+    <p class="eyebrow"><a href="index.html">Beranda</a> · Paket</p>
+    <h1 id="paket-title">Paket langganan</h1>
+    <p class="lede" id="paket-lede">Hidup/matikan fitur di halaman paket ini, lalu bayar lisensi ke Rekasa lewat Midtrans.</p>
+    <p class="eyebrow" id="industry-blurb" style="margin:14px 0 10px"></p>
+    <div id="industry-chips" class="chips" role="list"></div>
+    <div id="plan-switch" class="chips"></div>
+
+    <article class="card plan-page" id="plan-page">
+      <div id="plan-hero"></div>
+      <div id="feature-list" class="plan-features"></div>
+      <div class="checkout" id="checkout">
+        <p class="eyebrow">Checkout lisensi</p>
+        <p class="price" id="quote-total">Rp 0</p>
+        <p class="muted" id="quote-break"></p>
+        <form id="checkout-form">
+          <label>Nama usaha / merek
+            <input id="biz-name" name="display_name" autocomplete="organization" required>
+          </label>
+          <label>Kode usaha
+            <input id="biz-slug" name="slug" placeholder="contoh: toko-maju">
+          </label>
+          <label>WA / HP
+            <input id="biz-phone" name="phone" type="tel" autocomplete="tel" required>
+          </label>
+          <label>Email (opsional)
+            <input id="biz-email" name="email" type="email" autocomplete="email">
+          </label>
+          <button type="submit" class="pay-btn" id="pay-btn">Bayar via Midtrans</button>
+        </form>
+        <p class="pay-status" id="pay-status"></p>
+        <p class="muted">QRIS, transfer bank, kartu, GoPay/ShopeePay lewat Midtrans. Uang masuk ke REKASA KARYA INDONESIA — lisensi software, bukan pengiriman barang.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="wrap footer">
+    <a href="index.html">Kembali ke beranda</a>
+  </footer>
+  <script src="config.js"></script>
+  <script src="catalog.js"></script>
+  <script src="store.js"></script>
+</body>
+</html>
