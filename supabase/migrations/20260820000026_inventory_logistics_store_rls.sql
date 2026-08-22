@@ -1014,5 +1014,41 @@ revoke all on function public.pending_requests_guard() from public, anon;
 revoke all on function public.draft_pengiriman_guard() from public, anon;
 revoke all on function public.stock_move_status_ok(text, text) from public, anon;
 
+revoke all on function public.apply_stock_delta(
+  text, text, integer, text, text, text, text, uuid, text, jsonb, boolean
+) from public, anon;
+grant execute on function public.apply_stock_delta(
+  text, text, integer, text, text, text, text, uuid, text, jsonb, boolean
+) to authenticated, service_role;
+
+revoke all on function public.apply_stock_transfer(
+  text, text, text, integer, text, text, text, text, text, uuid, text, jsonb
+) from public, anon;
+grant execute on function public.apply_stock_transfer(
+  text, text, text, integer, text, text, text, text, text, uuid, text, jsonb
+) to authenticated, service_role;
+
+revoke all on function public.reserve_stock(text, text, integer, text, text, text, jsonb)
+  from public, anon;
+grant execute on function public.reserve_stock(text, text, integer, text, text, text, jsonb)
+  to authenticated, service_role;
+
+revoke all on function public.release_reservation(text, text, text, text, text)
+  from public, anon;
+grant execute on function public.release_reservation(text, text, text, text, text)
+  to authenticated, service_role;
+
+revoke all on function public.recognize_stock_variance(text, text, text, uuid, text)
+  from public, anon;
+grant execute on function public.recognize_stock_variance(text, text, text, uuid, text)
+  to authenticated, service_role;
+
+revoke all on function public.consume_reservation_and_transfer_out(
+  text, text, text, text, text, uuid, text, text, text
+) from public, anon;
+grant execute on function public.consume_reservation_and_transfer_out(
+  text, text, text, text, text, uuid, text, text, text
+) to authenticated, service_role;
+
 comment on function public.can_manage_inventory_for_toko(text) is
   'Mutasi stok: pusat semua toko tenant; admin_toko toko sendiri. Bukan owner etalase.';
