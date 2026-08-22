@@ -49,7 +49,7 @@ abstract final class RequestOrderRules {
         s == InventoryStockRules.roSuccess) {
       return false;
     }
-    return bolehApprove(profile, status) ||
+    return bolehApprove(profile: profile, status: status) ||
         (s == InventoryStockRules.roPreparing && bolehProsesPusat(profile));
   }
 
