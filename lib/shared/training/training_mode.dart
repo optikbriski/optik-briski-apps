@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'training_curriculum.dart';
@@ -27,8 +26,6 @@ class TrainingMode extends ChangeNotifier {
   static const _prefsSessionKey = 'training_mode_session_id';
   static const _prefsTokoKey = 'training_mode_toko_id';
   static const _prefsRoleKey = 'training_mode_role';
-
-  static const FlutterSecureStorage _secure = FlutterSecureStorage();
 
   bool _isActive = false;
   String? _sessionId;
@@ -94,12 +91,18 @@ class TrainingMode extends ChangeNotifier {
       rethrow;
     }
 
-    await _persistRecoveryFlag(
-      active: true,
-      sessionId: sessionId,
-      tokoId: tokoId,
-      role: role,
-    );
+    try {
+      await _persistRecoveryFlag(
+        active: true,
+        sessionId: sessionId,
+        tokoId: tokoId,
+        role: role,
+      );
+    } catch (e) {
+      // Jangan gagalkan sandbox. Flag hanya untuk wipe setelah crash.
+      // macOS debug sering -34018 (Keychain tanpa entitlement).
+      debugPrint('[TrainingMode] persist recovery flag: $e');
+    }
 
     notifyListeners();
     debugPrint(
@@ -187,9 +190,11 @@ class TrainingMode extends ChangeNotifier {
       TrainingHttpOverrides.uninstall();
       await TrainingLocalFileServer.instance.stop();
 
-      final flagged = await _secure.read(key: _prefsActiveKey);
-      if (flagged == '1') {
-        final orphanSid = await _secure.read(key: _prefsSessionKey);
+      final prefs = await SharedPreferences.getInstance();
+      final flagged = prefs.getBool(_prefsActiveKey) == true ||
+          prefs.getString(_prefsActiveKey) == '1';
+      if (flagged) {
+        final orphanSid = prefs.getString(_prefsSessionKey);
         debugPrint(
           '[TrainingMode] orphan recovery flag — wiping session=$orphanSid',
         );
@@ -295,16 +300,18 @@ class TrainingMode extends ChangeNotifier {
     required String tokoId,
     required String role,
   }) async {
-    await _secure.write(key: _prefsActiveKey, value: active ? '1' : '0');
-    await _secure.write(key: _prefsSessionKey, value: sessionId);
-    await _secure.write(key: _prefsTokoKey, value: tokoId);
-    await _secure.write(key: _prefsRoleKey, value: role);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsActiveKey, active);
+    await prefs.setString(_prefsSessionKey, sessionId);
+    await prefs.setString(_prefsTokoKey, tokoId);
+    await prefs.setString(_prefsRoleKey, role);
   }
 
   Future<void> _clearRecoveryFlag() async {
-    await _secure.delete(key: _prefsActiveKey);
-    await _secure.delete(key: _prefsSessionKey);
-    await _secure.delete(key: _prefsTokoKey);
-    await _secure.delete(key: _prefsRoleKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsActiveKey);
+    await prefs.remove(_prefsSessionKey);
+    await prefs.remove(_prefsTokoKey);
+    await prefs.remove(_prefsRoleKey);
   }
 }
