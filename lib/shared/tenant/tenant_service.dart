@@ -77,12 +77,23 @@ class TenantService {
     await resolveSlug(brandedStoreSlug, client: client);
   }
 
-  /// Tolak sesi/akun yang bukan merek APK ini.
+  /// APK merek sendiri: akun wajib tenant yang sama. Kosong / beda = tolak.
+  /// Kulit Rekasa bersama: tidak mengunci di sini (kode usaha + [sessionAllowsAccount]).
   bool storeMatchesApk(String? tenantId, {bool platform = false}) {
-    if (platform || isPlatform) return true;
-    if (!isBrandedStoreApk || !isBound) return true;
+    if (!isBrandedStoreApk) return true;
+    if (!isBound) return false;
     final t = (tenantId ?? '').trim();
-    if (t.isEmpty) return true;
+    if (t.isEmpty) return false;
+    return t == id;
+  }
+
+  /// Akun (profiles/karyawan/member) vs tenant sesi. Tenant kosong = tolak.
+  bool sessionAllowsAccount(String? accountTenantId) {
+    final t = (accountTenantId ?? '').trim();
+    if (t.isEmpty) return false;
+    if (isRekasaStorefront) return false;
+    if (isBrandedStoreApk) return storeMatchesApk(t);
+    if (!isBound) return true;
     return t == id;
   }
 

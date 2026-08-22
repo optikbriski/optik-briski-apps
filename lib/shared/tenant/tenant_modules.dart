@@ -7,8 +7,8 @@ import 'tenant_service.dart';
 
 /// Hak modul tenant. Etalase menulis `tenant_modules`; APK toko membaca ini.
 ///
-/// Fail-open hanya jika RPC belum ada (migrasi lama) **dan** bukan APK Store,
-/// atau sesi belum terikat tenant. Setelah load sukses: hanya modul `enabled`.
+/// Fail-closed: tanpa load sukses = tidak ada menu kasir/modul.
+/// Etalase Rekasa selalu kosong. Setelah load: hanya modul `enabled`.
 class TenantModules extends ChangeNotifier {
   TenantModules._();
   static final TenantModules instance = TenantModules._();
@@ -25,7 +25,7 @@ class TenantModules extends ChangeNotifier {
 
   bool allows(String moduleKey) {
     if (storefront || isRekasaStorefront) return false;
-    if (!loaded) return true;
+    if (!loaded) return false;
     return _enabled.contains(moduleKey);
   }
 
@@ -112,7 +112,7 @@ class TenantModules extends ChangeNotifier {
           notifyListeners();
           return;
         }
-        // anon / no_tenant: tetap fail-open sampai login bind.
+        // anon / no_tenant: jangan buka menu. Bind dulu.
         if (raw is Map && raw['ok'] == false) {
           loaded = false;
           _enabled.clear();

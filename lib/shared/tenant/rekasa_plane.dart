@@ -45,7 +45,7 @@
 /// 4. Dasbor merek di etalase baca `my_tenant_account()` (tagihan + kontrak).
 /// 5. APK toko login / isi kode usaha → `TenantModules.load()`.
 /// 6. RPC `my_tenant_entitlements()` = sumber menu. `allows(key)`
-///    hanya true untuk modul `enabled`.
+///    fail-closed: belum load / etalase = false. Hanya modul `enabled`.
 /// 7. Upgrade = tenant yang sama, login ulang. Bukan ganti APK
 ///    (kecuali pindah ke white-label / `BRAND=<slug>`).
 library;

@@ -119,10 +119,18 @@ class _LoginPageState extends State<LoginPage> {
     final isPlat = profile['is_platform'] == true ||
         profile['is_platform'] == 'true' ||
         assignedRole == 'platform';
-    if (!TenantService.instance.storeMatchesApk(
-      profile['tenant_id']?.toString(),
-      platform: isPlat,
-    )) {
+    if (isBrandedStoreApk &&
+        !TenantService.instance.storeMatchesApk(
+          profile['tenant_id']?.toString(),
+        )) {
+      await client.auth.signOut();
+      throw 'Akun ini bukan admin ${BrandService.name}.';
+    }
+    if (!isPlat &&
+        !isRekasaControlPlane &&
+        !TenantService.instance.sessionAllowsAccount(
+          profile['tenant_id']?.toString(),
+        )) {
       await client.auth.signOut();
       throw 'Akun ini bukan admin ${BrandService.name}.';
     }

@@ -5,10 +5,11 @@ import 'package:optik_b_riski/shared/tenant/tenant_modules.dart';
 void main() {
   setUp(TenantModules.instance.debugReset);
 
-  test('modules fail-open before load so Optik tetap jalan pra-migrasi', () {
+  test('modules fail-closed before load — no menus without entitlements', () {
     expect(TenantModules.instance.loaded, isFalse);
-    expect(TenantModules.instance.allows('finance'), isTrue);
-    expect(TenantModules.instance.allows('online_orders'), isTrue);
+    expect(TenantModules.instance.allows('finance'), isFalse);
+    expect(TenantModules.instance.allows('online_orders'), isFalse);
+    expect(TenantModules.instance.allows('pos'), isFalse);
   });
 
   test('after bind, only purchased modules stay on', () {

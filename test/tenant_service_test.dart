@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:optik_b_riski/shared/config.dart';
@@ -34,6 +36,24 @@ void main() {
     TenantService.instance.debugBind('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
     expect(isBrandedStoreApk, isFalse);
     expect(TenantService.instance.storeMatchesApk('other-tenant'), isTrue);
+  });
+
+  test('sessionAllowsAccount rejects empty tenant on any shell', () {
+    TenantService.instance.debugBind('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(TenantService.instance.sessionAllowsAccount(''), isFalse);
+    expect(TenantService.instance.sessionAllowsAccount(null), isFalse);
+    expect(
+      TenantService.instance.sessionAllowsAccount(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      ),
+      isTrue,
+    );
+    expect(
+      TenantService.instance.sessionAllowsAccount(
+        'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      ),
+      isFalse,
+    );
   });
 
   test('platform default is Rekasa shell; Optik is a brand skin', () {

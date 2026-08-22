@@ -476,12 +476,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
   }
 
   bool _tenantMatchesLogin(String? tenantId) {
-    if (!TenantService.instance.storeMatchesApk(tenantId)) return false;
-    if (isBrandedStoreApk) return true;
-    final bound = TenantService.instance.id;
-    final t = (tenantId ?? '').trim();
-    if (bound == null || bound.isEmpty || t.isEmpty) return true;
-    return t == bound;
+    return TenantService.instance.sessionAllowsAccount(tenantId);
   }
 
   String? _validateEmail(String? v) {
