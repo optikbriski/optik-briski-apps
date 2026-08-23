@@ -10,8 +10,8 @@
     on: {},
     whiteLabel: false
   };
-  if (!cat.plans[state.plan]) state.plan = page === "paket" ? "paket_c" : null;
-  if (!industry()) state.industry = "umum";
+  if (state.plan && !cat.plans[state.plan]) state.plan = null;
+  if (page === "paket" && !industry()) state.industry = "umum";
 
   function industry() {
     for (var i = 0; i < cat.industries.length; i++) {
@@ -101,24 +101,44 @@
     history.replaceState({}, "", u.pathname + u.search + u.hash);
   }
 
+  function industryIcon(key) {
+    var map = {
+      optik: "◉",
+      retail: "▣",
+      fnb: "♨",
+      jasa: "✄",
+      bengkel: "⚒",
+      klinik: "+",
+      grosir: "▦",
+      umum: "◇"
+    };
+    return map[key] || "◇";
+  }
+
   function renderIndustries() {
-    var box = el("industry-chips");
-    if (!box) return;
-    box.innerHTML = "";
-    cat.industries.forEach(function (ind) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip" + (ind.key === state.industry ? " is-on" : "");
-      b.textContent = ind.label;
-      b.addEventListener("click", function () {
-        state.industry = ind.key;
-        if (page === "paket") applyPlanDefaults();
-        render();
-        syncUrl();
+    var grid = el("industry-grid");
+    if (grid) {
+      grid.innerHTML = "";
+      cat.industries.forEach(function (ind) {
+        var a = document.createElement("a");
+        a.className = "card industry-card";
+        a.href = "paket.html?bidang=" + encodeURIComponent(ind.key);
+        a.setAttribute("data-industry", ind.key);
+        a.innerHTML =
+          '<span class="industry-ico" aria-hidden="true">' +
+          industryIcon(ind.key) +
+          "</span>" +
+          "<div><h3>" +
+          ind.label +
+          "</h3><p>" +
+          ind.blurb +
+          '</p><span class="industry-go">LIHAT PAKET</span></div>';
+        grid.appendChild(a);
       });
-      box.appendChild(b);
-    });
-    if (el("industry-blurb")) el("industry-blurb").textContent = industry().blurb;
+    }
+    if (el("industry-blurb") && industry()) {
+      el("industry-blurb").textContent = industry().label;
+    }
   }
 
   function renderHomePlans() {
@@ -140,7 +160,7 @@
         '<p class="price">' + rp(p.priceIdr) + "</p>" +
         "<p>" + p.blurb + "</p>" +
         '<p class="muted plan-include">Termasuk: ' + names + "</p>" +
-        '<p class="plan-go">Buka halaman paket →</p>';
+        '<p class="plan-go">PILIH FITUR</p>';
       box.appendChild(a);
     });
   }
@@ -250,11 +270,24 @@
   function render() {
     renderIndustries();
     if (page === "paket") {
-      renderPaketSwitch();
-      renderPaketPage();
-      renderTotals();
-    } else {
-      renderHomePlans();
+      var picking = !state.plan;
+      var cards = el("plan-cards");
+      var pageBox = el("plan-page");
+      var sw = el("plan-switch");
+      if (cards) cards.classList.toggle("hidden", !picking);
+      if (pageBox) pageBox.classList.toggle("hidden", picking);
+      if (sw) sw.classList.toggle("hidden", picking);
+      if (el("paket-title") && picking) {
+        el("paket-title").textContent = "Pilih paket";
+        document.title = "Pilih paket — REKASA KARYA INDONESIA";
+      }
+      if (picking) {
+        renderHomePlans();
+      } else {
+        renderPaketSwitch();
+        renderPaketPage();
+        renderTotals();
+      }
     }
   }
 
@@ -397,7 +430,7 @@
     }
   }
 
-  if (page === "paket") applyPlanDefaults();
+  if (page === "paket" && state.plan) applyPlanDefaults();
   render();
   var form = el("checkout-form");
   if (form) form.addEventListener("submit", pay);

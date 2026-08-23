@@ -13,10 +13,12 @@ void main() {
     expect(html, isNot(contains('optikbriski.apps@gmail.com')));
     expect(html, contains('Perseroan Perorangan'));
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
-    expect(html, contains('id="plan-cards"'));
+    expect(html, contains('id="industry-grid"'));
+    expect(html, contains('Pilih bidang usaha'));
     expect(html, contains('paket.html'));
     expect(html, isNot(contains('checkout-form')));
     expect(html, contains('perangkat lunak'));
+    expect(File('site/paket.html').readAsStringSync(), contains('id="plan-cards"'));
     expect(File('site/paket.html').readAsStringSync(), contains('checkout-form'));
     expect(File('site/paket.html').readAsStringSync(), contains('Bayar via Midtrans'));
     expect(html, isNot(contains('PT Biasa')));

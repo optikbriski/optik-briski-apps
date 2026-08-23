@@ -20,6 +20,9 @@ void main() {
   test('situs publik paket bisa diklik dan fitur bisa di-toggle', () {
     final js = File('site/store.js').readAsStringSync();
     expect(js, contains('data-plan'));
+    expect(js, contains('data-industry'));
+    expect(js, contains('industry-grid'));
+    expect(js, contains('LIHAT PAKET'));
     expect(js, contains('paket.html?plan='));
     expect(js, contains('data-page'));
     expect(js, contains('type = "checkbox"'));
