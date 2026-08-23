@@ -49,8 +49,19 @@ void main() {
     );
   });
 
+  test('antrian terbuka termasuk QUEUED; volume baca 12.0', () {
+    expect(LogisticsTrackingRules.isOpenStatus('QUEUED'), isTrue);
+    expect(LogisticsTrackingRules.isOpenStatus('TRANSIT'), isTrue);
+    expect(LogisticsTrackingRules.isOpenStatus('SUCCESS'), isFalse);
+    expect(
+      LogisticsTrackingRules.volumeOf({'jumlah': 12.0, 'keterangan': ''}),
+      12,
+    );
+  });
+
   test('kurir terkunci setelah SUCCESS / BATAL', () {
     expect(LogisticsTrackingRules.statusBolehKurir('PREPARING'), isTrue);
+    expect(LogisticsTrackingRules.statusBolehKurir('QUEUED'), isTrue);
     expect(LogisticsTrackingRules.statusBolehKurir('TRANSIT'), isTrue);
     expect(LogisticsTrackingRules.statusBolehKurir('SUCCESS'), isFalse);
     expect(LogisticsTrackingRules.statusBolehKurir('BATAL'), isFalse);

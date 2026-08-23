@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/logistics/do_lifecycle_rules.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_google_map.dart';
 import '../../shared/logistics/logistics_live_map_rules.dart';
@@ -70,13 +71,9 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       _error = null;
     });
     try {
-      final moves = await _svc.listOpenMoves(profile: widget.profile);
-      List<Map<String, dynamic>> closed = const [];
-      try {
-        closed = await _svc.listRecentClosedMoves(profile: widget.profile);
-      } catch (_) {
-        closed = const [];
-      }
+      final bundle = await _svc.listTrackingMoves(profile: widget.profile);
+      final moves = bundle.open;
+      final closed = bundle.closed;
       final toko = await _svc.listTokoGeo();
       if (!mounted) return;
       Map<String, dynamic>? sel;
@@ -115,8 +112,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       }
       final st = (m['status'] ?? '').toString().toUpperCase();
       if (_statusFilter == 'preparing' &&
-          st != 'PREPARING' &&
-          st != 'WAITING') {
+          !DoLifecycleRules.isPreparing(st)) {
         return false;
       }
       if (_statusFilter == 'transit' && st != 'TRANSIT') return false;
@@ -249,6 +245,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
         return OptikAdminTokens.ice;
       case 'PREPARING':
       case 'WAITING':
+      case 'QUEUED':
         return OptikAdminTokens.navy;
       default:
         return OptikAdminTokens.textMuted;
@@ -342,8 +339,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   }
 
   Widget _filterBar() {
-    final nPrep = _countStatus(
-        (s) => s == 'PREPARING' || s == 'WAITING');
+    final nPrep = _countStatus(DoLifecycleRules.isPreparing);
     final nTransit = _countStatus((s) => s == 'TRANSIT');
     final nPending = _countStatus((s) => s == 'PENDING');
 
@@ -739,7 +735,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     final st = (m['status'] ?? '').toString().toUpperCase();
     final tipe = LogisticsTrackingService.tipeLabel(m);
     final kurir = (m['kurir_nama'] ?? '').toString().trim();
-    final isPrep = st == 'PREPARING' || st == 'WAITING';
+    final isPrep = DoLifecycleRules.isPreparing(st);
     final isPending = st == 'PENDING';
     final isDo = tipe == 'DO';
     final bolehKurir = LogisticsTrackingRules.bolehAssignKurir(
@@ -766,7 +762,8 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
         children: [
           LogisticsStatusTimelineView(
             resi: m['product_name']?.toString() ?? '-',
-            subtitle: '$who\n${_routeLabel(m)} · ${m['jumlah'] ?? 0} pcs',
+            subtitle:
+                '$who\n${_routeLabel(m)} · ${LogisticsTrackingRules.volumeOf(m)} pcs',
             nodes: nodes,
             trailing: _miniBadge(tipe, OptikAdminTokens.navy),
           ),

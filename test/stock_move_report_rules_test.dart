@@ -114,6 +114,7 @@ void main() {
 
     test('kurir hanya status terbuka; terima hanya tujuan', () {
       expect(StockMoveReportRules.canAssignKurir('TRANSIT'), isTrue);
+      expect(StockMoveReportRules.canAssignKurir('QUEUED'), isTrue);
       expect(StockMoveReportRules.canAssignKurir('SUCCESS'), isFalse);
       expect(
         StockMoveReportRules.canReceiveFromReport(

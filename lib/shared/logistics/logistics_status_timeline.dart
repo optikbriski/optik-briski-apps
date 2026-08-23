@@ -157,7 +157,7 @@ abstract final class LogisticsStatusTimeline {
       ));
     }
 
-    if (st != 'PREPARING' && st != 'WAITING') {
+    if (st != 'PREPARING' && st != 'WAITING' && st != 'QUEUED') {
       nodes.add(LogisticsTimelineNode(
         key: 'siap',
         title: 'Menyiapkan pengiriman',
@@ -166,7 +166,8 @@ abstract final class LogisticsStatusTimeline {
       ));
     }
 
-    if (dibuat != null && (st == 'PREPARING' || st == 'WAITING')) {
+    if (dibuat != null &&
+        (st == 'PREPARING' || st == 'WAITING' || st == 'QUEUED')) {
       nodes.add(LogisticsTimelineNode(
         key: 'dibuat',
         title: 'Surat jalan dibuat',

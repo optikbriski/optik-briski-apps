@@ -96,6 +96,7 @@ abstract final class StockMoveReportRules {
     final s = DoLifecycleRules.norm(status);
     return s == DoLifecycleRules.movePreparing ||
         s == DoLifecycleRules.moveWaiting ||
+        s == DoLifecycleRules.moveQueued ||
         s == DoLifecycleRules.moveTransit ||
         s == DoLifecycleRules.movePending;
   }

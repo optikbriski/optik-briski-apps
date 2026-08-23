@@ -3,10 +3,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../attendance/attendance_admin_scope.dart';
 import '../attendance/pos_duty_gate.dart';
+import 'do_lifecycle_rules.dart';
 import 'logistics_tracking_rules.dart';
+import 'stock_move_report_rules.dart';
 
-/// Status surat jalan yang masih “di jalan” (bisa dilacak di peta gratis).
-const kLogisticsOpenStatuses = ['PREPARING', 'WAITING', 'TRANSIT', 'PENDING'];
+/// Status surat jalan yang masih terbuka (termasuk QUEUED).
+const kLogisticsOpenStatuses = [
+  'PREPARING',
+  'WAITING',
+  'QUEUED',
+  'TRANSIT',
+  'PENDING',
+];
 
 class TokoGeo {
   const TokoGeo({
@@ -43,63 +51,150 @@ class LogisticsTrackingService {
   bool isPusatView(Map<String, dynamic> profile) =>
       LogisticsTrackingRules.isHub(profile);
 
+  static bool _missingRpc(PostgrestException e) {
+    final blob = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+    return e.code == 'PGRST202' ||
+        blob.contains('pgrst202') ||
+        blob.contains('could not find the function') ||
+        blob.contains('does not exist');
+  }
+
+  Future<List<Map<String, dynamic>>> _mapsFromRpc(
+    String name,
+    Map<String, dynamic> params,
+  ) async {
+    final raw = await _db.rpc(name, params: params);
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  /// Satu tarikan: antrian terbuka + SUCCESS 3 hari (konteks giliran).
+  Future<({List<Map<String, dynamic>> open, List<Map<String, dynamic>> closed})>
+      listTrackingMoves({
+    required Map<String, dynamic> profile,
+  }) async {
+    final hub = LogisticsTrackingRules.isHub(profile);
+    final mine = AttendanceAdminScope.tokoOf(profile);
+    final pToko = hub || mine.isEmpty ? null : mine.toUpperCase();
+
+    List<Map<String, dynamic>> rows = const [];
+    var fromRpc = false;
+    try {
+      rows = await _mapsFromRpc(
+        'list_logistics_tracking',
+        {'p_toko': pToko},
+      );
+      fromRpc = true;
+    } on PostgrestException catch (e) {
+      if (!_missingRpc(e)) rethrow;
+    }
+    if (!fromRpc) {
+      try {
+        rows = await _mapsFromRpc(
+          'list_stock_move_report',
+          {'p_toko': pToko, 'p_days': 3},
+        );
+        fromRpc = true;
+      } on PostgrestException catch (e) {
+        if (!_missingRpc(e)) rethrow;
+      }
+    }
+    if (!fromRpc) {
+      rows = await _restTrackingFallback(profile: profile);
+    }
+
+    final open = <Map<String, dynamic>>[];
+    final closed = <Map<String, dynamic>>[];
+    for (final m in rows) {
+      final st = DoLifecycleRules.norm(m['status']?.toString());
+      if (StockMoveReportRules.isOpenStatus(st)) {
+        open.add(m);
+      } else if (st == DoLifecycleRules.moveSuccess) {
+        closed.add(m);
+      }
+    }
+    return (open: open, closed: closed);
+  }
+
   /// Surat jalan terbuka untuk tracking Admin.
   Future<List<Map<String, dynamic>>> listOpenMoves({
     required Map<String, dynamic> profile,
-    int limit = 120,
+    int limit = 0,
   }) async {
-    var q = _db
-        .from('stock_move_history')
-        .select(_openSelect)
-        .inFilter('status', kLogisticsOpenStatuses);
-
-    if (!LogisticsTrackingRules.isHub(profile)) {
-      final myToko = (profile['toko_id'] ?? '').toString().toUpperCase();
-      if (myToko.isNotEmpty) {
-        final aliases = AttendanceAdminScope.storeIdAliases(myToko);
-        q = q.or(aliases
-            .expand((t) => ['ke_lokasi.eq.$t', 'dari_lokasi.eq.$t'])
-            .join(','));
-      }
-    }
-
-    final rows =
-        await q.order('created_at', ascending: false).limit(limit);
-    return (rows as List)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    final bundle = await listTrackingMoves(profile: profile);
+    if (limit <= 0) return bundle.open;
+    return bundle.open.take(limit).toList();
   }
 
   /// SUCCESS 3 hari terakhir — konteks giliran A→B→C (A sudah terima).
   Future<List<Map<String, dynamic>>> listRecentClosedMoves({
     required Map<String, dynamic> profile,
-    int limit = 80,
+    int limit = 0,
   }) async {
+    final bundle = await listTrackingMoves(profile: profile);
+    if (limit <= 0) return bundle.closed;
+    return bundle.closed.take(limit).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _restTrackingFallback({
+    required Map<String, dynamic> profile,
+  }) async {
+    final aliases = LogisticsTrackingRules.isHub(profile)
+        ? const <String>[]
+        : AttendanceAdminScope.storeIdAliases(
+            AttendanceAdminScope.tokoOf(profile),
+          );
     final since = DateTime.now()
         .toUtc()
         .subtract(const Duration(days: 3))
         .toIso8601String();
-    var q = _db
-        .from('stock_move_history')
-        .select(_openSelect)
-        .eq('status', 'SUCCESS')
-        .gte('created_at', since);
-
-    if (!LogisticsTrackingRules.isHub(profile)) {
-      final myToko = (profile['toko_id'] ?? '').toString().toUpperCase();
-      if (myToko.isNotEmpty) {
-        final aliases = AttendanceAdminScope.storeIdAliases(myToko);
-        q = q.or(aliases
-            .expand((t) => ['ke_lokasi.eq.$t', 'dari_lokasi.eq.$t'])
-            .join(','));
+    final byId = <String, Map<String, dynamic>>{};
+    Future<void> page({
+      required List<String> statuses,
+      String? sinceIso,
+    }) async {
+      var offset = 0;
+      const pageSize = 500;
+      while (true) {
+        var q = _db
+            .from('stock_move_history')
+            .select(_openSelect)
+            .inFilter('status', statuses);
+        if (aliases.isNotEmpty) {
+          q = q.or(aliases
+              .expand((t) => ['ke_lokasi.eq.$t', 'dari_lokasi.eq.$t'])
+              .join(','));
+        }
+        if (sinceIso != null) {
+          q = q.or('created_at.gte.$sinceIso,verified_at.gte.$sinceIso');
+        }
+        final chunk = await q
+            .order('created_at', ascending: false)
+            .range(offset, offset + pageSize - 1);
+        final rows = List<Map<String, dynamic>>.from(chunk as List);
+        if (rows.isEmpty) break;
+        for (final r in rows) {
+          final id = r['id']?.toString();
+          if (id != null && id.isNotEmpty) byId[id] = r;
+        }
+        if (rows.length < pageSize) break;
+        offset += pageSize;
+        if (offset > 8000) break;
       }
     }
 
-    final rows =
-        await q.order('created_at', ascending: false).limit(limit);
-    return (rows as List)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    await page(statuses: kLogisticsOpenStatuses);
+    await page(statuses: const ['SUCCESS'], sinceIso: since);
+    final out = byId.values.toList()
+      ..sort((a, b) {
+        final aa = (a['created_at'] ?? '').toString();
+        final bb = (b['created_at'] ?? '').toString();
+        return bb.compareTo(aa);
+      });
+    return out;
   }
 
   Future<List<TokoGeo>> listTokoGeo() async {
@@ -219,6 +314,8 @@ class LogisticsTrackingService {
     switch ((status ?? '').toUpperCase()) {
       case 'PREPARING':
         return 'Disiapkan';
+      case 'QUEUED':
+        return 'Antrian preparing';
       case 'WAITING':
         return 'Siap dijemput';
       case 'TRANSIT':
@@ -250,7 +347,7 @@ class LogisticsTrackingService {
   ) {
     final st = (move['status'] ?? '').toString().toUpperCase();
     final created = true;
-    final preparing = st == 'PREPARING' || st == 'WAITING';
+    final preparing = DoLifecycleRules.isPreparing(st);
     final onRoad = st == 'TRANSIT' || st == 'PENDING';
     final done = st == 'SUCCESS';
     final batal = st == 'BATAL' || st == 'REJECTED';

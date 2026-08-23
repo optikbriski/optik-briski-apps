@@ -522,7 +522,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   PremiumListTile(
                     title: 'Tracking Logistics',
                     subtitle:
-                        'Daftar surat jalan · peta Google setelah tiba di kota tujuan',
+                        'Antrian DO·RO·Retur · kurir gudang asal · peta setelah tiba kota',
                     icon: Icons.map_rounded,
                     iconColor: OptikAdminTokens.warning,
                     onTap: () {
