@@ -75,6 +75,43 @@ void main() {
       );
     });
 
+    test('antrian terbuka termasuk QUEUED; volume baca jumlah 12.0', () {
+      expect(StockMoveReportRules.isOpenStatus('QUEUED'), isTrue);
+      expect(StockMoveReportRules.isOpenStatus('TRANSIT'), isTrue);
+      expect(StockMoveReportRules.isOpenStatus('SUCCESS'), isFalse);
+      expect(StockMoveReportRules.kpiBucket('QUEUED'), 'disiapkan');
+      expect(StockMoveReportRules.kpiBucket('PENDING'), 'jalan');
+      expect(
+        StockMoveReportRules.volumeOf({'jumlah': 12.0, 'keterangan': ''}),
+        12,
+      );
+      expect(
+        StockMoveReportRules.volumeOf({
+          'jumlah': 0,
+          'keterangan': '[{ "sku": "A", "qty": 2.0 }]',
+        }),
+        2,
+      );
+    });
+
+    test('nilai laporan pakai modal dulu, bukan jual', () {
+      expect(
+        StockMoveReportRules.nilaiOf({
+          'keterangan':
+              '[{ "sku": "A", "qty": 2, "harga_modal": 150000.0, "harga_jual": "250.000" }]',
+        }),
+        300000,
+      );
+      expect(StockMoveReportRules.kindOf({'tipe': 'DELIVERY'}), 'do');
+      expect(
+        StockMoveReportRules.kindOf({
+          'tipe': '',
+          'keterangan': 'RequestOrder#9 | []',
+        }),
+        'ro',
+      );
+    });
+
     test('kurir hanya status terbuka; terima hanya tujuan', () {
       expect(StockMoveReportRules.canAssignKurir('TRANSIT'), isTrue);
       expect(StockMoveReportRules.canAssignKurir('SUCCESS'), isFalse);

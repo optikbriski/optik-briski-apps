@@ -9,8 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/do_cart_lines.dart';
+import '../../shared/logistics/do_lifecycle_rules.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
-import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/logistics/stock_move_report_rules.dart';
@@ -47,7 +47,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
   /// Filter status DB (PREPARING, WAITING, …). Chip "Disiapkan" = keduanya.
   Set<String> selectedStatuses = {};
 
-  // KPI volume (pcs) — jujur; nilai Rp hanya jika harga modal ada.
+  // KPI volume (pcs). Nilai Rp = qty × modal (jual hanya jika modal 0).
   int kpiDisiapkan = 0;
   int kpiJalan = 0;
   int kpiDiterima = 0;
@@ -62,20 +62,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
       StockMoveReportRules.isTenantWideHistoryView(widget.profile);
 
   /// Klasifikasi: do | ro | retur | other
-  String _moveKind(dynamic item) {
-    final tipe = (item['tipe'] ?? '').toString().toUpperCase();
-    final resi = (item['product_name'] ?? '').toString().toUpperCase();
-    final ket = (item['keterangan'] ?? '').toString();
-
-    if (tipe == 'RETUR' || resi.startsWith('RET-')) return 'retur';
-    if (tipe == 'REQUEST' ||
-        resi.startsWith('RO-') ||
-        ket.contains('RequestOrder#')) {
-      return 'ro';
-    }
-    if (tipe == 'DELIVERY' || resi.startsWith('DO-')) return 'do';
-    return 'other';
-  }
+  String _moveKind(dynamic item) =>
+      StockMoveReportRules.kindOf(Map<String, dynamic>.from(item as Map));
 
   String _kindLabel(String kind) {
     switch (kind) {
@@ -124,21 +112,11 @@ class _StockMoveReportState extends State<StockMoveReport> {
   }
 
   (int volume, int nilai) _itemTotals(dynamic item) {
-    final rawItems = (item['keterangan'] ?? '').toString();
-    var volume = 0;
-    var nilai = 0;
-    for (final itm in DoCartLines.parseKeterangan(rawItems)) {
-      final qty = DoCartLines.qtyOf(itm);
-      final harga = ProductIdentity.sellPriceOf(itm);
-      final modal = ProductIdentity.modalPriceOf(itm);
-      volume += qty;
-      final unit = harga > 0 ? harga : modal;
-      if (unit > 0) nilai += qty * unit;
-    }
-    if (volume <= 0) {
-      volume = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
-    }
-    return (volume, nilai);
+    final m = Map<String, dynamic>.from(item as Map);
+    return (
+      StockMoveReportRules.volumeOf(m),
+      StockMoveReportRules.nilaiOf(m),
+    );
   }
 
   void _recomputeKpis(List<dynamic> scope) {
@@ -150,15 +128,15 @@ class _StockMoveReportState extends State<StockMoveReport> {
     for (final item in scope) {
       final status = (item['status'] ?? 'PENDING').toString().toUpperCase();
       final vol = _itemTotals(item).$1;
-
-      if (status == 'PREPARING' || status == 'WAITING') {
-        disiapkan += vol;
-      } else if (status == 'TRANSIT' || status == 'PENDING') {
-        jalan += vol;
-      } else if (status == 'SUCCESS') {
-        diterima += vol;
-      } else if (status == 'BATAL' || status == 'REJECTED') {
-        batal += vol;
+      switch (StockMoveReportRules.kpiBucket(status)) {
+        case 'disiapkan':
+          disiapkan += vol;
+        case 'jalan':
+          jalan += vol;
+        case 'diterima':
+          diterima += vol;
+        case 'batal':
+          batal += vol;
       }
     }
 
@@ -230,37 +208,95 @@ class _StockMoveReportState extends State<StockMoveReport> {
     return raw;
   }
 
-  Future<void> _fetchMoveHistory({bool resetFilters = false}) async {
-    try {
-      if (mounted) setState(() => isLoading = true);
-
-      final since = DateTime.now()
-          .toUtc()
-          .subtract(const Duration(days: 90))
-          .toIso8601String();
-
-      final List response;
+  Future<List<Map<String, dynamic>>> _pageMoves({
+    List<String>? statuses,
+    String? sinceIso,
+  }) async {
+    const pageSize = 1000;
+    var from = 0;
+    final out = <Map<String, dynamic>>[];
+    while (true) {
+      var q = supabase.from('stock_move_history').select();
+      if (statuses != null) {
+        q = q.inFilter('status', statuses);
+      }
+      if (sinceIso != null) {
+        q = q.gte('created_at', sinceIso);
+      }
       if (!_isPusatView && _myToko.isNotEmpty) {
         final aliases = AttendanceAdminScope.storeIdAliases(_myToko);
         final orFilter = aliases
             .expand((t) => ['dari_lokasi.eq.$t', 'ke_lokasi.eq.$t'])
             .join(',');
-        response = await supabase
-            .from('stock_move_history')
-            .select()
-            .gte('created_at', since)
-            .or(orFilter)
-            .order('created_at', ascending: false)
-            .limit(400) as List;
-      } else if (_isPusatView) {
-        response = await supabase
-            .from('stock_move_history')
-            .select()
-            .gte('created_at', since)
-            .order('created_at', ascending: false)
-            .limit(400) as List;
-      } else {
-        response = const [];
+        q = q.or(orFilter);
+      }
+      final res = await q
+          .order('created_at', ascending: false)
+          .range(from, from + pageSize - 1);
+      final chunk = List<Map<String, dynamic>>.from(
+        (res as List).map((e) => Map<String, dynamic>.from(e as Map)),
+      );
+      out.addAll(chunk);
+      if (chunk.length < pageSize) break;
+      from += pageSize;
+      if (from > 8000) break;
+    }
+    return out;
+  }
+
+  Future<void> _fetchMoveHistory({bool resetFilters = false}) async {
+    try {
+      if (mounted) setState(() => isLoading = true);
+
+      List<dynamic> response = const [];
+      var fromRpc = false;
+      if (_isPusatView || _myToko.isNotEmpty) {
+        try {
+          final raw = await supabase.rpc(
+            'list_stock_move_report',
+            params: {
+              'p_toko': _isPusatView ? null : _myToko,
+              'p_days': 90,
+            },
+          );
+          if (raw is List) {
+            response = raw;
+            fromRpc = true;
+          }
+        } on PostgrestException catch (e) {
+          final blob = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+          final missing = e.code == 'PGRST202' ||
+              blob.contains('pgrst202') ||
+              blob.contains('could not find the function') ||
+              blob.contains('does not exist');
+          if (!missing) rethrow;
+        }
+      }
+
+      if (!fromRpc) {
+        if (!_isPusatView && _myToko.isEmpty) {
+          response = const [];
+        } else {
+          final since = DateTime.now()
+              .toUtc()
+              .subtract(const Duration(days: 90))
+              .toIso8601String();
+          final open = await _pageMoves(
+            statuses: StockMoveReportRules.openStatuses.toList(),
+          );
+          final recent = await _pageMoves(sinceIso: since);
+          final byId = <String, Map<String, dynamic>>{};
+          for (final row in [...open, ...recent]) {
+            final id = row['id']?.toString();
+            if (id == null || id.isEmpty) continue;
+            byId[id] = row;
+          }
+          final merged = byId.values.toList()
+            ..sort((a, b) => (b['created_at'] ?? '')
+                .toString()
+                .compareTo((a['created_at'] ?? '').toString()));
+          response = merged;
+        }
       }
       if (!mounted) return;
 
@@ -1179,7 +1215,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final when = _formatWhen(item['created_at']);
     final statusColor = _statusAccent(status);
     final canOpenPreparing = kind == 'do' &&
-        (status == 'PREPARING' || status == 'WAITING') &&
+        DoLifecycleRules.isPreparing(status) &&
         (amITheSender || _isPusatView);
     final canReceive = StockMoveReportRules.canReceiveFromReport(
       profile: widget.profile,
@@ -1323,7 +1359,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
   @override
   Widget build(BuildContext context) {
     final unitLabel =
-        '${_myToko.isEmpty ? 'Unit' : _myToko} · ${filteredHistory.length} data · 90 hari';
+        '${_myToko.isEmpty ? 'Unit' : _myToko} · ${filteredHistory.length} data · antrian + 90 hari';
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
