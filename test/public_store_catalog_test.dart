@@ -21,8 +21,10 @@ void main() {
     final js = File('site/store.js').readAsStringSync();
     expect(js, contains('data-plan'));
     expect(js, contains('data-industry'));
+    expect(js, contains('industry-chips'));
     expect(js, contains('industry-grid'));
     expect(js, contains('LIHAT PAKET'));
+    expect(File('site/paket.html').readAsStringSync(), contains('id="industry-grid"'));
     expect(js, contains('PILIH FITUR'));
     expect(js, contains('plan-badge'));
     expect(js, contains('paket.html?plan='));

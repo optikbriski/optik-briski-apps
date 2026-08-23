@@ -5,13 +5,16 @@
   var page = document.body.getAttribute("data-page") || "beranda";
   var params = new URLSearchParams(location.search);
   var state = {
-    industry: params.get("bidang") || "umum",
+    industry: params.get("bidang") || (page === "beranda" ? "umum" : null),
     plan: params.get("plan") || null,
     on: {},
     whiteLabel: false
   };
   if (state.plan && !cat.plans[state.plan]) state.plan = null;
-  if (page === "paket" && !industry()) state.industry = "umum";
+  if (state.industry && !industry()) {
+    state.industry = page === "beranda" ? "umum" : null;
+  }
+  if (state.plan && !state.industry) state.industry = "umum";
 
   function industry() {
     for (var i = 0; i < cat.industries.length; i++) {
@@ -98,7 +101,8 @@
     var u = new URL(location.href);
     if (state.plan) u.searchParams.set("plan", state.plan);
     else u.searchParams.delete("plan");
-    u.searchParams.set("bidang", state.industry);
+    if (state.industry) u.searchParams.set("bidang", state.industry);
+    else u.searchParams.delete("bidang");
     history.replaceState({}, "", u.pathname + u.search + u.hash);
   }
 
@@ -116,7 +120,26 @@
     return map[key] || "◇";
   }
 
+  function renderIndustryChips() {
+    var box = el("industry-chips");
+    if (!box) return;
+    box.innerHTML = "";
+    cat.industries.forEach(function (ind) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (ind.key === state.industry ? " is-on" : "");
+      b.setAttribute("data-industry", ind.key);
+      b.textContent = ind.label;
+      b.addEventListener("click", function () {
+        state.industry = ind.key;
+        render();
+      });
+      box.appendChild(b);
+    });
+  }
+
   function renderIndustries() {
+    renderIndustryChips();
     var grid = el("industry-grid");
     if (grid) {
       grid.innerHTML = "";
@@ -138,7 +161,8 @@
       });
     }
     if (el("industry-blurb") && industry()) {
-      el("industry-blurb").textContent = industry().label;
+      el("industry-blurb").textContent =
+        page === "beranda" ? industry().blurb : industry().label;
     }
   }
 
@@ -155,29 +179,49 @@
       a.className = "card plan-card plan-link";
       a.setAttribute("data-plan", key);
       a.href = paketHref(key);
-      a.innerHTML =
-        '<div class="plan-head">' +
-        "<h3>" +
-        p.label +
-        "</h3>" +
-        (p.highlight
-          ? '<span class="plan-badge' +
-            (key === "paket_a" ? " is-top" : "") +
-            '">' +
-            p.highlight +
-            "</span>"
-          : "") +
-        "</div>" +
-        '<p class="price">' +
-        rp(p.priceIdr) +
-        "</p>" +
-        "<p>" +
-        p.blurb +
-        "</p>" +
-        '<p class="muted plan-include">Termasuk: ' +
-        names +
-        "</p>" +
-        '<p class="plan-go">PILIH FITUR</p>';
+      if (page === "beranda") {
+        a.innerHTML =
+          '<p class="eyebrow">' +
+          p.eyebrow +
+          "</p>" +
+          "<h3>" +
+          p.short +
+          "</h3>" +
+          '<p class="price">' +
+          rp(p.priceIdr) +
+          "</p>" +
+          "<p>" +
+          p.blurb +
+          "</p>" +
+          '<p class="muted plan-include">Termasuk: ' +
+          names +
+          "</p>" +
+          '<p class="plan-go">Buka halaman paket →</p>';
+      } else {
+        a.innerHTML =
+          '<div class="plan-head">' +
+          "<h3>" +
+          p.label +
+          "</h3>" +
+          (p.highlight
+            ? '<span class="plan-badge' +
+              (key === "paket_a" ? " is-top" : "") +
+              '">' +
+              p.highlight +
+              "</span>"
+            : "") +
+          "</div>" +
+          '<p class="price">' +
+          rp(p.priceIdr) +
+          "</p>" +
+          "<p>" +
+          p.blurb +
+          "</p>" +
+          '<p class="muted plan-include">Termasuk: ' +
+          names +
+          "</p>" +
+          '<p class="plan-go">PILIH FITUR</p>';
+      }
       box.appendChild(a);
     });
   }
@@ -303,31 +347,47 @@
 
   function render() {
     renderIndustries();
+    if (page === "beranda") {
+      renderHomePlans();
+      return;
+    }
     if (page === "paket") {
-      var picking = !state.plan;
+      var pickingIndustry = !state.industry;
+      var pickingPlan = !!state.industry && !state.plan;
+      var buying = !!state.plan;
+      var grid = el("industry-grid");
       var cards = el("plan-cards");
       var pageBox = el("plan-page");
       var nav = document.querySelector(".store-bottom");
       var payBar = el("pay-bar");
       var lede = el("paket-lede");
       var backBidang = el("back-bidang");
-      if (cards) cards.classList.toggle("hidden", !picking);
-      if (pageBox) pageBox.classList.toggle("hidden", picking);
-      if (nav) nav.classList.toggle("hidden", !picking);
-      if (payBar) payBar.classList.toggle("hidden", picking);
-      document.body.classList.toggle("has-paybar", !picking);
-      if (backBidang) backBidang.classList.toggle("hidden", !picking);
-      if (el("paket-title") && picking) {
+      if (grid) grid.classList.toggle("hidden", !pickingIndustry);
+      if (cards) cards.classList.toggle("hidden", !pickingPlan);
+      if (pageBox) pageBox.classList.toggle("hidden", !buying);
+      if (nav) nav.classList.toggle("hidden", buying);
+      if (payBar) payBar.classList.toggle("hidden", !buying);
+      document.body.classList.toggle("has-paybar", buying);
+      if (backBidang) backBidang.classList.toggle("hidden", pickingIndustry);
+      if (el("paket-title") && pickingIndustry) {
+        el("paket-title").textContent = "Pilih bidang usaha";
+        document.title = "Pilih bidang — REKASA KARYA INDONESIA";
+      }
+      if (el("paket-title") && pickingPlan) {
         el("paket-title").textContent = "Pilih paket";
         document.title = "Pilih paket — REKASA KARYA INDONESIA";
       }
-      if (lede && picking) {
+      if (lede && pickingIndustry) {
+        lede.textContent =
+          "Satu mesin. Pilih bidang, pilih paket, bayar via Midtrans — pintu yang sama dengan APK katalog.";
+      }
+      if (lede && pickingPlan) {
         lede.textContent =
           "Fitur dan harga menyesuaikan bidang ini. Paket A = tertinggi + merek sendiri. Bayar via Midtrans.";
       }
-      if (picking) {
+      if (pickingPlan) {
         renderHomePlans();
-      } else {
+      } else if (buying) {
         renderPaketPage();
         renderTotals();
       }
@@ -481,6 +541,16 @@
     backPlan.addEventListener("click", function (ev) {
       ev.preventDefault();
       state.plan = null;
+      render();
+      syncUrl();
+    });
+  }
+  var backBidang = el("back-bidang");
+  if (backBidang) {
+    backBidang.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      state.plan = null;
+      state.industry = null;
       render();
       syncUrl();
     });
