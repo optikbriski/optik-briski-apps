@@ -6,6 +6,8 @@ import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_google_map.dart';
 import '../../shared/logistics/logistics_live_map_rules.dart';
 import '../../shared/logistics/logistics_route_cities.dart';
+import '../../shared/logistics/logistics_status_timeline.dart';
+import '../../shared/logistics/logistics_status_timeline_view.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/theme.dart';
@@ -674,14 +676,6 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     );
   }
 
-  List<LogisticsRouteEvent> _eventsFor(Map<String, dynamic> m) {
-    return LogisticsRouteCities.events(
-      move: m,
-      stops: _stopsFor(m),
-      tripSameCity: _tripFor(m),
-    );
-  }
-
   String _kotaOf(String? ke) {
     final t = _findToko(ke);
     if (t == null || !t.hasCoords) return '';
@@ -742,8 +736,6 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   }
 
   Widget _detailCard(Map<String, dynamic> m) {
-    final events = _eventsFor(m);
-    final verified = (m['verified_by_name'] ?? '').toString().trim();
     final st = (m['status'] ?? '').toString().toUpperCase();
     final tipe = LogisticsTrackingService.tipeLabel(m);
     final kurir = (m['kurir_nama'] ?? '').toString().trim();
@@ -755,110 +747,55 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       dari: m['dari_lokasi']?.toString(),
       status: st,
     );
+    final nodes = LogisticsStatusTimeline.build(
+      move: m,
+      stops: _stopsFor(m),
+      tripSameCity: _tripFor(m),
+    );
+    final who = kurir.isNotEmpty ? kurir : 'Kurir belum ditetapkan';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
       decoration: BoxDecoration(
-        color: OptikAdminTokens.card.withOpacity(0.6),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusMd),
         border: Border.all(color: OptikAdminTokens.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  m['product_name']?.toString() ?? '-',
-                  style: const TextStyle(
-                    color: OptikAdminTokens.navy,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              _miniBadge(tipe, OptikAdminTokens.navy),
-              const SizedBox(width: 6),
-              _miniBadge(
-                LogisticsTrackingService.statusLabel(st),
-                _statusAccent(st),
-              ),
-            ],
+          LogisticsStatusTimelineView(
+            resi: m['product_name']?.toString() ?? '-',
+            subtitle: '$who\n${_routeLabel(m)} · ${m['jumlah'] ?? 0} pcs',
+            nodes: nodes,
+            trailing: _miniBadge(tipe, OptikAdminTokens.navy),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${_routeLabel(m)} · ${m['jumlah'] ?? 0} pcs',
-            style: const TextStyle(
-              color: OptikAdminTokens.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Jalur kota besar',
-            style: TextStyle(
-              color: OptikAdminTokens.navy.withOpacity(0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (events.isEmpty)
-            const Text(
-              'Koordinat gudang/tujuan belum ada, jadi jalur kota belum bisa dihitung.',
-              style: TextStyle(
-                color: OptikAdminTokens.textMuted,
-                fontSize: 12,
-              ),
-            )
-          else
-            ...[
-              for (var i = 0; i < events.length; i++)
-                _routeEventRow(events[i], last: i == events.length - 1),
-            ],
           const SizedBox(height: 16),
-          Text(
-            kurir.isNotEmpty ? 'Kurir: $kurir' : 'Kurir: belum ditetapkan',
-            style: const TextStyle(
-              color: OptikAdminTokens.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-          if (verified.isNotEmpty)
-            Text(
-              'Diterima oleh: $verified',
-              style: const TextStyle(
-                color: OptikAdminTokens.textMuted,
-                fontSize: 12,
-              ),
-            ),
-          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               if (bolehKurir)
-              FilledButton.icon(
-                onPressed: _busyKurir ? null : _assignKurir,
-                style: FilledButton.styleFrom(
-                  backgroundColor: OptikAdminTokens.navy,
-                  foregroundColor: OptikAdminTokens.bg,
+                FilledButton.icon(
+                  onPressed: _busyKurir ? null : _assignKurir,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: OptikAdminTokens.navy,
+                    foregroundColor: OptikAdminTokens.bg,
+                  ),
+                  icon: _busyKurir
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: OptikAdminTokens.bg,
+                          ),
+                        )
+                      : const Icon(Icons.person_search_rounded, size: 18),
+                  label: Text(
+                    kurir.isNotEmpty ? 'Ganti / hapus kurir' : 'Pilih kurir',
+                  ),
                 ),
-                icon: _busyKurir
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: OptikAdminTokens.bg,
-                        ),
-                      )
-                    : const Icon(Icons.person_search_rounded, size: 18),
-                label: Text(
-                  kurir.isNotEmpty ? 'Ganti / hapus kurir' : 'Pilih kurir',
-                ),
-              ),
               if (isDo && isPrep)
                 OutlinedButton.icon(
                   onPressed: () => _openPreparing(m),
@@ -872,79 +809,6 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                   label: const Text('Verifikasi Terima'),
                 ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'List menampilkan kota besar di jalur darat. Kabupaten kecil tidak '
-            'dihitung. Kota tengah = jalur, bukan GPS kurir. Peta Google hanya '
-            'setelah tiba di kota tujuan dan hanya untuk toko yang giliran.',
-            style: TextStyle(
-              color: OptikAdminTokens.navy.withOpacity(0.4),
-              fontSize: 11,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _routeEventRow(LogisticsRouteEvent e, {required bool last}) {
-    final color = e.done
-        ? OptikAdminTokens.success
-        : (e.current ? OptikAdminTokens.warning : OptikAdminTokens.slate);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                margin: const EdgeInsets.only(top: 3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: e.current
-                      ? Border.all(color: OptikAdminTokens.navy, width: 1.5)
-                      : null,
-                ),
-              ),
-              if (!last)
-                Container(
-                  width: 2,
-                  height: 22,
-                  color: OptikAdminTokens.line,
-                ),
-            ],
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  e.tempat,
-                  style: TextStyle(
-                    color: OptikAdminTokens.navy,
-                    fontSize: 13,
-                    fontWeight: e.current || e.done
-                        ? FontWeight.w800
-                        : FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  e.at != null ? '${e.aksi} · ${_fmt(e.at!)}' : e.aksi,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
