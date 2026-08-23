@@ -41,6 +41,22 @@ void main() {
         ReceiveVerificationRules.canReceiveAtToko(cabang, 'CABANG-A', 'PREPARING'),
         isFalse,
       );
+      expect(
+        ReceiveVerificationRules.canReceiveAtToko(
+          p('admin_pusat', 'PUSAT'),
+          'CABANG-A',
+          'TRANSIT',
+        ),
+        isFalse,
+      );
+      expect(
+        ReceiveVerificationRules.canReceiveAtToko(
+          p('admin_pusat', 'PUSAT'),
+          'PUSAT',
+          'PENDING',
+        ),
+        isTrue,
+      );
     });
 
     test('foto wajib; RO SUCCESS hanya setelah move SUCCESS', () {
@@ -57,6 +73,17 @@ void main() {
       expect(
         ReceiveVerificationRules.verifierIdOk('orang-lain', 'abc'),
         isFalse,
+      );
+      expect(
+        ReceiveVerificationRules.volumeOf({
+          'jumlah': 12.0,
+          'keterangan': 'RequestOrder#1 | [ { "sku": "A", "qty": 2.0 } ]',
+        }),
+        2,
+      );
+      expect(
+        ReceiveVerificationRules.kindOf({'keterangan': 'RequestOrder#1'}),
+        'ro',
       );
     });
   });

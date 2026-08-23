@@ -1,8 +1,9 @@
 import '../attendance/attendance_admin_scope.dart';
 import 'do_lifecycle_rules.dart';
+import 'stock_move_report_rules.dart';
 
 /// Aturan Verifikasi Terima — UI/tes.
-/// RLS + trigger + RPC 000029 yang menahan celah saat toko jalan.
+/// RLS + trigger + RPC 000029 / 000041 yang menahan celah saat toko jalan.
 abstract final class ReceiveVerificationRules {
   /// Antrian + lonceng: admin toko/pusat. Bukan owner. Bukan kasir.
   static bool canOpenIncomingQueue(Map<String, dynamic> profile) =>
@@ -34,4 +35,10 @@ abstract final class ReceiveVerificationRules {
     final s = (submitted ?? '').trim();
     return s.isEmpty || s == a;
   }
+
+  static String kindOf(Map<String, dynamic> item) =>
+      StockMoveReportRules.kindOf(item);
+
+  static int volumeOf(Map<String, dynamic> item) =>
+      StockMoveReportRules.volumeOf(item);
 }

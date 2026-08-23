@@ -1,8 +1,7 @@
 import 'dart:async'; // ✅ WAJIB: Menghilangkan error merah pada objek Timer periodic
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'verifikasi_terima.dart';
-import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/logistics/receive_queue_service.dart';
 import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/theme.dart';
 
@@ -47,19 +46,11 @@ class _GlobalNotificationIconState extends State<GlobalNotificationIcon> {
       final tokoSaya = widget.profile['toko_id']?.toString() ?? '';
       if (tokoSaya.isEmpty) return;
 
-      final aliases = AttendanceAdminScope.storeIdAliases(tokoSaya);
-      var q = Supabase.instance.client
-          .from('stock_move_history')
-          .select('id')
-          .inFilter('status', ['TRANSIT', 'PENDING']);
-      q = aliases.length == 1
-          ? q.eq('ke_lokasi', aliases.first)
-          : q.inFilter('ke_lokasi', aliases);
-      final res = await q;
+      final n = await ReceiveQueueService().countIncoming(tokoId: tokoSaya);
 
       if (mounted) {
         setState(() {
-          pendingCount = (res as List).length;
+          pendingCount = n;
         });
       }
     } catch (e) {

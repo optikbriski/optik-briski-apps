@@ -106,6 +106,20 @@ void main() {
         ),
         isFalse,
       );
+      expect(
+        AttendanceAdminScope.canReceiveStockToko(
+          p('admin_pusat', 'PUSAT'),
+          'CABANG-A',
+        ),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canReceiveStockToko(
+          p('admin_pusat', 'PUSAT'),
+          'PUSAT',
+        ),
+        isTrue,
+      );
     });
   });
 }

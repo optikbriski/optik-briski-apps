@@ -79,6 +79,36 @@ class ReceiveScanService {
     return {'resi': trimmed};
   }
 
+  Future<Map<String, dynamic>?> _findMoveByResi(String resi) async {
+    final exact = await _client
+        .from('stock_move_history')
+        .select()
+        .eq('product_name', resi)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    if (exact != null) return Map<String, dynamic>.from(exact);
+
+    final loose = await _client
+        .from('stock_move_history')
+        .select()
+        .ilike('product_name', resi)
+        .order('created_at', ascending: false)
+        .limit(5);
+    final rows = List<Map<String, dynamic>>.from(
+      (loose as List).map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+    if (rows.isEmpty) return null;
+    if (rows.length == 1) return rows.first;
+    final fold = rows.where(
+      (r) =>
+          (r['product_name'] ?? '').toString().trim().toUpperCase() ==
+          resi.toUpperCase(),
+    );
+    if (fold.length == 1) return fold.first;
+    return rows.first;
+  }
+
   static bool tokoMatches(String? tujuan, String cabangKaryawan) {
     final a = (tujuan ?? '').trim().toUpperCase();
     final b = cabangKaryawan.trim().toUpperCase();
@@ -109,13 +139,7 @@ class ReceiveScanService {
       );
     }
 
-    final row = await _client
-        .from('stock_move_history')
-        .select()
-        .eq('product_name', resi)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+    final row = await _findMoveByResi(resi);
 
     if (row == null) {
       return ReceiveScanResult(

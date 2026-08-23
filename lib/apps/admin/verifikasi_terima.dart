@@ -1,6 +1,4 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,8 +6,10 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/logistics/do_cart_lines.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/logistics/receive_queue_service.dart';
 import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/safe_image_picker.dart';
@@ -46,19 +46,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     _load();
   }
 
-  String _moveKind(Map<String, dynamic> item) {
-    final tipe = (item['tipe'] ?? '').toString().toUpperCase();
-    final resi = (item['product_name'] ?? '').toString().toUpperCase();
-    final ket = (item['keterangan'] ?? '').toString();
-    if (tipe == 'RETUR' || resi.startsWith('RET-')) return 'retur';
-    if (tipe == 'REQUEST' ||
-        resi.startsWith('RO-') ||
-        ket.contains('RequestOrder#')) {
-      return 'ro';
-    }
-    if (tipe == 'DELIVERY' || resi.startsWith('DO-')) return 'do';
-    return 'other';
-  }
+  String _moveKind(Map<String, dynamic> item) =>
+      ReceiveVerificationRules.kindOf(item);
 
   String _kindLabel(String kind) {
     switch (kind) {
@@ -97,23 +86,13 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   }
 
   String _cleanItems(String raw) {
-    if (raw.trim().isEmpty) return '-';
-    try {
-      if (raw.contains('[{')) {
-        final part = raw.substring(raw.indexOf('[{'));
-        final items = jsonDecode(part) as List;
-        return items
-            .map((it) => '${it['nama'] ?? '-'} (${it['qty'] ?? 0}x)')
-            .join(', ');
-      }
-      if (raw.trim().startsWith('[')) {
-        final items = jsonDecode(raw) as List;
-        return items
-            .map((it) => '${it['nama'] ?? '-'} (${it['qty'] ?? 0}x)')
-            .join(', ');
-      }
-    } catch (_) {}
-    return raw;
+    final parsed = DoCartLines.parseKeterangan(raw);
+    if (parsed.isEmpty) {
+      return raw.trim().isEmpty ? '-' : raw;
+    }
+    return parsed
+        .map((it) => '${it['nama'] ?? '-'} (${DoCartLines.qtyOf(it)}x)')
+        .join(', ');
   }
 
   String _formatWhen(dynamic iso) {
@@ -147,25 +126,13 @@ class _IncomingVerificationState extends State<IncomingVerification> {
       _error = null;
     });
     try {
-      final aliases = AttendanceAdminScope.storeIdAliases(_myToko);
-      var q = _db
-          .from('stock_move_history')
-          .select()
-          .inFilter('status', ['TRANSIT', 'PENDING']);
-      if (aliases.length == 1) {
-        q = q.eq('ke_lokasi', aliases.first);
-      } else {
-        q = q.inFilter('ke_lokasi', aliases);
-      }
-      final res = await q
-          .order('created_at', ascending: false)
-          .limit(100);
+      final res = await ReceiveQueueService(client: _db).listIncoming(
+        tokoId: _myToko,
+      );
 
       if (!mounted) return;
       setState(() {
-        _tasks = (res as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        _tasks = res;
         _loading = false;
       });
     } catch (e) {
@@ -182,7 +149,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     if (_receiving || _loading) return;
     final kind = _moveKind(task);
     final resi = (task['product_name'] ?? '-').toString();
-    final qty = task['jumlah'] ?? 0;
+    final qty = ReceiveVerificationRules.volumeOf(task);
     final dari = (task['dari_lokasi'] ?? '-').toString();
 
     final ok = await showDialog<bool>(
@@ -309,6 +276,9 @@ class _IncomingVerificationState extends State<IncomingVerification> {
             fileOptions: const FileOptions(upsert: true),
           );
       final imgUrl = _db.storage.from('attendance_photos').getPublicUrl(path);
+      if (!ReceiveVerificationRules.photoOk(imgUrl)) {
+        throw 'Foto terima wajib sebelum stok masuk.';
+      }
 
       final resiName = (row['product_name'] ?? '').toString();
       final kind = _moveKind(row);
@@ -418,7 +388,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                 style: const TextStyle(
                     color: OptikAdminTokens.textSecondary, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('Jumlah: ${task['jumlah'] ?? 0} pcs',
+            Text('Jumlah: ${ReceiveVerificationRules.volumeOf(task)} pcs',
                 style: const TextStyle(
                     color: OptikAdminTokens.textSecondary, fontSize: 13)),
             const SizedBox(height: 4),
@@ -536,7 +506,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     final kindColor = _kindColor(kind);
     final resi = (task['product_name'] ?? '-').toString();
     final dari = (task['dari_lokasi'] ?? '-').toString();
-    final qty = task['jumlah'] ?? 0;
+    final qty = ReceiveVerificationRules.volumeOf(task);
     final kurir = (task['kurir_nama'] ?? '').toString().trim();
     final when = _formatWhen(task['created_at']);
     final preview = _cleanItems(task['keterangan']?.toString() ?? '');
