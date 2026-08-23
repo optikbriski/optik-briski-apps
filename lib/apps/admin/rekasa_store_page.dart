@@ -26,6 +26,7 @@ class RekasaStorePage extends StatefulWidget {
 class _RekasaStorePageState extends State<RekasaStorePage> {
   StoreCatalog _catalog = StoreCatalog.local();
   bool _loading = true;
+  bool _companyHome = true;
 
   IconData _icon(String key) {
     switch (key) {
@@ -61,32 +62,45 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
     setState(() {
       _catalog = next;
       _loading = false;
+      if (industry != null) _companyHome = false;
     });
+  }
+
+  void _openIndustries() {
+    setState(() => _companyHome = false);
+  }
+
+  void _openCompanyHome() {
+    setState(() => _companyHome = true);
+    _boot();
   }
 
   @override
   Widget build(BuildContext context) {
     final selected = _catalog.industryKey;
+    final onIndustries = !_companyHome && selected == null;
     final body = _loading
         ? const Center(
             child: CircularProgressIndicator(color: RekasaTokens.ink),
           )
-        : selected == null
-            ? _industries()
-            : _plans();
+        : _companyHome
+            ? _company()
+            : selected == null
+                ? _industries()
+                : _plans();
     if (widget.embedded) {
       return DecoratedBox(
         decoration: const BoxDecoration(gradient: RekasaTokens.skyCanvas),
         child: Column(
           children: [
-            if (selected != null)
+            if (onIndustries || selected != null)
               RekasaPage(
                 padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: RekasaPillButton(
-                    label: 'Ganti bidang',
-                    onTap: () => _boot(),
+                    label: selected != null ? 'Ganti bidang' : '← Halaman utama',
+                    onTap: selected != null ? () => _boot() : _openCompanyHome,
                   ),
                 ),
               ),
@@ -98,15 +112,125 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
     return Scaffold(
       backgroundColor: RekasaTokens.canvas,
       appBar: AppBar(
-        title: const Text('Etalase Rekasa'),
-        leading: selected != null
-            ? IconButton(
+        title: Text(_companyHome ? 'REKASA KARYA INDONESIA' : 'Etalase Rekasa'),
+        leading: (_companyHome)
+            ? null
+            : IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => _boot(),
-              )
-            : null,
+                onPressed: selected != null ? () => _boot() : _openCompanyHome,
+              ),
       ),
       body: body,
+    );
+  }
+
+  Widget _company() {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        RekasaPage(
+          padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const RekasaEyebrow('Perangkat lunak · Indonesia'),
+              const SizedBox(height: 18),
+              Text(
+                'Satu mesin untuk banyak bidang usaha.',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 14),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 540),
+                child: Text(
+                  'REKASA KARYA INDONESIA menjual lisensi aplikasi: kasir, stok, '
+                  'absensi, keuangan, dan aplikasi pelanggan. Pembeli adalah UMKM. '
+                  'Kami tidak menjual barang fisik dan tidak mengirim paket.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              const SizedBox(height: 28),
+              RekasaSurface(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Apa yang dijual',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Satu codebase. Nama fitur mengikuti bidang yang dipilih pembeli. '
+                      'Optik, retail, kafe/resto, jasa, bengkel, klinik, grosir, dan usaha umum.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              RekasaSurface(
+                onTap: _openIndustries,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const RekasaEyebrow('Etalase'),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Pilih bidang usaha',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Kartu bidang, paket, lalu bayar via Midtrans.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'LIHAT BIDANG',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: RekasaTokens.inkSoft,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                decoration: BoxDecoration(
+                  color: RekasaTokens.inkDeep,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RekasaEyebrow('Identitas hukum'),
+                    SizedBox(height: 12),
+                    Text(
+                      'REKASA KARYA INDONESIA',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Perseroan Perorangan. AHU-A011645.AH.01.31.Tahun 2026. '
+                      'Pemilik: Natanael Demetrius Riscton.',
+                      style: TextStyle(height: 1.45, color: Color(0xFFD6E5F7)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -124,6 +248,16 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (!widget.embedded) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: _openCompanyHome,
+                        child: const Text('← Halaman utama'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   const RekasaEyebrow('Etalase'),
                   const SizedBox(height: 18),
                   Text(

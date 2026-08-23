@@ -28,6 +28,10 @@ void main() {
     expect(File('site/paket.html').readAsStringSync(), contains('id="industry-grid"'));
     expect(File('site/paket.html').readAsStringSync(), contains('id="back-home"'));
     expect(File('site/paket.html').readAsStringSync(), contains('Halaman utama'));
+    expect(
+      File('lib/apps/admin/rekasa_store_page.dart').readAsStringSync(),
+      contains('Halaman utama'),
+    );
     expect(js, contains('PILIH FITUR'));
     expect(js, contains('plan-badge'));
     expect(js, contains('paket.html?plan='));
