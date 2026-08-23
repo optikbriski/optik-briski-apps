@@ -366,7 +366,7 @@
   "inv_smr_desc": "Pantau sejarah barang masuk/keluar & terima pesanan",
   "inv_quick_tools": "ALAT PANTAS",
   "inv_quick_scan": "Imbasan Stok Pantas",
-  "inv_quick_scan_desc": "Imbas Kod Bar cermin mata untuk semak butiran, warna & saiz",
+  "inv_quick_scan_desc": "Kamera, taip/tampal, atau HID — semak stok rak. Stok tidak berubah.",
   "inv_detail_produk": "BUTIRAN PRODUK",
   "inv_stok_saat_ini": "Stok Semasa",
   "inv_kategori": "Kategori",

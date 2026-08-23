@@ -231,7 +231,7 @@
   "inv_smr_desc": "入荷/出荷履歴の監視と注文の受け取り",
   "inv_quick_tools": "クイックツール",
   "inv_quick_scan": "クイック在庫スキャン",
-  "inv_quick_scan_desc": "メガネのバーコードをスキャンして詳細、色、サイズを確認する",
+  "inv_quick_scan_desc": "カメラ・入力・HIDで棚在庫を確認。在庫は変わりません。",
   "inv_detail_produk": "製品詳細",
   "inv_stok_saat_ini": "現在の在庫",
   "inv_kategori": "カテゴリー",

@@ -6,13 +6,15 @@ import 'package:intl/intl.dart';
 import 'delivery_order.dart';
 import 'logistics_tracking_page.dart';
 import 'stock_move_report.dart';
-import 'barcode_scanner.dart';
 import 'restore_operation.dart';
 import 'global_notification.dart';
 import 'request_order_page.dart';
 import 'request_order_pusat_page.dart';
 import 'verifikasi_terima.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/qr/hid_scan_intake.dart';
+import '../../shared/qr/qr_route.dart';
+import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_integrity_service.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
@@ -387,7 +389,30 @@ class _InventoryOverviewState extends State<InventoryOverview> {
   Widget build(BuildContext context) {
     bool isPusat = widget.profile['toko_id'] == 'PUSAT';
 
-    return PremiumScaffold(
+    return HidScanIntake(
+      tryHandleKnown: (result) async {
+        if (!QuickStockScanRules.bolehScanToko(
+          widget.profile,
+          AttendanceAdminScope.tokoOf(widget.profile),
+        )) {
+          return false;
+        }
+        if (result.type != QrPayloadType.product) return false;
+        await _handleQuickCheck(context, result.raw);
+        return true;
+      },
+      onUnknown: (raw) async {
+        if (!QuickStockScanRules.bolehScanToko(
+          widget.profile,
+          AttendanceAdminScope.tokoOf(widget.profile),
+        )) {
+          return false;
+        }
+        if (!QuickStockScanRules.codeOk(raw)) return false;
+        await _handleQuickCheck(context, raw);
+        return true;
+      },
+      child: PremiumScaffold(
       appBar: PremiumAppBar(
         title: "inv_title".tr(),
         actions: [
@@ -570,7 +595,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                     subtitle: "inv_quick_scan_desc".tr(),
                     icon: Icons.qr_code_scanner_rounded,
                     iconColor: OptikAdminTokens.success,
-                    onTap: () {
+                    onTap: () async {
                       if (!QuickStockScanRules.bolehScanToko(
                         widget.profile,
                         AttendanceAdminScope.tokoOf(widget.profile),
@@ -585,20 +610,24 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                         );
                         return;
                       }
-                      Navigator.push(
+                      final raw = await UniversalQrScanPage.scanRaw(
                         context,
-                        MaterialPageRoute(
-                          builder: (c) => OptikBRiskiScanner(
-                            onDetect: (code) async {
-                              _handleQuickCheck(context, code);
-                            },
-                          ),
-                        ),
+                        allowedTypes: {
+                          QrPayloadType.product,
+                          QrPayloadType.unknown,
+                        },
+                        titleKey: 'inv_quick_scan',
+                        hintKey: 'inv_quick_scan_desc',
                       );
+                      if (!mounted || raw == null || raw.trim().isEmpty) {
+                        return;
+                      }
+                      await _handleQuickCheck(context, raw);
                     },
                   ),
               ],
             ),
+    ),
     );
   }
 

@@ -388,7 +388,7 @@
   "inv_smr_desc": "Monitor incoming/outgoing item history & receive orders",
   "inv_quick_tools": "QUICK TOOLS",
   "inv_quick_scan": "Quick Stock Scan",
-  "inv_quick_scan_desc": "Scan glasses Barcode to check details, color & size",
+  "inv_quick_scan_desc": "Camera, type/paste, or HID — check shelf stock. Stock does not change.",
   "inv_detail_produk": "PRODUCT DETAILS",
   "inv_stok_saat_ini": "Current Stock",
   "inv_kategori": "Category",

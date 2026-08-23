@@ -363,7 +363,7 @@
   "inv_smr_desc": "监控进出货物记录",
   "inv_quick_tools": "快速工具",
   "inv_quick_scan": "快速库存扫描",
-  "inv_quick_scan_desc": "扫描条形码以查看详细信息",
+  "inv_quick_scan_desc": "相机、输入或 HID 查看货架库存。库存不会变动。",
   "inv_detail_produk": "产品详情",
   "inv_stok_saat_ini": "当前库存",
   "inv_kategori": "类别",
