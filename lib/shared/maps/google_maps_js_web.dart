@@ -1,12 +1,18 @@
-// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
-
 import 'dart:async';
-import 'dart:html' as html;
-import 'dart:js' as js;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import '../config.dart';
 
 Completer<void>? _loadGate;
+
+bool get googleMapsJsReadyImpl {
+  if (!globalContext.has('google')) return false;
+  final google = globalContext.getProperty('google'.toJS);
+  if (google == null || google.isUndefinedOrNull) return false;
+  if (google is! JSObject) return false;
+  return google.has('maps');
+}
 
 Future<void> ensureGoogleMapsJsImpl() async {
   final key = googleMapsApiKey.trim();
@@ -18,13 +24,26 @@ Future<void> ensureGoogleMapsJsImpl() async {
   }
   _loadGate = Completer<void>();
   try {
-    final existing = html.document.querySelector(
-      'script[src*="maps.googleapis.com/maps/api/js"]',
+    final document = globalContext.getProperty('document'.toJS);
+    if (document is! JSObject) {
+      throw StateError('Document web tidak ada');
+    }
+    final existing = document.callMethod<JSAny?>(
+      'querySelector'.toJS,
+      'script[src*="maps.googleapis.com/maps/api/js"]'.toJS,
     );
-    if (existing != null && !googleMapsJsReadyImpl) {
-      existing.addEventListener('load', (_) {
+    if (existing != null &&
+        existing.isDefinedAndNotNull &&
+        !googleMapsJsReadyImpl) {
+      void onExistingLoad(JSAny _) {
         if (!_loadGate!.isCompleted) _loadGate!.complete();
-      });
+      }
+
+      (existing as JSObject).callMethod(
+        'addEventListener'.toJS,
+        'load'.toJS,
+        onExistingLoad.toJS,
+      );
       await _loadGate!.future.timeout(const Duration(seconds: 12));
       return;
     }
@@ -32,31 +51,36 @@ Future<void> ensureGoogleMapsJsImpl() async {
       if (!_loadGate!.isCompleted) _loadGate!.complete();
       return;
     }
-    final script = html.ScriptElement()
-      ..src =
-          'https://maps.googleapis.com/maps/api/js?key=${Uri.encodeQueryComponent(key)}&language=id&region=id'
-      ..async = true;
+    final src =
+        'https://maps.googleapis.com/maps/api/js?key=${Uri.encodeQueryComponent(key)}&language=id&region=id';
+    final script = document.callMethod<JSObject>(
+      'createElement'.toJS,
+      'script'.toJS,
+    );
+    script.setProperty('src'.toJS, src.toJS);
+    script.setProperty('async'.toJS, true.toJS);
     final done = Completer<void>();
-    script.onLoad.listen((_) {
+    void onLoad(JSAny _) {
       if (!done.isCompleted) done.complete();
-    });
-    script.onError.listen((_) {
+    }
+
+    void onError(JSAny _) {
       if (!done.isCompleted) {
         done.completeError(StateError('Gagal memuat Google Maps JS'));
       }
-    });
-    html.document.head!.append(script);
+    }
+
+    script.callMethod('addEventListener'.toJS, 'load'.toJS, onLoad.toJS);
+    script.callMethod('addEventListener'.toJS, 'error'.toJS, onError.toJS);
+    final head = document.getProperty('head'.toJS);
+    if (head is! JSObject) {
+      throw StateError('document.head tidak ada');
+    }
+    head.callMethod('appendChild'.toJS, script);
     await done.future.timeout(const Duration(seconds: 15));
     if (!_loadGate!.isCompleted) _loadGate!.complete();
   } catch (e) {
     if (!_loadGate!.isCompleted) _loadGate!.completeError(e);
     rethrow;
   }
-}
-
-bool get googleMapsJsReadyImpl {
-  if (!js.context.hasProperty('google')) return false;
-  final g = js.context['google'];
-  if (g is! js.JsObject) return false;
-  return g.hasProperty('maps');
 }
