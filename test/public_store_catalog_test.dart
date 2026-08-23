@@ -24,6 +24,7 @@ void main() {
     expect(js, contains('industry-chips'));
     expect(js, contains('industry-grid'));
     expect(js, contains('LIHAT PAKET'));
+    expect(File('site/index.html').readAsStringSync(), contains('id="industry-grid"'));
     expect(File('site/paket.html').readAsStringSync(), contains('id="industry-grid"'));
     expect(js, contains('PILIH FITUR'));
     expect(js, contains('plan-badge'));
