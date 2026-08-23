@@ -38,6 +38,10 @@ DEFINE_ARGS+=(
   --dart-define=ADMIN_PIN_TENANT="${STORE_PIN_TENANT:-false}"
   --dart-define=ADMIN_TENANT_SLUG="${ADMIN_TENANT_SLUG:-$STORE_SLUG}"
 )
+if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
+  DEFINE_ARGS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
+fi
+bash "$ROOT/scripts/sync_google_maps_native_key.sh" || true
 
 FLUTTER_ARGS=(
   build apk --release --split-per-abi

@@ -60,9 +60,9 @@ const bool pinAdminTenant =
 const bool pinStoreTenant =
     bool.fromEnvironment('PIN_STORE_TENANT', defaultValue: false);
 
-/// Maps JavaScript / Geocoding / Android geo key.
-/// Terisi = kanvas geofence + cari alamat memakai Google Maps.
-/// Kosong = peta OSM/Esri + Nominatim.
+/// Maps JavaScript / Geocoding / kunci native Android+iOS.
+/// Satu nilai --dart-define, dipakai Admin / Karyawan / Member / web.
+/// Terisi = kanvas + cari alamat Google. Kosong = OSM/Esri.
 const String googleMapsApiKey = String.fromEnvironment(
   'GOOGLE_MAPS_API_KEY',
   defaultValue: '',

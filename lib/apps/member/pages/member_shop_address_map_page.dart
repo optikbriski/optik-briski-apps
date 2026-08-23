@@ -5,6 +5,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../shared/config.dart';
+import '../../../shared/maps/google_pin_map.dart';
 import '../../../shared/maps/osm_address_search.dart';
 import '../../../shared/member/member_shop_address.dart';
 import '../../../shared/theme.dart';
@@ -30,6 +32,7 @@ class MemberShopAddressMapPage extends StatefulWidget {
 class _MemberShopAddressMapPageState extends State<MemberShopAddressMapPage> {
   final _mapCtrl = MapController();
   Timer? _settle;
+  LatLng? _googleMove;
 
   double _lat = -6.9175;
   double _lng = 107.6191;
@@ -69,6 +72,7 @@ class _MemberShopAddressMapPageState extends State<MemberShopAddressMapPage> {
     try {
       _mapCtrl.move(LatLng(_lat, _lng), 17);
     } catch (_) {}
+    _googleMove = LatLng(_lat, _lng);
     await _reverse();
   }
 
@@ -147,25 +151,39 @@ class _MemberShopAddressMapPageState extends State<MemberShopAddressMapPage> {
       backgroundColor: OptikMemberTokens.canvas,
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapCtrl,
-            options: MapOptions(
-              initialCenter: LatLng(_lat, _lng),
-              initialZoom: 17,
-              onPositionChanged: _onMapMoved,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.pinchZoom |
-                    InteractiveFlag.drag |
-                    InteractiveFlag.doubleTapZoom,
+          if (hasGoogleMapsKey)
+            GooglePinMap(
+              point: _googleMove ?? LatLng(_lat, _lng),
+              zoom: 17,
+              centerPin: true,
+              onCameraIdle: (p) {
+                _lat = p.latitude;
+                _lng = p.longitude;
+                _settle?.cancel();
+                _settle = Timer(const Duration(milliseconds: 420), _reverse);
+              },
+            )
+          else
+            FlutterMap(
+              mapController: _mapCtrl,
+              options: MapOptions(
+                initialCenter: LatLng(_lat, _lng),
+                initialZoom: 17,
+                onPositionChanged: _onMapMoved,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.pinchZoom |
+                      InteractiveFlag.drag |
+                      InteractiveFlag.doubleTapZoom,
+                ),
               ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'optik_b_riski',
+                ),
+              ],
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'optik_b_riski',
-              ),
-            ],
-          ),
           // Pin tetap di tengah (geser peta).
           const IgnorePointer(
             child: Center(

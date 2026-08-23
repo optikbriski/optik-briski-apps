@@ -39,8 +39,9 @@ if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
   sed -i.bak "s/__GOOGLE_MAPS_API_KEY__/${GOOGLE_MAPS_API_KEY}/g" web/index.html
   rm -f web/index.html.bak
 else
-  echo "WARN: GOOGLE_MAPS_API_KEY not set — Geofence Google Map akan gagal load di web."
+  echo "WARN: GOOGLE_MAPS_API_KEY not set — peta Google web memakai loader Dart bila dart-define terisi."
 fi
+bash "$(dirname "$0")/sync_google_maps_native_key.sh" || true
 
 # Konsol Rekasa: jangan pin merek. Web per merek: scripts/release_brand_web.sh
 flutter build web --release \

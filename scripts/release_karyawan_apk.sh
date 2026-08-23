@@ -29,6 +29,10 @@ else
   [[ -n "${SUPABASE_URL:-}" ]] && DEFINE_ARGS+=(--dart-define=SUPABASE_URL="$SUPABASE_URL")
   [[ -n "${SUPABASE_ANON_KEY:-}" ]] && DEFINE_ARGS+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
 fi
+if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
+  DEFINE_ARGS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
+fi
+bash "$ROOT/scripts/sync_google_maps_native_key.sh" || true
 
 FLUTTER_ARGS=(
   build apk --release --split-per-abi

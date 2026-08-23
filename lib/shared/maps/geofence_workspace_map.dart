@@ -197,7 +197,16 @@ class GoogleGeofenceMap extends StatefulWidget {
 }
 
 class _GoogleGeofenceMapState extends State<GoogleGeofenceMap> {
-  late final Future<void> _ready = ensureGoogleMapsJs();
+  late final Future<void> _ready = _boot();
+
+  Future<void> _boot() async {
+    try {
+      await ensureGoogleMapsJs();
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await ensureGoogleMapsJs();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

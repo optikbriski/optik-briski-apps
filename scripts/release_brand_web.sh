@@ -53,6 +53,7 @@ if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
   rm -f web/index.html.bak
   DEFINE_ARGS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
 fi
+bash "$ROOT/scripts/sync_google_maps_native_key.sh" || true
 
 # Judul splash = merek, lalu Flutter ganti lagi dari app_brand.
 TITLE="${STORE_ADMIN_APP_NAME:-$STORE_DISPLAY_NAME}"

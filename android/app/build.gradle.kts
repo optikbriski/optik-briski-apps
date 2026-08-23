@@ -8,6 +8,12 @@ plugins {
 fun storeProp(name: String): String =
     (project.findProperty(name) as String?)?.trim().orEmpty()
 
+fun googleMapsKeyFromDartDefine(file: java.io.File): String {
+    if (!file.exists()) return ""
+    val m = Regex("\"GOOGLE_MAPS_API_KEY\"\\s*:\\s*\"([^\"]+)\"").find(file.readText())
+    return m?.groupValues?.getOrNull(1)?.trim().orEmpty()
+}
+
 fun googleMapsKey(): String {
     val env = System.getenv("GOOGLE_MAPS_API_KEY")?.trim().orEmpty()
     if (env.isNotEmpty()) return env
@@ -24,11 +30,12 @@ fun googleMapsKey(): String {
             ).trim()
         if (fromLocal.isNotEmpty()) return fromLocal
     }
-    val dartFile = rootProject.file("../.dart_define.admin.json")
-    if (dartFile.exists()) {
-        val text = dartFile.readText()
-        val m = Regex("\"GOOGLE_MAPS_API_KEY\"\\s*:\\s*\"([^\"]+)\"").find(text)
-        val v = m?.groupValues?.getOrNull(1)?.trim().orEmpty()
+    for (name in listOf(
+        "../.dart_define.admin.json",
+        "../.dart_define.karyawan.json",
+        "../.dart_define.member.json",
+    )) {
+        val v = googleMapsKeyFromDartDefine(rootProject.file(name))
         if (v.isNotEmpty()) return v
     }
     return ""

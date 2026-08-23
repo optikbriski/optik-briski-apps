@@ -23,73 +23,65 @@ Future<void> ensureGoogleMapsJsImpl() async {
   final key = googleMapsApiKey.trim();
   if (key.isEmpty) return;
   if (googleMapsJsReadyImpl) return;
-  if (_loadGate != null) {
-    await _loadGate!.future;
+
+  final existing = _loadGate;
+  if (existing != null) {
+    try {
+      await existing.future;
+    } catch (_) {}
+    if (googleMapsJsReadyImpl) return;
+  }
+
+  final gate = Completer<void>();
+  _loadGate = gate;
+  try {
+    await _ensureScript(key);
+    await _waitUntilReady();
+    if (!gate.isCompleted) gate.complete();
+  } catch (e) {
+    if (!gate.isCompleted) gate.completeError(e);
+    if (identical(_loadGate, gate)) _loadGate = null;
+    rethrow;
+  }
+}
+
+Future<void> _ensureScript(String key) async {
+  if (googleMapsJsReadyImpl) return;
+  final document = _asObject(globalContext.getProperty('document'.toJS));
+  if (document == null) {
+    throw StateError('Document web tidak ada');
+  }
+  final existing = document.callMethod<JSAny?>(
+    'querySelector'.toJS,
+    'script[src*="maps.googleapis.com/maps/api/js"]'.toJS,
+  );
+  if (existing != null && existing.isDefinedAndNotNull) {
     return;
   }
-  _loadGate = Completer<void>();
-  try {
-    final document = _asObject(globalContext.getProperty('document'.toJS));
-    if (document == null) {
-      throw StateError('Document web tidak ada');
-    }
-    final existing = document.callMethod<JSAny?>(
-      'querySelector'.toJS,
-      'script[src*="maps.googleapis.com/maps/api/js"]'.toJS,
-    );
-    if (existing != null &&
-        existing.isDefinedAndNotNull &&
-        !googleMapsJsReadyImpl) {
-      void onExistingLoad(JSAny _) {
-        if (!_loadGate!.isCompleted) _loadGate!.complete();
-      }
+  final src =
+      'https://maps.googleapis.com/maps/api/js?key=${Uri.encodeQueryComponent(key)}'
+      '&language=id&region=id&loading=async';
+  final script = document.callMethod<JSObject>(
+    'createElement'.toJS,
+    'script'.toJS,
+  );
+  script.setProperty('src'.toJS, src.toJS);
+  script.setProperty('async'.toJS, true.toJS);
+  final head = _asObject(document.getProperty('head'.toJS));
+  if (head == null) {
+    throw StateError('document.head tidak ada');
+  }
+  head.callMethod('appendChild'.toJS, script);
+}
 
-      final node = _asObject(existing);
-      if (node == null) {
-        throw StateError('Script Maps JS tidak valid');
-      }
-      node.callMethod(
-        'addEventListener'.toJS,
-        'load'.toJS,
-        onExistingLoad.toJS,
-      );
-      await _loadGate!.future.timeout(const Duration(seconds: 12));
-      return;
+Future<void> _waitUntilReady() async {
+  const step = Duration(milliseconds: 50);
+  const limit = Duration(seconds: 15);
+  final started = DateTime.now();
+  while (!googleMapsJsReadyImpl) {
+    if (DateTime.now().difference(started) > limit) {
+      throw StateError('Google Maps JS belum siap');
     }
-    if (googleMapsJsReadyImpl) {
-      if (!_loadGate!.isCompleted) _loadGate!.complete();
-      return;
-    }
-    final src =
-        'https://maps.googleapis.com/maps/api/js?key=${Uri.encodeQueryComponent(key)}&language=id&region=id';
-    final script = document.callMethod<JSObject>(
-      'createElement'.toJS,
-      'script'.toJS,
-    );
-    script.setProperty('src'.toJS, src.toJS);
-    script.setProperty('async'.toJS, true.toJS);
-    final done = Completer<void>();
-    void onLoad(JSAny _) {
-      if (!done.isCompleted) done.complete();
-    }
-
-    void onError(JSAny _) {
-      if (!done.isCompleted) {
-        done.completeError(StateError('Gagal memuat Google Maps JS'));
-      }
-    }
-
-    script.callMethod('addEventListener'.toJS, 'load'.toJS, onLoad.toJS);
-    script.callMethod('addEventListener'.toJS, 'error'.toJS, onError.toJS);
-    final head = _asObject(document.getProperty('head'.toJS));
-    if (head == null) {
-      throw StateError('document.head tidak ada');
-    }
-    head.callMethod('appendChild'.toJS, script);
-    await done.future.timeout(const Duration(seconds: 15));
-    if (!_loadGate!.isCompleted) _loadGate!.complete();
-  } catch (e) {
-    if (!_loadGate!.isCompleted) _loadGate!.completeError(e);
-    rethrow;
+    await Future<void>.delayed(step);
   }
 }

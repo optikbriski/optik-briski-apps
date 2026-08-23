@@ -7,7 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../shared/config.dart';
 import '../../../shared/logistics/stock_realtime.dart';
+import '../../../shared/maps/google_pin_map.dart';
 import '../../../shared/maps/osm_address_search.dart';
 import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_repository.dart';
@@ -72,6 +74,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     decimalDigits: 0,
   );
   final _mapCtrl = MapController();
+  LatLng? _googlePoint;
   Timer? _searchDebounce;
 
   List<Map<String, dynamic>> _stores = const [];
@@ -146,6 +149,14 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     _detail.dispose();
     _mapCtrl.dispose();
     super.dispose();
+  }
+
+  void _moveCamera(LatLng point, [double? zoom]) {
+    _googlePoint = point;
+    try {
+      _mapCtrl.move(point, zoom ?? _mapCtrl.camera.zoom);
+    } catch (_) {}
+    if (mounted) setState(() {});
   }
 
   void _bindStockRealtime(String? tokoId) {
@@ -342,9 +353,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
       _searching = false;
       _resetStoreForNewAddress();
     });
-    try {
-      _mapCtrl.move(LatLng(hit.lat, hit.lng), 16);
-    } catch (_) {}
+    _moveCamera(LatLng(hit.lat, hit.lng), 16);
 
     if (!fromGps) {
       final pos = await _currentGps();
@@ -416,7 +425,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     final lng = _addressLng;
     if (lat == null || lng == null) return;
     final uri = Uri.parse(
-      'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=17/$lat/$lng',
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
     );
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -465,9 +474,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
       _mapsVerified = true;
       _resetStoreForNewAddress();
     });
-    try {
-      _mapCtrl.move(point, _mapCtrl.camera.zoom);
-    } catch (_) {}
+    _moveCamera(point);
 
     setState(() => _resolvingStore = true);
     try {
@@ -530,9 +537,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
               _storeHint = prevHint;
             });
             if (prevLat != null && prevLng != null) {
-              try {
-                _mapCtrl.move(LatLng(prevLat, prevLng), _mapCtrl.camera.zoom);
-              } catch (_) {}
+              _moveCamera(LatLng(prevLat, prevLng));
             }
             return;
           }
@@ -1772,7 +1777,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
                     child: TextButton.icon(
                       onPressed: _openInMaps,
                       icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      label: const Text('Buka di OpenStreetMap'),
+                      label: const Text('Buka di Google Maps'),
                     ),
                   ),
                 ],
@@ -1791,7 +1796,15 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
               borderRadius: BorderRadius.circular(14),
               child: SizedBox(
                 height: 200,
-                child: FlutterMap(
+                child: hasGoogleMapsKey
+                    ? GooglePinMap(
+                        point: _googlePoint ??
+                            LatLng(_addressLat!, _addressLng!),
+                        zoom: 16,
+                        title: 'Alamat kirim',
+                        onTap: (p) => _onPinMoved(p, confirmFar: true),
+                      )
+                    : FlutterMap(
                   mapController: _mapCtrl,
                   options: MapOptions(
                     initialCenter: LatLng(_addressLat!, _addressLng!),
