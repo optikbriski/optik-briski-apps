@@ -72,11 +72,20 @@
   <link rel="manifest" href="manifest.json">
 
   <!--
-    Google Maps JavaScript API — required for Admin Geofence editor (web).
-    Build/Vercel replaces __GOOGLE_MAPS_API_KEY__ from env GOOGLE_MAPS_API_KEY.
-    Enable Maps JavaScript API + billing on Google Cloud.
+    Google Maps JS — Vercel mengganti __GOOGLE_MAPS_API_KEY__.
+    Debug lokal: dart-define GOOGLE_MAPS_API_KEY (loader Dart).
   -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__"></script>
+  <script>
+    (function () {
+      var k = '__GOOGLE_MAPS_API_KEY__';
+      if (!k || k.indexOf('__GOOGLE') === 0) return;
+      var s = document.createElement('script');
+      s.src = 'https://maps.googleapis.com/maps/api/js?key=' +
+        encodeURIComponent(k) + '&language=id&region=id';
+      s.async = true;
+      document.head.appendChild(s);
+    })();
+  </script>
 </head>
 <body>
   <div class="obr-boot" id="obr-boot">

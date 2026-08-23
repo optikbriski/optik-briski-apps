@@ -60,6 +60,16 @@ const bool pinAdminTenant =
 const bool pinStoreTenant =
     bool.fromEnvironment('PIN_STORE_TENANT', defaultValue: false);
 
+/// Maps JavaScript / Geocoding / Android geo key.
+/// Terisi = kanvas geofence + cari alamat memakai Google Maps.
+/// Kosong = peta OSM/Esri + Nominatim.
+const String googleMapsApiKey = String.fromEnvironment(
+  'GOOGLE_MAPS_API_KEY',
+  defaultValue: '',
+);
+
+bool get hasGoogleMapsKey => googleMapsApiKey.trim().isNotEmpty;
+
 bool get isBrandedMemberApk => currentFlavor == AppFlavor.member;
 
 /// APK/web merek sendiri (paket atas). False = kulit Rekasa + kode usaha.

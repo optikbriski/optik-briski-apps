@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
+import '../config.dart';
+import 'google_geocode.dart';
+
 /// Satu hasil geocode (OSM Nominatim / Photon).
 class OsmAddressHit {
   const OsmAddressHit({
@@ -137,6 +140,14 @@ class OsmAddressSearch {
     final ownsClient = client == null;
 
     try {
+      if (hasGoogleMapsKey) {
+        try {
+          final google = await GoogleGeocode.search(q, limit: limit);
+          if (google.isNotEmpty) return google;
+        } catch (e) {
+          debugPrint('google geocode search: $e');
+        }
+      }
       try {
         return await _searchNominatim(httpClient, q, limit: limit);
       } catch (_) {
@@ -157,6 +168,17 @@ class OsmAddressSearch {
     final httpClient = client ?? http.Client();
     final ownsClient = client == null;
     try {
+      if (hasGoogleMapsKey) {
+        try {
+          final google = await GoogleGeocode.reverse(
+            point.latitude,
+            point.longitude,
+          );
+          if (google != null) return google;
+        } catch (e) {
+          debugPrint('google geocode reverse: $e');
+        }
+      }
       try {
         return await _reverseNominatim(httpClient, point);
       } catch (_) {

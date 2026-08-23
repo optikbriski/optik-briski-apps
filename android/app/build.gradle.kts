@@ -8,6 +8,32 @@ plugins {
 fun storeProp(name: String): String =
     (project.findProperty(name) as String?)?.trim().orEmpty()
 
+fun googleMapsKey(): String {
+    val env = System.getenv("GOOGLE_MAPS_API_KEY")?.trim().orEmpty()
+    if (env.isNotEmpty()) return env
+    val prop = (project.findProperty("GOOGLE_MAPS_API_KEY") as String?)?.trim().orEmpty()
+    if (prop.isNotEmpty()) return prop
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        val p = java.util.Properties()
+        localFile.inputStream().use { p.load(it) }
+        val fromLocal = (
+            p.getProperty("GOOGLE_MAPS_API_KEY")
+                ?: p.getProperty("google.maps.api.key")
+                ?: ""
+            ).trim()
+        if (fromLocal.isNotEmpty()) return fromLocal
+    }
+    val dartFile = rootProject.file("../.dart_define.admin.json")
+    if (dartFile.exists()) {
+        val text = dartFile.readText()
+        val m = Regex("\"GOOGLE_MAPS_API_KEY\"\\s*:\\s*\"([^\"]+)\"").find(text)
+        val v = m?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        if (v.isNotEmpty()) return v
+    }
+    return ""
+}
+
 android {
     namespace = "com.example.toko_kacamata_natan"
     compileSdk = flutter.compileSdkVersion
@@ -36,6 +62,7 @@ compileOptions {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsKey()
     }
 
     flavorDimensions += "app"

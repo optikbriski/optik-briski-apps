@@ -51,6 +51,7 @@ fi
 if [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]]; then
   sed -i.bak "s/__GOOGLE_MAPS_API_KEY__/${GOOGLE_MAPS_API_KEY}/g" web/index.html
   rm -f web/index.html.bak
+  DEFINE_ARGS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
 fi
 
 # Judul splash = merek, lalu Flutter ganti lagi dari app_brand.

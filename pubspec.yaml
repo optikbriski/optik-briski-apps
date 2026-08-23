@@ -63,6 +63,7 @@ dependencies:
   latlong2: ^0.9.1
   flutter_local_notifications: ^18.0.1
   google_fonts: ^8.2.1
+  google_maps_flutter: ^2.18.0
 
 dev_dependencies:
   flutter_test:

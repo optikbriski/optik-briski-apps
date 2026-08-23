@@ -13,6 +13,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/geofence_geometry.dart';
+import '../../shared/config.dart';
+import '../../shared/maps/geofence_workspace_map.dart';
 import '../../shared/maps/osm_address_search.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -33,6 +35,7 @@ class TokoGeofencePage extends StatefulWidget {
 class _TokoGeofencePageState extends State<TokoGeofencePage> {
   final _db = Supabase.instance.client;
   final _mapCtrl = MapController();
+  late final _mapHandle = GeofenceMapHandle(_mapCtrl);
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   final _coordsCtrl = TextEditingController();
@@ -44,8 +47,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   bool _saving = false;
   bool _searching = false;
   bool _reversing = false;
-  /// Default satelit = mosaic Esri terbaru (bukan arsip Wayback).
+  /// Default satelit = mosaic Esri (tanpa kunci) atau hybrid Google.
   bool _satellite = true;
+  bool _googleMapFailed = false;
   String? _error;
   String? _searchFeedback;
   String? _coordsFeedback;
@@ -116,9 +120,11 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     _coordsFocus.dispose();
     _radiusCtrl.dispose();
     _radiusFocus.dispose();
-    _mapCtrl.dispose();
+    _mapHandle.dispose();
     super.dispose();
   }
+
+  bool get _useGoogleMap => hasGoogleMapsKey && !_googleMapFailed;
 
   void _scheduleImageryMeta() {
     _imageryMetaDebounce?.cancel();
@@ -145,8 +151,18 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     return t;
   }
 
-  /// Ambil tanggal akuisisi foto satelit Esri di titik peta (mosaic terbaru).
+  /// Badge sumber peta. Google: label hybrid. Tanpa kunci: metadata Esri.
   Future<void> _refreshImageryMeta() async {
+    if (_useGoogleMap) {
+      if (!mounted) return;
+      setState(() {
+        _imageryMeta = _satellite
+            ? 'Satelit Google Maps · hybrid (foto + nama jalan)'
+            : 'Peta jalan Google Maps';
+        _imageryMetaLoading = false;
+      });
+      return;
+    }
     if (!_satellite) {
       if (!mounted) return;
       setState(() {
@@ -159,8 +175,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     LatLng center;
     double zoom;
     try {
-      center = _mapCtrl.camera.center;
-      zoom = _mapCtrl.camera.zoom;
+      center = _mapHandle.center;
+      zoom = _mapHandle.zoom;
     } catch (_) {
       center = (_lat != null && _lng != null)
           ? LatLng(_lat!, _lng!)
@@ -267,12 +283,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   }
 
   LatLng get _mapBias {
-    try {
-      return _mapCtrl.camera.center;
-    } catch (_) {
-      if (_lat != null && _lng != null) return LatLng(_lat!, _lng!);
-      return _defaultCenter;
-    }
+    if (_lat != null && _lng != null) return LatLng(_lat!, _lng!);
+    return _mapHandle.center;
   }
 
   void _cancelInFlightSearch() {
@@ -399,9 +411,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   void _goToSearchHit(OsmAddressHit hit, {bool keepResults = false}) {
     _searchDebounce?.cancel();
     _invalidateSearch();
-    try {
-      _mapCtrl.move(hit.point, _searchZoom);
-    } catch (_) {}
+    _mapHandle.move(hit.point, _searchZoom);
     _searchCtrl.value = TextEditingValue(
       text: hit.displayName,
       selection: TextSelection.collapsed(offset: hit.displayName.length),
@@ -439,9 +449,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     }
     _coordsFocus.unfocus();
     final point = parsed.point;
-    try {
-      _mapCtrl.move(point, _searchZoom);
-    } catch (_) {}
+    _mapHandle.move(point, _searchZoom);
     _coordsCtrl.value = TextEditingValue(
       text:
           '${parsed.lat.toStringAsFixed(6)}, ${parsed.lng.toStringAsFixed(6)}',
@@ -685,32 +693,21 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
   }
 
   void _moveCameraToFence() {
-    try {
-      if (_mode == _FenceDrawMode.corners4 && _corners.length >= 2) {
-        _mapCtrl.fitCamera(
-          CameraFit.bounds(
-            bounds: LatLngBounds.fromPoints(_corners),
-            padding: const EdgeInsets.all(80),
-            maxZoom: _mapMaxZoom,
-          ),
-        );
-        return;
-      }
-      final cam = (_lat != null && _lng != null)
-          ? LatLng(_lat!, _lng!)
-          : _defaultCenter;
-      _mapCtrl.move(cam, _zoomForRadius(_radiusMeters));
-    } catch (_) {
-      final cam = (_lat != null && _lng != null)
-          ? LatLng(_lat!, _lng!)
-          : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
-      final z = _mode == _FenceDrawMode.corners4 && _corners.length >= 2
-          ? _zoomForPolygon(_corners)
-          : _zoomForRadius(_radiusMeters);
-      try {
-        _mapCtrl.move(cam, z);
-      } catch (_) {}
+    if (_mode == _FenceDrawMode.corners4 && _corners.length >= 2) {
+      _mapHandle.fit(
+        _corners,
+        padding: 80,
+        maxZoom: _mapMaxZoom,
+      );
+      return;
     }
+    final cam = (_lat != null && _lng != null)
+        ? LatLng(_lat!, _lng!)
+        : (_corners.isNotEmpty ? _corners.first : _defaultCenter);
+    final z = _mode == _FenceDrawMode.corners4 && _corners.length >= 2
+        ? _zoomForPolygon(_corners)
+        : _zoomForRadius(_radiusMeters);
+    _mapHandle.move(cam, z);
   }
 
   void _setRadius(int meters, {bool updateText = true, bool moveCamera = false}) {
@@ -724,9 +721,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       );
     }
     if (moveCamera && _lat != null && _lng != null) {
-      try {
-        _mapCtrl.move(LatLng(_lat!, _lng!), _zoomForRadius(clamped));
-      } catch (_) {}
+      _mapHandle.move(LatLng(_lat!, _lng!), _zoomForRadius(clamped));
     }
   }
 
@@ -772,7 +767,9 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     _lng = c?.lng;
   }
 
-  void _onMapTap(TapPosition tap, LatLng point) {
+  void _onMapTap(TapPosition tap, LatLng point) => _placeOnMap(point);
+
+  void _placeOnMap(LatLng point) {
     if (_draggingMarker) return;
     if (_mode == _FenceDrawMode.circle) {
       setState(() {
@@ -1056,6 +1053,126 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     }
   }
 
+  Widget _buildWorkspaceCanvas(LatLng center, int mapFlags) {
+    if (_useGoogleMap) {
+      return GoogleGeofenceMap(
+        handle: _mapHandle,
+        satellite: _satellite,
+        initialCenter: center,
+        initialZoom: _zoomForRadius(_radiusMeters),
+        interactionLocked: _draggingMarker,
+        onTap: _placeOnMap,
+        onCameraIdle: _scheduleImageryMeta,
+        onGoogleReady: _moveCameraToFence,
+        onFailed: () {
+          if (!mounted || _googleMapFailed) return;
+          setState(() => _googleMapFailed = true);
+        },
+        circleCenter: _mode == _FenceDrawMode.circle &&
+                _lat != null &&
+                _lng != null
+            ? LatLng(_lat!, _lng!)
+            : null,
+        circleRadiusMeters: _radiusMeters.toDouble(),
+        polygon:
+            _mode == _FenceDrawMode.corners4 ? List<LatLng>.from(_corners) : const [],
+        previewTarget: _previewTarget,
+        selectedCorner: _selectedCorner,
+        onCenterDragStart: _beginMarkerDrag,
+        onCenterDrag: (p) {
+          setState(() {
+            _lat = p.latitude;
+            _lng = p.longitude;
+          });
+        },
+        onCenterDragEnd: _endMarkerDrag,
+        onCornerDragStart: (i) {
+          _beginMarkerDrag();
+          setState(() => _selectedCorner = i);
+        },
+        onCornerDrag: (i, p) {
+          if (i < 0 || i >= _corners.length) return;
+          setState(() {
+            _corners[i] = p;
+            _selectedCorner = i;
+            if (_corners.length >= 3) _syncCentroidFromCorners();
+          });
+        },
+        onCornerDragEnd: _endMarkerDrag,
+        onCornerTap: (i) {
+          setState(() {
+            _selectedCorner = _selectedCorner == i ? null : i;
+            _previewTarget = null;
+          });
+          _refreshReverseForActivePoint(immediate: true);
+        },
+      );
+    }
+    return FlutterMap(
+      mapController: _mapCtrl,
+      options: MapOptions(
+        initialCenter: center,
+        initialZoom: _zoomForRadius(_radiusMeters),
+        minZoom: 3,
+        maxZoom: _mapMaxZoom,
+        onTap: _onMapTap,
+        onMapEvent: (event) {
+          if (event is MapEventMoveEnd || event is MapEventFlingAnimationEnd) {
+            _scheduleImageryMeta();
+          }
+        },
+        interactionOptions: InteractionOptions(flags: mapFlags),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: _satellite ? _esriSatelliteTiles : _streetTiles,
+          userAgentPackageName: 'com.optikbriski.admin',
+          maxZoom: _mapMaxZoom,
+          maxNativeZoom:
+              _satellite ? _satelliteNativeZoom : _streetNativeZoom,
+        ),
+        if (_mode == _FenceDrawMode.circle && _lat != null && _lng != null)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: LatLng(_lat!, _lng!),
+                radius: _radiusMeters.toDouble(),
+                useRadiusInMeter: true,
+                color: OptikAdminTokens.ice.withOpacity(0.22),
+                borderColor: OptikAdminTokens.ice,
+                borderStrokeWidth: 2.5,
+              ),
+            ],
+          ),
+        if (_mode == _FenceDrawMode.corners4 && _corners.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: [
+                  ..._corners,
+                  if (_corners.length >= 3) _corners.first,
+                ],
+                color: OptikAdminTokens.ice,
+                strokeWidth: 2.5,
+              ),
+            ],
+          ),
+        if (_mode == _FenceDrawMode.corners4 && _corners.length >= 3)
+          PolygonLayer(
+            polygons: [
+              Polygon(
+                points: List<LatLng>.from(_corners),
+                color: OptikAdminTokens.ice.withOpacity(0.22),
+                borderColor: OptikAdminTokens.ice,
+                borderStrokeWidth: 2.5,
+              ),
+            ],
+          ),
+        MarkerLayer(markers: _buildMarkers()),
+      ],
+    );
+  }
+
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
 
@@ -1237,99 +1354,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                   },
                                   child: Stack(
                                     children: [
-                                      FlutterMap(
-                                        mapController: _mapCtrl,
-                                        options: MapOptions(
-                                          initialCenter: center,
-                                          initialZoom:
-                                              _zoomForRadius(_radiusMeters),
-                                          minZoom: 3,
-                                          maxZoom: _mapMaxZoom,
-                                          onTap: _onMapTap,
-                                          onMapEvent: (event) {
-                                            if (event is MapEventMoveEnd ||
-                                                event is MapEventFlingAnimationEnd) {
-                                              _scheduleImageryMeta();
-                                            }
-                                          },
-                                          interactionOptions:
-                                              InteractionOptions(
-                                            flags: mapFlags,
-                                          ),
-                                        ),
-                                        children: [
-                                          TileLayer(
-                                            urlTemplate: _satellite
-                                                ? _esriSatelliteTiles
-                                                : _streetTiles,
-                                            userAgentPackageName:
-                                                'com.optikbriski.admin',
-                                            // Zoom kamera boleh > native: tile
-                                            // terakhir di-scale (tidak abu-abu).
-                                            maxZoom: _mapMaxZoom,
-                                            maxNativeZoom: _satellite
-                                                ? _satelliteNativeZoom
-                                                : _streetNativeZoom,
-                                          ),
-                                          if (_mode ==
-                                                  _FenceDrawMode.circle &&
-                                              _lat != null &&
-                                              _lng != null)
-                                            CircleLayer(
-                                              circles: [
-                                                CircleMarker(
-                                                  point: LatLng(_lat!, _lng!),
-                                                  radius: _radiusMeters
-                                                      .toDouble(),
-                                                  useRadiusInMeter: true,
-                                                  color: OptikAdminTokens
-                                                      .ice
-                                                      .withOpacity(0.22),
-                                                  borderColor:
-                                                      OptikAdminTokens.ice,
-                                                  borderStrokeWidth: 2.5,
-                                                ),
-                                              ],
-                                            ),
-                                          if (_mode ==
-                                                  _FenceDrawMode.corners4 &&
-                                              _corners.length >= 2)
-                                            PolylineLayer(
-                                              polylines: [
-                                                Polyline(
-                                                  points: [
-                                                    ..._corners,
-                                                    if (_corners.length >= 3)
-                                                      _corners.first,
-                                                  ],
-                                                  color: OptikAdminTokens.ice,
-                                                  strokeWidth: 2.5,
-                                                ),
-                                              ],
-                                            ),
-                                          if (_mode ==
-                                                  _FenceDrawMode.corners4 &&
-                                              _corners.length >= 3)
-                                            PolygonLayer(
-                                              polygons: [
-                                                Polygon(
-                                                  points: List<LatLng>.from(
-                                                    _corners,
-                                                  ),
-                                                  color: OptikAdminTokens
-                                                      .ice
-                                                      .withOpacity(0.22),
-                                                  borderColor:
-                                                      OptikAdminTokens.ice,
-                                                  borderStrokeWidth: 2.5,
-                                                ),
-                                              ],
-                                            ),
-                                          MarkerLayer(
-                                            markers: _buildMarkers(),
-                                          ),
-                                        ],
-                                      ),
+                                      _buildWorkspaceCanvas(center, mapFlags),
                                       Positioned(
                                         right: 12,
                                         bottom: _mode ==
@@ -1650,8 +1675,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Default: satelit Esri mosaic terbaru. Badge di peta menampilkan '
-          'tanggal foto di lokasi tersebut. Google-level “hari ini” butuh API berbayar.',
+          _useGoogleMap
+              ? 'Peta workspace = Google Maps. Cari alamat, ketuk peta, '
+                  'atau geser pin untuk set geofence.'
+              : 'Peta workspace masih OSM/Esri. Isi GOOGLE_MAPS_API_KEY di '
+                  '.dart_define.admin.json (Maps JavaScript API + Geocoding API), '
+                  'lalu Stop/Play Admin Rekasa.',
           style: TextStyle(
             color: OptikAdminTokens.slate.withOpacity(0.9),
             fontSize: 11,
@@ -2122,8 +2151,12 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Belum ketemu di pencarian? Buka Google Maps → bagikan/salin '
-            'koordinat → tempel di sini.',
+            hasGoogleMapsKey
+                ? 'Ketik nama jalan / tempat — hasil dari Google Maps. '
+                    'Atau tempel koordinat / tautan Maps di kolom bawah.'
+                : 'Belum ketemu? Tempel koordinat atau tautan Google Maps. '
+                    'Sambungkan GOOGLE_MAPS_API_KEY agar peta dan cari alamat '
+                    'langsung memakai Google.',
             style: TextStyle(
               color: OptikAdminTokens.slate.withOpacity(0.85),
               fontSize: 11,
