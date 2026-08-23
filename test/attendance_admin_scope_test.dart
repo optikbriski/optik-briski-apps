@@ -240,4 +240,21 @@ void main() {
       );
     });
   });
+
+  group('canEditProductCatalog', () {
+    test('admin_toko boleh edit katalog, kasir tidak', () {
+      expect(
+        AttendanceAdminScope.canEditProductCatalog(p('admin_toko', 'CABANG-X')),
+        isTrue,
+      );
+      expect(
+        AttendanceAdminScope.canEditProductCatalog(p('kasir', 'CABANG-X')),
+        isFalse,
+      );
+      expect(
+        AttendanceAdminScope.canEditProductCatalog(p('admin_pusat', 'PUSAT')),
+        isTrue,
+      );
+    });
+  });
 }

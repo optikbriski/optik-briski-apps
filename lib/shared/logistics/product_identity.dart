@@ -16,6 +16,28 @@ class ProductIdentity {
     return s;
   }
 
+  /// Harga jual untuk kasir/master. `harga` dulu, lalu `harga_jual`.
+  static int sellPriceOf(Map<String, dynamic> item) {
+    return int.tryParse('${item['harga'] ?? ''}'.replaceAll('.', '')) ??
+        int.tryParse('${item['harga_jual'] ?? ''}'.replaceAll('.', '')) ??
+        0;
+  }
+
+  /// Tulis kedua kolom harga supaya POS/master tidak pecah.
+  static Map<String, dynamic> catalogPriceFields(int sell, {int? modal}) {
+    return {
+      'harga': sell,
+      'harga_jual': sell,
+      if (modal != null) 'harga_modal': modal,
+    };
+  }
+
+  static Map<String, dynamic> catalogImageFields(String? url) {
+    final u = (url ?? '').trim();
+    if (u.isEmpty) return const {};
+    return {'image_url': u, 'foto_url': u};
+  }
+
   /// Resolve SKU from a product map / logistics line.
   static String? skuOf(Map<String, dynamic> item) {
     return normalizeSku(item['sku']) ??

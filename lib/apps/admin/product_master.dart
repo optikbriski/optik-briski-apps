@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'request_order_page.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
@@ -65,6 +66,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       filterSubKat != 'SEMUA' ||
       filterHarga != 'SEMUA' ||
       groupMode != 'none';
+
+  int _hargaJualOf(dynamic item) {
+    if (item is! Map) return 0;
+    return ProductIdentity.sellPriceOf(Map<String, dynamic>.from(item));
+  }
 
   String _cabangLabel(String raw) {
     final t = raw.trim().toUpperCase();
@@ -407,11 +413,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return v >= 0 ? "+${v.toStringAsFixed(2)}" : v.toStringAsFixed(2);
   }
 
-  // Hak Akses Edit Data (Mendukung role dinamis database baru)
+  /// Sama dengan RLS `can_edit_product_catalog` + dasbor Master Data.
   bool get isCanEdit =>
-      widget.profile['role'] == 'owner' ||
-      widget.profile['role'] == 'admin_pusat' ||
-      widget.profile['toko_id']?.toString().toUpperCase() == 'PUSAT';
+      AttendanceAdminScope.canEditProductCatalog(widget.profile);
 
   // 1. FUNGSI AWAL: MENGAMBIL DAFTAR UNIT TOKO/CABANG AKTIF DARI DATABASE
   Future<void> _init() async {
@@ -666,8 +670,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       (item['warna'] ?? '').toString(),
       (item['jenis_lensa'] ?? '').toString(),
       (item['toko_id'] ?? '').toString(),
-      _formatRupiahLocal(item['harga']),
-      (item['harga'] ?? '').toString(),
+      _formatRupiahLocal(_hargaJualOf(item)),
+      '${_hargaJualOf(item)}',
     ];
     return haystacks.any((s) => s.toLowerCase().contains(query));
   }
@@ -745,7 +749,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         if (sub.toLowerCase() != filterSubKat.toLowerCase()) return false;
       }
       if (filterHarga != 'SEMUA') {
-        final h = int.tryParse((item['harga'] ?? 0).toString()) ?? 0;
+        final h = _hargaJualOf(item);
         if (h.toString() != filterHarga) return false;
       }
       // Filter cabang: tampilkan produk yang punya baris di toko itu
@@ -759,7 +763,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   List<int> get _hargaOptions {
     final set = <int>{};
     for (final raw in listProdukAll) {
-      final h = int.tryParse((raw['harga'] ?? 0).toString()) ?? 0;
+      final h = _hargaJualOf(raw);
       if (h > 0) set.add(h);
     }
     final list = set.toList()..sort();
@@ -788,7 +792,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     for (final item in items) {
       String key;
       if (groupMode == 'harga') {
-        key = _formatRupiahLocal(item['harga']);
+        key = _formatRupiahLocal(_hargaJualOf(item));
       } else {
         final sub = (item['sub_kategori'] ?? '').toString().trim();
         key = sub.isEmpty ? 'Tanpa Sub Kategori' : sub;
@@ -799,12 +803,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final entries = map.entries.toList();
     if (groupMode == 'harga') {
       entries.sort((a, b) {
-        final ha = int.tryParse(
-                (a.value.first['harga'] ?? 0).toString()) ??
-            0;
-        final hb = int.tryParse(
-                (b.value.first['harga'] ?? 0).toString()) ??
-            0;
+        final ha = _hargaJualOf(a.value.first);
+        final hb = _hargaJualOf(b.value.first);
         return ha.compareTo(hb);
       });
     } else {
@@ -909,9 +909,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         finalBarcode = barcodeController.text.trim();
       }
 
+      final sell =
+          int.tryParse(hargaController.text.replaceAll('.', '')) ?? 0;
+      final modal =
+          int.tryParse(hargaModalController.text.replaceAll('.', '')) ?? 0;
       final basePayload = {
         'nama': namaRapi,
-        'harga': int.tryParse(hargaController.text.replaceAll('.', '')) ?? 0,
+        ...ProductIdentity.catalogPriceFields(sell, modal: modal),
         'kategori': inputKat,
         'sub_kategori': subRapi,
         'barcode': finalBarcode,
@@ -932,11 +936,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     selectedJenisLensa == 'Kryptok'))
             ? double.tryParse(addCtrl.text)
             : null,
-        'harga_modal':
-            int.tryParse(hargaModalController.text.replaceAll('.', '')) ?? 0,
       };
 
-      if (imgUrl != null) basePayload['image_url'] = imgUrl;
+      if (imgUrl != null) {
+        basePayload.addAll(ProductIdentity.catalogImageFields(imgUrl));
+      }
 
       if (editId == null) {
         if (selectedCabang == null) {
@@ -1537,7 +1541,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             Expanded(
                               child: _detailMetricCard(
                                 label: "pm_harga_jual".tr(),
-                                value: _formatRupiahLocal(item['harga']),
+                                value: _formatRupiahLocal(_hargaJualOf(item)),
                                 color: OptikAdminTokens.warning,
                               ),
                             ),
@@ -2658,7 +2662,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               ],
             ),
             const SizedBox(height: 6),
-            Text(_formatRupiahLocal(item['harga']),
+            Text(_formatRupiahLocal(_hargaJualOf(item)),
                 style: const TextStyle(
                     color: OptikAdminTokens.success,
                     fontWeight: FontWeight.bold,
@@ -2735,7 +2739,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       _editStockBefore = _stockAtToko(map, scopeToko);
                       _editPendingBefore = _pendingAtToko(map, scopeToko);
                       nameController.text = map['nama'] ?? '';
-                      hargaController.text = _formatRupiahLocal(map['harga'] ?? 0)
+                      hargaController.text = _formatRupiahLocal(_hargaJualOf(map))
                           .replaceAll('Rp', '')
                           .replaceAll('.', '')
                           .trim();
