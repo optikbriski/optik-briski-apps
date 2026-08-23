@@ -14,8 +14,8 @@ void main() {
     expect(html, contains('Perseroan Perorangan'));
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
     expect(html, contains('Satu mesin untuk banyak bidang usaha'));
-    expect(html, contains('id="industry-chips"'));
-    expect(html, contains('id="plan-cards"'));
+    expect(html, contains('Pilih bidang usaha'));
+    expect(html, contains('id="industry-grid"'));
     expect(html, contains('id="badan"'));
     expect(html, contains('paket.html'));
     expect(File('site/akun.html').existsSync(), isTrue);
