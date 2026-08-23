@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap foto bukti surat jalan pengiriman
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/responsive.dart';
+import '../../shared/logistics/do_cart_lines.dart';
+import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/restock_suggest_service.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
@@ -430,36 +432,17 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     }
   }
 
-  // 5. BUNDLE DATA KERANJANG MENJADI PAYLOAD JSON UNTUK DISIMPAN KE SUPABASE
-  String buildCartJson() {
-    List<Map<String, dynamic>> detailItems = [];
-    for (var entry in selectedItems.entries) {
+  List<Map<String, dynamic>> _cartLines() {
+    final lines = <Map<String, dynamic>>[];
+    for (final entry in selectedItems.entries) {
       final prod =
           allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
-      final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
-      if (sku == null) {
-        throw 'Produk ${prod['nama']} belum punya SKU. Lengkapi di Product Master.';
-      }
-      detailItems.add({
-        'id_produk': prod['id'],
-        'nama': prod['nama'] ?? '-',
-        'kategori': prod['kategori'] ?? '-',
-        'sub_kategori': prod['sub_kategori'] ?? '-',
-        'warna': prod['warna'] ?? '-',
-        'jenis_lensa': prod['jenis_lensa'] ?? '-',
-        'sph_r': prod['sph_r'] ?? 0,
-        'cyl_r': prod['cyl_r'] ?? 0,
-        'add_r': prod['add_r'] ?? 0,
-        'barcode': prod['barcode'] ?? sku,
-        'sku': sku,
-        'harga_jual': ProductIdentity.sellPriceOf(
-          Map<String, dynamic>.from(prod),
-        ),
-        'harga_modal': prod['harga_modal'] ?? 0,
-        'qty': entry.value
-      });
+      lines.add(DoCartLines.fromProduct(
+        Map<String, dynamic>.from(prod as Map),
+        entry.value,
+      ));
     }
-    return jsonEncode(detailItems);
+    return lines;
   }
 
   // 6. MENGHITUNG TOTAL BARANG YANG AKAN MASUK SURAT JALAN PENGIRIMAN
@@ -472,48 +455,14 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     if (selectedToko == null || selectedItems.isEmpty) return;
     setState(() => isProcessing = true);
 
-    String? draftId;
-    final mut = StockMutationService();
     try {
-      final cartJson = buildCartJson();
       final actor =
           (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
-
-      final draft = await supabase
-          .from('draft_pengiriman')
-          .insert({
-            'tujuan': selectedToko,
-            'items': cartJson,
-            'created_at': DateTime.now().toIso8601String()
-          })
-          .select('id')
-          .single();
-
-      draftId = draft['id'].toString();
-
-      final reserves = <Future>[];
-      for (final entry in selectedItems.entries) {
-        final prod = allProdukPusat
-            .firstWhere((p) => p['id'].toString() == entry.key);
-        final sku =
-            ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
-        if (sku == null) {
-          throw 'Produk ${prod['nama']} belum punya SKU.';
-        }
-        reserves.add(mut.reserve(
-          tokoId: 'PUSAT',
-          sku: sku,
-          qty: entry.value,
-          kind: StockReserveKind.doDraft,
-          refType: 'draft',
-          refId: draftId,
-          meta: {
-            'tujuan': selectedToko,
-            'actor': actor,
-          },
-        ));
-      }
-      await Future.wait(reserves);
+      await DoLifecycleService().createDraft(
+        ke: selectedToko!,
+        items: _cartLines(),
+        actor: actor,
+      );
 
       if (mounted) {
         setState(() {
@@ -525,19 +474,6 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
             backgroundColor: OptikAdminTokens.success));
       }
     } catch (e) {
-      if (draftId != null) {
-        try {
-          await mut.releaseReservation(
-            kind: StockReserveKind.doDraft,
-            refType: 'draft',
-            refId: draftId,
-            tokoId: 'PUSAT',
-          );
-        } catch (_) {}
-        try {
-          await supabase.from('draft_pengiriman').delete().eq('id', draftId);
-        } catch (_) {}
-      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Gagal menyimpan draft: $e'),
@@ -615,57 +551,21 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     if (selectedToko == null || selectedItems.isEmpty) return;
     setState(() => isProcessing = true);
 
-    String? moveId;
-    final mut = StockMutationService();
     try {
-      final cartJson = buildCartJson();
       final actor =
           (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
-
       final resiDO =
           'DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-
-      final inserted = await Supabase.instance.client
-          .from('stock_move_history')
-          .insert({
-            'product_name': resiDO,
-            'dari_lokasi': 'PUSAT',
-            'ke_lokasi': selectedToko,
-            'jumlah': _calculateTotalQty(),
-            'tipe': 'DELIVERY',
-            'status': 'PREPARING',
-            'keterangan': cartJson,
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select('id')
-          .single();
-
-      moveId = inserted['id'].toString();
-
-      // Booking Pending paralel (Real dipotong saat TRANSIT).
-      final reserves = <Future>[];
-      for (final entry in selectedItems.entries) {
-        final prod =
-            allProdukPusat.firstWhere((p) => p['id'].toString() == entry.key);
-        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(prod));
-        if (sku == null) {
-          throw 'Produk ${prod['nama']} belum punya SKU.';
-        }
-        reserves.add(mut.reserve(
-          tokoId: 'PUSAT',
-          sku: sku,
-          qty: entry.value,
-          kind: StockReserveKind.doPreparing,
-          refType: 'stock_move',
-          refId: moveId,
-          meta: {
-            'resi': resiDO,
-            'tujuan': selectedToko,
-            'actor': actor,
-          },
-        ));
+      final created = await DoLifecycleService().createDelivery(
+        ke: selectedToko!,
+        items: _cartLines(),
+        resi: resiDO,
+        actor: actor,
+      );
+      final moveId = created['id']?.toString();
+      if (moveId == null || moveId.isEmpty) {
+        throw 'Surat jalan tanpa id.';
       }
-      await Future.wait(reserves);
 
       if (!mounted) return;
       setState(() {
@@ -684,27 +584,11 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         MaterialPageRoute(
           builder: (_) => DoPreparingPage(
             profile: widget.profile,
-            moveId: moveId!,
+            moveId: moveId,
           ),
         ),
       );
     } catch (e) {
-      // Rollback partial create: lepas booking + batalkan move.
-      if (moveId != null) {
-        try {
-          await mut.releaseReservation(
-            kind: StockReserveKind.doPreparing,
-            refType: 'stock_move',
-            refId: moveId,
-            tokoId: 'PUSAT',
-          );
-        } catch (_) {}
-        try {
-          await Supabase.instance.client.from('stock_move_history').update({
-            'status': 'BATAL',
-          }).eq('id', moveId);
-        } catch (_) {}
-      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Gagal buat surat jalan: $e'),
@@ -1938,10 +1822,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     }
 
     setState(() => isProcessing = true);
-    final mut = StockMutationService();
     final draftId = widget.draft['id'].toString();
-    String? moveIdNew;
-    var draftReleased = false;
 
     try {
       // Foto packing awal (boleh diganti lagi di halaman Disiapkan).
@@ -1975,60 +1856,22 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
 
       final resiDO =
           'DO-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-      var totalQty = 0;
-      for (final itm in localItems) {
-        totalQty += int.tryParse(itm['qty'].toString()) ?? 0;
-      }
-
-      // Lepas booking draft dulu (hindari double Pending), lalu book PREPARING.
-      await mut.releaseReservation(
-        kind: StockReserveKind.doDraft,
-        refType: 'draft',
-        refId: draftId,
-        tokoId: 'PUSAT',
+      final actor =
+          (widget.profile['nama'] ?? widget.profile['email'] ?? '').toString();
+      final lines = localItems
+          .map((itm) => DoCartLines.normalize(Map<String, dynamic>.from(itm as Map)))
+          .toList();
+      final created = await DoLifecycleService().promoteDraft(
+        draftId: draftId,
+        items: lines,
+        buktiFotoPengirim: imgUrl,
+        resi: resiDO,
+        actor: actor,
       );
-      draftReleased = true;
-
-      final inserted = await Supabase.instance.client
-          .from('stock_move_history')
-          .insert({
-            'product_name': resiDO,
-            'dari_lokasi': 'PUSAT',
-            'ke_lokasi': widget.draft['tujuan'],
-            'jumlah': totalQty,
-            'tipe': 'DELIVERY',
-            'status': 'PREPARING',
-            'bukti_foto_pengirim': imgUrl,
-            'keterangan': jsonEncode(localItems),
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select('id')
-          .single();
-
-      moveIdNew = inserted['id'].toString();
-
-      final reserves = <Future>[];
-      for (final itm in localItems) {
-        final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
-        if (qty <= 0) continue;
-        final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(itm));
-        if (sku == null) throw 'Item draft tanpa SKU.';
-        reserves.add(mut.reserve(
-          tokoId: 'PUSAT',
-          sku: sku,
-          qty: qty,
-          kind: StockReserveKind.doPreparing,
-          refType: 'stock_move',
-          refId: moveIdNew,
-          meta: {'resi': resiDO, 'from_draft': draftId},
-        ));
+      final moveIdNew = created['id']?.toString();
+      if (moveIdNew == null || moveIdNew.isEmpty) {
+        throw 'Surat jalan tanpa id.';
       }
-      await Future.wait(reserves);
-
-      await Supabase.instance.client
-          .from('draft_pengiriman')
-          .delete()
-          .eq('id', draftId);
 
       if (!mounted) return;
       setState(() => isProcessing = false);
@@ -2037,47 +1880,11 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         MaterialPageRoute(
           builder: (_) => DoPreparingPage(
             profile: widget.profile,
-            moveId: moveIdNew!,
+            moveId: moveIdNew,
           ),
         ),
       );
     } catch (e) {
-      // Rollback PREPARING partial. Draft tetap ada kecuali booking draft sudah dilepas.
-      if (moveIdNew != null) {
-        try {
-          await mut.releaseReservation(
-            kind: StockReserveKind.doPreparing,
-            refType: 'stock_move',
-            refId: moveIdNew,
-            tokoId: 'PUSAT',
-          );
-        } catch (_) {}
-        try {
-          await Supabase.instance.client.from('stock_move_history').update({
-            'status': 'BATAL',
-          }).eq('id', moveIdNew);
-        } catch (_) {}
-      }
-      if (draftReleased) {
-        // Coba book ulang draft agar stok tidak "mengambang".
-        try {
-          for (final itm in localItems) {
-            final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
-            if (qty <= 0) continue;
-            final sku = ProductIdentity.skuOf(Map<String, dynamic>.from(itm));
-            if (sku == null) continue;
-            await mut.reserve(
-              tokoId: 'PUSAT',
-              sku: sku,
-              qty: qty,
-              kind: StockReserveKind.doDraft,
-              refType: 'draft',
-              refId: draftId,
-              meta: {'restored_after_failed_promote': true},
-            );
-          }
-        } catch (_) {}
-      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Gagal jadikan surat jalan: $e'),

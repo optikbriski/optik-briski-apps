@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'do_cart_lines.dart';
 import 'product_identity.dart';
 import 'stock_realtime.dart';
 import 'write_off_rules.dart';
@@ -631,7 +631,7 @@ class StockMutationService {
   }) async {
     final toko = tokoId.trim().toUpperCase();
     final inReason = isReturn ? StockReason.returnIn : reason;
-    final items = _parseItems(keterangan);
+    final items = DoCartLines.parseKeterangan(keterangan);
     if (items.isNotEmpty) {
       for (final itm in items) {
         final qty = int.tryParse(itm['qty']?.toString() ?? '0') ?? 0;
@@ -653,9 +653,10 @@ class StockMutationService {
             'product': {
               'nama': itm['nama'],
               'barcode': itm['barcode'],
-              'harga': itm['harga_jual'] ?? itm['harga'],
-              'harga_jual': itm['harga_jual'] ?? itm['harga'],
-              'harga_modal': itm['harga_modal'],
+              ...ProductIdentity.catalogPriceFields(
+                ProductIdentity.sellPriceOf(itm),
+                modal: ProductIdentity.modalPriceOf(itm),
+              ),
               'kategori': itm['kategori'],
               'warna': itm['warna'],
             },
@@ -669,18 +670,4 @@ class StockMutationService {
     }
   }
 
-  List<Map<String, dynamic>> _parseItems(String keterangan) {
-    if (!keterangan.contains('[{')) return const [];
-    try {
-      final jsonPart = keterangan.substring(keterangan.indexOf('[{'));
-      final decoded = jsonDecode(jsonPart);
-      if (decoded is! List) return const [];
-      return decoded
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    } catch (_) {
-      return const [];
-    }
-  }
 }

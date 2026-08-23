@@ -8,7 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/logistics/do_cart_lines.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
+import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/logistics/stock_move_report_rules.dart';
@@ -125,19 +127,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final rawItems = (item['keterangan'] ?? '').toString();
     var volume = 0;
     var nilai = 0;
-    if (rawItems.contains('[{')) {
-      try {
-        final jsonPart = rawItems.substring(rawItems.indexOf('[{'));
-        final itemsObj = jsonDecode(jsonPart) as List;
-        for (final itm in itemsObj) {
-          final qty = int.tryParse(itm['qty'].toString()) ?? 0;
-          final harga = int.tryParse(itm['harga']?.toString() ?? '') ??
-              int.tryParse(itm['harga_modal']?.toString() ?? '0') ??
-              0;
-          volume += qty;
-          if (harga > 0) nilai += qty * harga;
-        }
-      } catch (_) {}
+    for (final itm in DoCartLines.parseKeterangan(rawItems)) {
+      final qty = DoCartLines.qtyOf(itm);
+      final harga = ProductIdentity.sellPriceOf(itm);
+      final modal = ProductIdentity.modalPriceOf(itm);
+      volume += qty;
+      final unit = harga > 0 ? harga : modal;
+      if (unit > 0) nilai += qty * unit;
     }
     if (volume <= 0) {
       volume = int.tryParse(item['jumlah']?.toString() ?? '0') ?? 0;
@@ -210,22 +206,16 @@ class _StockMoveReportState extends State<StockMoveReport> {
 
   String _cleanKeterangan(String raw) {
     if (raw.trim().isEmpty) return '-';
-    if (raw.trim().startsWith('[')) {
-      try {
-        final items = jsonDecode(raw) as List;
-        return items.map((it) => "${it['nama']} (${it['qty']}x)").join(', ');
-      } catch (e) {
-        return raw;
+    final parsed = DoCartLines.parseKeterangan(raw);
+    if (parsed.isNotEmpty) {
+      final names = parsed
+          .map((it) => "${it['nama']} (${DoCartLines.qtyOf(it)}x)")
+          .join(', ');
+      if (raw.contains('DATA: [')) {
+        final cut = raw.indexOf(' DATA: ');
+        if (cut > 0) return '${raw.substring(0, cut)}\n$names';
       }
-    }
-    if (raw.contains('[{')) {
-      try {
-        final jsonPart = raw.substring(raw.indexOf('[{'));
-        final items = jsonDecode(jsonPart) as List;
-        return items.map((it) => "${it['nama']} (${it['qty']}x)").join(', ');
-      } catch (e) {
-        return raw;
-      }
+      return names;
     }
     if (raw.contains('DATA: [')) {
       try {

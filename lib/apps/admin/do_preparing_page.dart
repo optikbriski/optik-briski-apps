@@ -1,15 +1,15 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/logistics/do_cart_lines.dart';
+import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
-import '../../shared/logistics/stock_mutation_service.dart';
+import '../../shared/logistics/product_identity.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
@@ -63,7 +63,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
         throw 'Surat jalan tidak ditemukan.';
       }
       final move = Map<String, dynamic>.from(row);
-      final items = _parseItems(move['keterangan']?.toString() ?? '');
+      final items = DoCartLines.parseKeterangan(move['keterangan']?.toString() ?? '');
       if (!mounted) return;
       setState(() {
         _move = move;
@@ -76,21 +76,6 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
         _error = '$e';
         _loading = false;
       });
-    }
-  }
-
-  List<Map<String, dynamic>> _parseItems(String raw) {
-    if (!raw.contains('[{')) return const [];
-    try {
-      final jsonPart = raw.substring(raw.indexOf('[{'));
-      final decoded = jsonDecode(jsonPart);
-      if (decoded is! List) return const [];
-      return decoded
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    } catch (_) {
-      return const [];
     }
   }
 
@@ -125,10 +110,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
   bool get _allChecked =>
       _items.isNotEmpty && _checked.length >= _items.length;
 
-  int get _totalQty => _items.fold<int>(
-        0,
-        (s, it) => s + (int.tryParse('${it['qty'] ?? 0}') ?? 0),
-      );
+  int get _totalQty => DoCartLines.totalQty(_items);
 
   Future<void> _cancelDo() async {
     if (_move == null || !_canReadyToSend) return;
@@ -166,15 +148,9 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
 
     setState(() => _busy = true);
     try {
-      await StockMutationService().releaseReservation(
-        kind: StockReserveKind.doPreparing,
-        refType: 'stock_move',
-        refId: widget.moveId,
-        tokoId: 'PUSAT',
+      await DoLifecycleService(client: _db).cancelPreparing(
+        moveId: widget.moveId,
       );
-      await _db.from('stock_move_history').update({
-        'status': 'BATAL',
-      }).eq('id', widget.moveId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Surat jalan dibatalkan. Booking dilepas.'),
@@ -590,11 +566,11 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                             ...List.generate(_items.length, (i) {
                               final it = _items[i];
                               final nama = (it['nama'] ?? '-').toString();
-                              final qty =
-                                  int.tryParse('${it['qty'] ?? 0}') ?? 0;
+                              final qty = DoCartLines.qtyOf(it);
                               final sku = (it['sku'] ?? it['barcode'] ?? '-')
                                   .toString();
                               final warna = (it['warna'] ?? '-').toString();
+                              final foto = ProductIdentity.catalogImageOf(it);
                               final checked = _checked.contains(i);
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 8),
@@ -643,13 +619,31 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       fontSize: 11,
                                     ),
                                   ),
-                                  secondary: Text(
-                                    '${qty}x',
-                                    style: const TextStyle(
-                                      color: OptikAdminTokens.warning,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 13,
-                                    ),
+                                  secondary: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (foto.isNotEmpty)
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Image.network(
+                                            foto,
+                                            width: 36,
+                                            height: 36,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                const SizedBox.shrink(),
+                                          ),
+                                        ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${qty}x',
+                                        style: const TextStyle(
+                                          color: OptikAdminTokens.warning,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );

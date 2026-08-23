@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/logistics/do_cart_lines.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
@@ -118,17 +119,10 @@ class _RestoreOperationState extends State<RestoreOperation> {
           throw 'Produk ${prod['nama']} belum punya SKU. Tidak bisa retur.';
         }
 
-        detailReturn.add({
-          'id_produk': prod['id'],
-          'nama': prod['nama'],
-          'barcode': prod['barcode'] ?? sku,
-          'sku': sku,
-          'harga_jual': ProductIdentity.sellPriceOf(prod),
-          'harga_modal': prod['harga_modal'] ?? 0,
-          'kategori': prod['kategori'] ?? 'Lainnya',
-          'warna': prod['warna'] ?? '-',
-          'qty': returQty
-        });
+        detailReturn.add(DoCartLines.fromProduct(
+          Map<String, dynamic>.from(prod as Map),
+          returQty,
+        ));
       }
 
       if (!mounted) return;
