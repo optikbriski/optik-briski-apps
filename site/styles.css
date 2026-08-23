@@ -31,6 +31,7 @@ img { max-width: 100%; height: auto; }
 }
 
 .store-app { padding-bottom: 88px; }
+.store-app.has-paybar { padding-bottom: 148px; }
 .store-top {
   background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--sky);
@@ -313,12 +314,38 @@ a.industry-card:hover { border-color: var(--mid); }
 }
 .plan-stack {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   margin: 10px 0 36px;
 }
 .plan-card {
   padding: 22px 22px 20px;
   overflow: hidden;
+}
+.plan-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.plan-head h3 { margin: 0; font-size: 18px; }
+.plan-badge {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #d6e8fb;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.plan-badge.is-top {
+  background: var(--mid);
+  color: #fff;
+}
+.plan-card .price {
+  font-size: 34px;
+  letter-spacing: -1.1px;
+  margin: 12px 0 8px;
+  color: var(--mid);
 }
 a.plan-link {
   text-decoration: none;
@@ -327,10 +354,11 @@ a.plan-link {
 }
 a.plan-link:hover { border-color: var(--mid); }
 .plan-go {
-  margin-top: 16px;
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--ink);
+  margin-top: 14px;
+  color: var(--mid);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
 }
 .plan-include { margin-top: 12px; }
 .plan-page .price { margin-top: 8px; }
@@ -393,6 +421,38 @@ a.plan-link:hover { border-color: var(--mid); }
 .pay-btn:disabled { opacity: 0.6; cursor: wait; }
 .pay-status { margin-top: 12px; font-size: 14px; font-weight: 700; }
 .pay-status.is-err { color: var(--danger); }
+.store-paybar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid var(--sky);
+  z-index: 22;
+  padding: 12px 0 14px;
+}
+.store-paybar-inner p {
+  margin: 0 0 10px;
+  font-weight: 800;
+  color: var(--mid);
+  font-size: 16px;
+}
+.store-paybar .pay-btn { margin-top: 0; }
+.akun-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 16px;
+  text-decoration: none;
+  color: inherit;
+}
+.akun-tile:first-of-type { margin-top: 22px; }
+.akun-go {
+  margin-left: auto;
+  color: var(--mid);
+  font-size: 20px;
+  line-height: 1;
+}
 
 @media (max-width: 800px) {
   .grid-3, .grid-2, .industry-grid { grid-template-columns: 1fr; }

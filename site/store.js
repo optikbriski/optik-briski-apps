@@ -156,11 +156,27 @@
       a.setAttribute("data-plan", key);
       a.href = paketHref(key);
       a.innerHTML =
-        '<p class="eyebrow">' + p.eyebrow + "</p>" +
-        "<h3>" + p.short + "</h3>" +
-        '<p class="price">' + rp(p.priceIdr) + "</p>" +
-        "<p>" + p.blurb + "</p>" +
-        '<p class="muted plan-include">Termasuk: ' + names + "</p>" +
+        '<div class="plan-head">' +
+        "<h3>" +
+        p.label +
+        "</h3>" +
+        (p.highlight
+          ? '<span class="plan-badge' +
+            (key === "paket_a" ? " is-top" : "") +
+            '">' +
+            p.highlight +
+            "</span>"
+          : "") +
+        "</div>" +
+        '<p class="price">' +
+        rp(p.priceIdr) +
+        "</p>" +
+        "<p>" +
+        p.blurb +
+        "</p>" +
+        '<p class="muted plan-include">Termasuk: ' +
+        names +
+        "</p>" +
         '<p class="plan-go">PILIH FITUR</p>';
       box.appendChild(a);
     });
@@ -215,10 +231,18 @@
     var hero = el("plan-hero");
     if (hero) {
       hero.innerHTML =
-        '<p class="eyebrow">' + p.eyebrow + " · " + industry().label + "</p>" +
-        '<p class="price">' + rp(p.priceIdr) + "</p>" +
-        "<p>" + p.blurb + "</p>" +
-        '<p class="muted plan-include">Termasuk: ' + names + "</p>";
+        '<p class="eyebrow">' +
+        industry().label +
+        "</p>" +
+        "<p>" +
+        p.blurb +
+        "</p>" +
+        '<p class="muted">Harga dasar ' +
+        rp(p.priceIdr) +
+        ". Centang fitur yang mau dipakai. Yang di luar paket = add-on.</p>" +
+        '<p class="muted plan-include">Termasuk: ' +
+        names +
+        "</p>";
     }
     var list = el("feature-list");
     if (!list) return;
@@ -265,7 +289,16 @@
     if (q.addOnIdr) bits.push("add-on " + rp(q.addOnIdr));
     if (q.whiteLabelIdr) bits.push("merek sendiri " + rp(q.whiteLabelIdr));
     brk.textContent = bits.join(" · ");
-    btn.textContent = "Bayar " + rp(q.amountIdr) + " via Midtrans";
+    btn.textContent = "Bayar via Midtrans";
+    var barTotal = el("pay-bar-total");
+    var barBtn = el("pay-bar-btn");
+    if (barTotal) {
+      barTotal.textContent =
+        "Total " +
+        rp(q.amountIdr) +
+        (q.addOnIdr ? " · add-on " + rp(q.addOnIdr) : "");
+    }
+    if (barBtn) barBtn.textContent = "Bayar via Midtrans";
   }
 
   function render() {
@@ -274,18 +307,27 @@
       var picking = !state.plan;
       var cards = el("plan-cards");
       var pageBox = el("plan-page");
-      var sw = el("plan-switch");
+      var nav = document.querySelector(".store-bottom");
+      var payBar = el("pay-bar");
+      var lede = el("paket-lede");
+      var backBidang = el("back-bidang");
       if (cards) cards.classList.toggle("hidden", !picking);
       if (pageBox) pageBox.classList.toggle("hidden", picking);
-      if (sw) sw.classList.toggle("hidden", picking);
+      if (nav) nav.classList.toggle("hidden", !picking);
+      if (payBar) payBar.classList.toggle("hidden", picking);
+      document.body.classList.toggle("has-paybar", !picking);
+      if (backBidang) backBidang.classList.toggle("hidden", !picking);
       if (el("paket-title") && picking) {
         el("paket-title").textContent = "Pilih paket";
         document.title = "Pilih paket — REKASA KARYA INDONESIA";
       }
+      if (lede && picking) {
+        lede.textContent =
+          "Fitur dan harga menyesuaikan bidang ini. Paket A = tertinggi + merek sendiri. Bayar via Midtrans.";
+      }
       if (picking) {
         renderHomePlans();
       } else {
-        renderPaketSwitch();
         renderPaketPage();
         renderTotals();
       }

@@ -27,7 +27,6 @@
     <p class="lede" id="paket-lede">Fitur dan harga menyesuaikan bidang ini. Paket A = tertinggi + merek sendiri. Bayar via Midtrans.</p>
     <p><a href="index.html" id="back-bidang">← Pilih bidang</a></p>
     <div id="plan-cards" class="plan-stack"></div>
-    <div id="plan-switch" class="chips hidden"></div>
 
     <article class="card plan-page" id="plan-page">
       <p><a href="#" id="back-paket">← Pilih paket</a></p>
@@ -36,6 +35,7 @@
       <div class="checkout" id="checkout">
         <p class="eyebrow">Beli paket</p>
         <p class="price" id="quote-total">Rp 0</p>
+        <p class="muted">Per periode. Bayar via Midtrans (bentukannya sama dengan APK katalog), lalu tandatangani kontrak. Data tidak dicampur merek lain.</p>
         <p class="muted" id="quote-break"></p>
         <form id="checkout-form">
           <label>Nama usaha / merek
@@ -60,6 +60,13 @@
       </div>
     </article>
   </main>
+
+  <div class="store-paybar hidden" id="pay-bar">
+    <div class="wrap store-paybar-inner">
+      <p id="pay-bar-total">Total Rp 0</p>
+      <button type="submit" form="checkout-form" class="pay-btn" id="pay-bar-btn">Bayar via Midtrans</button>
+    </div>
+  </div>
 
   <nav class="store-bottom" aria-label="Etalase">
     <a class="is-on" href="index.html"><span>▣</span>Etalase</a>

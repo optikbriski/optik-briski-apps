@@ -36,6 +36,11 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
   late bool _whiteLabel;
   bool _buying = false;
   StoreQuote? _remoteQuote;
+  final _name = TextEditingController();
+  final _slug = TextEditingController();
+  final _phone = TextEditingController();
+  final _email = TextEditingController();
+  final _signer = TextEditingController();
 
   StorePlanDef get plan => widget.plan;
 
@@ -55,6 +60,16 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
     };
     _whiteLabel = plan.whiteLabel;
     _refreshQuote();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _slug.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _signer.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshQuote() async {
@@ -78,82 +93,28 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
   }
 
   Future<void> _buy() async {
-    final name = TextEditingController();
-    final slug = TextEditingController();
-    final phone = TextEditingController();
-    final email = TextEditingController();
-    final signer = TextEditingController();
-    final ok = await showRekasaSheet<bool>(
-      context: context,
-      builder: (ctx) => RekasaSheetScaffold(
-        eyebrow: widget.catalog.industry?.label ?? 'Checkout',
-        title: widget.isUpgrade ? 'Upgrade paket' : 'Beli paket',
-        price: TenantBilling.formatRp(_quote.amountIdr),
-        caption: 'Per periode. Bayar langsung via Midtrans (sama dengan '
-            'situs perusahaan), lalu tandatangani kontrak. '
-            'Data tidak dicampur merek lain.',
-        primaryLabel: 'Bayar via Midtrans',
-        onPrimary: () => Navigator.pop(ctx, true),
-        onSecondary: () => Navigator.pop(ctx, false),
-        child: Column(
-          children: [
-            TextField(
-              controller: name,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Nama usaha / merek'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: slug,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Kode usaha',
-                hintText: 'optik-maju',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phone,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'WA / HP'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Email (opsional)'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: signer,
-              textInputAction: TextInputAction.done,
-              decoration: const InputDecoration(
-                labelText: 'Nama penandatangan kontrak',
-              ),
-            ),
-          ],
+    final displayName = _name.text.trim();
+    final phone = _phone.text.trim();
+    if (displayName.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Isi nama usaha dan WA/HP.'),
+          backgroundColor: RekasaTokens.danger,
         ),
-      ),
-    );
+      );
+      return;
+    }
     final payload = {
       'p_plan_key': plan.planKey,
       'p_modules': _on,
       'p_white_label': _whiteLabel,
-      'p_display_name': name.text,
-      'p_slug': slug.text,
-      'p_phone': phone.text,
-      'p_email': email.text,
-      'p_signer_name': signer.text,
+      'p_display_name': displayName,
+      'p_slug': _slug.text,
+      'p_phone': phone,
+      'p_email': _email.text,
+      'p_signer_name': _signer.text,
       'p_industry_key': widget.catalog.industryKey ?? 'umum',
     };
-    name.dispose();
-    slug.dispose();
-    phone.dispose();
-    email.dispose();
-    signer.dispose();
-    if (ok != true) return;
 
     setState(() => _buying = true);
     try {
@@ -356,6 +317,77 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                       ),
                     ),
                   ),
+                const SizedBox(height: 18),
+                RekasaSurface(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RekasaEyebrow(
+                        widget.isUpgrade ? 'Upgrade paket' : 'Beli paket',
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        TenantBilling.formatRp(q.amountIdr),
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Per periode. Bayar via Midtrans (bentukannya sama '
+                        'dengan situs perusahaan), lalu tandatangani kontrak. '
+                        'Data tidak dicampur merek lain.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _name,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama usaha / merek',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _slug,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Kode usaha',
+                          hintText: 'optik-maju',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _phone,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'WA / HP'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Email (opsional)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _signer,
+                        textInputAction: TextInputAction.done,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama penandatangan kontrak',
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'QRIS, transfer bank, kartu, GoPay/ShopeePay lewat '
+                        'Midtrans. Uang masuk ke REKASA KARYA INDONESIA — '
+                        'lisensi software, bukan pengiriman barang.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

@@ -23,6 +23,8 @@ void main() {
     expect(js, contains('data-industry'));
     expect(js, contains('industry-grid'));
     expect(js, contains('LIHAT PAKET'));
+    expect(js, contains('PILIH FITUR'));
+    expect(js, contains('plan-badge'));
     expect(js, contains('paket.html?plan='));
     expect(js, contains('data-page'));
     expect(js, contains('type = "checkbox"'));
@@ -30,6 +32,24 @@ void main() {
     expect(js, contains('snap.pay'));
     expect(File('site/index.html').readAsStringSync(), isNot(contains('checkout-form')));
     expect(File('site/paket.html').existsSync(), isTrue);
+  });
+
+  test('web dan APK pakai field checkout yang sama', () {
+    final paket = File('site/paket.html').readAsStringSync();
+    final dart = File('lib/apps/admin/rekasa_store_plan_page.dart').readAsStringSync();
+    for (final field in [
+      'Nama usaha / merek',
+      'Kode usaha',
+      'WA / HP',
+      'Email (opsional)',
+      'Nama penandatangan kontrak',
+      'Bayar via Midtrans',
+    ]) {
+      expect(paket, contains(field), reason: 'web: $field');
+      expect(dart, contains(field), reason: 'apk: $field');
+    }
+    expect(File('site/catalog.js').readAsStringSync(), contains('highlight: "Hemat"'));
+    expect(File('site/catalog.js').readAsStringSync(), contains('highlight: "Tertinggi"'));
   });
 
   test('harga dan modul situs sama dengan etalase Flutter', () {

@@ -32,6 +32,9 @@ void main() {
     expect(File('site/syarat.html').existsSync(), isTrue);
     expect(File('site/kebijakan.html').existsSync(), isTrue);
     expect(File('site/kontak.html').existsSync(), isTrue);
+    expect(File('site/syarat.html').readAsStringSync(), contains('store-bottom'));
+    expect(File('site/kebijakan.html').readAsStringSync(), contains('store-bottom'));
+    expect(File('site/kontak.html').readAsStringSync(), contains('store-bottom'));
     expect(File('site/sw-kill.js').existsSync(), isTrue);
     expect(File('site/store.js').existsSync(), isTrue);
     expect(File('site/catalog.js').readAsStringSync(), contains('Paket C'));

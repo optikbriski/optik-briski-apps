@@ -2,9 +2,9 @@
 window.REKASA_CATALOG = {
   whiteLabelAddonIdr: 200000,
   plans: {
-    paket_c: { key: "paket_c", label: "Paket C — Starter", short: "Paket C", eyebrow: "Starter", priceIdr: 250000, whiteLabel: false, blurb: "Kulit Rekasa + kode usaha. Kasir dan data dasar mulai jalan." },
-    paket_b: { key: "paket_b", label: "Paket B — Bisnis", short: "Paket B", eyebrow: "Bisnis", priceIdr: 450000, whiteLabel: false, blurb: "Modul operasional lebih lengkap. Masih kulit Rekasa, sekat per usaha." },
-    paket_a: { key: "paket_a", label: "Paket A — Pro", short: "Paket A", eyebrow: "Pro", priceIdr: 750000, whiteLabel: true, blurb: "Modul penuh bidang itu + APK/web nama dan ikon merek pembeli." }
+    paket_c: { key: "paket_c", label: "Paket C — Starter", short: "Paket C", eyebrow: "Starter", highlight: "Hemat", priceIdr: 250000, whiteLabel: false, blurb: "Mulai jalan. Kulit Rekasa + kode usaha." },
+    paket_b: { key: "paket_b", label: "Paket B — Bisnis", short: "Paket B", eyebrow: "Bisnis", highlight: "Laku", priceIdr: 450000, whiteLabel: false, blurb: "Operasional lebih lengkap. Masih kulit Rekasa." },
+    paket_a: { key: "paket_a", label: "Paket A — Pro", short: "Paket A", eyebrow: "Pro", highlight: "Tertinggi", priceIdr: 750000, whiteLabel: true, blurb: "Paket tertinggi: modul penuh bidang ini + merek sendiri." }
   },
   modules: {
     pos: { key: "pos", label: "POS / Kasir", summary: "Nota cepat, DP, struk, dan antrian toko.", addOnPriceIdr: 50000 },
