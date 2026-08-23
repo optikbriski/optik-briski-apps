@@ -56,6 +56,14 @@ img { max-width: 100%; height: auto; }
   font-weight: 700;
 }
 .store-main { padding: 28px 0 40px; }
+.back-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 18px;
+  font-weight: 700;
+}
+.back-row a { text-decoration: none; }
 .store-main h1 {
   font-size: clamp(28px, 5vw, 40px);
   letter-spacing: -0.04em;

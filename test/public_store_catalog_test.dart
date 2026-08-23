@@ -26,6 +26,8 @@ void main() {
     expect(js, contains('LIHAT PAKET'));
     expect(File('site/index.html').readAsStringSync(), contains('id="industry-grid"'));
     expect(File('site/paket.html').readAsStringSync(), contains('id="industry-grid"'));
+    expect(File('site/paket.html').readAsStringSync(), contains('id="back-home"'));
+    expect(File('site/paket.html').readAsStringSync(), contains('Halaman utama'));
     expect(js, contains('PILIH FITUR'));
     expect(js, contains('plan-badge'));
     expect(js, contains('paket.html?plan='));
