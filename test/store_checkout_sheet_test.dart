@@ -19,7 +19,7 @@ void main() {
             eyebrow: 'Checkout',
             title: 'Beli paket',
             price: 'Rp 750.000',
-            primaryLabel: 'Pesan',
+            primaryLabel: 'Bayar via Midtrans',
             child: SizedBox.shrink(),
           ),
         ),
@@ -27,7 +27,7 @@ void main() {
     );
     expect(find.text('Beli paket'), findsOneWidget);
     expect(find.text('Rp 750.000'), findsOneWidget);
-    expect(find.text('Pesan'), findsOneWidget);
+    expect(find.text('Bayar via Midtrans'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
   });
 }

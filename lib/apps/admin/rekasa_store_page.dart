@@ -134,8 +134,9 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 480),
                     child: Text(
-                      'Satu mesin. Paket C/B/A dan nama fitur mengikuti bidang '
-                      'yang dipilih — bukan semua klien pakai POS optik.',
+                      'Satu mesin. Pilih bidang, pilih paket, bayar via Midtrans '
+                      'dari sini — pintu yang sama dengan situs perusahaan. '
+                      'Bukan semua klien pakai POS optik.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
@@ -226,7 +227,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: Text(
                   ind == null
-                      ? 'Nyalakan fitur yang dipakai, buka Detail, lalu beli.'
+                      ? 'Nyalakan fitur yang dipakai, buka Detail, lalu bayar via Midtrans.'
                       : 'Fitur dan harga menyesuaikan bidang ini. '
                           'Paket A = tertinggi + merek sendiri.',
                   style: Theme.of(context).textTheme.bodyMedium,

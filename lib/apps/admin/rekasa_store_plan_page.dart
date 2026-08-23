@@ -4,6 +4,7 @@ import '../../shared/bootstrap.dart';
 import '../../shared/brand/rekasa_tokens.dart';
 import '../../shared/tenant/module_catalog.dart';
 import '../../shared/tenant/store_catalog.dart';
+import '../../shared/tenant/rekasa_store_midtrans.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/widgets/rekasa_surface.dart';
@@ -88,9 +89,10 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
         eyebrow: widget.catalog.industry?.label ?? 'Checkout',
         title: widget.isUpgrade ? 'Upgrade paket' : 'Beli paket',
         price: TenantBilling.formatRp(_quote.amountIdr),
-        caption: 'Per periode. Usaha baru uji coba sampai tagihan lunas '
-            'dan kontrak ditandatangani. Data tidak dicampur merek lain.',
-        primaryLabel: 'Pesan',
+        caption: 'Per periode. Bayar langsung via Midtrans (sama dengan '
+            'situs perusahaan), lalu tandatangani kontrak. '
+            'Data tidak dicampur merek lain.',
+        primaryLabel: 'Bayar via Midtrans',
         onPrimary: () => Navigator.pop(ctx, true),
         onSecondary: () => Navigator.pop(ctx, false),
         child: Column(
@@ -165,6 +167,23 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       if (map['ok'] != true) throw map['error'] ?? 'Gagal memesan';
       if (!mounted) return;
+
+      final mid = await RekasaStoreMidtrans.chargeAndWait(
+        context: context,
+        body: {
+          'industry_key': payload['p_industry_key'] ?? 'umum',
+          'plan_key': plan.planKey,
+          'modules': _on,
+          'white_label': _whiteLabel,
+          'display_name': payload['p_display_name'],
+          'slug': payload['p_slug'],
+          'phone': payload['p_phone'],
+          'email': payload['p_email'],
+          'amount_idr': _quote.amountIdr,
+        },
+      );
+      if (!mounted) return;
+
       final token = '${map['contract_token'] ?? ''}';
       final slug = '${map['slug'] ?? ''}'.trim();
       final phone = '${payload['p_phone'] ?? ''}'.trim();
@@ -194,10 +213,15 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
       await showRekasaSheet<void>(
         context: context,
         builder: (ctx) => RekasaSheetScaffold(
-          eyebrow: 'Pesanan',
-          title: 'Pesanan masuk',
+          eyebrow: mid.mock
+              ? 'Pesanan'
+              : (mid.paid ? 'Pembayaran' : 'Pesanan'),
+          title: mid.mock
+              ? 'Pesanan masuk'
+              : (mid.paid ? 'Pembayaran Midtrans' : 'Pesanan tercatat'),
           price: TenantBilling.formatRp(map['amount_idr']),
-          caption: 'Kode usaha $slug · ${map['invoice_no'] ?? ''}',
+          caption: 'Kode usaha $slug · ${map['invoice_no'] ?? ''}'
+              '${(mid.orderId ?? '').isEmpty ? '' : ' · ${mid.orderId}'}',
           primaryLabel: token.isNotEmpty ? 'Tandatangani' : 'Selesai',
           secondaryLabel: 'Akun owner',
           onPrimary: () {
@@ -229,8 +253,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
           child: Text(
             'Fitur yang nyala di APK toko:\n$labels\n\n'
             '${TenantModules.installHint(whiteLabel: wl, slug: slug)}\n\n'
-            'Tandatangani kontrak, buat akun owner (kode usaha + HP), '
-            'transfer ke Rekasa. Setelah lunas sistem dinyalakan. '
+            '${mid.mock ? 'Gerbang Midtrans belum hidup di server. Pesanan sudah tercatat — pasang kunci Midtrans di Edge, lalu bayar dari etalase ini (sama dengan situs).' : mid.paid ? 'Pembayaran Midtrans diterima. Tandatangani kontrak, buat akun owner (kode usaha + HP). Setelah lunas sistem dinyalakan.' : mid.ok ? 'Selesaikan Snap Midtrans jika belum. Pesanan sudah tercatat. Tandatangani kontrak, buat akun owner.' : 'Pesanan tercatat. ${mid.error ?? 'Midtrans belum terbuka'}. Bayar ulang dari etalase atau situs perusahaan.'}\n\n'
             'Data tidak dihapus kalau telat bayar — hanya dimatikan.',
             style: Theme.of(ctx).textTheme.bodyMedium,
           ),
@@ -368,7 +391,8 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _buying ? null : _buy,
-                      child: Text(_buying ? 'Memesan…' : 'Beli paket ini'),
+                      child: Text(
+                          _buying ? 'Menyiapkan Midtrans…' : 'Bayar via Midtrans'),
                     ),
                   ),
                 ],

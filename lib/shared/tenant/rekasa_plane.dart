@@ -38,7 +38,8 @@
 ///   bukan APK baru.
 ///
 /// Sinkron beli → APK (setelah SQL 000011):
-/// 1. Etalase: centang fitur + beli → `submit_store_order`.
+/// 1. Etalase: centang fitur + beli → `submit_store_order` + Midtrans Snap
+///    (`rekasa-midtrans-create`, sama dengan situs paket.html).
 /// 2. Baris `tenants` + `apply_store_modules` menulis `tenant_modules`.
 /// 3. Struk: tanda tangan kontrak + **klaim owner**
 ///    (`claim_store_owner` = email Auth + kode usaha + HP pesanan).
