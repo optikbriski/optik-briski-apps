@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_google_map.dart';
 import '../../shared/logistics/logistics_live_map_rules.dart';
+import '../../shared/logistics/logistics_route_cities.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/theme.dart';
@@ -304,35 +305,33 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                       _filterBar(),
                       const SizedBox(height: 12),
                       Expanded(
-                        child: !live
-                            ? _listPanel()
-                            : wide
-                                ? Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      SizedBox(
-                                        width: 360,
-                                        child: _listPanel(),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: SingleChildScrollView(
-                                          child: _detailAndMap(),
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : ListView(
-                                    children: [
-                                      SizedBox(
-                                        height: 280,
-                                        child: _listPanel(),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _detailAndMap(),
-                                    ],
+                        child: wide
+                            ? Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.stretch,
+                                children: [
+                                  SizedBox(
+                                    width: live ? 360 : 420,
+                                    child: _listPanel(),
                                   ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: _detailAndMap(showMap: live),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView(
+                                children: [
+                                  SizedBox(
+                                    height: live ? 280 : 360,
+                                    child: _listPanel(),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _detailAndMap(showMap: live),
+                                ],
+                              ),
                       ),
                     ],
                   ),
@@ -527,6 +526,10 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                       final st = (m['status'] ?? '').toString();
                       final accent = _statusAccent(st);
                       final kurir = (m['kurir_nama'] ?? '').toString().trim();
+                      final stops = _stopsFor(m);
+                      final berangkat = LogisticsRouteCities.berangkatAt(m);
+                      final dibuat = LogisticsRouteCities.dibuatAt(m);
+                      final jalur = LogisticsRouteCities.jalurRingkas(stops);
                       return ListTile(
                         selected: selected,
                         selectedTileColor:
@@ -551,6 +554,31 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                                   fontSize: 11.5,
                                 ),
                               ),
+                              const SizedBox(height: 3),
+                              Text(
+                                berangkat != null
+                                    ? 'Berangkat ${_fmt(berangkat)}'
+                                    : dibuat != null
+                                        ? 'Belum berangkat · dibuat ${_fmt(dibuat)}'
+                                        : 'Belum berangkat',
+                                style: const TextStyle(
+                                  color: OptikAdminTokens.navy,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (jalur.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  jalur,
+                                  style: TextStyle(
+                                    color: OptikAdminTokens.navy
+                                        .withOpacity(0.55),
+                                    fontSize: 11,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 4),
                               Wrap(
                                 spacing: 6,
@@ -616,6 +644,44 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     );
   }
 
+  String _fmt(DateTime t) => _dt.format(t.toLocal());
+
+  List<LogisticsRouteStop> _stopsFor(Map<String, dynamic> m) {
+    final dariId = m['dari_lokasi']?.toString();
+    final keId = m['ke_lokasi']?.toString();
+    final dari = _findToko(dariId);
+    final ke = _findToko(keId);
+    final from = LogisticsRouteCities.resolveEnd(
+      lat: dari?.latitude,
+      lng: dari?.longitude,
+      tokoId: dariId,
+      fallbackLabel: LogisticsTrackingService.tokoLabel(dariId),
+    );
+    final to = LogisticsRouteCities.resolveEnd(
+      lat: ke?.latitude,
+      lng: ke?.longitude,
+      tokoId: keId,
+      fallbackLabel: LogisticsTrackingService.tokoLabel(keId),
+    );
+    if (from == null || to == null) return const [];
+    return LogisticsRouteCities.along(
+      fromLat: from.lat,
+      fromLng: from.lng,
+      toLat: to.lat,
+      toLng: to.lng,
+      fromName: from.name,
+      toName: to.name,
+    );
+  }
+
+  List<LogisticsRouteEvent> _eventsFor(Map<String, dynamic> m) {
+    return LogisticsRouteCities.events(
+      move: m,
+      stops: _stopsFor(m),
+      tripSameCity: _tripFor(m),
+    );
+  }
+
   String _kotaOf(String? ke) {
     final t = _findToko(ke);
     if (t == null || !t.hasCoords) return '';
@@ -639,35 +705,44 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     return null;
   }
 
-  Widget _detailAndMap() {
+  Widget _detailAndMap({required bool showMap}) {
     final m = _selected;
-    if (m == null) return const SizedBox.shrink();
+    if (m == null) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Pilih surat jalan untuk lihat jam berangkat dan kota besar di jalur.',
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+        ),
+      );
+    }
     final ke = _findToko(m['ke_lokasi']?.toString());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (ke != null && ke.hasCoords)
-          LogisticsLiveGoogleMap(destination: ke, height: 300)
-        else
-          Text(
-            'Koordinat toko tujuan belum ada. Lengkapi latitude/longitude '
-            'di master toko.',
-            style: TextStyle(
-              color: OptikAdminTokens.warning.withOpacity(0.9),
-              fontSize: 11.5,
-              height: 1.3,
+        if (showMap) ...[
+          if (ke != null && ke.hasCoords)
+            LogisticsLiveGoogleMap(destination: ke, height: 300)
+          else
+            Text(
+              'Koordinat toko tujuan belum ada. Lengkapi latitude/longitude '
+              'di master toko.',
+              style: TextStyle(
+                color: OptikAdminTokens.warning.withOpacity(0.9),
+                fontSize: 11.5,
+                height: 1.3,
+              ),
             ),
-          ),
-        const SizedBox(height: 14),
+          const SizedBox(height: 14),
+        ],
         _detailCard(m),
       ],
     );
   }
 
   Widget _detailCard(Map<String, dynamic> m) {
-    final created = DateTime.tryParse(m['created_at']?.toString() ?? '');
-    final steps = LogisticsTrackingService.timeline(m);
+    final events = _eventsFor(m);
     final verified = (m['verified_by_name'] ?? '').toString().trim();
     final st = (m['status'] ?? '').toString().toUpperCase();
     final tipe = LogisticsTrackingService.tipeLabel(m);
@@ -719,31 +794,29 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
               fontSize: 13,
             ),
           ),
-          if (created != null)
-            Text(
-              'Dibuat: ${_dt.format(created.toLocal())}',
-              style: const TextStyle(
+          const SizedBox(height: 14),
+          Text(
+            'Jalur kota besar',
+            style: TextStyle(
+              color: OptikAdminTokens.navy.withOpacity(0.7),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (events.isEmpty)
+            const Text(
+              'Koordinat gudang/tujuan belum ada, jadi jalur kota belum bisa dihitung.',
+              style: TextStyle(
                 color: OptikAdminTokens.textMuted,
                 fontSize: 12,
               ),
-            ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              for (var i = 0; i < steps.length; i++) ...[
-                if (i > 0)
-                  Expanded(
-                    child: Container(
-                      height: 2,
-                      color: steps[i].done
-                          ? OptikAdminTokens.success.withOpacity(0.7)
-                          : OptikAdminTokens.line,
-                    ),
-                  ),
-                _stepDot(steps[i].label, steps[i].done, steps[i].current),
-              ],
+            )
+          else
+            ...[
+              for (var i = 0; i < events.length; i++)
+                _routeEventRow(events[i], last: i == events.length - 1),
             ],
-          ),
           const SizedBox(height: 16),
           Text(
             kurir.isNotEmpty ? 'Kurir: $kurir' : 'Kurir: belum ditetapkan',
@@ -802,9 +875,9 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Transit = status teks. Peta Google hanya setelah kurir tiba di kota '
-            'tujuan, dan hanya untuk toko yang sedang giliran. Toko yang sudah '
-            'verifikasi tidak melihat lagi.',
+            'List menampilkan kota besar di jalur darat. Kabupaten kecil tidak '
+            'dihitung. Kota tengah = jalur, bukan GPS kurir. Peta Google hanya '
+            'setelah tiba di kota tujuan dan hanya untuk toko yang giliran.',
             style: TextStyle(
               color: OptikAdminTokens.navy.withOpacity(0.4),
               fontSize: 11,
@@ -816,34 +889,65 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     );
   }
 
-  Widget _stepDot(String label, bool done, bool current) {
-    return Column(
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: done
-                ? (current ? OptikAdminTokens.warning : OptikAdminTokens.success)
-                : OptikAdminTokens.lineStrong,
-            border: current
-                ? Border.all(color: OptikAdminTokens.navy, width: 1.5)
-                : null,
+  Widget _routeEventRow(LogisticsRouteEvent e, {required bool last}) {
+    final color = e.done
+        ? OptikAdminTokens.success
+        : (e.current ? OptikAdminTokens.warning : OptikAdminTokens.slate);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                margin: const EdgeInsets.only(top: 3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  border: e.current
+                      ? Border.all(color: OptikAdminTokens.navy, width: 1.5)
+                      : null,
+                ),
+              ),
+              if (!last)
+                Container(
+                  width: 2,
+                  height: 22,
+                  color: OptikAdminTokens.line,
+                ),
+            ],
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: current
-                ? OptikAdminTokens.navy
-                : OptikAdminTokens.textMuted,
-            fontSize: 10,
-            fontWeight: current ? FontWeight.w800 : FontWeight.w500,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  e.tempat,
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy,
+                    fontSize: 13,
+                    fontWeight: e.current || e.done
+                        ? FontWeight.w800
+                        : FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  e.at != null ? '${e.aksi} · ${_fmt(e.at!)}' : e.aksi,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
