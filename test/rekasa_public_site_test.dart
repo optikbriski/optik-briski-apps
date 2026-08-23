@@ -15,7 +15,12 @@ void main() {
     expect(html, contains('AHU-A011645.AH.01.31.Tahun 2026'));
     expect(html, contains('id="industry-grid"'));
     expect(html, contains('Pilih bidang usaha'));
+    expect(html, contains('Etalase'));
+    expect(html, contains('Akun'));
+    expect(html, contains('Bantuan'));
     expect(html, contains('paket.html'));
+    expect(File('site/akun.html').existsSync(), isTrue);
+    expect(File('site/bantuan.html').existsSync(), isTrue);
     expect(html, isNot(contains('checkout-form')));
     expect(html, contains('perangkat lunak'));
     expect(File('site/paket.html').readAsStringSync(), contains('id="plan-cards"'));

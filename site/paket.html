@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Paket langganan — REKASA KARYA INDONESIA</title>
+  <title>Rekasa — Pilih paket</title>
   <meta name="description" content="Pilih fitur paket lisensi REKASA KARYA INDONESIA lalu bayar via Midtrans. Bukan barang fisik.">
   <link rel="icon" type="image/png" href="rekasa-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,34 +11,30 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-page="paket">
-  <header class="wrap nav">
-    <a class="mark" href="index.html" aria-label="REKASA KARYA INDONESIA">
-      <span class="mark-type"><strong>REKASA</strong><span>KARYA INDONESIA</span></span>
-    </a>
-    <nav class="nav-links">
-      <a href="index.html">Beranda</a>
-      <a href="paket.html">Paket</a>
-      <a href="kontak.html">Kontak</a>
-      <a href="syarat.html">Syarat</a>
-      <a href="kebijakan.html">Kebijakan</a>
-    </nav>
+<body data-page="paket" class="store-app">
+  <header class="store-top">
+    <div class="wrap store-top-inner">
+      <a class="mark" href="index.html" aria-label="REKASA KARYA INDONESIA">
+        <span class="mark-type"><strong>REKASA</strong><span>KARYA INDONESIA</span></span>
+      </a>
+      <a class="pill-btn" href="index.html">Etalase</a>
+    </div>
   </header>
 
-  <main class="wrap page">
-    <p class="eyebrow"><a href="index.html#paket">Ganti bidang</a> · Paket</p>
+  <main class="wrap store-main page">
+    <p class="eyebrow" id="industry-blurb">Paket</p>
     <h1 id="paket-title">Pilih paket</h1>
     <p class="lede" id="paket-lede">Fitur dan harga menyesuaikan bidang ini. Paket A = tertinggi + merek sendiri. Bayar via Midtrans.</p>
-    <p class="eyebrow" id="industry-blurb" style="margin:14px 0 10px"></p>
-    <p><a href="index.html#paket" id="back-bidang">← Pilih bidang</a></p>
+    <p><a href="index.html" id="back-bidang">← Pilih bidang</a></p>
     <div id="plan-cards" class="plan-stack"></div>
-    <div id="plan-switch" class="chips"></div>
+    <div id="plan-switch" class="chips hidden"></div>
 
     <article class="card plan-page" id="plan-page">
+      <p><a href="#" id="back-paket">← Pilih paket</a></p>
       <div id="plan-hero"></div>
       <div id="feature-list" class="plan-features"></div>
       <div class="checkout" id="checkout">
-        <p class="eyebrow">Checkout lisensi</p>
+        <p class="eyebrow">Beli paket</p>
         <p class="price" id="quote-total">Rp 0</p>
         <p class="muted" id="quote-break"></p>
         <form id="checkout-form">
@@ -46,13 +42,16 @@
             <input id="biz-name" name="display_name" autocomplete="organization" required>
           </label>
           <label>Kode usaha
-            <input id="biz-slug" name="slug" placeholder="contoh: toko-maju">
+            <input id="biz-slug" name="slug" placeholder="optik-maju">
           </label>
           <label>WA / HP
             <input id="biz-phone" name="phone" type="tel" autocomplete="tel" required>
           </label>
           <label>Email (opsional)
             <input id="biz-email" name="email" type="email" autocomplete="email">
+          </label>
+          <label>Nama penandatangan kontrak
+            <input id="biz-signer" name="signer_name" autocomplete="name">
           </label>
           <button type="submit" class="pay-btn" id="pay-btn">Bayar via Midtrans</button>
         </form>
@@ -62,9 +61,16 @@
     </article>
   </main>
 
-  <footer class="wrap footer">
-    <a href="index.html">Kembali ke beranda</a>
-  </footer>
+  <nav class="store-bottom" aria-label="Etalase">
+    <a class="is-on" href="index.html"><span>▣</span>Etalase</a>
+    <a href="akun.html"><span>○</span>Akun</a>
+    <a href="bantuan.html"><span>?</span>Bantuan</a>
+  </nav>
+  <p class="store-legal">
+    REKASA KARYA INDONESIA · Perseroan Perorangan ·
+    <a href="mailto:rekasakaryaindonesia@gmail.com">rekasakaryaindonesia@gmail.com</a>
+    · perangkat lunak
+  </p>
   <script src="config.js"></script>
   <script src="catalog.js"></script>
   <script src="store.js"></script>

@@ -96,7 +96,8 @@
   function syncUrl() {
     if (page !== "paket") return;
     var u = new URL(location.href);
-    u.searchParams.set("plan", state.plan);
+    if (state.plan) u.searchParams.set("plan", state.plan);
+    else u.searchParams.delete("plan");
     u.searchParams.set("bidang", state.industry);
     history.replaceState({}, "", u.pathname + u.search + u.hash);
   }
@@ -376,6 +377,7 @@
       slug: (el("biz-slug").value || "").trim(),
       phone: phone,
       email: (el("biz-email").value || "").trim(),
+      signer_name: ((el("biz-signer") && el("biz-signer").value) || "").trim(),
       amount_idr: q.amountIdr
     };
     var base = (cfg.supabaseUrl || "").replace(/\/$/, "");
@@ -432,6 +434,15 @@
 
   if (page === "paket" && state.plan) applyPlanDefaults();
   render();
+  var backPlan = el("back-paket");
+  if (backPlan) {
+    backPlan.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      state.plan = null;
+      render();
+      syncUrl();
+    });
+  }
   var form = el("checkout-form");
   if (form) form.addEventListener("submit", pay);
   if (page === "paket" && params.get("bayar") === "selesai") {
