@@ -2,11 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../shared/config.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
 import '../../shared/logistics/logistics_google_map.dart';
 import '../../shared/logistics/logistics_live_map_rules.dart';
-import '../../shared/logistics/logistics_osm_map.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
 import '../../shared/theme.dart';
@@ -14,7 +12,7 @@ import '../../shared/widgets/admin/admin_premium.dart';
 import 'do_preparing_page.dart';
 import 'verifikasi_terima.dart';
 
-/// Tracking gratis Admin: list surat jalan + detail/kurir + peta OSM.
+/// Tracking Admin: daftar surat jalan; peta Google hanya setelah tiba di kota.
 class LogisticsTrackingPage extends StatefulWidget {
   const LogisticsTrackingPage({super.key, required this.profile});
 
@@ -151,8 +149,8 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       .where((m) => test((m['status'] ?? '').toString().toUpperCase()))
       .length;
 
-  Future<void> _assignKurir() async {
-    final move = _selected;
+  Future<void> _assignKurir([Map<String, dynamic>? target]) async {
+    final move = target ?? _selected;
     if (move == null || _busyKurir) return;
     if (!LogisticsTrackingRules.bolehAssignKurir(
       profile: widget.profile,
@@ -261,9 +259,19 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     return '$dari → $ke';
   }
 
+  bool _isLive(Map<String, dynamic>? m) {
+    if (m == null) return false;
+    return LogisticsLiveMapRules.bolehLihatPetaLive(
+      profile: widget.profile,
+      move: m,
+      tripSameCity: _tripFor(m),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 960;
+    final live = _isLive(_selected);
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
@@ -296,26 +304,35 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                       _filterBar(),
                       const SizedBox(height: 12),
                       Expanded(
-                        child: wide
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  SizedBox(width: 360, child: _listPanel()),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: SingleChildScrollView(
-                                      child: _detailAndMap(),
-                                    ),
+                        child: !live
+                            ? _listPanel()
+                            : wide
+                                ? Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      SizedBox(
+                                        width: 360,
+                                        child: _listPanel(),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: SingleChildScrollView(
+                                          child: _detailAndMap(),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : ListView(
+                                    children: [
+                                      SizedBox(
+                                        height: 280,
+                                        child: _listPanel(),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      _detailAndMap(),
+                                    ],
                                   ),
-                                ],
-                              )
-                            : ListView(
-                                children: [
-                                  SizedBox(height: 300, child: _listPanel()),
-                                  const SizedBox(height: 16),
-                                  _detailAndMap(),
-                                ],
-                              ),
                       ),
                     ],
                   ),
@@ -555,6 +572,22 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                         ),
                         isThreeLine: true,
                         onTap: () => setState(() => _selected = m),
+                        trailing: LogisticsTrackingRules.bolehAssignKurir(
+                          profile: widget.profile,
+                          dari: m['dari_lokasi']?.toString(),
+                          status: st,
+                        )
+                            ? IconButton(
+                                tooltip: 'Ganti / hapus kurir',
+                                onPressed: _busyKurir
+                                    ? null
+                                    : () => _assignKurir(m),
+                                icon: const Icon(
+                                  Icons.person_search_rounded,
+                                  size: 20,
+                                ),
+                              )
+                            : null,
                       );
                     },
                   ),
@@ -606,85 +639,28 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     return null;
   }
 
-  Widget _mapClosedPanel(String hint) {
-    return Container(
-      height: 180,
-      decoration: BoxDecoration(
-        color: OptikAdminTokens.card.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: OptikAdminTokens.line),
-      ),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Text(
-        hint.isEmpty
-            ? 'Pilih surat jalan. Peta Google hanya untuk giliran toko setelah tiba di kota tujuan.'
-            : hint,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: OptikAdminTokens.navy,
-          fontSize: 13,
-          height: 1.4,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
   Widget _detailAndMap() {
     final m = _selected;
-    final dari = _findToko(m?['dari_lokasi']?.toString());
-    final ke = _findToko(m?['ke_lokasi']?.toString());
-    final routeReady = dari?.hasCoords == true && ke?.hasCoords == true;
-    final trip = m == null ? const <Map<String, dynamic>>[] : _tripFor(m);
-    final live = m != null &&
-        LogisticsLiveMapRules.bolehLihatPetaLive(
-          profile: widget.profile,
-          move: m,
-          tripSameCity: trip,
-        );
-    final liveHint = m == null
-        ? ''
-        : LogisticsLiveMapRules.alasanTertutup(
-            profile: widget.profile,
-            move: m,
-            tripSameCity: trip,
-          );
+    if (m == null) return const SizedBox.shrink();
+    final ke = _findToko(m['ke_lokasi']?.toString());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (live && ke != null && ke.hasCoords && hasGoogleMapsKey)
+        if (ke != null && ke.hasCoords)
           LogisticsLiveGoogleMap(destination: ke, height: 300)
-        else if (live && ke != null && ke.hasCoords)
-          LogisticsOsmMap(
-            toko: _toko,
-            selectedMove: m,
-            height: 300,
-          )
         else
-          _mapClosedPanel(liveHint),
-        if (m != null && !routeReady && live) ...[
-          const SizedBox(height: 8),
           Text(
-            'Koordinat toko belum lengkap — rute di peta mungkin tidak tampil. '
-            'Lengkapi latitude/longitude di master toko.',
+            'Koordinat toko tujuan belum ada. Lengkapi latitude/longitude '
+            'di master toko.',
             style: TextStyle(
               color: OptikAdminTokens.warning.withOpacity(0.9),
               fontSize: 11.5,
               height: 1.3,
             ),
           ),
-        ],
         const SizedBox(height: 14),
-        if (m == null)
-          PremiumEmptyState(
-            message:
-                'Pilih surat jalan di daftar untuk melihat detail, kurir, dan rute.',
-            icon: Icons.map_outlined,
-          )
-        else
-          _detailCard(m),
+        _detailCard(m),
       ],
     );
   }
