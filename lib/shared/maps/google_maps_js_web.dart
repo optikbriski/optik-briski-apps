@@ -6,15 +6,15 @@ import '../config.dart';
 
 Completer<void>? _loadGate;
 
-T? _jsAs<T extends JSAny>(JSAny? value) {
+JSObject? _asObject(JSAny? value) {
   if (value == null || value.isUndefinedOrNull) return null;
-  if (!value.isA<T>()) return null; // ignore: sdk_version_since
-  return value as T;
+  if (!value.isA<JSObject>()) return null; // ignore: sdk_version_since
+  return value as JSObject;
 }
 
 bool get googleMapsJsReadyImpl {
   if (!globalContext.has('google')) return false;
-  final google = _jsAs<JSObject>(globalContext.getProperty('google'.toJS));
+  final google = _asObject(globalContext.getProperty('google'.toJS));
   if (google == null) return false;
   return google.has('maps');
 }
@@ -29,7 +29,7 @@ Future<void> ensureGoogleMapsJsImpl() async {
   }
   _loadGate = Completer<void>();
   try {
-    final document = _jsAs<JSObject>(globalContext.getProperty('document'.toJS));
+    final document = _asObject(globalContext.getProperty('document'.toJS));
     if (document == null) {
       throw StateError('Document web tidak ada');
     }
@@ -44,7 +44,7 @@ Future<void> ensureGoogleMapsJsImpl() async {
         if (!_loadGate!.isCompleted) _loadGate!.complete();
       }
 
-      final node = _jsAs<JSObject>(existing);
+      final node = _asObject(existing);
       if (node == null) {
         throw StateError('Script Maps JS tidak valid');
       }
@@ -81,7 +81,7 @@ Future<void> ensureGoogleMapsJsImpl() async {
 
     script.callMethod('addEventListener'.toJS, 'load'.toJS, onLoad.toJS);
     script.callMethod('addEventListener'.toJS, 'error'.toJS, onError.toJS);
-    final head = _jsAs<JSObject>(document.getProperty('head'.toJS));
+    final head = _asObject(document.getProperty('head'.toJS));
     if (head == null) {
       throw StateError('document.head tidak ada');
     }

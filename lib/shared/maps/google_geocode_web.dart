@@ -6,18 +6,36 @@ import '../config.dart';
 import 'google_maps_js.dart';
 import 'osm_address_search.dart';
 
-T? _jsAs<T extends JSAny>(JSAny? value) {
+JSObject? _asObject(JSAny? value) {
   if (value == null || value.isUndefinedOrNull) return null;
-  if (!value.isA<T>()) return null; // ignore: sdk_version_since
-  return value as T;
+  if (!value.isA<JSObject>()) return null; // ignore: sdk_version_since
+  return value as JSObject;
+}
+
+JSFunction? _asFunction(JSAny? value) {
+  if (value == null || value.isUndefinedOrNull) return null;
+  if (!value.isA<JSFunction>()) return null; // ignore: sdk_version_since
+  return value as JSFunction;
+}
+
+JSArray? _asArray(JSAny? value) {
+  if (value == null || value.isUndefinedOrNull) return null;
+  if (!value.isA<JSArray>()) return null; // ignore: sdk_version_since
+  return value as JSArray;
+}
+
+JSNumber? _asNumber(JSAny? value) {
+  if (value == null || value.isUndefinedOrNull) return null;
+  if (!value.isA<JSNumber>()) return null; // ignore: sdk_version_since
+  return value as JSNumber;
 }
 
 JSObject _mapsNs() {
-  final google = _jsAs<JSObject>(globalContext.getProperty('google'.toJS));
+  final google = _asObject(globalContext.getProperty('google'.toJS));
   if (google == null) {
     throw StateError('google.maps belum siap');
   }
-  final maps = _jsAs<JSObject>(google.getProperty('maps'.toJS));
+  final maps = _asObject(google.getProperty('maps'.toJS));
   if (maps == null) {
     throw StateError('google.maps belum siap');
   }
@@ -25,7 +43,7 @@ JSObject _mapsNs() {
 }
 
 JSObject _newGeocoder() {
-  final ctor = _jsAs<JSFunction>(_mapsNs().getProperty('Geocoder'.toJS));
+  final ctor = _asFunction(_mapsNs().getProperty('Geocoder'.toJS));
   if (ctor == null) {
     throw StateError('google.maps.Geocoder tidak ada');
   }
@@ -65,7 +83,7 @@ Future<OsmAddressHit?> googleGeocodeReverse(double lat, double lng) async {
   if (googleMapsApiKey.trim().isEmpty) return null;
   await ensureGoogleMapsJs();
   if (!googleMapsJsReady) return null;
-  final ctor = _jsAs<JSFunction>(_mapsNs().getProperty('LatLng'.toJS));
+  final ctor = _asFunction(_mapsNs().getProperty('LatLng'.toJS));
   if (ctor == null) return null;
   final latLng = ctor.callAsConstructor<JSObject>(lat.toJS, lng.toJS);
   final geocoder = _newGeocoder();
@@ -88,20 +106,20 @@ Future<OsmAddressHit?> googleGeocodeReverse(double lat, double lng) async {
 }
 
 List<OsmAddressHit> _hitsFromJs(JSAny? results, int limit) {
-  final arr = _jsAs<JSArray>(results);
+  final arr = _asArray(results);
   if (arr == null) return const [];
   final rows = arr.toDart;
   final out = <OsmAddressHit>[];
   for (var i = 0; i < rows.length && out.length < limit; i++) {
-    final row = _jsAs<JSObject>(rows[i]);
+    final row = _asObject(rows[i]);
     if (row == null) continue;
     final formattedRaw = row.getProperty('formatted_address'.toJS);
     final formatted = formattedRaw == null || formattedRaw.isUndefinedOrNull
         ? ''
         : '${formattedRaw.dartify()}'.trim();
-    final geometry = _jsAs<JSObject>(row.getProperty('geometry'.toJS));
+    final geometry = _asObject(row.getProperty('geometry'.toJS));
     if (geometry == null) continue;
-    final loc = _jsAs<JSObject>(geometry.getProperty('location'.toJS));
+    final loc = _asObject(geometry.getProperty('location'.toJS));
     if (loc == null) continue;
     final la = _asDouble(loc.callMethod<JSAny?>('lat'.toJS));
     final ln = _asDouble(loc.callMethod<JSAny?>('lng'.toJS));
@@ -119,7 +137,7 @@ List<OsmAddressHit> _hitsFromJs(JSAny? results, int limit) {
 
 double? _asDouble(JSAny? value) {
   if (value == null || value.isUndefinedOrNull) return null;
-  final num = _jsAs<JSNumber>(value);
+  final num = _asNumber(value);
   if (num != null) return num.toDartDouble;
   return double.tryParse('${value.dartify()}');
 }
