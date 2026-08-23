@@ -70,6 +70,38 @@ class LogisticsTrackingService {
         .toList();
   }
 
+  /// SUCCESS 3 hari terakhir — konteks giliran A→B→C (A sudah terima).
+  Future<List<Map<String, dynamic>>> listRecentClosedMoves({
+    required Map<String, dynamic> profile,
+    int limit = 80,
+  }) async {
+    final since = DateTime.now()
+        .toUtc()
+        .subtract(const Duration(days: 3))
+        .toIso8601String();
+    var q = _db
+        .from('stock_move_history')
+        .select(_openSelect)
+        .eq('status', 'SUCCESS')
+        .gte('created_at', since);
+
+    if (!LogisticsTrackingRules.isHub(profile)) {
+      final myToko = (profile['toko_id'] ?? '').toString().toUpperCase();
+      if (myToko.isNotEmpty) {
+        final aliases = AttendanceAdminScope.storeIdAliases(myToko);
+        q = q.or(aliases
+            .expand((t) => ['ke_lokasi.eq.$t', 'dari_lokasi.eq.$t'])
+            .join(','));
+      }
+    }
+
+    final rows =
+        await q.order('created_at', ascending: false).limit(limit);
+    return (rows as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
   Future<List<TokoGeo>> listTokoGeo() async {
     final rows = await _db
         .from('toko_id')

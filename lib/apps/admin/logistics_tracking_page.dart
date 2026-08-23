@@ -2,7 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/config.dart';
 import '../../shared/logistics/kurir_pick_dialog.dart';
+import '../../shared/logistics/logistics_google_map.dart';
+import '../../shared/logistics/logistics_live_map_rules.dart';
 import '../../shared/logistics/logistics_osm_map.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
@@ -29,6 +32,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _moves = [];
+  List<Map<String, dynamic>> _closedMoves = [];
   List<TokoGeo> _toko = [];
   Map<String, dynamic>? _selected;
   bool _busyKurir = false;
@@ -66,6 +70,12 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     });
     try {
       final moves = await _svc.listOpenMoves(profile: widget.profile);
+      List<Map<String, dynamic>> closed = const [];
+      try {
+        closed = await _svc.listRecentClosedMoves(profile: widget.profile);
+      } catch (_) {
+        closed = const [];
+      }
       final toko = await _svc.listTokoGeo();
       if (!mounted) return;
       Map<String, dynamic>? sel;
@@ -80,6 +90,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       }
       setState(() {
         _moves = moves;
+        _closedMoves = closed;
         _toko = toko;
         _selected = sel;
         _loading = false;
@@ -572,6 +583,20 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     );
   }
 
+  String _kotaOf(String? ke) {
+    final t = _findToko(ke);
+    if (t == null || !t.hasCoords) return '';
+    return LogisticsLiveMapRules.kotaBucket(t.latitude, t.longitude);
+  }
+
+  List<Map<String, dynamic>> _tripFor(Map<String, dynamic> move) {
+    return LogisticsLiveMapRules.tripSameCity(
+      move: move,
+      allMoves: [..._moves, ..._closedMoves],
+      kotaOf: _kotaOf,
+    );
+  }
+
   TokoGeo? _findToko(String? id) {
     if (id == null || id.isEmpty) return null;
     final key = id.toUpperCase();
@@ -581,21 +606,65 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
     return null;
   }
 
+  Widget _mapClosedPanel(String hint) {
+    return Container(
+      height: 180,
+      decoration: BoxDecoration(
+        color: OptikAdminTokens.card.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: OptikAdminTokens.line),
+      ),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Text(
+        hint.isEmpty
+            ? 'Pilih surat jalan. Peta Google hanya untuk giliran toko setelah tiba di kota tujuan.'
+            : hint,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: OptikAdminTokens.navy,
+          fontSize: 13,
+          height: 1.4,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   Widget _detailAndMap() {
     final m = _selected;
     final dari = _findToko(m?['dari_lokasi']?.toString());
     final ke = _findToko(m?['ke_lokasi']?.toString());
     final routeReady = dari?.hasCoords == true && ke?.hasCoords == true;
+    final trip = m == null ? const <Map<String, dynamic>>[] : _tripFor(m);
+    final live = m != null &&
+        LogisticsLiveMapRules.bolehLihatPetaLive(
+          profile: widget.profile,
+          move: m,
+          tripSameCity: trip,
+        );
+    final liveHint = m == null
+        ? ''
+        : LogisticsLiveMapRules.alasanTertutup(
+            profile: widget.profile,
+            move: m,
+            tripSameCity: trip,
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LogisticsOsmMap(
-          toko: _toko,
-          selectedMove: m,
-          height: 300,
-        ),
-        if (m != null && !routeReady) ...[
+        if (live && ke != null && ke.hasCoords && hasGoogleMapsKey)
+          LogisticsLiveGoogleMap(destination: ke, height: 300)
+        else if (live && ke != null && ke.hasCoords)
+          LogisticsOsmMap(
+            toko: _toko,
+            selectedMove: m,
+            height: 300,
+          )
+        else
+          _mapClosedPanel(liveHint),
+        if (m != null && !routeReady && live) ...[
           const SizedBox(height: 8),
           Text(
             'Koordinat toko belum lengkap — rute di peta mungkin tidak tampil. '
@@ -757,8 +826,9 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Peta OSM menampilkan garis lurus antar toko (bukan GPS kurir live). '
-            'Status berubah lewat alur DO/RO · scan kurir · Verifikasi Terima.',
+            'Transit = status teks. Peta Google hanya setelah kurir tiba di kota '
+            'tujuan, dan hanya untuk toko yang sedang giliran. Toko yang sudah '
+            'verifikasi tidak melihat lagi.',
             style: TextStyle(
               color: OptikAdminTokens.navy.withOpacity(0.4),
               fontSize: 11,
