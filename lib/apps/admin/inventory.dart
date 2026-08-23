@@ -22,6 +22,7 @@ import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/product_identity.dart';
+import '../../shared/logistics/warehouse_asset_rules.dart';
 import '../../shared/logistics/write_off_rules.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -45,7 +46,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 
   // --- CORPORATE INVENTORY ACCOUNTING MATRIX STATE ---
   int totalAssetValuation =
-      0; // Akun [1105] - Nilai Total Kapitalisasi Uang di Aset Barang
+      0; // Aset pokok gudang = stok fisik × harga_modal (bukan GL 1201)
   int totalPotentialRevenue =
       0; // Estimasi total nilai omzet jika seluruh barang terjual habis
   int totalPotentialMargin =
@@ -323,46 +324,57 @@ class _InventoryOverviewState extends State<InventoryOverview> {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      String userTokoId =
-          widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-      bool isPusat = userTokoId == 'PUSAT';
+      final userTokoId =
+          AttendanceAdminScope.tokoOf(widget.profile).toUpperCase();
+      final isPusat = userTokoId == 'PUSAT' || userTokoId == 'CABANG-PUSAT';
+      final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
 
-      // Query dinamis: Pusat memantau total aset konsolidasian seluruh ruko, cabang mengunci aset wilayahnya
-      var query =
-          supabase.from('products').select('stock, harga_modal, harga, harga_jual');
-      if (!isPusat) {
-        query = query.eq('toko_id', userTokoId);
+      var totals = const (aset: 0, omzet: 0, margin: 0, volume: 0);
+      var fromRpc = false;
+      try {
+        final raw = await supabase.rpc(
+          'warehouse_asset_neraca',
+          params: {'p_toko': isPusat ? 'PUSAT' : userTokoId},
+        );
+        final parsed = WarehouseAssetRules.fromRpc(raw);
+        if (parsed != null) {
+          totals = parsed;
+          fromRpc = true;
+        }
+      } catch (e) {
+        debugPrint('warehouse_asset_neraca: $e');
       }
 
-      final res = await query;
-      final List<Map<String, dynamic>> dataProducts =
-          List<Map<String, dynamic>>.from(res);
-
-      int akumulasiHppAset = 0;
-      int akumulasiOmzetAset = 0;
-      int akumulasiVolume = 0;
-
-      for (var product in dataProducts) {
-        int stok = int.tryParse(product['stock']?.toString() ?? '0') ?? 0;
-        int hargaBeli =
-            int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
-        int hargaJual = ProductIdentity.sellPriceOf(product);
-
-        // Formula Akuntansi Aset Persediaan Korporat
-        if (stok > 0) {
-          akumulasiHppAset += (stok *
-              hargaBeli); // Nilai riil buku aset persediaan barang dagang
-          akumulasiOmzetAset +=
-              (stok * hargaJual); // Potensi likuidasi penjualan bruto
-          akumulasiVolume += stok;
+      if (!fromRpc) {
+        const pageSize = 1000;
+        var from = 0;
+        final rows = <Map<String, dynamic>>[];
+        while (true) {
+          var query = supabase
+              .from('products')
+              .select(
+                'stock, reserved_qty, harga_modal, harga, harga_jual, toko_id',
+              );
+          if (tenant != null && tenant.isNotEmpty) {
+            query = query.eq('tenant_id', tenant);
+          }
+          if (!isPusat) {
+            query = query.eq('toko_id', userTokoId);
+          }
+          final res = await query.range(from, from + pageSize - 1);
+          final chunk = List<Map<String, dynamic>>.from(res as List);
+          rows.addAll(chunk);
+          if (chunk.length < pageSize) break;
+          from += pageSize;
         }
+        totals = WarehouseAssetRules.fromProducts(rows);
       }
 
       setState(() {
-        totalAssetValuation = akumulasiHppAset;
-        totalPotentialRevenue = akumulasiOmzetAset;
-        totalPotentialMargin = akumulasiOmzetAset - akumulasiHppAset;
-        totalVolumeItem = akumulasiVolume;
+        totalAssetValuation = totals.aset;
+        totalPotentialRevenue = totals.omzet;
+        totalPotentialMargin = totals.margin;
+        totalVolumeItem = totals.volume;
         isLoading = false;
       });
     } catch (e) {
@@ -600,8 +612,9 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 
       if (!context.mounted) return;
       if (product != null) {
-        int modal =
-            int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
+        int modal = ProductIdentity.modalPriceOf(
+          Map<String, dynamic>.from(product),
+        );
         int jual = ProductIdentity.sellPriceOf(product);
         int marginItem = jual - modal;
         double pctMargin = jual > 0 ? (marginItem / jual) * 100 : 0.0;

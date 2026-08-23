@@ -39,6 +39,11 @@ class ProductIdentity {
     return _parseMoney(item['harga_jual']) ?? _parseMoney(item['harga']) ?? 0;
   }
 
+  /// Modal buku gudang. Jangan int.tryParse — `150000.0` / `150.000` pecah jadi 0.
+  static int modalPriceOf(Map<String, dynamic> item) {
+    return _parseMoney(item['harga_modal']) ?? 0;
+  }
+
   /// Tulis kedua kolom harga supaya POS/master/member tidak pecah.
   static Map<String, dynamic> catalogPriceFields(int sell, {int? modal}) {
     return {

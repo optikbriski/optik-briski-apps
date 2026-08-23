@@ -30,11 +30,27 @@ abstract final class StockReserveKind {
 
 /// Real / Pending / Available helpers.
 abstract final class StockQty {
-  static int realOf(Map<String, dynamic>? row) =>
-      int.tryParse(row?['stock']?.toString() ?? '0') ?? 0;
+  static int parseCount(dynamic raw) {
+    if (raw == null) return 0;
+    if (raw is int) return raw < 0 ? 0 : raw;
+    if (raw is num) {
+      final n = raw.round();
+      return n < 0 ? 0 : n;
+    }
+    final s = raw.toString().trim();
+    if (s.isEmpty || s == '-') return 0;
+    final asInt = int.tryParse(s);
+    if (asInt != null) return asInt < 0 ? 0 : asInt;
+    final asD = double.tryParse(s);
+    if (asD == null) return 0;
+    final n = asD.round();
+    return n < 0 ? 0 : n;
+  }
+
+  static int realOf(Map<String, dynamic>? row) => parseCount(row?['stock']);
 
   static int pendingOf(Map<String, dynamic>? row) =>
-      int.tryParse(row?['reserved_qty']?.toString() ?? '0') ?? 0;
+      parseCount(row?['reserved_qty']);
 
   /// Total tersedia untuk dijual = Real − Pending.
   static int availableOf(Map<String, dynamic>? row) {
