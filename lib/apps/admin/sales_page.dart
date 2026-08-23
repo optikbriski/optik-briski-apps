@@ -3992,11 +3992,14 @@ class _SalesPageState extends State<SalesPage> {
           "DEBUG KASIR ID: ${activeCashier?['id'] ?? widget.profile['id']}");
 
       // 1. Simpan Transaksi Utama ke Tabel 'sales' (Data Diri Mengalir Murni dari POS)
+      final saleTenant = AttendanceAdminScope.tenantIdOf(widget.profile);
       final saleRes = await supabase
           .from('sales')
           .insert({
             'no_invoice': noInvoice,
             'toko_id': tokoId,
+            if (saleTenant != null && saleTenant.isNotEmpty)
+              'tenant_id': saleTenant,
             'kasir_id': supabase.auth.currentUser!.id,
             // Karyawan yang unlock POS (untuk rating QR) — fallback auth admin
             'kasir_karyawan_id': activeCashier?['id'],
@@ -4242,6 +4245,8 @@ class _SalesPageState extends State<SalesPage> {
         try {
           await supabase.from('finance_transactions').insert({
             'toko_id': tokoId,
+            if (saleTenant != null && saleTenant.isNotEmpty)
+              'tenant_id': saleTenant,
             'tanggal_transaksi':
                 DateTime.now().toIso8601String().split('T')[0],
             'jenis_transaksi': 'PEMASUKAN',

@@ -167,6 +167,8 @@ class InvoiceLifecycleService {
     required String staffNik,
     required String staffNama,
     required String rawScan,
+    String? posPaymentId,
+    String? midtransOrderId,
   }) async {
     final validated = await validateCustomerScan(rawScan);
     if (validated.phase != 'DP') {
@@ -181,6 +183,8 @@ class InvoiceLifecycleService {
       metodePembayaran: metodePembayaran,
       staffNik: staffNik,
       staffNama: staffNama,
+      posPaymentId: posPaymentId,
+      midtransOrderId: midtransOrderId,
     );
   }
 
@@ -210,6 +214,27 @@ class InvoiceLifecycleService {
     );
   }
 
+  Future<String?> _posPaymentIdForSettle({
+    String? posPaymentId,
+    String? midtransOrderId,
+  }) async {
+    final given = (posPaymentId ?? '').trim();
+    if (given.isNotEmpty) return given;
+    final mid = (midtransOrderId ?? '').trim();
+    if (mid.isEmpty) return null;
+    try {
+      final row = await _db
+          .from('pos_payments')
+          .select('id')
+          .eq('midtrans_order_id', mid)
+          .maybeSingle();
+      final id = (row?['id'] ?? '').toString().trim();
+      return id.isEmpty ? null : id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Map<String, dynamic> _saleFromRpc(String fn, dynamic res) {
     if (res is Map) return Map<String, dynamic>.from(res);
     throw 'Respons $fn tidak valid.';
@@ -222,6 +247,8 @@ class InvoiceLifecycleService {
     required String metodePembayaran,
     required String staffNik,
     required String staffNama,
+    String? posPaymentId,
+    String? midtransOrderId,
   }) async {
     final metode = metodePembayaran.trim();
     if (metode.isEmpty) throw 'Metode pembayaran wajib.';
@@ -230,11 +257,16 @@ class InvoiceLifecycleService {
     }
 
     try {
+      final payId = await _posPaymentIdForSettle(
+        posPaymentId: posPaymentId,
+        midtransOrderId: midtransOrderId,
+      );
       final res = await _db.rpc('settle_invoice_dp', params: {
         'p_sale_id': saleId,
         'p_metode': metode,
         'p_staff_nik': staffNik,
         'p_staff_nama': staffNama,
+        if (payId != null) 'p_pos_payment_id': payId,
       });
       return _saleFromRpc('settle_invoice_dp', res);
     } on PostgrestException catch (e) {

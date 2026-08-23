@@ -44,4 +44,23 @@ abstract final class PosCheckoutRules {
     );
     return total < 0 ? 0 : total;
   }
+
+  /// Header nota saat baris item masuk satu-satu.
+  /// Jangan potong [intendedBayar] ke total sementara — itu yang pecah LUNAS 2+ SKU.
+  static ({int total, int dibayar, int sisa, String status}) recomputeHeader({
+    required int itemSubtotalSum,
+    required int voucherDiscount,
+    required int intendedBayar,
+  }) {
+    final disc = voucherDiscount < 0 ? 0 : voucherDiscount;
+    final sum = itemSubtotalSum < 0 ? 0 : itemSubtotalSum;
+    final total = sum - disc < 0 ? 0 : sum - disc;
+    final bayar = intendedBayar < 0 ? 0 : intendedBayar;
+    final rawSisa = total - bayar;
+    final sisa = rawSisa < 0 ? 0 : rawSisa;
+    final status = total <= 0
+        ? 'LUNAS'
+        : (bayar <= 0 || bayar < total ? 'DP' : 'LUNAS');
+    return (total: total, dibayar: bayar, sisa: sisa, status: status);
+  }
 }

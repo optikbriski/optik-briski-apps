@@ -308,6 +308,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     if (metode == null || !mounted) return;
 
     var metodeBayar = metode;
+    String? midtransOrderId;
     if (PosMidtrans.usesGateway(metode)) {
       if (sisa <= 0) return;
       final paid = await PosMidtrans.chargeAndWait(
@@ -333,6 +334,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       if ((paid.paymentType ?? '').trim().isNotEmpty) {
         metodeBayar = PosMidtrans.labelForType(paid.paymentType!);
       }
+      midtransOrderId = paid.midtransOrderId;
     }
 
     final staff = await showStaffNikScanDialog(
@@ -350,6 +352,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         staffNik: staff['nik']?.toString() ?? '',
         staffNama: staff['nama']?.toString() ?? '',
         rawScan: raw,
+        midtransOrderId: midtransOrderId,
       );
       final tracking =
           (updated['tracking_status'] ?? '').toString().toUpperCase();

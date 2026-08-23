@@ -41,4 +41,45 @@ void main() {
       100000,
     );
   });
+
+  test('LUNAS 2 SKU: bayar penuh tidak dipotong saat baris pertama masuk', () {
+    final afterFirst = PosCheckoutRules.recomputeHeader(
+      itemSubtotalSum: 100000,
+      voucherDiscount: 0,
+      intendedBayar: 200000,
+    );
+    expect(afterFirst.dibayar, 200000);
+    expect(afterFirst.sisa, 0);
+    expect(afterFirst.status, 'LUNAS');
+
+    final afterBoth = PosCheckoutRules.recomputeHeader(
+      itemSubtotalSum: 200000,
+      voucherDiscount: 0,
+      intendedBayar: 200000,
+    );
+    expect(afterBoth.total, 200000);
+    expect(afterBoth.dibayar, 200000);
+    expect(afterBoth.sisa, 0);
+    expect(afterBoth.status, 'LUNAS');
+  });
+
+  test('DP 2 SKU: uang muka tetap, sisa naik setelah semua baris', () {
+    final afterFirst = PosCheckoutRules.recomputeHeader(
+      itemSubtotalSum: 100000,
+      voucherDiscount: 0,
+      intendedBayar: 50000,
+    );
+    expect(afterFirst.status, 'DP');
+    expect(afterFirst.dibayar, 50000);
+    expect(afterFirst.sisa, 50000);
+
+    final afterBoth = PosCheckoutRules.recomputeHeader(
+      itemSubtotalSum: 200000,
+      voucherDiscount: 0,
+      intendedBayar: 50000,
+    );
+    expect(afterBoth.status, 'DP');
+    expect(afterBoth.dibayar, 50000);
+    expect(afterBoth.sisa, 150000);
+  });
 }
