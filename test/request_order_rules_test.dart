@@ -19,6 +19,8 @@ void main() {
     expect(RequestOrderRules.bolehProsesPusat(p('owner', 'PUSAT')), isFalse);
     expect(RequestOrderRules.bolehProsesPusat(p('admin_pusat', 'PUSAT')), isTrue);
     expect(RequestOrderRules.bolehProsesPusat(p('admin_toko', 'PUSAT')), isTrue);
+    expect(RequestOrderRules.openStatuses.contains('SHIPPING'), isTrue);
+    expect(RequestOrderRules.openStatuses.contains('SUCCESS'), isFalse);
   });
 
   test('cabang hanya kirim PENDING ke Pusat; tidak SHIPPING sendiri', () {
@@ -81,5 +83,15 @@ void main() {
       RequestOrderRules.transisiOk('PENDING', 'SUCCESS'),
       isFalse,
     );
+  });
+
+  test('idOf / qtyOf baca JSON 123.0 dan 2.0', () {
+    expect(RequestOrderRules.idOf(123.0), 123);
+    expect(RequestOrderRules.idOf('123.0'), 123);
+    expect(RequestOrderRules.idOf(0), isNull);
+    expect(RequestOrderRules.qtyOf(2.0), 2);
+    expect(RequestOrderRules.qtyOf('2.0'), 2);
+    expect(RequestOrderRules.qtyOf(0), 0);
+    expect(RequestOrderRules.qtyOf(2000), 999);
   });
 }

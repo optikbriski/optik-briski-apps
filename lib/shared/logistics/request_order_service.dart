@@ -4,6 +4,7 @@ import '../invoice/invoice_delivery_service.dart';
 import '../invoice/sale_fulfillment_service.dart';
 import 'product_identity.dart';
 import 'receive_verification_rules.dart';
+import 'request_order_rules.dart';
 import 'stock_mutation_service.dart';
 
 /// Pipeline RO Pusat: Approve → Preparing → Shipping → Success
@@ -58,10 +59,27 @@ class RequestOrderService {
     }
   }
 
-  static int? requestIdOf(Map<String, dynamic> req) {
-    final v = req['id'];
-    if (v is int) return v;
-    return int.tryParse(v?.toString() ?? '');
+  static int? requestIdOf(Map<String, dynamic> req) =>
+      RequestOrderRules.idOf(req['id']);
+
+  static bool _missingRpc(PostgrestException e) {
+    final blob = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+    return e.code == 'PGRST202' ||
+        blob.contains('pgrst202') ||
+        blob.contains('could not find the function') ||
+        blob.contains('does not exist');
+  }
+
+  Future<List<Map<String, dynamic>>> _mapsFromRpc(
+    String name,
+    Map<String, dynamic> params,
+  ) async {
+    final raw = await _client.rpc(name, params: params);
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   static String tokoLabel(String? id) {
@@ -72,14 +90,78 @@ class RequestOrderService {
     return t;
   }
 
-  Future<List<Map<String, dynamic>>> listByStatuses(List<String> statuses) async {
-    final rows = await _client
-        .from('pending_requests')
-        .select()
-        .inFilter('status', statuses)
-        .order('created_at', ascending: true)
-        .limit(300);
-    return List<Map<String, dynamic>>.from(rows);
+  Future<List<Map<String, dynamic>>> listByStatuses(
+    List<String> statuses, {
+    String? tokoId,
+  }) async {
+    final wanted = statuses
+        .map((s) => s.trim().toUpperCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (wanted.isEmpty) return const [];
+    try {
+      return await _mapsFromRpc('list_request_orders', {
+        'p_toko': (tokoId ?? '').trim().isEmpty
+            ? null
+            : tokoId!.trim().toUpperCase(),
+        'p_statuses': wanted,
+      });
+    } on PostgrestException catch (e) {
+      if (!_missingRpc(e)) rethrow;
+    }
+    return _restListByStatuses(wanted, tokoId: tokoId);
+  }
+
+  Future<List<Map<String, dynamic>>> _restListByStatuses(
+    List<String> statuses, {
+    String? tokoId,
+  }) async {
+    final byId = <String, Map<String, dynamic>>{};
+    var offset = 0;
+    const pageSize = 500;
+    final toko = (tokoId ?? '').trim().toUpperCase();
+    while (true) {
+      var q = _client
+          .from('pending_requests')
+          .select()
+          .inFilter('status', statuses);
+      if (toko.isNotEmpty) q = q.eq('toko_id', toko);
+      final chunk = await q
+          .order('created_at', ascending: true)
+          .range(offset, offset + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(chunk as List);
+      if (rows.isEmpty) break;
+      for (final r in rows) {
+        final id = r['id']?.toString();
+        if (id != null && id.isNotEmpty) byId[id] = r;
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+      if (offset > 8000) break;
+    }
+    return byId.values.toList()
+      ..sort((a, b) {
+        final aa = (a['created_at'] ?? '').toString();
+        final bb = (b['created_at'] ?? '').toString();
+        return aa.compareTo(bb);
+      });
+  }
+
+  /// PENDING cabang untuk hari lokal device.
+  Future<List<Map<String, dynamic>>> listTodayPending({
+    required String tokoId,
+  }) async {
+    final toko = tokoId.trim().toUpperCase();
+    if (toko.isEmpty) return const [];
+    final bounds = localDayBoundsUtc();
+    final rows = await listByStatuses(['PENDING'], tokoId: toko);
+    return rows.where((r) {
+      final raw = r['created_at']?.toString();
+      final at = DateTime.tryParse(raw ?? '')?.toUtc();
+      if (at == null) return false;
+      return !at.isBefore(bounds.startUtc) &&
+          at.isBefore(bounds.endExclusiveUtc);
+    }).toList();
   }
 
   Future<Map<String, dynamic>?> findPusatProduct({
@@ -117,7 +199,7 @@ class RequestOrderService {
           .select('reserved_qty')
           .eq('id', excludeRequestId)
           .maybeSingle();
-      final own = (self?['reserved_qty'] as num?)?.toInt() ?? 0;
+      final own = RequestOrderRules.qtyOf(self?['reserved_qty']);
       total = (total - own).clamp(0, 1 << 30);
     }
     return total;
@@ -155,7 +237,7 @@ class RequestOrderService {
     if (ids.isEmpty) return;
     final parsed = <int>[];
     for (final raw in ids) {
-      final n = raw is int ? raw : int.tryParse(raw.toString());
+      final n = RequestOrderRules.idOf(raw);
       if (n != null) parsed.add(n);
     }
     if (parsed.isEmpty) return;
@@ -234,8 +316,8 @@ class RequestOrderService {
     if (status != 'APPROVED') {
       throw 'Request sudah di tahap Preparing atau selesai.';
     }
-    final reserved = (req['reserved_qty'] as num?)?.toInt() ?? 0;
-    final qty = (req['qty_request'] as num?)?.toInt() ?? 0;
+    final reserved = RequestOrderRules.qtyOf(req['reserved_qty']);
+    final qty = RequestOrderRules.qtyOf(req['qty_request']);
     final hold = reserved > 0 ? reserved : qty;
     final product = await findPusatProduct(
       sku: req['sku']?.toString(),

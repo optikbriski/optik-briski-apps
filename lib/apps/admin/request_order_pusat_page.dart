@@ -186,7 +186,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           namaProduk: r['nama_produk']?.toString(),
           excludeRequestId: id,
         );
-        final own = (r['reserved_qty'] as num?)?.toInt() ?? 0;
+        final own = RequestOrderRules.qtyOf(r['reserved_qty']);
         final status = (r['status'] ?? '').toString().toUpperCase();
         final reservedShown = (status == 'APPROVED' || status == 'PREPARING')
             ? snap.reserved + own
@@ -356,7 +356,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Gagal: $e\nPastikan migration request_order_pipeline sudah dijalankan.'),
+              'Gagal: $e\nPaste seal 000045 (list_request_orders) jika belum.'),
           backgroundColor: OptikAdminTokens.danger,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1019,7 +1019,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
     );
     final availLow = snap != null &&
         canApprove &&
-        snap.available < ((req['qty_request'] as num?)?.toInt() ?? 0);
+        snap.available < RequestOrderRules.qtyOf(req['qty_request']);
 
     return PremiumPanel(
       padding: EdgeInsets.zero,
@@ -1265,7 +1265,7 @@ class _RequestOrderPusatPageState extends State<RequestOrderPusatPage>
           icon: Icons.check_circle_outline,
           color: OptikAdminTokens.slate,
           onTap: () {
-            final q = (req['qty_request'] as num?)?.toInt() ?? 0;
+            final q = RequestOrderRules.qtyOf(req['qty_request']);
             final avail = snap?.available ?? 0;
             if (avail < q) {
               ScaffoldMessenger.of(context).showSnackBar(

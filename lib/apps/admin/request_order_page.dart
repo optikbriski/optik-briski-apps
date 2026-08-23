@@ -67,21 +67,11 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      // Antrian "hari ini" = hari lokal device (bukan UTC calendar day).
-      final bounds = RequestOrderService.localDayBoundsUtc();
-
-      final res = await supabase
-          .from('pending_requests')
-          .select()
-          .eq('toko_id', _tokoId)
-          .eq('status', 'PENDING')
-          .gte('created_at', bounds.startUtc.toIso8601String())
-          .lt('created_at', bounds.endExclusiveUtc.toIso8601String())
-          .order('created_at', ascending: true);
+      final res = await _svc.listTodayPending(tokoId: _tokoId);
 
       if (mounted) {
         setState(() {
-          pendingRequestsList = List<Map<String, dynamic>>.from(res);
+          pendingRequestsList = res;
           isLoading = false;
         });
       }
@@ -154,8 +144,10 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
       _sending = true;
     });
     try {
-      final idsToUpdate =
-          pendingRequestsList.map((e) => e['id']).whereType<Object>().toList();
+      final idsToUpdate = pendingRequestsList
+          .map(RequestOrderService.requestIdOf)
+          .whereType<int>()
+          .toList();
 
       // Training: TrainingHttpClient sandboxes this (no cabang↔pusat sync).
       await _svc.sendToHq(idsToUpdate, tokoId: _tokoId);
