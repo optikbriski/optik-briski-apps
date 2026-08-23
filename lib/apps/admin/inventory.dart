@@ -148,7 +148,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal cek kebocoran: $e\n'
-          'Pastikan migrasi stock ledger (00012+) sudah dijalankan di Supabase.',
+          'Paste seal 000043 (stock_leak_scan) di SQL Editor jika belum.',
         ),
         backgroundColor: OptikAdminTokens.danger,
       ));
@@ -304,7 +304,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Gagal catat selisih: $e\n'
-          'Jalankan migrasi recognize_stock_variance (000031) di Supabase.',
+          'Paste seal 000043 (recognize_stock_variance) di SQL Editor jika belum.',
         ),
         backgroundColor: OptikAdminTokens.danger,
       ));
@@ -512,7 +512,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   PremiumListTile(
                     title: 'Cek Kebocoran Stok',
                     subtitle:
-                        'Audit stok vs ledger · paket perjalanan · penjualan POS',
+                        'Audit stok vs ledger · WRITE_OFF · paket perjalanan · POS',
                     icon: Icons.fact_check_rounded,
                     iconColor: OptikAdminTokens.success,
                     onTap: _runIntegrityCheck,
@@ -935,6 +935,23 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
           detail: _posDetail(soldEntries),
         ),
         _categoryTile(
+          keyName: 'writeoff',
+          icon: Icons.report_gmailerrorred_rounded,
+          title: 'Stok rusak / WRITE_OFF',
+          countLabel: '${report.writeOffQty}',
+          unit: 'pcs',
+          color: report.writeOffQty == 0
+              ? OptikAdminTokens.textSecondary
+              : OptikAdminTokens.warning,
+          detail: _emptyDetail(
+            report.writeOffQty == 0
+                ? 'Belum ada jejak WRITE_OFF di toko ini. '
+                    'Catat rusak lewat Stok Rusak — bukan lewat selisih kebocoran.'
+                : '${report.writeOffQty} pcs sudah dipotong write_off_stock '
+                    'dan masuk Σ ledger. Ini jejak resmi — bukan kebocoran.',
+          ),
+        ),
+        _categoryTile(
           keyName: 'selisih',
           icon: Icons.warning_amber_rounded,
           title: 'Selisih / Bocor',
@@ -979,7 +996,8 @@ class _LeakCheckResultBodyState extends State<_LeakCheckResultBody> {
             border: Border.all(color: OptikAdminTokens.line),
           ),
           child: Text(
-            'Rumus: stok toko = Σ ledger (+/−) per SKU · lokasi. '
+            'Rumus: stok toko = Σ ledger (+/−) per SKU · lokasi, termasuk WRITE_OFF. '
+            'Stok rusak yang sudah dicatat bukan bocor. '
             'Angka beda = kebocoran. Catat selisih melengkapi jejak tanpa mengubah stok rak.',
             style: TextStyle(
               color: OptikAdminTokens.navy.withOpacity(0.4),

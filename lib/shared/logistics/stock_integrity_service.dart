@@ -128,6 +128,7 @@ class StockLeakReport {
     this.soldByToko30d = const {},
     this.soldLinesByToko30d = const {},
     this.ledgerByReason = const {},
+    this.writeOffQty = 0,
   });
 
   final int checkedProducts;
@@ -146,6 +147,9 @@ class StockLeakReport {
   final Map<String, int> soldByToko30d;
   final Map<String, List<StockSkuQtyLine>> soldLinesByToko30d;
   final Map<String, int> ledgerByReason;
+
+  /// Pcs WRITE_OFF tercatat (stok rusak). Bukan bocor — sudah ada jejak.
+  final int writeOffQty;
 
   bool get isClean => mismatches.isEmpty && missingSkuCount == 0;
 
@@ -208,7 +212,15 @@ class StockIntegrityService {
   final SupabaseClient _client;
 
   static String _key(String sku, String toko) =>
-      '${sku.trim().toUpperCase()}|${toko.trim().toUpperCase()}';
+      '${sku.trim().toUpperCase()}|${StockLeakRules.tokoKey(toko)}';
+
+  static bool _missingRpc(PostgrestException e) {
+    final blob = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+    return e.code == 'PGRST202' ||
+        blob.contains('pgrst202') ||
+        blob.contains('could not find the function') ||
+        blob.contains('does not exist');
+  }
 
   /// Full scan dengan callback progress (persen nyata).
   Future<StockLeakReport> runLeakCheck({
@@ -222,6 +234,47 @@ class StockIntegrityService {
       percent: 0.02,
       phase: 'Menyiapkan daftar produk…',
     ));
+
+    final scopedToko = tokoIds == null || tokoIds.isEmpty
+        ? null
+        : StockLeakRules.tokoKey(tokoIds.first);
+    try {
+      final raw = await _client.rpc(
+        'stock_leak_scan',
+        params: {'p_toko': scopedToko},
+      );
+      final fromRpc = _reportFromScanRpc(raw);
+      if (fromRpc != null) {
+        emit(const StockLeakProgress(
+          percent: 0.90,
+          phase: 'Merinci paket perjalanan…',
+        ));
+        final transit = await _openTransitBreakdown();
+        emit(StockLeakProgress(
+          percent: 1.0,
+          phase: 'Pengecekan selesai',
+          foundLeaks: fromRpc.mismatches.length,
+        ));
+        return StockLeakReport(
+          checkedProducts: fromRpc.checkedProducts,
+          mismatches: fromRpc.mismatches,
+          missingSkuCount: fromRpc.missingSkuCount,
+          openTransitQty: transit.total,
+          stockByToko: fromRpc.stockByToko,
+          stockLinesByToko: fromRpc.stockLinesByToko,
+          transitByStatus: transit.byStatus,
+          transitByTujuan: transit.byTujuan,
+          openTransitItems: transit.items,
+          soldByToko30d: fromRpc.soldByToko30d,
+          soldLinesByToko30d: fromRpc.soldLinesByToko30d,
+          ledgerByReason: fromRpc.ledgerByReason,
+          writeOffQty: fromRpc.writeOffQty,
+          generatedAt: DateTime.now(),
+        );
+      }
+    } on PostgrestException catch (e) {
+      if (!_missingRpc(e)) rethrow;
+    }
 
     final allRows = <Map<String, dynamic>>[];
     var offset = 0;
@@ -291,12 +344,13 @@ class StockIntegrityService {
       final skuRaw = (p['sku'] ?? '').toString().trim();
       final toko = (p['toko_id'] ?? '').toString().trim().toUpperCase();
       final nama = (p['nama'] ?? skuRaw).toString();
-      final stock = int.tryParse(p['stock']?.toString() ?? '0') ?? 0;
+      final stock = StockLeakRules.stockOf(p['stock']);
+      final tokoKey = StockLeakRules.tokoKey(toko);
 
-      if (toko.isNotEmpty && toko != 'NULL') {
-        stockByToko[toko] = (stockByToko[toko] ?? 0) + stock;
+      if (tokoKey.isNotEmpty) {
+        stockByToko[tokoKey] = (stockByToko[tokoKey] ?? 0) + stock;
         if (stock > 0 && skuRaw.isNotEmpty && !skuRaw.startsWith('NOSKU-')) {
-          stockLinesRaw.putIfAbsent(toko, () => []).add(StockSkuQtyLine(
+          stockLinesRaw.putIfAbsent(tokoKey, () => []).add(StockSkuQtyLine(
                 sku: skuRaw,
                 nama: nama,
                 qty: stock,
@@ -319,7 +373,7 @@ class StockIntegrityService {
         continue;
       }
 
-      if (toko.isEmpty || toko == 'NULL') {
+      if (tokoKey.isEmpty) {
         // Tanpa lokasi, rumus integrity tidak valid.
         final scanPct =
             total == 0 ? 0.88 : 0.62 + (0.26 * (checked / total));
@@ -334,12 +388,12 @@ class StockIntegrityService {
         continue;
       }
 
-      final agg = ledgerIndex[_key(skuRaw, toko)] ??
+      final agg = ledgerIndex[_key(skuRaw, tokoKey)] ??
           const _LedgerAgg(sum: 0, byReason: {});
-      if (agg.sum != stock) {
+      if (!StockLeakRules.sinkron(stock: stock, ledgerSum: agg.sum)) {
         mismatches.add(StockIntegrityIssue(
           sku: skuRaw,
-          tokoId: toko,
+          tokoId: tokoKey,
           stock: stock,
           ledgerSum: agg.sum,
           delta: stock - agg.sum,
@@ -400,8 +454,10 @@ class StockIntegrityService {
       foundLeaks: mismatches.length,
     ));
     final ledgerByReason = <String, int>{};
-    for (final m in mismatches) {
-      m.ledgerByReason.forEach((k, v) {
+    var writeOffQty = 0;
+    for (final agg in ledgerIndex.values) {
+      writeOffQty += StockLeakRules.writeOffPcsOf(agg.byReason);
+      agg.byReason.forEach((k, v) {
         ledgerByReason[k] = (ledgerByReason[k] ?? 0) + v;
       });
     }
@@ -430,6 +486,80 @@ class StockIntegrityService {
       soldByToko30d: sold.byToko,
       soldLinesByToko30d: sold.linesByToko,
       ledgerByReason: ledgerByReason,
+      writeOffQty: writeOffQty,
+      generatedAt: DateTime.now(),
+    );
+  }
+
+  StockLeakReport? _reportFromScanRpc(dynamic raw) {
+    if (raw is! Map) return null;
+    final m = Map<String, dynamic>.from(raw);
+    if (!m.containsKey('checked') && !m.containsKey('mismatches')) {
+      return null;
+    }
+    final mismatches = <StockIntegrityIssue>[];
+    final rawIssues = m['mismatches'];
+    if (rawIssues is List) {
+      for (final row in rawIssues) {
+        if (row is! Map) continue;
+        final r = Map<String, dynamic>.from(row);
+        final stock = StockLeakRules.stockOf(r['stock']);
+        final ledger = StockLeakRules.deltaOf(r['ledger_sum']);
+        mismatches.add(StockIntegrityIssue(
+          sku: (r['sku'] ?? '').toString(),
+          tokoId: StockLeakRules.tokoKey(r['toko_id']),
+          stock: stock,
+          ledgerSum: ledger,
+          delta: StockLeakRules.deltaOf(r['delta'] ?? (stock - ledger)),
+          productId: r['product_id']?.toString(),
+          nama: r['nama']?.toString(),
+          ledgerByReason: StockLeakRules.reasonMapOf(r['ledger_by_reason']),
+        ));
+      }
+    }
+    mismatches.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+
+    final stockByToko = StockLeakRules.reasonMapOf(m['stock_by_toko'])
+        .map((k, v) => MapEntry(StockLeakRules.tokoKey(k), StockLeakRules.stockOf(v)));
+    final soldByToko = StockLeakRules.reasonMapOf(m['sold_by_toko'])
+        .map((k, v) => MapEntry(StockLeakRules.tokoKey(k), StockLeakRules.stockOf(v)));
+
+    final stockLines = <String, List<StockSkuQtyLine>>{};
+    final soldLines = <String, List<StockSkuQtyLine>>{};
+    void takeLines(Object? rawLines, Map<String, List<StockSkuQtyLine>> dest) {
+      if (rawLines is! List) return;
+      for (final row in rawLines) {
+        if (row is! Map) continue;
+        final r = Map<String, dynamic>.from(row);
+        final toko = StockLeakRules.tokoKey(r['toko_id']);
+        final qty = StockLeakRules.stockOf(r['qty']);
+        if (toko.isEmpty || qty <= 0) continue;
+        dest.putIfAbsent(toko, () => []).add(StockSkuQtyLine(
+              sku: (r['sku'] ?? '-').toString(),
+              nama: (r['nama'] ?? r['sku'] ?? '-').toString(),
+              qty: qty,
+            ));
+      }
+    }
+
+    takeLines(m['stock_lines'], stockLines);
+    takeLines(m['sold_lines'], soldLines);
+
+    final reasons = StockLeakRules.reasonMapOf(m['ledger_by_reason']);
+    var writeOff = StockLeakRules.stockOf(m['write_off_qty']);
+    if (writeOff <= 0) writeOff = StockLeakRules.writeOffPcsOf(reasons);
+
+    return StockLeakReport(
+      checkedProducts: StockLeakRules.stockOf(m['checked']),
+      mismatches: mismatches,
+      missingSkuCount: StockLeakRules.stockOf(m['missing_sku']),
+      openTransitQty: 0,
+      stockByToko: stockByToko,
+      stockLinesByToko: stockLines,
+      soldByToko30d: soldByToko,
+      soldLinesByToko30d: soldLines,
+      ledgerByReason: reasons,
+      writeOffQty: writeOff,
       generatedAt: DateTime.now(),
     );
   }
@@ -458,10 +588,10 @@ class StockIntegrityService {
 
       for (final r in rows) {
         final sku = (r['sku'] ?? '').toString().trim();
-        final toko = (r['toko_id'] ?? '').toString().trim().toUpperCase();
-        if (sku.isEmpty || toko.isEmpty || toko == 'NULL') continue;
+        final toko = StockLeakRules.tokoKey(r['toko_id']);
+        if (sku.isEmpty || toko.isEmpty) continue;
         final key = _key(sku, toko);
-        final d = int.tryParse(r['qty_delta']?.toString() ?? '0') ?? 0;
+        final d = StockLeakRules.deltaOf(r['qty_delta']);
         final reason = (r['reason'] ?? 'UNKNOWN').toString().toUpperCase();
         sums[key] = (sums[key] ?? 0) + d;
         final reasonMap = byReason.putIfAbsent(key, () => {});
@@ -504,7 +634,7 @@ class StockIntegrityService {
     final byTujuan = <String, int>{};
     final items = <StockOpenTransitItem>[];
     for (final r in List<Map<String, dynamic>>.from(rows)) {
-      final qty = int.tryParse(r['jumlah']?.toString() ?? '0') ?? 0;
+      final qty = StockLeakRules.stockOf(r['jumlah']);
       final status = (r['status'] ?? 'UNKNOWN').toString().toUpperCase();
       final tujuan = (r['ke_lokasi'] ?? '-').toString().toUpperCase();
       final dari = (r['dari_lokasi'] ?? '-').toString().toUpperCase();
@@ -554,9 +684,9 @@ class StockIntegrityService {
       final rows = List<Map<String, dynamic>>.from(page);
       if (rows.isEmpty) break;
       for (final r in rows) {
-        final toko = (r['toko_id'] ?? '').toString().toUpperCase();
+        final toko = StockLeakRules.tokoKey(r['toko_id']);
         if (toko.isEmpty) continue;
-        final d = (int.tryParse(r['qty_delta']?.toString() ?? '0') ?? 0).abs();
+        final d = StockLeakRules.writeOffPcs(r['qty_delta']);
         final sku = (r['sku'] ?? '-').toString();
         byToko[toko] = (byToko[toko] ?? 0) + d;
         final skuMap = skuByToko.putIfAbsent(toko, () => {});
@@ -598,11 +728,9 @@ class StockIntegrityService {
         'p_actor_nama': actorNama ?? _client.auth.currentUser?.email,
       });
       final map = Map<String, dynamic>.from(res as Map);
-      final before = int.tryParse('${map['stock_before'] ?? map['stock'] ?? ''}');
-      final after = int.tryParse('${map['stock_after'] ?? map['stock'] ?? ''}');
-      if (before != null &&
-          after != null &&
-          !StockLeakRules.stokTetap(stockBefore: before, stockAfter: after)) {
+      final before = StockLeakRules.stockOf(map['stock_before'] ?? map['stock']);
+      final after = StockLeakRules.stockOf(map['stock_after'] ?? map['stock']);
+      if (!StockLeakRules.stokTetap(stockBefore: before, stockAfter: after)) {
         throw 'Rekognisi tidak boleh mengubah stok rak.';
       }
       return map;

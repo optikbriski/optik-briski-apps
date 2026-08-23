@@ -47,4 +47,38 @@ void main() {
     expect(StockLeakRules.adaSelisih(0), isFalse);
     expect(StockLeakRules.adaSelisih(-3), isTrue);
   });
+
+  test('stockOf baca JSON 8.0; negatif jadi 0', () {
+    expect(StockLeakRules.stockOf(8.0), 8);
+    expect(StockLeakRules.stockOf('8.0'), 8);
+    expect(StockLeakRules.stockOf(-2), 0);
+  });
+
+  test('deltaOf baca WRITE_OFF -2.0 tetap negatif', () {
+    expect(StockLeakRules.deltaOf(-2.0), -2);
+    expect(StockLeakRules.deltaOf('-2.0'), -2);
+    expect(StockLeakRules.writeOffPcs(-2.0), 2);
+    expect(StockLeakRules.writeOffPcsOf({'WRITE_OFF': -2, 'OPENING': 10}), 2);
+  });
+
+  test('PUSAT dan CABANG-PUSAT satu kunci toko', () {
+    expect(StockLeakRules.tokoKey('cabang-pusat'), 'PUSAT');
+    expect(StockLeakRules.tokoKey('PUSAT'), 'PUSAT');
+    expect(StockLeakRules.tokoKey('CABANG-A'), 'CABANG-A');
+  });
+
+  test('WRITE_OFF -2.0 masuk Σ ledger — bukan bocor palsu', () {
+    final stock = StockLeakRules.stockOf(8.0);
+    final ledger = StockLeakRules.deltaOf(10.0) + StockLeakRules.deltaOf(-2.0);
+    expect(stock, 8);
+    expect(ledger, 8);
+    expect(StockLeakRules.sinkron(stock: stock, ledgerSum: ledger), isTrue);
+    expect(
+      StockLeakRules.sinkron(
+        stock: StockLeakRules.stockOf(8.0),
+        ledgerSum: StockLeakRules.deltaOf(10.0),
+      ),
+      isFalse,
+    );
+  });
 }
