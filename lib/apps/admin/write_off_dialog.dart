@@ -207,7 +207,14 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
     await _lookup(code);
   }
 
-  int get _qty => int.tryParse(_qtyCtrl.text.trim()) ?? 0;
+  int get _qty => WriteOffRules.qtyOf(_qtyCtrl.text);
+
+  int get _nilaiBuku =>
+      _product == null ? 0 : WriteOffRules.nilaiModal(_qty, _product!);
+
+  String _rp(int n) =>
+      NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
+          .format(n);
 
   int get _real => StockQty.realOf(_product);
   int get _pending => StockQty.pendingOf(_product);
@@ -261,7 +268,9 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
           'Potong $_qty pcs dari $nama\n'
           'Toko ${widget.tokoId}\n'
           'Real $_real → ${_real - _qty} '
-          '(booking $_pending tetap)\n\n'
+          '(booking $_pending tetap)\n'
+          'Nilai buku ${_rp(_nilaiBuku)} '
+          '(qty × harga modal)\n\n'
           'Alasan: ${_alasanCtrl.text.trim()}\n\n'
           'Ini mengurangi stok rak dan tercatat ledger WRITE_OFF.',
           style: const TextStyle(
@@ -297,11 +306,16 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
         actorNama: widget.actorNama,
       );
       if (!mounted) return;
-      final before = res['stock_before'] ?? _real;
-      final after = res['stock_after'] ?? (_real - _qty);
+      final before = StockQty.parseCount(res['stock_before'] ?? _real);
+      final after = StockQty.parseCount(res['stock_after'] ?? (_real - _qty));
+      var nilai = ProductIdentity.modalPriceOf({
+        'harga_modal': res['nilai_modal'],
+      });
+      if (nilai <= 0) nilai = _nilaiBuku;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          'Stok rusak tercatat: $sku −$_qty pcs ($before → $after).',
+          'Stok rusak tercatat: $sku −$_qty pcs ($before → $after)'
+          '${nilai > 0 ? ' · buku ${_rp(nilai)}' : ''}.',
         ),
         backgroundColor: OptikAdminTokens.success,
       ));
@@ -618,6 +632,8 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
     final nama = (_product!['nama'] ?? '-').toString();
     final sku = (_product!['sku'] ?? '-').toString();
     final barcode = (_product!['barcode'] ?? '').toString();
+    final foto = ProductIdentity.catalogImageOf(_product!);
+    final modal = ProductIdentity.modalPriceOf(_product!);
     final availOk = _available > 0;
 
     return Container(
@@ -634,22 +650,59 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            nama,
-            style: const TextStyle(
-              color: OptikAdminTokens.navy,
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (foto.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    foto,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nama,
+                      style: const TextStyle(
+                        color: OptikAdminTokens.navy,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'SKU $sku${barcode.isNotEmpty ? ' · $barcode' : ''}',
+                      style: TextStyle(
+                        color: OptikAdminTokens.navy.withOpacity(0.42),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 3),
-          Text(
-            'SKU $sku${barcode.isNotEmpty ? ' · $barcode' : ''}',
-            style: TextStyle(
-              color: OptikAdminTokens.navy.withOpacity(0.42),
-              fontSize: 11.5,
+          if (modal > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Modal ${_rp(modal)}'
+              '${_qty > 0 ? ' · buku write-off ${_rp(_nilaiBuku)}' : ''}',
+              style: TextStyle(
+                color: OptikAdminTokens.navy.withOpacity(0.55),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -716,7 +769,8 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
 
   Widget _recentTile(Map<String, dynamic> r) {
     final sku = (r['sku'] ?? '-').toString();
-    final delta = int.tryParse(r['qty_delta']?.toString() ?? '0') ?? 0;
+    final delta = WriteOffRules.deltaOf(r['qty_delta']);
+    final nilai = WriteOffRules.nilaiModalFromLedger(r);
     final alasan = (r['alasan_text'] ?? '-').toString();
     final actor = (r['actor_nama'] ?? '').toString();
     final when = _fmtWhen(r['created_at']);
@@ -770,13 +824,27 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
               ],
             ),
           ),
-          Text(
-            '$delta',
-            style: const TextStyle(
-              color: OptikAdminTokens.warning,
-              fontWeight: FontWeight.w900,
-              fontSize: 13,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$delta',
+                style: const TextStyle(
+                  color: OptikAdminTokens.warning,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+              if (nilai > 0)
+                Text(
+                  _rp(nilai),
+                  style: TextStyle(
+                    color: OptikAdminTokens.navy.withOpacity(0.45),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                  ),
+                ),
+            ],
           ),
         ],
       ),

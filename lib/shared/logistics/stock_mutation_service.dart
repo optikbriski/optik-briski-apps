@@ -62,6 +62,16 @@ abstract final class StockQty {
     final a = real - pending;
     return a < 0 ? 0 : a;
   }
+
+  /// Ledger qty_delta boleh negatif (`-2.0` tidak jadi 0).
+  static int parseSigned(dynamic raw) {
+    if (raw == null) return 0;
+    if (raw is int) return raw;
+    if (raw is num) return raw.round();
+    final s = raw.toString().trim();
+    if (s.isEmpty || s == '-') return 0;
+    return int.tryParse(s) ?? double.tryParse(s)?.round() ?? 0;
+  }
 }
 
 /// All stock changes go through Supabase RPCs (ledger + atomic update).
@@ -450,7 +460,8 @@ class StockMutationService {
       tokoId: toko,
       sku: sku,
       barcode: sku,
-      select: 'id, sku, barcode, nama, stock, reserved_qty, toko_id',
+      select:
+          'id, sku, barcode, nama, stock, reserved_qty, toko_id, harga_modal, harga, harga_jual',
     );
     if (row == null) {
       throw 'Produk / SKU tidak ditemukan di $toko.';
@@ -478,6 +489,7 @@ class StockMutationService {
     final woRef = (refId ?? '').trim().isNotEmpty
         ? refId!.trim()
         : 'WO-${DateTime.now().millisecondsSinceEpoch}';
+    final nilai = WriteOffRules.nilaiModal(qty, row);
 
     try {
       final res = await _client.rpc('write_off_stock', params: {
@@ -493,19 +505,20 @@ class StockMutationService {
           'stock_before': real,
           'pending_before': pending,
           'available_before': available,
+          'harga_modal': ProductIdentity.modalPriceOf(row),
+          'nilai_modal': nilai,
         },
       });
       final map = Map<String, dynamic>.from(res as Map);
-      final stockAfter = int.tryParse(
-        '${map['stock_after'] ?? map['real_stock'] ?? map['stock'] ?? ''}',
+      final stockAfter = StockQty.parseCount(
+        map['stock_after'] ?? map['real_stock'] ?? map['stock'],
       );
-      final pendingAfter = int.tryParse(
-        '${map['pending_stock'] ?? map['reserved_qty'] ?? ''}',
+      final pendingAfter = StockQty.parseCount(
+        map['pending_stock'] ?? map['reserved_qty'],
       );
-      final avail = int.tryParse('${map['available_qty'] ?? ''}') ??
-          (stockAfter != null && pendingAfter != null
-              ? StockQty.available(stockAfter, pendingAfter)
-              : null);
+      final avail = map['available_qty'] == null
+          ? StockQty.available(stockAfter, pendingAfter)
+          : StockQty.parseCount(map['available_qty']);
       _pingRealtime(
         tokoId: toko,
         sku: canonicalSku,
@@ -513,6 +526,7 @@ class StockMutationService {
         reservedQty: pendingAfter,
         availableQty: avail,
       );
+      map['nilai_modal'] ??= nilai;
       return map;
     } on PostgrestException catch (e) {
       final msg = e.message.trim();
@@ -610,9 +624,29 @@ class StockMutationService {
   Future<List<Map<String, dynamic>>> fetchWriteOffs({
     required String tokoId,
     int limit = 12,
-  }) {
+  }) async {
+    final toko = tokoId.trim().toUpperCase();
+    try {
+      final raw = await _client.rpc(
+        'list_write_off_ledger',
+        params: {'p_toko': toko, 'p_limit': limit},
+      );
+      if (raw is List) {
+        return raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    } on PostgrestException catch (e) {
+      final blob = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+      final missing = e.code == 'PGRST202' ||
+          blob.contains('pgrst202') ||
+          blob.contains('could not find the function') ||
+          blob.contains('does not exist');
+      if (!missing) rethrow;
+    }
     return fetchLedger(
-      tokoId: tokoId,
+      tokoId: toko,
       reason: StockReason.writeOff,
       limit: limit,
     );

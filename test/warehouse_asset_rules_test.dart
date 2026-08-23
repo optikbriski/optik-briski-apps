@@ -18,6 +18,13 @@ void main() {
     expect(StockQty.pendingOf({'reserved_qty': 2.0}), 2);
   });
 
+  test('parseSigned baca qty_delta negatif JSON', () {
+    expect(StockQty.parseSigned(-2.0), -2);
+    expect(StockQty.parseSigned('-2.0'), -2);
+    expect(StockQty.parseSigned(-2), -2);
+    expect(StockQty.parseCount(-2.0), 0);
+  });
+
   test('satu SKU: aset = stok × modal, omzet = stok × jual', () {
     final line = WarehouseAssetRules.fromProduct({
       'stock': 4,

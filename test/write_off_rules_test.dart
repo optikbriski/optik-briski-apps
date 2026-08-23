@@ -60,4 +60,51 @@ void main() {
     expect(WriteOffRules.qtyDelta(3), -3);
     expect(WriteOffRules.qtyDelta(-3), -3);
   });
+
+  test('qtyOf baca JSON 2.0; negatif jadi 0', () {
+    expect(WriteOffRules.qtyOf(2.0), 2);
+    expect(WriteOffRules.qtyOf('2.0'), 2);
+    expect(WriteOffRules.qtyOf(2), 2);
+    expect(WriteOffRules.qtyOf(-2), 0);
+    expect(WriteOffRules.qtyOf('-2.0'), 0);
+  });
+
+  test('deltaOf baca JSON -2.0 tetap negatif', () {
+    expect(WriteOffRules.deltaOf(-2.0), -2);
+    expect(WriteOffRules.deltaOf('-2.0'), -2);
+    expect(WriteOffRules.deltaOf(-2), -2);
+  });
+
+  test('nilaiModal = qty × harga_modal, bukan harga jual', () {
+    expect(
+      WriteOffRules.nilaiModal(2, {
+        'harga_modal': 150000.0,
+        'harga': 250000,
+        'harga_jual': 275000,
+      }),
+      300000,
+    );
+    expect(
+      WriteOffRules.nilaiModal(2, {'harga_modal': '150.000'}),
+      300000,
+    );
+    expect(WriteOffRules.nilaiModal(0, {'harga_modal': 150000}), 0);
+  });
+
+  test('nilaiModalFromLedger pakai meta.nilai_modal dulu', () {
+    expect(
+      WriteOffRules.nilaiModalFromLedger({
+        'qty_delta': -2.0,
+        'meta': {'nilai_modal': 300000.0, 'harga_modal': 150000},
+      }),
+      300000,
+    );
+    expect(
+      WriteOffRules.nilaiModalFromLedger({
+        'qty_delta': '-2.0',
+        'harga_modal': '150.000',
+      }),
+      300000,
+    );
+  });
 }

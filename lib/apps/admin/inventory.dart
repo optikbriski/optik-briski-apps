@@ -502,7 +502,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                   PremiumListTile(
                     title: 'Stok Rusak / Write-off',
                     subtitle:
-                        'Scan produk · potong stok tersedia · jejak WRITE_OFF',
+                        'Scan produk · potong stok tersedia · nilai modal · jejak WRITE_OFF',
                     icon: Icons.report_gmailerrorred_rounded,
                     iconColor: OptikAdminTokens.warning,
                     onTap: _showWriteOffDialog,
