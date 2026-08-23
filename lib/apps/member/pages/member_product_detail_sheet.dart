@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/logistics/product_identity.dart';
 import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/theme.dart';
@@ -92,8 +93,8 @@ Future<void> showMemberProductDetailSheet(
   final sku = (product['sku'] ?? '-').toString();
   final barcode = (product['barcode'] ?? '-').toString();
   final lensa = (product['jenis_lensa'] ?? '').toString();
-  final img = (product['image_url'] ?? '').toString().trim();
-  final harga = int.tryParse('${product['harga'] ?? 0}') ?? 0;
+  final img = ProductIdentity.catalogImageOf(product);
+  final harga = ProductIdentity.sellPriceOf(product);
   final asliRaw = int.tryParse('${product['harga_asli'] ?? ''}');
   final asli = (asliRaw != null && asliRaw > harga) ? asliRaw : null;
   final avail = int.tryParse('${product['available_qty'] ?? ''}');

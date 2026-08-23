@@ -62,6 +62,19 @@ void main() {
     expect(out.first['available_qty'], 3);
   });
 
+  test('harga_jual-only frame is buyable', () {
+    final out = pickMemberShopRecommended([
+      {
+        'sku': 'HJ1',
+        'nama': 'HJ1',
+        'kategori': 'Frame',
+        'harga_jual': 175000,
+        'available_qty': 2,
+      },
+    ]);
+    expect(out.map((e) => e['sku']), ['HJ1']);
+  });
+
   test('missing available_qty is not treated as out-of-stock', () {
     expect(memberShopIsOutOfStock(p(sku: 'X', omitAvailableQty: true)), isFalse);
     expect(memberShopIsOutOfStock(p(sku: 'Y', availableQty: 0)), isTrue);

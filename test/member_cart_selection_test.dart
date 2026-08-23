@@ -61,6 +61,20 @@ void main() {
     expect(MemberCart.isOnlineBlockedKategori(''), isFalse);
   });
 
+  test('addProduct accepts harga_jual-only and foto_url-only', () async {
+    final err = await cart.addProduct({
+      'sku': 'FR-HJ',
+      'id': 'p-fr-hj',
+      'nama': 'Frame HJ',
+      'kategori': 'Frame',
+      'harga_jual': 175000,
+      'foto_url': 'https://x/f.jpg',
+    });
+    expect(err, isNull);
+    expect(cart.items.single.harga, 175000);
+    expect(cart.items.single.imageUrl, 'https://x/f.jpg');
+  });
+
   test('addProduct accepts Frame (not lensa-blocked)', () async {
     final err = await cart.addProduct(
       product(sku: 'FR-1', nama: 'Rayban', kategori: 'Frame', harga: 250000),

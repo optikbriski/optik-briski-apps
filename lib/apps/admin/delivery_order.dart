@@ -452,7 +452,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         'add_r': prod['add_r'] ?? 0,
         'barcode': prod['barcode'] ?? sku,
         'sku': sku,
-        'harga_jual': prod['harga_jual'] ?? prod['harga'] ?? 0,
+        'harga_jual': ProductIdentity.sellPriceOf(prod),
         'harga_modal': prod['harga_modal'] ?? 0,
         'qty': entry.value
       });
@@ -1092,13 +1092,10 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                     height: 48,
                                     color: OptikAdminTokens.navy
                                         .withOpacity(0.04),
-                                    child: (item['image_url'] != null &&
-                                            item['image_url']
-                                                .toString()
-                                                .trim()
-                                                .isNotEmpty &&
-                                            item['image_url'] != '-')
-                                        ? Image.network(item['image_url'],
+                                    child: ProductIdentity.catalogImageOf(item)
+                                            .isNotEmpty
+                                        ? Image.network(
+                                            ProductIdentity.catalogImageOf(item),
                                             fit: BoxFit.cover,
                                             errorBuilder: (c, e, s) =>
                                                 const Icon(

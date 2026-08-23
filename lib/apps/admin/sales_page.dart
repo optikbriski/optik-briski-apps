@@ -2306,10 +2306,7 @@ class _SalesPageState extends State<SalesPage> {
   // ==========================================================================
   void _tambahItemKeKeranjang(Map<String, dynamic> produk, int stokGudang) {
     String nama = produk['nama'] ?? produk['nama_produk'] ?? "Unnamed";
-    int harga = int.tryParse(produk['harga']?.toString() ??
-            produk['harga_jual']?.toString() ??
-            '0') ??
-        0;
+    int harga = ProductIdentity.sellPriceOf(produk);
     String sku = produk['sku'] ?? "";
     dynamic idProduk =
         produk['id']; // 💡 Ambil ID Primary Key asli dari Supabase
@@ -2361,7 +2358,7 @@ class _SalesPageState extends State<SalesPage> {
 
     setState(() {
       // 🟢 1. MASUKKAN LENSA MATA KANAN (R)
-      int hargaR = int.tryParse(lensaR['harga']?.toString() ?? '0') ?? 0;
+      int hargaR = ProductIdentity.sellPriceOf(lensaR);
 
       // Racik info ukuran kanan: Otomatis tambah ADD jika Progresif/Kryptok
       String infoR = "${sphRCtrl.text}/${cylRCtrl.text}";
@@ -2399,7 +2396,7 @@ class _SalesPageState extends State<SalesPage> {
       }
 
       // 🔵 2. MASUKKAN LENSA MATA KIRI (L)
-      int hargaL = int.tryParse(lensaL['harga']?.toString() ?? '0') ?? 0;
+      int hargaL = ProductIdentity.sellPriceOf(lensaL);
 
       // Racik info ukuran kiri: Otomatis tambah ADD jika Progresif/Kryptok
       String infoL = "${sphLCtrl.text}/${cylLCtrl.text}";
@@ -2659,10 +2656,7 @@ class _SalesPageState extends State<SalesPage> {
                     cartItems[idx]['subtotal'] =
                         (cartItems[idx]['qty'] as int) * harga;
                   } else {
-                    final harga = int.tryParse(item['harga']?.toString() ??
-                            item['harga_jual']?.toString() ??
-                            '0') ??
-                        0;
+                    final harga = ProductIdentity.sellPriceOf(item);
                     cartItems.add({
                       'id': idProduk,
                       'nama_produk': nama,
@@ -2742,10 +2736,9 @@ class _SalesPageState extends State<SalesPage> {
     required VoidCallback onTap,
   }) {
     final sku = item['sku']?.toString() ?? "pos_tanpa_sku".tr();
-    final fotoUrl =
-        (item['foto_url'] ?? item['image_url'] ?? '').toString();
+    final fotoUrl = ProductIdentity.catalogImageOf(item);
     final nama = item['nama']?.toString() ?? "pos_tanpa_nama".tr();
-    final harga = item['harga'] ?? 0;
+    final harga = ProductIdentity.sellPriceOf(item);
     final stockColor = stock > 0 ? OptikAdminTokens.success : OptikAdminTokens.danger;
 
     return PremiumPanel(
@@ -4183,7 +4176,9 @@ class _SalesPageState extends State<SalesPage> {
           'product_id': item['id'],
           'tipe_produk': item['kategori'] ?? 'Lainnya',
           'nama_produk': item['nama_produk'],
-          'harga_satuan': item['harga'],
+          'harga_satuan': ProductIdentity.sellPriceOf(
+            Map<String, dynamic>.from(item),
+          ),
           'qty': item['qty'],
           'subtotal': item['subtotal'],
           'detail_resep': item['is_lensa_custom'] == true
@@ -6375,6 +6370,7 @@ class _SalesPageState extends State<SalesPage> {
                                           "Special Order: $inputMerk $lensJenis (R: ${sphRCtrl.text}/${cylRCtrl.text} L: ${sphLCtrl.text}/${cylLCtrl.text})",
                                       'sku': "CUSTOM_HQ",
                                       'harga': 0,
+                                      'harga_jual': 0,
                                       'qty': 1,
                                       'subtotal': 0,
                                       'kategori': 'Lensa',
@@ -6428,7 +6424,7 @@ class _SalesPageState extends State<SalesPage> {
                                   selectedAksesoris!['nama'] ?? 'Aksesoris',
                                   style: const TextStyle(color: OptikAdminTokens.navy)),
                               subtitle: Text(
-                                  "Rp ${selectedAksesoris!['harga'] ?? 0}",
+                                  "Rp ${ProductIdentity.sellPriceOf(selectedAksesoris!)}",
                                   style: const TextStyle(
                                       color: OptikAdminTokens.success)),
                               trailing: SizedBox(

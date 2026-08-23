@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../logistics/product_identity.dart';
 import 'member_catalog_kategori.dart';
 
 /// Copy tunggal: Lensa tidak dijual online (cart / detail / checkout client).
@@ -226,7 +227,7 @@ class MemberCart extends ChangeNotifier {
         }
         final sku = (product['sku'] ?? '').toString().trim();
         if (sku.isEmpty) return 'Produk tanpa SKU tidak bisa dibeli online.';
-        final harga = int.tryParse('${product['harga'] ?? 0}') ?? 0;
+        final harga = ProductIdentity.sellPriceOf(product);
         if (harga <= 0) return 'Harga produk tidak valid.';
         // Stok cabang dicek di checkout; jika kurang → pre-order → RO cabang.
 
@@ -241,7 +242,7 @@ class MemberCart extends ChangeNotifier {
         final productId = (product['id'] ?? '').toString();
         final nama = (product['nama'] ?? sku).toString();
         final kategori = (product['kategori'] ?? '').toString();
-        final imageUrl = (product['image_url'] ?? '').toString();
+        final imageUrl = ProductIdentity.catalogImageOf(product);
         if (i >= 0) {
           // Refresh nama/harga/gambar dari master saat qty bertambah.
           _items[i] = _items[i].copyWith(
@@ -407,8 +408,8 @@ class MemberCartItem {
         productId: (m['product_id'] ?? m['id'] ?? '').toString(),
         nama: (m['nama'] ?? '').toString(),
         kategori: (m['kategori'] ?? '').toString(),
-        harga: int.tryParse('${m['harga'] ?? 0}') ?? 0,
+        harga: ProductIdentity.sellPriceOf(m),
         qty: int.tryParse('${m['qty'] ?? 1}') ?? 1,
-        imageUrl: (m['image_url'] ?? '').toString(),
+        imageUrl: ProductIdentity.catalogImageOf(m),
       );
 }

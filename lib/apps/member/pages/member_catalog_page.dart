@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/logistics/product_identity.dart';
 import '../../../shared/logistics/stock_realtime.dart';
 import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_catalog_kategori.dart';
@@ -926,7 +927,7 @@ class _ProductCard extends StatelessWidget {
   final bool browseOnly;
   final VoidCallback? onOpenCart;
 
-  int get _harga => int.tryParse('${product['harga'] ?? 0}') ?? 0;
+  int get _harga => ProductIdentity.sellPriceOf(product);
   int? get _hargaAsli {
     final v = int.tryParse('${product['harga_asli'] ?? ''}');
     if (v == null || v <= _harga) return null;
@@ -952,7 +953,7 @@ class _ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nama = (product['nama'] ?? '-').toString();
-    final img = (product['image_url'] ?? '').toString().trim();
+    final img = ProductIdentity.catalogImageOf(product);
     final blocked = MemberCart.isOnlineBlocked(product);
     final diskon = _diskonPersen;
     final asli = _hargaAsli;

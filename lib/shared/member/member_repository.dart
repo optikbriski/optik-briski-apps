@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../logistics/product_identity.dart';
 import '../invoice/invoice_hub_service.dart';
 import '../invoice/invoice_settings_service.dart';
 import '../maps/osm_address_search.dart';
@@ -764,7 +765,8 @@ class MemberRepository {
       if (res is List) {
         return res.map((e) {
           final m = Map<String, dynamic>.from(e as Map);
-          final jual = int.tryParse('${m['harga'] ?? 0}') ?? 0;
+          final jual = ProductIdentity.sellPriceOf(m);
+          m['harga'] = jual;
           final asli = int.tryParse('${m['harga_asli'] ?? ''}');
           if (asli != null && asli > jual && jual > 0) {
             m['harga_asli'] = asli;

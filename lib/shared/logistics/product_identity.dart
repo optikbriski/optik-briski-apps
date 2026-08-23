@@ -16,14 +16,30 @@ class ProductIdentity {
     return s;
   }
 
-  /// Harga jual untuk kasir/master. `harga` dulu, lalu `harga_jual`.
-  static int sellPriceOf(Map<String, dynamic> item) {
-    return int.tryParse('${item['harga'] ?? ''}'.replaceAll('.', '')) ??
-        int.tryParse('${item['harga_jual'] ?? ''}'.replaceAll('.', '')) ??
-        0;
+  static final _thousandDots = RegExp(r'^\d{1,3}(\.\d{3})+$');
+
+  static int? _parseMoney(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is num) return raw.round();
+    var s = raw.toString().trim();
+    if (s.isEmpty || s == '-') return null;
+    if (s.contains(',')) {
+      s = s.replaceAll('.', '').replaceAll(',', '.');
+      return double.tryParse(s)?.round();
+    }
+    if (_thousandDots.hasMatch(s)) {
+      return int.tryParse(s.replaceAll('.', ''));
+    }
+    return int.tryParse(s) ?? double.tryParse(s)?.round();
   }
 
-  /// Tulis kedua kolom harga supaya POS/master tidak pecah.
+  /// Harga jual kasir/etalase. `harga_jual` dulu (diskon), lalu `harga`.
+  static int sellPriceOf(Map<String, dynamic> item) {
+    return _parseMoney(item['harga_jual']) ?? _parseMoney(item['harga']) ?? 0;
+  }
+
+  /// Tulis kedua kolom harga supaya POS/master/member tidak pecah.
   static Map<String, dynamic> catalogPriceFields(int sell, {int? modal}) {
     return {
       'harga': sell,
@@ -32,9 +48,23 @@ class ProductIdentity {
     };
   }
 
+  static Map<String, dynamic> cartPriceFields(int sell) => {
+        'harga': sell,
+        'harga_jual': sell,
+      };
+
+  /// Foto katalog. `image_url` dulu, lalu `foto_url`.
+  static String catalogImageOf(Map<String, dynamic> item) {
+    for (final key in const ['image_url', 'foto_url']) {
+      final u = (item[key] ?? '').toString().trim();
+      if (u.isNotEmpty && u != '-') return u;
+    }
+    return '';
+  }
+
   static Map<String, dynamic> catalogImageFields(String? url) {
     final u = (url ?? '').trim();
-    if (u.isEmpty) return const {};
+    if (u.isEmpty || u == '-') return const {};
     return {'image_url': u, 'foto_url': u};
   }
 
@@ -51,7 +81,7 @@ class ProductIdentity {
     String? sku,
     String? barcode,
     String select =
-        'id, sku, barcode, nama, stock, reserved_qty, toko_id, harga, harga_jual, harga_modal, kategori, warna',
+        'id, sku, barcode, nama, stock, reserved_qty, toko_id, harga, harga_jual, harga_modal, kategori, warna, image_url, foto_url',
   }) async {
     final client = Supabase.instance.client;
     final toko = tokoId.trim().toUpperCase();
@@ -138,6 +168,14 @@ class ProductIdentity {
       row['toko_id'] = toko;
       row['stock'] = 0;
       row['reserved_qty'] = 0;
+      row.addAll(catalogPriceFields(
+        sellPriceOf(pusat),
+        modal: _parseMoney(pusat['harga_modal']),
+      ));
+      final img = catalogImageOf(pusat);
+      if (img.isNotEmpty) {
+        row.addAll(catalogImageFields(img));
+      }
       try {
         await Supabase.instance.client.from('products').insert(row);
       } catch (_) {}

@@ -93,7 +93,7 @@ class RequestOrderService {
       final byNama = await _client
           .from('products')
           .select(
-              'id, nama, sku, barcode, stock, reserved_qty, harga_jual, harga_modal, kategori, warna, toko_id')
+              'id, nama, sku, barcode, stock, reserved_qty, harga, harga_jual, harga_modal, kategori, warna, toko_id, image_url, foto_url')
           .eq('toko_id', 'PUSAT')
           .ilike('nama', namaProduk.trim())
           .maybeSingle();

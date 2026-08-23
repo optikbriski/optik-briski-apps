@@ -255,6 +255,10 @@ void main() {
         AttendanceAdminScope.canEditProductCatalog(p('admin_pusat', 'PUSAT')),
         isTrue,
       );
+      expect(
+        AttendanceAdminScope.canEditProductCatalog(p('owner', 'CABANG-X')),
+        isTrue,
+      );
     });
   });
 }

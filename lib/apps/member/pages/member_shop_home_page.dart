@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/logistics/product_identity.dart';
 import '../../../shared/logistics/stock_realtime.dart';
 import '../../../shared/member/member_cart.dart';
 import '../../../shared/member/member_repository.dart';
@@ -38,7 +39,7 @@ List<Map<String, dynamic>> pickMemberShopRecommended(
     final sku = (p['sku'] ?? '').toString().trim();
     if (sku.isEmpty) return false;
     if (MemberCart.isOnlineBlocked(p)) return false;
-    final harga = int.tryParse('${p['harga'] ?? 0}') ?? 0;
+    final harga = ProductIdentity.sellPriceOf(p);
     return harga > 0;
   }).toList();
   buyable.sort((a, b) {
@@ -49,9 +50,9 @@ List<Map<String, dynamic>> pickMemberShopRecommended(
     if (byStock != 0) return byStock;
 
     final da = int.tryParse('${a['harga_asli'] ?? 0}') ?? 0;
-    final ha = int.tryParse('${a['harga'] ?? 0}') ?? 0;
+    final ha = ProductIdentity.sellPriceOf(a);
     final db = int.tryParse('${b['harga_asli'] ?? 0}') ?? 0;
-    final hb = int.tryParse('${b['harga'] ?? 0}') ?? 0;
+    final hb = ProductIdentity.sellPriceOf(b);
     final discA = da > ha ? da - ha : 0;
     final discB = db > hb ? db - hb : 0;
     return discB.compareTo(discA);
@@ -734,8 +735,8 @@ class _RecoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nama = (product['nama'] ?? '-').toString();
-    final img = (product['image_url'] ?? '').toString().trim();
-    final harga = int.tryParse('${product['harga'] ?? 0}') ?? 0;
+    final img = ProductIdentity.catalogImageOf(product);
+    final harga = ProductIdentity.sellPriceOf(product);
     final asli = int.tryParse('${product['harga_asli'] ?? ''}');
     final outOfStock = memberShopIsOutOfStock(product);
     final hasDisc = asli != null && asli > harga;

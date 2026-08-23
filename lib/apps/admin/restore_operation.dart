@@ -123,7 +123,7 @@ class _RestoreOperationState extends State<RestoreOperation> {
           'nama': prod['nama'],
           'barcode': prod['barcode'] ?? sku,
           'sku': sku,
-          'harga_jual': prod['harga_jual'] ?? prod['harga'] ?? 0,
+          'harga_jual': ProductIdentity.sellPriceOf(prod),
           'harga_modal': prod['harga_modal'] ?? 0,
           'kategori': prod['kategori'] ?? 'Lainnya',
           'warna': prod['warna'] ?? '-',

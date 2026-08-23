@@ -2614,12 +2614,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           height: 50,
           decoration: BoxDecoration(
               color: OptikAdminTokens.lineStrong, borderRadius: BorderRadius.circular(10)),
-          child: (item['image_url'] != null &&
-                  item['image_url'].toString().isNotEmpty &&
-                  item['image_url'].toString() != '-')
+          child: ProductIdentity.catalogImageOf(item).isNotEmpty
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: Image.network(item['image_url'], fit: BoxFit.cover))
+                  child: Image.network(
+                    ProductIdentity.catalogImageOf(item),
+                    fit: BoxFit.cover,
+                  ))
               : const Icon(Icons.image, color: OptikAdminTokens.line),
         ),
         title: Text(namaRapi,

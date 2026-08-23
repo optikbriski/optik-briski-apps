@@ -205,6 +205,7 @@ def main() -> int:
                 "barcode": barcode,
                 "sku": barcode,
                 "image_url": image_url,
+                "foto_url": image_url,
                 "toko_id": TOKO_ID,
                 "stock": 0,
             }

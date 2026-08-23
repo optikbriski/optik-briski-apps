@@ -21,6 +21,7 @@ import '../../shared/logistics/quick_stock_scan_service.dart';
 import '../../shared/logistics/request_order_rules.dart';
 import '../../shared/logistics/stock_leak_rules.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
+import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/write_off_rules.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
@@ -328,7 +329,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
 
       // Query dinamis: Pusat memantau total aset konsolidasian seluruh ruko, cabang mengunci aset wilayahnya
       var query =
-          supabase.from('products').select('stock, harga_modal, harga_jual');
+          supabase.from('products').select('stock, harga_modal, harga, harga_jual');
       if (!isPusat) {
         query = query.eq('toko_id', userTokoId);
       }
@@ -345,8 +346,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
         int stok = int.tryParse(product['stock']?.toString() ?? '0') ?? 0;
         int hargaBeli =
             int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
-        int hargaJual =
-            int.tryParse(product['harga_jual']?.toString() ?? '0') ?? 0;
+        int hargaJual = ProductIdentity.sellPriceOf(product);
 
         // Formula Akuntansi Aset Persediaan Korporat
         if (stok > 0) {
@@ -602,7 +602,7 @@ class _InventoryOverviewState extends State<InventoryOverview> {
       if (product != null) {
         int modal =
             int.tryParse(product['harga_modal']?.toString() ?? '0') ?? 0;
-        int jual = int.tryParse(product['harga_jual']?.toString() ?? '0') ?? 0;
+        int jual = ProductIdentity.sellPriceOf(product);
         int marginItem = jual - modal;
         double pctMargin = jual > 0 ? (marginItem / jual) * 100 : 0.0;
 
@@ -685,11 +685,11 @@ class _InventoryOverviewState extends State<InventoryOverview> {
                             OptikAdminTokens.slate),
                     ],
                     const SizedBox(height: 12),
-                    if (product['image_url'] != null &&
-                        product['image_url'] != '-')
+                    if (ProductIdentity.catalogImageOf(product).isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(product['image_url'],
+                        child: Image.network(
+                            ProductIdentity.catalogImageOf(product),
                             height: 110,
                             width: double.infinity,
                             fit: BoxFit.cover,
