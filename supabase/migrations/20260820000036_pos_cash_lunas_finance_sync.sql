@@ -151,6 +151,7 @@ declare
   v_status text;
   v_existing public.bagi_hasil_period%rowtype;
   v_out jsonb;
+  v_payroll_gaji bigint;
 begin
   if auth.uid() is null then
     raise exception 'Unauthorized';
@@ -201,12 +202,27 @@ begin
     and upper(coalesce(ft.jenis_transaksi, '')) in ('PENGELUARAN', 'HUTANG')
     and public._owner_ft_is_approved_or_pos(
       ft.status_konfirmasi, ft.referensi_id, ft.kategori
-    );
+    )
+    and not public._owner_ft_is_closing(ft.referensi_id, ft.kategori)
+    and not public._owner_ft_is_modal_noise(ft.kategori);
 
-  select coalesce(sum(k.gaji_pokok), 0) into v_gaji
-  from public.karyawan k
-  where k.toko_id = p_toko_id
-    and k.status_approval = 'Aktif';
+  -- Payroll terkunci/dibayar lebih dulu; kalau belum ada, gaji pokok aktif.
+  select pp.total_nett into v_payroll_gaji
+  from public.payroll_period pp
+  where pp.toko_id = p_toko_id
+    and pp.periode_ym = v_ym
+    and pp.status in ('draft', 'dikunci', 'dibayar')
+  order by case pp.status when 'dibayar' then 1 when 'dikunci' then 2 else 3 end
+  limit 1;
+
+  if v_payroll_gaji is not null then
+    v_gaji := v_payroll_gaji;
+  else
+    select coalesce(sum(k.gaji_pokok), 0) into v_gaji
+    from public.karyawan k
+    where k.toko_id = p_toko_id
+      and k.status_approval = 'Aktif';
+  end if;
 
   v_laba := v_omzet - v_hpp - v_opex - v_gaji;
   v_bagi_u := round(v_laba * (v_pct_u / 100.0));
@@ -259,7 +275,7 @@ begin
   insert into public.bagi_hasil_lines (period_id, line_key, label, amount) values
     (v_period_id, 'omzet', 'Omzet bersih POS', v_omzet),
     (v_period_id, 'hpp', 'HPP / modal', v_hpp),
-    (v_period_id, 'gaji', 'Gaji karyawan (estimasi)', v_gaji),
+    (v_period_id, 'gaji', 'Gaji karyawan', v_gaji),
     (v_period_id, 'opex', 'Opex / pengeluaran', v_opex),
     (v_period_id, 'laba', 'Laba bersih', v_laba),
     (v_period_id, 'bagi_utama', 'Bagi Owner Utama', v_bagi_u),
@@ -281,4 +297,7 @@ end;
 $$;
 
 comment on function public.owner_compute_bagi_hasil(text, text, boolean) is
-  'Bagi hasil = omzet/HPP buku besar (subtotal item + HPP 40%), bukan header total_harga.';
+  'Bagi hasil = omzet/HPP buku besar (subtotal item + HPP 40%), opex BB, gaji payroll bila ada.';
+
+revoke all on function public.owner_compute_bagi_hasil(text, text, boolean) from public;
+grant execute on function public.owner_compute_bagi_hasil(text, text, boolean) to authenticated;

@@ -63,6 +63,13 @@ void main() {
     expect(afterBoth.status, 'LUNAS');
   });
 
+  test('laci kasir: Tunai dan CASH sama-sama tunai', () {
+    expect(PosCheckoutRules.isCashMethod('Tunai'), isTrue);
+    expect(PosCheckoutRules.isCashMethod('CASH'), isTrue);
+    expect(PosCheckoutRules.isCashMethod('QRIS'), isFalse);
+    expect(PosCheckoutRules.isCashMethod('Transfer'), isFalse);
+  });
+
   test('DP 2 SKU: uang muka tetap, sisa naik setelah semua baris', () {
     final afterFirst = PosCheckoutRules.recomputeHeader(
       itemSubtotalSum: 100000,

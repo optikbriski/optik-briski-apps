@@ -968,16 +968,20 @@ class _SalesPageState extends State<SalesPage> {
 
       final res = await Supabase.instance.client
           .from('finance_transactions')
-          .select('nominal')
+          .select('nominal, metode_pembayaran')
           .eq('toko_id', tokoId)
           .eq('jenis_transaksi', 'PEMASUKAN')
           .neq('kategori',
               'Modal Awal Sesi') // 🎯 REVISI KUNCI: Kecualikan modal awal dari hitungan omzet harian agar tidak double-count!
-          .eq('metode_pembayaran', 'Tunai')
           .gte('created_at', startTime.toIso8601String());
 
       int totalTunaiHariIni = 0;
       for (var item in res) {
+        if (!PosCheckoutRules.isCashMethod(
+          item['metode_pembayaran']?.toString(),
+        )) {
+          continue;
+        }
         totalTunaiHariIni += (item['nominal'] ?? 0) as int;
       }
 
@@ -1055,8 +1059,12 @@ class _SalesPageState extends State<SalesPage> {
                 // Unik per sesi (hindari tabrakan tutup toko 2x di hari sama).
                 final closeRef =
                     'CLOSE-$tokoId-$closeDate-${closeNow.millisecondsSinceEpoch}';
+                final closeTenant =
+                    AttendanceAdminScope.tenantIdOf(widget.profile);
                 await supabase.from('finance_transactions').insert({
                   'toko_id': tokoId,
+                  if (closeTenant != null && closeTenant.isNotEmpty)
+                    'tenant_id': closeTenant,
                   'tanggal_transaksi': closeDate,
                   'jenis_transaksi': selisih >= 0 ? 'PEMASUKAN' : 'PENGELUARAN',
                   'kategori': 'Penutupan Toko (Closing Shift)',
