@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optik_b_riski/shared/tenant/rekasa_store_midtrans.dart';
 
@@ -22,6 +24,17 @@ void main() {
     expect(mock.ok, isTrue);
     expect(mock.mock, isTrue);
     expect(mock.redirectUrl, isNull);
+  });
+
+  test('katalog Midtrans: dialog web cek mounted setelah buka tab', () {
+    final src =
+        File('lib/shared/tenant/rekasa_store_midtrans.dart').readAsStringSync();
+    expect(src, contains('await launchUrl'));
+    final launchAt = src.indexOf('await launchUrl');
+    expect(
+      src.indexOf('if (!context.mounted)', launchAt),
+      greaterThan(launchAt),
+    );
   });
 
   test('katalog Midtrans: error edge tidak dianggap lunas', () {

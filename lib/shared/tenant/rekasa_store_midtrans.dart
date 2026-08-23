@@ -90,6 +90,13 @@ class RekasaStoreMidtrans {
 
       if (kIsWeb) {
         await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
+        if (!context.mounted) {
+          return RekasaStoreMidtransResult(
+            ok: true,
+            orderId: parsed.orderId,
+            redirectUrl: url,
+          );
+        }
         final done = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
