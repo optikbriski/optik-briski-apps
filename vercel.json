@@ -65,6 +65,24 @@
       ]
     },
     {
+      "source": "/perusahaan/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/perusahaan/:path*.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
       "source": "/main.dart.js",
       "headers": [
         {
