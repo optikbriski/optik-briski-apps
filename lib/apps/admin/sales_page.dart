@@ -4290,6 +4290,7 @@ class _SalesPageState extends State<SalesPage> {
             bayar: bayar,
             sisaTagihan: sisa,
             metode: paymentMethod,
+            tanggal: GlPostingService.dateJakarta(),
             createdBy: namaKasirPost.isEmpty ? null : namaKasirPost,
             namaPelanggan: namaPasienForm,
           );

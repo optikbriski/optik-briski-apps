@@ -19,7 +19,7 @@ class GlPostingService {
   static const akunOpex = '5200';
   static const akunSelisihKas = '5201';
 
-  String cashOrBank(String? metode) {
+  static String cashOrBank(String? metode) {
     final m = (metode ?? '').toUpperCase();
     if (m.contains('CASH') || m.contains('TUNAI') || m.isEmpty) {
       return akunKas;
@@ -34,6 +34,32 @@ class GlPostingService {
     return (dpp: dpp, ppn: omzet - dpp);
   }
 
+  /// Tanggal buku = kalender Asia/Jakarta (UTC+7, tanpa DST).
+  static DateTime dateJakarta([DateTime? now]) {
+    final utc = (now ?? DateTime.now()).toUtc();
+    final jkt = utc.add(const Duration(hours: 7));
+    return DateTime(jkt.year, jkt.month, jkt.day);
+  }
+
+  static String dateJakartaYmd([DateTime? now]) {
+    final d = dateJakarta(now);
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  /// SETTLE hanya jika total nota stabil (bukan wobble insert item).
+  static bool shouldPostSettle({
+    required int oldTotal,
+    required int newTotal,
+    required int oldSisa,
+    required int newSisa,
+  }) {
+    if (oldTotal != newTotal) return false;
+    return newSisa < oldSisa && (oldSisa - newSisa) > 0;
+  }
+
   Future<String?> postBalanced({
     required String tokoId,
     required DateTime tanggal,
@@ -43,7 +69,7 @@ class GlPostingService {
     required List<Map<String, dynamic>> lines,
     String? createdBy,
   }) async {
-    final dateStr = tanggal.toIso8601String().split('T').first;
+    final dateStr = dateJakartaYmd(tanggal);
     final cleaned = lines
         .where((l) {
           final d = (l['debit'] as int?) ?? 0;
