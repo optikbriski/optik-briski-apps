@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../tenant/tenant_service.dart';
 import 'attendance_config.dart';
 
 class AttendanceQrIssue {
@@ -64,13 +65,20 @@ class AttendanceQrService {
     int? ttlSeconds,
   }) async {
     try {
-      final res = await _client.rpc(
-        'issue_attendance_qr_token',
-        params: {
-          'p_toko_id': tokoId,
-          'p_ttl_seconds': ttlSeconds ?? AttendanceConfig.qrTtlSeconds,
-        },
-      );
+      final base = {
+        'p_toko_id': tokoId,
+        'p_ttl_seconds': ttlSeconds ?? AttendanceConfig.qrTtlSeconds,
+      };
+      dynamic res;
+      try {
+        res = await _client.rpc(
+          'issue_attendance_qr_token',
+          params: TenantService.instance.isBound ? withTenant(base) : base,
+        );
+      } on PostgrestException catch (e) {
+        if (!_rpcMissing(e)) rethrow;
+        res = await _client.rpc('issue_attendance_qr_token', params: base);
+      }
       final map = _asMap(res);
       if (map == null || (map['payload'] ?? '').toString().isEmpty) {
         throw 'Gagal membuat QR absensi.';
@@ -83,10 +91,17 @@ class AttendanceQrService {
 
   Future<AttendanceQrValidation> validatePayload(String raw) async {
     try {
-      final res = await _client.rpc(
-        'validate_attendance_qr_token',
-        params: {'p_payload': raw.trim()},
-      );
+      final payload = {'p_payload': raw.trim()};
+      dynamic res;
+      try {
+        res = await _client.rpc(
+          'validate_attendance_qr_token',
+          params: TenantService.instance.isBound ? withTenant(payload) : payload,
+        );
+      } on PostgrestException catch (e) {
+        if (!_rpcMissing(e)) rethrow;
+        res = await _client.rpc('validate_attendance_qr_token', params: payload);
+      }
       final map = _asMap(res);
       if (map == null || map['ok'] != true) {
         throw 'QR absensi tidak valid.';
@@ -101,6 +116,15 @@ class AttendanceQrService {
     if (res is Map<String, dynamic>) return res;
     if (res is Map) return Map<String, dynamic>.from(res);
     return null;
+  }
+
+  bool _rpcMissing(PostgrestException e) {
+    final code = (e.code ?? '').toUpperCase();
+    final msg = e.message.toLowerCase();
+    return code == 'PGRST202' ||
+        code == 'PGRST204' ||
+        msg.contains('could not find the function') ||
+        msg.contains('schema cache');
   }
 
   String _rpcMessage(PostgrestException e) {

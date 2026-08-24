@@ -342,6 +342,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       context,
       title: 'Scan karyawan · pelunasan',
       subtitle: 'Scan NIK karyawan yang menerima pelunasan sisa tagihan.',
+      notaTokoId: h['toko_id']?.toString(),
     );
     if (staff == null || !mounted) return;
 
@@ -646,6 +647,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       context,
       title: 'Scan admin · barang ready',
       subtitle: 'Scan NIK admin yang mengonfirmasi barang sudah siap diambil.',
+      notaTokoId: h['toko_id']?.toString(),
     );
     if (staff == null || !mounted) return;
 
@@ -746,6 +748,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       title: 'Scan karyawan · serah terima',
       subtitle:
           'Scan barcode NIK karyawan yang menyerahkan ${picked.length} item terpilih.',
+      notaTokoId: h['toko_id']?.toString(),
     );
     if (staff == null || !mounted) return;
 
@@ -859,6 +862,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       context,
       title: 'Scan karyawan · klaim garansi',
       subtitle: 'Scan barcode NIK karyawan yang menangani klaim garansi.',
+      notaTokoId: h['toko_id']?.toString(),
     );
     if (staff == null || !mounted) return;
 

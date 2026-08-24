@@ -56,10 +56,14 @@ class InvoiceHubService {
         .eq('id', user.id)
         .maybeSingle();
     if (profile == null) return null;
+    final bound = AttendanceAdminScope.boundTenantIdOrNull() ??
+        (profile['tenant_id'] ?? '').toString().trim();
+    if (bound.isEmpty) return null;
     final sale = await _db
         .from('sales')
         .select()
         .eq('no_invoice', noInvoice)
+        .eq('tenant_id', bound)
         .maybeSingle();
     if (sale == null) return null;
     if (!AttendanceAdminScope.canPosCheckoutToko(

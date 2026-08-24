@@ -2,8 +2,11 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
 import '../garansi/garansi_service.dart';
 import '../qr/obr_codes.dart';
+import '../qr/qr_scan_rules.dart';
+import '../tenant/tenant_service.dart';
 import 'invoice_lifecycle_rules.dart';
 import 'invoice_link.dart';
 import 'sale_fulfillment_service.dart';
@@ -31,10 +34,32 @@ class InvoiceLifecycleService {
     return encoded;
   }
 
+  Future<Map<String, dynamic>?> _saleById(String saleId) async {
+    var q = _db.from('sales').select().eq('id', saleId);
+    final bound = AttendanceAdminScope.boundTenantIdOrNull();
+    if (bound != null) q = q.eq('tenant_id', bound);
+    return q.maybeSingle();
+  }
+
+  Future<void> _updateSale(String saleId, Map<String, dynamic> patch) async {
+    var q = _db.from('sales').update(patch).eq('id', saleId);
+    final bound = AttendanceAdminScope.boundTenantIdOrNull();
+    if (bound != null) q = q.eq('tenant_id', bound);
+    await q;
+  }
+
+  bool _rpcMissing(PostgrestException e) {
+    final code = (e.code ?? '').toUpperCase();
+    final msg = e.message.toLowerCase();
+    return code == 'PGRST202' ||
+        code == 'PGRST204' ||
+        msg.contains('could not find the function') ||
+        msg.contains('schema cache');
+  }
+
   /// Pastikan token fase saat ini ada (hanya jika fase QR sudah dibuka admin).
   Future<Map<String, dynamic>> ensureTokens(String saleId) async {
-    final sale =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    final sale = await _saleById(saleId);
     if (sale == null) throw 'Transaksi tidak ditemukan.';
     final patch = <String, dynamic>{};
     final pay = ObrInvoice.normalizePayStatus(
@@ -77,9 +102,8 @@ class InvoiceLifecycleService {
     }
 
     if (patch.isNotEmpty) {
-      await _db.from('sales').update(patch).eq('id', saleId);
-      final updated =
-          await _db.from('sales').select().eq('id', saleId).maybeSingle();
+      await _updateSale(saleId, patch);
+      final updated = await _saleById(saleId);
       return Map<String, dynamic>.from(updated ?? sale);
     }
     return Map<String, dynamic>.from(sale);
@@ -90,16 +114,47 @@ class InvoiceLifecycleService {
       validateCustomerScan(String raw) async {
     final parsed = ObrInvoice.parse(raw);
     if (parsed == null || !parsed.customerLifecycle) {
-      throw 'QR pelanggan tidak valid. Gunakan QR DP / LUNAS / CLAIM bertoken.';
+      throw QrScanRules.messageForReason('bukan_qr_invoice');
     }
     final phase = parsed.phase!;
     final token = parsed.token!;
-    final sale = await _db
-        .from('sales')
-        .select()
-        .eq('no_invoice', parsed.noInvoice)
-        .maybeSingle();
-    if (sale == null) throw 'Invoice tidak ditemukan.';
+
+    try {
+      final res = await _db.rpc(
+        'validate_invoice_customer_qr',
+        params: TenantService.instance.isBound
+            ? withTenant({'p_payload': raw.trim()})
+            : {'p_payload': raw.trim()},
+      );
+      final map = res is Map ? Map<String, dynamic>.from(res) : null;
+      if (map == null) throw QrScanRules.messageForReason('bukan_qr_invoice');
+      if (map['ok'] != true) {
+        throw QrScanRules.messageForReason(map['reason']?.toString());
+      }
+      final saleId = (map['sale_id'] ?? '').toString();
+      final sale = saleId.isEmpty ? null : await _saleById(saleId);
+      if (sale == null) {
+        throw QrScanRules.messageForReason('invoice_tidak_ditemukan');
+      }
+      return (
+        sale: Map<String, dynamic>.from(sale),
+        phase: (map['phase'] ?? phase).toString(),
+        token: token,
+      );
+    } on PostgrestException catch (e) {
+      if (!_rpcMissing(e)) {
+        final msg = e.message.trim();
+        throw msg.isEmpty ? QrScanRules.messageForReason(null) : msg;
+      }
+    }
+
+    var q = _db.from('sales').select().eq('no_invoice', parsed.noInvoice);
+    final bound = AttendanceAdminScope.boundTenantIdOrNull();
+    if (bound != null) q = q.eq('tenant_id', bound);
+    final sale = await q.maybeSingle();
+    if (sale == null) {
+      throw QrScanRules.messageForReason('invoice_tidak_ditemukan');
+    }
 
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
@@ -195,8 +250,7 @@ class InvoiceLifecycleService {
     required String staffNik,
     required String staffNama,
   }) async {
-    final sale =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    final sale = await _saleById(saleId);
     if (sale == null) throw 'Transaksi tidak ditemukan.';
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
@@ -284,8 +338,7 @@ class InvoiceLifecycleService {
     String? staffNama,
     List<String>? saleItemIds,
   }) async {
-    final sale =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    final sale = await _saleById(saleId);
     if (sale == null) throw 'Transaksi tidak ditemukan.';
 
     final pay = ObrInvoice.normalizePayStatus(
@@ -456,7 +509,7 @@ class InvoiceLifecycleService {
           ? existingClaim
           : newToken();
 
-      await _db.from('sales').update({
+      await _updateSale(saleId, {
         if (!keepLunasQr) 'qr_lunas_used_at': now,
         if (!keepLunasQr) 'qr_lunas_used_by': staffNik,
         'qr_claim_token': claimToken,
@@ -465,11 +518,10 @@ class InvoiceLifecycleService {
         if (allDone) 'diambil_at': after['diambil_at'] ?? now,
         if (allDone) 'tracking_status': 'DIAMBIL',
         if (!allDone) 'diambil_at': null,
-      }).eq('id', saleId);
+      });
 
       after = Map<String, dynamic>.from(
-        await _db.from('sales').select().eq('id', saleId).maybeSingle() ??
-            after,
+        await _saleById(saleId) ?? after,
       );
 
       final claimQr = InvoiceLink.encode(
@@ -538,16 +590,15 @@ class InvoiceLifecycleService {
   }) async {
     final validated = await validateClaimScan(rawScan);
     final now = DateTime.now().toUtc().toIso8601String();
-    await _db.from('sales').update({
+    await _updateSale(validated.sale['id'].toString(), {
       'qr_claim_used_at': now,
       'qr_claim_used_by': staffNik,
-    }).eq('id', validated.sale['id']);
+    });
   }
 
   /// Pastikan ada QR CLAIM aktif bila sudah ada item DIAMBIL + garansi aktif.
   Future<String?> ensureClaimQrIfNeeded(String saleId) async {
-    final sale =
-        await _db.from('sales').select().eq('id', saleId).maybeSingle();
+    final sale = await _saleById(saleId);
     if (sale == null) return null;
     final items = await _fulfillment.listItems(saleId);
     final c = SaleFulfillmentService.counts(items);
@@ -564,11 +615,11 @@ class InvoiceLifecycleService {
     final used = sale['qr_claim_used_at'] != null;
     if (token.length < 8 || used) {
       token = newToken();
-      await _db.from('sales').update({
+      await _updateSale(saleId, {
         'qr_claim_token': token,
         'qr_claim_used_at': null,
         'qr_claim_used_by': null,
-      }).eq('id', saleId);
+      });
     }
     return InvoiceLink.encode(
       sale['no_invoice']?.toString() ?? '',

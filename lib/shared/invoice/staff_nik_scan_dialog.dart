@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
 import '../attendance/pos_duty_gate.dart';
 import '../qr/hid_scan_intake.dart';
+import '../qr/qr_scan_rules.dart';
+import '../tenant/tenant_service.dart';
 import '../theme.dart';
 import '../widgets/admin/admin_premium.dart';
 import '../widgets/admin/premium_app_bar.dart';
@@ -19,11 +22,16 @@ Future<Map<String, dynamic>?> showStaffNikScanDialog(
   String title = 'Scan barcode karyawan',
   String subtitle =
       'Arahkan kamera atau scanner toko ke barcode NIK karyawan.',
+  String? notaTokoId,
 }) {
   return Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (_) => _StaffNikScanPage(title: title, subtitle: subtitle),
+      builder: (_) => _StaffNikScanPage(
+        title: title,
+        subtitle: subtitle,
+        notaTokoId: notaTokoId,
+      ),
     ),
   );
 }
@@ -32,10 +40,12 @@ class _StaffNikScanPage extends StatefulWidget {
   const _StaffNikScanPage({
     required this.title,
     required this.subtitle,
+    this.notaTokoId,
   });
 
   final String title;
   final String subtitle;
+  final String? notaTokoId;
 
   @override
   State<_StaffNikScanPage> createState() => _StaffNikScanPageState();
@@ -89,17 +99,27 @@ class _StaffNikScanPageState extends State<_StaffNikScanPage> {
       await _camera?.stop();
     } catch (_) {}
     try {
-      final res = await Supabase.instance.client
-          .from('karyawan')
-          .select('id, nik, nama, jabatan, toko_id, status_approval')
-          .eq('nik', nik)
-          .maybeSingle();
+      final res = await _lookupStaff(nik);
       if (!mounted) return;
       if (res == null) {
         setState(() {
           _busy = false;
           _locked = false;
-          _error = 'Barcode NIK tidak ditemukan.';
+          _error = QrScanRules.messageForReason('nik_tidak_ditemukan');
+        });
+        try {
+          await _camera?.start();
+        } catch (_) {}
+        return;
+      }
+      if (!QrScanRules.staffNikSameStore(
+        staffToko: res['toko_id']?.toString(),
+        notaToko: widget.notaTokoId,
+      )) {
+        setState(() {
+          _busy = false;
+          _locked = false;
+          _error = QrScanRules.messageForReason('karyawan_beda_toko');
         });
         try {
           await _camera?.start();
@@ -148,6 +168,41 @@ class _StaffNikScanPageState extends State<_StaffNikScanPage> {
         await _camera?.start();
       } catch (_) {}
     }
+  }
+
+  Future<Map<String, dynamic>?> _lookupStaff(String nik) async {
+    final client = Supabase.instance.client;
+    try {
+      final params = <String, dynamic>{
+        'p_nik': nik,
+        'p_nota_toko_id': (widget.notaTokoId ?? '').trim(),
+      };
+      final res = await client.rpc(
+        'lookup_staff_by_nik',
+        params: TenantService.instance.isBound ? withTenant(params) : params,
+      );
+      if (res is Map) {
+        final map = Map<String, dynamic>.from(res);
+        if (map['ok'] == true) return map;
+        throw QrScanRules.messageForReason(map['reason']?.toString());
+      }
+    } on PostgrestException catch (e) {
+      final code = (e.code ?? '').toUpperCase();
+      final msg = e.message.toLowerCase();
+      final missing = code == 'PGRST202' ||
+          code == 'PGRST204' ||
+          msg.contains('could not find the function') ||
+          msg.contains('schema cache');
+      if (!missing) rethrow;
+    }
+
+    var q = client
+        .from('karyawan')
+        .select('id, nik, nama, jabatan, toko_id, status_approval, tenant_id')
+        .eq('nik', nik);
+    final bound = AttendanceAdminScope.boundTenantIdOrNull();
+    if (bound != null) q = q.eq('tenant_id', bound);
+    return q.maybeSingle();
   }
 
   @override

@@ -18,6 +18,10 @@ class TrainingRpcStubs {
         return _issueAttendanceQr(params);
       case 'validate_attendance_qr_token':
         return _validateAttendanceQr(params);
+      case 'validate_invoice_customer_qr':
+        return _validateInvoiceCustomerQr(params);
+      case 'lookup_staff_by_nik':
+        return _lookupStaffByNik(params);
       case 'get_invoice_hub':
         return _getInvoiceHub(params);
       case 'settle_invoice_dp':
@@ -188,6 +192,58 @@ class TrainingRpcStubs {
       'qr_claim_ready': phase == 'CLAIM',
       'training': true,
     };
+  }
+
+  static Future<Map<String, dynamic>> _validateInvoiceCustomerQr(
+    Map<String, dynamic>? p,
+  ) async {
+    final raw = (p?['p_payload'] ?? '').toString().trim();
+    final parts = raw.split('|');
+    if (parts.length < 5 || parts[0] != 'OBRINV') {
+      return {'ok': false, 'reason': 'bukan_qr_invoice', 'training': true};
+    }
+    final inv = parts[2].trim();
+    final sale = await TrainingSandboxStore.instance.selectOne(
+      'sales',
+      where: {'no_invoice': inv},
+    );
+    if (sale == null) {
+      return {'ok': false, 'reason': 'invoice_tidak_ditemukan', 'training': true};
+    }
+    return {
+      'ok': true,
+      'sale_id': sale['id'],
+      'no_invoice': inv,
+      'phase': parts[3].toString().toUpperCase(),
+      'toko_id': sale['toko_id'],
+      'training': true,
+    };
+  }
+
+  static Future<Map<String, dynamic>> _lookupStaffByNik(
+    Map<String, dynamic>? p,
+  ) async {
+    final nik = (p?['p_nik'] ?? '').toString().trim();
+    if (nik.isEmpty) {
+      return {'ok': false, 'reason': 'nik_kosong', 'training': true};
+    }
+    final row = await TrainingSandboxStore.instance.selectOne(
+      'karyawan',
+      where: {'nik': nik},
+    );
+    if (row == null) {
+      return {
+        'ok': true,
+        'id': 'training-staff',
+        'nik': nik,
+        'nama': 'Training Staff',
+        'jabatan': 'kasir',
+        'toko_id': TrainingMode.instance.tokoId ?? 'PUSAT',
+        'status_approval': 'Aktif',
+        'training': true,
+      };
+    }
+    return {'ok': true, ...row, 'training': true};
   }
 
   static Future<Map<String, dynamic>> _settleInvoiceDp(
