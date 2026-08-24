@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/member/member_online_order_labels.dart';
+import '../../shared/member/member_online_order_rules.dart';
+import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -50,36 +53,18 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
   }
 
   bool _orderBelongsHere(Map<String, dynamic> o) {
-    if (_isPusat) return true;
-    final orderToko = (o['toko_id'] ?? '').toString().trim().toUpperCase();
-    return orderToko.isNotEmpty && orderToko == _tokoId;
+    return MemberOnlineOrderRules.orderBelongsToStaff(
+      pusatRole: _isPusat,
+      staffTokoId: _tokoId,
+      orderTokoId: o['toko_id']?.toString(),
+    );
   }
 
-  /// Ada item pre-order di JSON items / catatan toko.
-  bool _hasPreorder(Map<String, dynamic> o) {
-    final note = (o['store_note'] ?? '').toString().toLowerCase();
-    if (note.contains('pre-order') || note.contains('preorder')) {
-      return true;
-    }
-    final items = o['items'];
-    if (items is! List) return false;
-    for (final raw in items) {
-      if (raw is! Map) continue;
-      final m = Map<String, dynamic>.from(raw);
-      if (m['pre_order'] == true) return true;
-      final pq = int.tryParse('${m['preorder_qty'] ?? 0}') ?? 0;
-      if (pq > 0) return true;
-    }
-    return false;
-  }
+  bool _hasPreorder(Map<String, dynamic> o) =>
+      MemberOnlineOrderRules.hasPreorder(o);
 
-  bool _isActivePaid(Map<String, dynamic> o) {
-    final s = (o['status'] ?? '').toString();
-    return s == 'paid' ||
-        s == 'packing' ||
-        s == 'ready' ||
-        s == 'shipped';
-  }
+  bool _isActivePaid(Map<String, dynamic> o) =>
+      MemberOnlineOrderRules.isActivePaid(o);
 
   List<Map<String, dynamic>> get _unpaidRows => _rows
       .where((o) => (o['status'] ?? '').toString() == 'pending_payment')
@@ -130,10 +115,11 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       // Soft-expire pending lewat 15 menit (hold stok habis).
       try {
         try {
-          await _db.rpc('expire_all_stale_stock_holds');
-        } catch (_) {
-          await _db.rpc('expire_stale_online_orders');
-        }
+          await _db.rpc(
+            'expire_stale_online_orders_for_tenant',
+            params: withTenant({}),
+          );
+        } catch (_) {}
       } catch (_) {}
 
       if (!_isPusat && _tokoId.isEmpty) {
@@ -149,16 +135,32 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
 
       // Cabang: filter ketat by toko_id. Pusat (role): semua cabang.
       // RLS server juga membatasi — filter client = defense in depth.
-      var q = _db.from('online_orders').select();
-      if (!_isPusat) {
-        q = q.eq('toko_id', _tokoId);
+      final tenant = TenantService.instance.boundId;
+      const pageSize = 500;
+      final mapped = <Map<String, dynamic>>[];
+      var offset = 0;
+      while (true) {
+        var q = _db
+            .from('online_orders')
+            .select()
+            .eq('tenant_id', tenant);
+        if (!_isPusat) {
+          final aliases = AttendanceAdminScope.storeIdAliases(_tokoId);
+          q = aliases.length == 1
+              ? q.eq('toko_id', aliases.first)
+              : q.inFilter('toko_id', aliases);
+        }
+        final chunk = await q
+            .order('created_at', ascending: false)
+            .range(offset, offset + pageSize - 1);
+        final rows = (chunk as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where(_orderBelongsHere)
+            .toList();
+        mapped.addAll(rows);
+        if ((chunk as List).length < pageSize) break;
+        offset += pageSize;
       }
-      final rows = await q.order('created_at', ascending: false).limit(100);
-      if (!mounted) return;
-      final mapped = (rows as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .where(_orderBelongsHere)
-          .toList();
       setState(() {
         _rows = mapped;
         _loading = false;
@@ -226,12 +228,12 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       ),
     );
     if (ok != true) return;
-    final res = await _db.rpc('update_online_order_fulfillment', params: {
+    final res = await _db.rpc('update_online_order_fulfillment', params: withTenant({
       'p_order_id': order['id'],
       'p_status': status,
       'p_courier_tracking': tracking.text.trim(),
       'p_store_note': note.text.trim(),
-    });
+    }));
     if (!mounted) return;
     if (res is Map && res['ok'] != true) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -747,7 +749,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     final phone = (o['phone_e164'] ?? '').toString().trim();
     final when = _relativeTime(o['created_at'] ?? o['paid_at']);
     final isDelivery = fulfill == 'delivery';
-    final total = int.tryParse('${o['total'] ?? 0}') ?? 0;
+    final total = MemberOnlineOrderRules.moneyOf(o['total']);
 
     return PremiumPanel(
       showAccentBar: true,
@@ -1028,13 +1030,11 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
   }
 
   List<Widget> _voucherLines(Map<String, dynamic> o) {
-    final shipDisc =
-        int.tryParse('${o['shipping_voucher_discount'] ?? 0}') ?? 0;
-    final prodDisc =
-        int.tryParse('${o['product_promo_discount'] ?? 0}') ?? 0;
+    final shipDisc = MemberOnlineOrderRules.moneyOf(o['shipping_voucher_discount']);
+    final prodDisc = MemberOnlineOrderRules.moneyOf(o['product_promo_discount']);
     final code = (o['product_promo_code'] ?? '').toString().trim();
-    final sub = int.tryParse('${o['subtotal'] ?? 0}') ?? 0;
-    final ship = int.tryParse('${o['shipping_fee'] ?? 0}') ?? 0;
+    final sub = MemberOnlineOrderRules.moneyOf(o['subtotal']);
+    final ship = MemberOnlineOrderRules.moneyOf(o['shipping_fee']);
     final out = <Widget>[];
     if (sub > 0 || ship > 0) {
       out.add(const SizedBox(height: 4));
@@ -1082,7 +1082,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       if (raw is! Map) continue;
       final m = Map<String, dynamic>.from(raw);
       if (m['pre_order'] == true ||
-          (int.tryParse('${m['preorder_qty'] ?? 0}') ?? 0) > 0) {
+          MemberOnlineOrderRules.countOf(m['preorder_qty']) > 0) {
         n++;
       }
     }
@@ -1225,7 +1225,10 @@ class _OnlineDeliverySettingsPageState
   Future<List<String>> _loadTokoOptions() async {
     final ids = <String>{};
     try {
-      final rows = await _db.from('toko_id').select('id');
+      final rows = await _db
+          .from('toko_id')
+          .select('id')
+          .eq('tenant_id', TenantService.instance.boundId);
       for (final r in (rows as List)) {
         final id = (r['id'] ?? '').toString().trim().toUpperCase();
         if (id.isNotEmpty) ids.add(id);
@@ -1272,9 +1275,9 @@ class _OnlineDeliverySettingsPageState
         _obrInstant = row['obr_instant_enabled'] != false;
         _obrSameday = row['obr_sameday_enabled'] != false;
         _obrNextday = row['obr_nextday_enabled'] != false;
-        _feeGrab = int.tryParse('${row['fee_grab'] ?? 15000}') ?? 15000;
-        _feeGojek = int.tryParse('${row['fee_gojek'] ?? 15000}') ?? 15000;
-        _feeOther = int.tryParse('${row['fee_other'] ?? 15000}') ?? 15000;
+        _feeGrab = MemberOnlineOrderRules.moneyOf(row['fee_grab'] ?? 15000);
+        _feeGojek = MemberOnlineOrderRules.moneyOf(row['fee_gojek'] ?? 15000);
+        _feeOther = MemberOnlineOrderRules.moneyOf(row['fee_other'] ?? 15000);
       } else {
         _online = true;
         _pickup = true;

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/member/member_online_order_labels.dart';
+import '../../../shared/member/member_online_order_rules.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/theme.dart';
@@ -385,8 +386,8 @@ class _MemberOnlineOrderPageState extends State<MemberOnlineOrderPage> {
                                   ),
                                   Text(
                                     _money.format(
-                                        int.tryParse('${o?['total'] ?? 0}') ??
-                                            0),
+                                        MemberOnlineOrderRules.moneyOf(
+                                            o?['total'])),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w800,
                                       color: OptikMemberTokens.blueDeep,

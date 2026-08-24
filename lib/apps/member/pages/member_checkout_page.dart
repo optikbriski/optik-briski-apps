@@ -12,6 +12,7 @@ import '../../../shared/logistics/stock_realtime.dart';
 import '../../../shared/maps/google_pin_map.dart';
 import '../../../shared/maps/osm_address_search.dart';
 import '../../../shared/member/member_cart.dart';
+import '../../../shared/member/member_online_order_rules.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
 import '../../../shared/member/member_shop_address.dart';
@@ -888,7 +889,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     final bySku = <String, int>{};
     for (final s in sellable) {
       final sku = (s['sku'] ?? '').toString().toUpperCase();
-      bySku[sku] = int.tryParse('${s['available_qty'] ?? 0}') ?? 0;
+      bySku[sku] = MemberOnlineOrderRules.countOf(s['available_qty']);
     }
     final need = <String>[];
     final newlyShort = <MemberCartItem>[];
@@ -1012,7 +1013,7 @@ class _MemberCheckoutPageState extends State<MemberCheckoutPage> {
     if (!mounted) return;
     if (q['ok'] == true) {
       setState(() {
-        _shippingFee = int.tryParse('${q['shipping_fee'] ?? 0}') ?? 0;
+        _shippingFee = MemberOnlineOrderRules.moneyOf(q['shipping_fee']);
       });
     } else {
       setState(() => _shippingFee = 0);

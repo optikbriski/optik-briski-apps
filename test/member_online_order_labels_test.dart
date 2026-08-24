@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optik_b_riski/shared/member/member_online_order_labels.dart';
+import 'package:optik_b_riski/shared/member/member_online_order_rules.dart';
 
 void main() {
   group('MemberOnlineOrderLabels', () {
@@ -36,6 +37,59 @@ void main() {
         MemberOnlineOrderLabels.salesTrackingLabel('WEIRD_STATUS'),
         'Weird Status',
       );
+    });
+  });
+
+  group('MemberOnlineOrderRules', () {
+    test('CABANG-PUSAT staff sees Pusat orders', () {
+      expect(
+        MemberOnlineOrderRules.orderBelongsToStaff(
+          pusatRole: false,
+          staffTokoId: 'CABANG-PUSAT',
+          orderTokoId: 'PUSAT',
+        ),
+        isTrue,
+      );
+      expect(
+        MemberOnlineOrderRules.orderBelongsToStaff(
+          pusatRole: false,
+          staffTokoId: 'CABANG-A',
+          orderTokoId: 'CABANG-B',
+        ),
+        isFalse,
+      );
+      expect(
+        MemberOnlineOrderRules.orderBelongsToStaff(
+          pusatRole: true,
+          staffTokoId: 'CABANG-A',
+          orderTokoId: 'CABANG-B',
+        ),
+        isTrue,
+      );
+    });
+
+    test('preorder qty JSON 2.0 is still preorder', () {
+      expect(
+        MemberOnlineOrderRules.hasPreorder({
+          'items': [
+            {'preorder_qty': 2.0},
+          ],
+        }),
+        isTrue,
+      );
+      expect(
+        MemberOnlineOrderRules.hasPreorder({
+          'items': [
+            {'preorder_qty': '0.0'},
+          ],
+        }),
+        isFalse,
+      );
+    });
+
+    test('money/qty JSON', () {
+      expect(MemberOnlineOrderRules.moneyOf('150000.0'), 150000);
+      expect(MemberOnlineOrderRules.countOf('7.0'), 7);
     });
   });
 }

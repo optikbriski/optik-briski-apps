@@ -1052,8 +1052,10 @@ class MemberRepository {
 
     // Lengkapi lat/lng + alamat toko dari master.
     try {
-      final geoRows =
-          await _db.from('toko_id').select('id, latitude, longitude');
+      final geoRows = await _db
+          .from('toko_id')
+          .select('id, latitude, longitude')
+          .eq('tenant_id', TenantService.instance.boundId);
       final byId = <String, Map<String, dynamic>>{};
       for (final raw in (geoRows as List)) {
         final m = Map<String, dynamic>.from(raw as Map);
@@ -1065,7 +1067,8 @@ class MemberRepository {
       try {
         final inv = await _db
             .from('invoice_settings')
-            .select('toko_id, shop_name, address');
+            .select('toko_id, shop_name, address')
+            .eq('tenant_id', TenantService.instance.boundId);
         for (final raw in (inv as List)) {
           final m = Map<String, dynamic>.from(raw as Map);
           final id = (m['toko_id'] ?? '').toString().trim().toUpperCase();
@@ -1887,11 +1890,11 @@ class MemberRepository {
           final oid = m['online_order_id'];
           if (oid != null) {
             try {
-              await _db.rpc('attach_online_order_snap', params: {
+              await _db.rpc('attach_online_order_snap', params: withTenant({
                 'p_online_order_id': oid,
                 'p_snap_token': 'DEV_NO_EDGE',
                 'p_redirect_url': '',
-              });
+              }));
             } catch (_) {}
           }
           return {
