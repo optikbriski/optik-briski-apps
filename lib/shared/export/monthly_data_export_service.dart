@@ -9,6 +9,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../brand/brand_service.dart';
+import '../brand/brand_slug_rules.dart';
+import '../tenant/tenant_service.dart';
+import 'export_report_rules.dart';
 
 typedef ExportProgress = void Function(String message, double? progress);
 
@@ -200,10 +203,12 @@ class MonthlyDataExportService {
   static bool isMissingExportSchema(Object e) {
     final raw = e.toString().toLowerCase();
     return raw.contains('export_salinan_counter') ||
+        raw.contains('export_salinan_counter_tenant') ||
         raw.contains('export_download_history') ||
         raw.contains('allocate_export_salinan') ||
         raw.contains('record_export_download') ||
         raw.contains('pgrst202') ||
+        raw.contains('pgrst204') ||
         raw.contains('pgrst205') ||
         raw.contains('42p01') ||
         raw.contains('42883') ||
@@ -420,9 +425,33 @@ class MonthlyDataExportService {
     return null;
   }
 
+  String? _boundTenantIdOrNull() {
+    final id = TenantService.instance.id;
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
   /// Preview nomor Salinan berikutnya (tidak mengunci / tidak increment).
   Future<PeekSalinanResult> peekNextSalinan() async {
     String? lastSchemaError;
+    final tenantId = _boundTenantIdOrNull();
+    if (tenantId != null) {
+      try {
+        final row = await _client
+            .from('export_salinan_counter_tenant')
+            .select('next_salinan')
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+        final n = (row?['next_salinan'] as num?)?.toInt();
+        if (n != null && n > 0) {
+          if (n > _localSalinanSeq) _localSalinanSeq = n;
+          return PeekSalinanResult(next: n);
+        }
+      } catch (e) {
+        debugPrint('peekNextSalinan tenant counter: $e');
+        if (isMissingExportSchema(e)) lastSchemaError = '$e';
+      }
+    }
     try {
       final row = await _client
           .from('export_salinan_counter')
@@ -439,11 +468,9 @@ class MonthlyDataExportService {
       if (isMissingExportSchema(e)) lastSchemaError = '$e';
     }
     try {
-      final rows = await _client
-          .from('export_download_history')
-          .select('salinan_ke')
-          .order('salinan_ke', ascending: false)
-          .limit(1);
+      var q = _client.from('export_download_history').select('salinan_ke');
+      if (tenantId != null) q = q.eq('tenant_id', tenantId);
+      final rows = await q.order('salinan_ke', ascending: false).limit(1);
       final list = List<Map<String, dynamic>>.from(rows as List);
       if (list.isNotEmpty) {
         final max = (list.first['salinan_ke'] as num?)?.toInt() ?? 0;
@@ -467,35 +494,62 @@ class MonthlyDataExportService {
     return const PeekSalinanResult(next: 1);
   }
 
+  int _parseAllocated(dynamic raw) {
+    final n = raw is int
+        ? raw
+        : ExportReportRules.moneyOf(raw);
+    if (n < 1) {
+      throw StateError('Gagal mengalokasikan nomor salinan.');
+    }
+    if (n >= _localSalinanSeq) _localSalinanSeq = n + 1;
+    return n;
+  }
+
   /// Ambil nomor salinan batch secara atomic; fallback lokal jika RPC belum ada.
   Future<AllocateSalinanResult> allocateSalinan() async {
+    final tenantId = _boundTenantIdOrNull();
+    if (tenantId == null) {
+      throw StateError(TenantService.unboundMessage);
+    }
     try {
-      final raw = await _client.rpc('allocate_export_salinan');
-      final n = raw is int
-          ? raw
-          : int.tryParse(raw?.toString() ?? '') ?? 0;
-      if (n < 1) {
-        throw StateError('Gagal mengalokasikan nomor salinan.');
-      }
-      if (n >= _localSalinanSeq) _localSalinanSeq = n + 1;
-      return AllocateSalinanResult(salinanKe: n);
-    } catch (e) {
-      debugPrint('allocateSalinan RPC: $e');
-      if (!isMissingExportSchema(e)) rethrow;
-      final local = _localSalinanSeq++;
-      return AllocateSalinanResult(
-        salinanKe: local,
-        usedLocalFallback: true,
-        warning: '$e',
+      final raw = await _client.rpc(
+        'allocate_export_salinan',
+        params: withTenant({}),
       );
+      return AllocateSalinanResult(salinanKe: _parseAllocated(raw));
+    } catch (e) {
+      debugPrint('allocateSalinan RPC tenant: $e');
+      if (!isMissingExportSchema(e)) rethrow;
+      try {
+        final raw = await _client.rpc('allocate_export_salinan');
+        return AllocateSalinanResult(salinanKe: _parseAllocated(raw));
+      } catch (e2) {
+        debugPrint('allocateSalinan RPC legacy: $e2');
+        if (!isMissingExportSchema(e2)) rethrow;
+        final local = _localSalinanSeq++;
+        return AllocateSalinanResult(
+          salinanKe: local,
+          usedLocalFallback: true,
+          warning: '$e2',
+        );
+      }
     }
   }
 
   Future<HistoryFetchResult> fetchHistory({int limit = 40}) async {
+    final tenantId = _boundTenantIdOrNull();
+    if (tenantId == null) {
+      return const HistoryFetchResult(
+        entries: [],
+        schemaReady: true,
+        error: TenantService.unboundMessage,
+      );
+    }
     try {
       final rows = await _client
           .from('export_download_history')
           .select()
+          .eq('tenant_id', tenantId)
           .order('created_at', ascending: false)
           .limit(limit);
       final list = List<Map<String, dynamic>>.from(rows as List);
@@ -530,6 +584,10 @@ class MonthlyDataExportService {
     String? adminEmail,
     String? notes,
   }) async {
+    final tenantId = _boundTenantIdOrNull();
+    if (tenantId == null) {
+      throw StateError(TenantService.unboundMessage);
+    }
     await _client.from('export_download_history').insert({
       'admin_user_id': adminUserId,
       'admin_email': adminEmail,
@@ -539,6 +597,7 @@ class MonthlyDataExportService {
       'domains': domainIds,
       'salinan_ke': salinanKe,
       'file_count': fileCount,
+      'tenant_id': tenantId,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     });
   }
@@ -558,6 +617,10 @@ class MonthlyDataExportService {
   }) async {
     if (domains.isEmpty) {
       throw StateError('Tidak ada domain yang dipilih.');
+    }
+    final tenantId = _boundTenantIdOrNull();
+    if (tenantId == null) {
+      throw StateError(TenantService.unboundMessage);
     }
 
     final selected = List<ExportDomain>.from(domains);
@@ -589,6 +652,7 @@ class MonthlyDataExportService {
         if (domain.id == 'sales_items') {
           salesInRange ??= await _fetchTable(
             table: 'sales',
+            tenantId: tenantId,
             dateColumn: 'created_at',
             start: range.startIso,
             end: range.endIso,
@@ -598,11 +662,13 @@ class MonthlyDataExportService {
         } else if (domain.isSnapshot || domain.dateColumn == null) {
           rows = await _fetchTable(
             table: domain.table,
+            tenantId: tenantId,
             orderBy: domain.orderBy,
           );
         } else {
           rows = await _fetchTable(
             table: domain.table,
+            tenantId: tenantId,
             dateColumn: domain.dateColumn,
             start: range.startIso,
             end: range.endIso,
@@ -717,8 +783,9 @@ class MonthlyDataExportService {
     final endStamp = _fileDay.format(range.endDay);
     final safeSlug = domainSlug.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
     final slug = safeSlug.isEmpty ? 'Laporan' : safeSlug;
+    final prefix = ExportReportRules.fileBrandPrefixFromSession();
     final fileName =
-        'OptikBRiski_${slug}_$startStamp-${endStamp}_Salinan$salinanKe.pdf';
+        '${prefix}_${slug}_$startStamp-${endStamp}_Salinan$salinanKe.pdf';
     final file = File('${dir.path}${Platform.pathSeparator}$fileName');
 
     await file.parent.create(recursive: true);
@@ -1381,6 +1448,7 @@ class MonthlyDataExportService {
 
   Future<List<Map<String, dynamic>>> _fetchTable({
     required String table,
+    required String tenantId,
     String? dateColumn,
     String? start,
     String? end,
@@ -1390,6 +1458,19 @@ class MonthlyDataExportService {
     var from = 0;
     while (true) {
       var filter = _client.from(table).select();
+      if (table == 'versi_app') {
+        final slug = BrandSlugRules.normalize(TenantService.instance.slug);
+        if (slug.isEmpty) return const [];
+        if (BrandSlugRules.isOptikSlug(slug)) {
+          filter = filter.or(
+            'tenant_slug.eq.${TenantService.optikSlug},tenant_slug.is.null',
+          );
+        } else {
+          filter = filter.eq('tenant_slug', slug);
+        }
+      } else if (ExportReportRules.tableUsesTenantId(table)) {
+        filter = filter.eq('tenant_id', tenantId);
+      }
       if (dateColumn != null && start != null && end != null) {
         final isDateOnly = dateColumn == 'tanggal' ||
             dateColumn == 'tanggal_transaksi' ||

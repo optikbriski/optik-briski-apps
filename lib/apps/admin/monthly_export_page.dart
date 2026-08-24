@@ -7,6 +7,7 @@ import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/export/export_report_rules.dart';
 import '../../shared/export/monthly_data_export_service.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
@@ -81,14 +82,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   bool get _showInfraBanner =>
       _salinanSchemaMissing || _historySchemaMissing;
 
-  bool get _isPusatExportAllowed {
-    final toko = (widget.profile['toko_id'] ?? '').toString();
-    final role = (widget.profile['role'] ?? '').toString();
-    return toko == 'PUSAT' ||
-        toko == 'CABANG-PUSAT' ||
-        role == 'owner' ||
-        role == 'admin_pusat';
-  }
+  bool get _isPusatExportAllowed =>
+      ExportReportRules.canExportPusat(profile: widget.profile);
 
   @override
   void initState() {
@@ -342,7 +337,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
               f.path,
               name: f.uri.pathSegments.isNotEmpty
                   ? f.uri.pathSegments.last
-                  : 'optik_briski_laporan.pdf',
+                  : ExportReportRules.shareFallbackName(),
               mimeType: 'application/pdf',
             ),
         ],

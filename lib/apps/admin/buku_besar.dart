@@ -17,8 +17,10 @@ import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
 import '../../shared/export/daily_ledger_pdf_service.dart';
+import '../../shared/export/export_report_rules.dart';
 import '../../shared/finance/gl_posting_service.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/tenant/tenant_service.dart';
 
 // ============================================================================
 // MODUL 16: FULL CORPORATE GENERAL LEDGER & FISCAL FINANCIAL CONSOLIDATION
@@ -130,7 +132,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       if (!_isIncome(e) || !_isApprovedOrPos(e)) continue;
       if (_isPosSaleRef(e)) continue;
       if (_isModalNoise(e['kategori']?.toString())) continue;
-      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+      sum += ExportReportRules.moneyOf(e['nominal']);
     }
     return sum;
   }
@@ -141,7 +143,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     for (final e in listTx) {
       if (!_isExpense(e) || !_isApprovedOrPos(e)) continue;
       if (_isModalNoise(e['kategori']?.toString())) continue;
-      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+      sum += ExportReportRules.moneyOf(e['nominal']);
     }
     return sum;
   }
@@ -153,7 +155,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       if (!_isIncome(e) || !_isApprovedOrPos(e)) continue;
       if (_isPosSaleRef(e) || _isClosingShift(e)) continue;
       if (_isModalNoise(e['kategori']?.toString())) continue;
-      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+      sum += ExportReportRules.moneyOf(e['nominal']);
     }
     return sum;
   }
@@ -165,7 +167,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       if (!_isExpense(e) || !_isApprovedOrPos(e)) continue;
       if (_isClosingShift(e)) continue;
       if (_isModalNoise(e['kategori']?.toString())) continue;
-      sum += int.tryParse(e['nominal']?.toString() ?? '0') ?? 0;
+      sum += ExportReportRules.moneyOf(e['nominal']);
     }
     return sum;
   }
@@ -426,16 +428,22 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      final resFinance = await supabase
+      var financeQ = supabase
           .from('finance_transactions')
           .select()
-          .eq('toko_id', tokoId)
-          .order('tanggal_transaksi', ascending: false);
-
-      final resSales = await supabase
+          .eq('toko_id', tokoId);
+      var salesQ = supabase
           .from('sales')
           .select('total_harga, sisa_tagihan, created_at')
           .eq('toko_id', tokoId);
+      final tenantId = TenantService.instance.id;
+      if (tenantId != null && tenantId.isNotEmpty) {
+        financeQ = financeQ.eq('tenant_id', tenantId);
+        salesQ = salesQ.eq('tenant_id', tenantId);
+      }
+      final resFinance =
+          await financeQ.order('tanggal_transaksi', ascending: false);
+      final resSales = await salesQ;
 
       final List<Map<String, dynamic>> dataFinance =
           List<Map<String, dynamic>>.from(resFinance);
@@ -455,8 +463,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       final Map<String, List<Map<String, dynamic>>> temporaryGroup = {};
 
       for (var sale in dataSales) {
-        int total = int.tryParse(sale['total_harga']?.toString() ?? '0') ?? 0;
-        int sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+        int total = ExportReportRules.moneyOf(sale['total_harga']);
+        int sisa = ExportReportRules.moneyOf(sale['sisa_tagihan']);
         int cashCollected = total - sisa;
 
         hitungPenjualanRiil += total;
@@ -478,7 +486,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       }
 
       for (var item in dataFinance) {
-        final nominal = int.tryParse(item['nominal']?.toString() ?? '0') ?? 0;
+        final nominal = ExportReportRules.moneyOf(item['nominal']);
         final kategori = item['kategori']?.toString() ?? '';
 
         if (_isIncome(item) && _isApprovedOrPos(item)) {
@@ -539,12 +547,17 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     try {
       String tokoId = selectedTokoId ?? widget.profile['toko_id'] ?? 'PUSAT';
 
-      final resSales = await supabase
+      var salesDetailQ = supabase
           .from('sales')
           .select('*, sales_items(*)')
           .eq('toko_id', tokoId)
           .gte('created_at', '${dateStr}T00:00:00')
           .lte('created_at', '${dateStr}T23:59:59');
+      final tenantId = TenantService.instance.id;
+      if (tenantId != null && tenantId.isNotEmpty) {
+        salesDetailQ = salesDetailQ.eq('tenant_id', tenantId);
+      }
+      final resSales = await salesDetailQ;
 
       List<Map<String, dynamic>> salesData =
           List<Map<String, dynamic>>.from(resSales);
@@ -582,10 +595,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           currentMetode = 'MIDTRANS';
         }
 
-        int saleTotal =
-            int.tryParse(sale['total_harga']?.toString() ?? '0') ?? 0;
-        int saleSisa =
-            int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+        int saleTotal = ExportReportRules.moneyOf(sale['total_harga']);
+        int saleSisa = ExportReportRules.moneyOf(sale['sisa_tagihan']);
         int riilCollected = saleTotal - saleSisa;
 
         // Akumulasi Alokasi Mutasi Bank Setoran Harian
@@ -599,12 +610,19 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
         var items = sale['sales_items'] as List<dynamic>? ?? [];
         for (var item in items) {
-          int qty = int.tryParse(item['qty']?.toString() ?? '1') ?? 1;
-          int subtotal = int.tryParse(item['subtotal']?.toString() ?? '0') ?? 0;
+          final qtyRaw = item['qty'];
+          int qty = (qtyRaw == null || qtyRaw.toString().trim().isEmpty)
+              ? 1
+              : ExportReportRules.countOf(qtyRaw);
+          if (qty < 1) qty = 1;
+          int subtotal = ExportReportRules.moneyOf(item['subtotal']);
 
-          int hargaModalSatuan =
-              int.tryParse(item['harga_modal']?.toString() ?? '') ??
-                  ((subtotal / qty) * 0.4).round();
+          final modalRaw = item['harga_modal'];
+          final hasModal =
+              modalRaw != null && modalRaw.toString().trim().isNotEmpty;
+          int hargaModalSatuan = hasModal
+              ? ExportReportRules.moneyOf(modalRaw)
+              : ((subtotal / qty) * 0.4).round();
           int totalHppItem = hargaModalSatuan * qty;
 
           akumulasiOmzet += subtotal;

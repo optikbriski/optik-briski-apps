@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../brand/brand_service.dart';
+import 'export_report_rules.dart';
 
 /// Ringkasan laba-rugi harian + mutasi untuk ekspor dari Buku Besar Stage 3.
 class DailyLedgerPdfData {
@@ -76,7 +77,8 @@ class DailyLedgerPdfService {
   }) {
     final safeToko = tokoId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final safeDate = dateStr.replaceAll('-', '');
-    return 'OptikBRiski_LedgerHarian_${safeToko}_$safeDate.pdf';
+    final prefix = ExportReportRules.fileBrandPrefixFromSession();
+    return '${prefix}_LedgerHarian_${safeToko}_$safeDate.pdf';
   }
 
   static Future<Uint8List> buildPdf(DailyLedgerPdfData data) async {
@@ -318,11 +320,11 @@ class DailyLedgerPdfService {
               ),
               _cell('${items[i]['qty'] ?? 0}',
                   align: pw.TextAlign.center),
-              _cell(_rp(int.tryParse('${items[i]['subtotal'] ?? 0}') ?? 0),
+              _cell(_rp(ExportReportRules.moneyOf(items[i]['subtotal'])),
                   align: pw.TextAlign.right),
-              _cell(_rp(int.tryParse('${items[i]['total_hpp'] ?? 0}') ?? 0),
+              _cell(_rp(ExportReportRules.moneyOf(items[i]['total_hpp'])),
                   align: pw.TextAlign.right),
-              _cell(_rp(int.tryParse('${items[i]['margin'] ?? 0}') ?? 0),
+              _cell(_rp(ExportReportRules.moneyOf(items[i]['margin'])),
                   align: pw.TextAlign.right, color: _green),
             ],
           ),
@@ -380,7 +382,7 @@ class DailyLedgerPdfService {
   }
 
   static String _signedNominal(Map<String, dynamic> row) {
-    final n = int.tryParse('${row['nominal'] ?? 0}') ?? 0;
+    final n = ExportReportRules.moneyOf(row['nominal']);
     return '${_isIncomeJenis(row) ? '+' : '-'} ${_rp(n)}';
   }
 

@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../finance/gl_report_service.dart';
 import '../brand/brand_service.dart';
+import 'export_report_rules.dart';
 
 class GlReportPdfService {
   GlReportPdfService._();
@@ -48,7 +49,7 @@ class GlReportPdfService {
     await Printing.sharePdf(
       bytes: bytes,
       filename:
-          'OptikBRiski_NeracaSaldo_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
+          '${ExportReportRules.fileBrandPrefixFromSession()}_NeracaSaldo_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
     );
   }
 
@@ -76,7 +77,7 @@ class GlReportPdfService {
     await Printing.sharePdf(
       bytes: bytes,
       filename:
-          'OptikBRiski_LabaRugi_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
+          '${ExportReportRules.fileBrandPrefixFromSession()}_LabaRugi_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
     );
   }
 
@@ -104,7 +105,7 @@ class GlReportPdfService {
     await Printing.sharePdf(
       bytes: bytes,
       filename:
-          'OptikBRiski_Neraca_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
+          '${ExportReportRules.fileBrandPrefixFromSession()}_Neraca_${DateFormat('yyyyMM').format(DateTime.now())}.pdf',
     );
   }
 
