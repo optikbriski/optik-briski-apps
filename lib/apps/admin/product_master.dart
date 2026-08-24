@@ -493,7 +493,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
     for (final cabang in listCabang) {
       final toko = cabang.toString().toUpperCase();
-      if (toko.isEmpty || toko == 'PUSAT') continue;
+      if (!MasterDataRules.isCabangToko(toko)) continue;
       try {
         await ProductIdentity.ensureAtToko(tokoId: toko, sku: sku);
       } catch (e) {
@@ -530,8 +530,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         }
         if (!mounted) return;
         final map = res is Map ? Map<String, dynamic>.from(res) : null;
-        final ok = map?['parity_ok'] == true || map?['gaps'] == 0;
-        final pusat = map?['pusat_skus'] ?? map?['skus'] ?? '?';
+        final ok = map?['ok'] == true ||
+            map?['parity_ok'] == true ||
+            map?['gaps'] == 0;
+        final pusat = map?['skus_propagated'] ??
+            map?['pusat_skus'] ??
+            map?['skus'] ??
+            '?';
         final gaps = map?['gaps'];
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -580,68 +585,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       // Selalu ambil semua toko lalu filter cabang di client,
       // supaya breakdown stok per cabang tetap lengkap.
       final data = await MasterDataService().listAllRows();
-      List<dynamic> rawList = data;
-
-      // Group by SKU casefold (selaras RPC / ledger), bukan nama.
-      Map<String, Map<String, dynamic>> mapGabung = {};
-      for (var item in rawList) {
-        final rawKey = ProductIdentity.normalizeSku(item['sku']) ??
-            ProductIdentity.normalizeBarcode(item['barcode']) ??
-            'ID-${item['id']}';
-        final skuKey = rawKey.toUpperCase();
-        final itemMap = Map<String, dynamic>.from(item as Map);
-        final realSekarang = StockQty.realOf(itemMap);
-        final pendingSekarang = StockQty.pendingOf(itemMap);
-        final availableSekarang = StockQty.availableOf(itemMap);
-        String lokasiToko =
-            item['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-
-        if (!mapGabung.containsKey(skuKey)) {
-          mapGabung[skuKey] = Map<String, dynamic>.from(item);
-          mapGabung[skuKey]!['breakdown_stok'] = [
-            {
-              "cabang": lokasiToko,
-              "stok": realSekarang,
-              "pending": pendingSekarang,
-              "available": availableSekarang,
-            }
-          ];
-          mapGabung[skuKey]!['total_stock'] = realSekarang;
-          mapGabung[skuKey]!['total_pending'] = pendingSekarang;
-          mapGabung[skuKey]!['total_available'] = availableSekarang;
-        } else {
-          mapGabung[skuKey]!['total_stock'] =
-              (mapGabung[skuKey]!['total_stock'] ?? 0) + realSekarang;
-          mapGabung[skuKey]!['total_pending'] =
-              (mapGabung[skuKey]!['total_pending'] ?? 0) + pendingSekarang;
-          mapGabung[skuKey]!['total_available'] =
-              (mapGabung[skuKey]!['total_available'] ?? 0) + availableSekarang;
-
-          List<Map<String, dynamic>> breakdown =
-              List<Map<String, dynamic>>.from(
-                  mapGabung[skuKey]!['breakdown_stok']);
-          breakdown.add({
-            "cabang": lokasiToko,
-            "stok": realSekarang,
-            "pending": pendingSekarang,
-            "available": availableSekarang,
-          });
-          mapGabung[skuKey]!['breakdown_stok'] = breakdown;
-          // Prefer baris PUSAT sebagai representasi master
-          if (lokasiToko == 'PUSAT') {
-            final prev = mapGabung[skuKey]!;
-            mapGabung[skuKey] = Map<String, dynamic>.from(item);
-            mapGabung[skuKey]!['breakdown_stok'] = breakdown;
-            mapGabung[skuKey]!['total_stock'] = prev['total_stock'];
-            mapGabung[skuKey]!['total_pending'] = prev['total_pending'];
-            mapGabung[skuKey]!['total_available'] = prev['total_available'];
-          }
-        }
-      }
+      final merged = MasterDataService.mergeBySku(data);
 
       if (mounted) {
         setState(() {
-          listProdukAll = mapGabung.values.toList();
+          listProdukAll = merged;
           isLoading = false;
         });
         _flushPendingStockRealtimeRefresh();
@@ -862,7 +810,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         final checkExist = await Supabase.instance.client
             .from('products')
             .select('nama')
-            .eq('toko_id', 'PUSAT')
+            .inFilter(
+              'toko_id',
+              AttendanceAdminScope.storeIdAliases('PUSAT'),
+            )
             .ilike('barcode', bc)
             .limit(1)
             .maybeSingle();
@@ -970,7 +921,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         final openingToko =
             (selectedCabang == null ||
                     selectedCabang == 'BROADCAST_ALL' ||
-                    selectedCabang == 'PUSAT')
+                    MasterDataRules.sameStore(selectedCabang, 'PUSAT'))
                 ? 'PUSAT'
                 : selectedCabang!.toString().toUpperCase();
 
@@ -2234,13 +2185,12 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       final detailTokos = <Map<String, dynamic>>[];
 
       for (final toko in cabangTargets) {
-        final branch = await client
-            .from('products')
-            .select('id, stock')
-            .eq('toko_id', toko)
-            .eq('sku', sku)
-            .maybeSingle();
-        final lama = int.tryParse(branch?['stock']?.toString() ?? '0') ?? 0;
+        final branch = await ProductIdentity.findAtToko(
+          tokoId: toko,
+          sku: sku,
+          select: 'id, stock',
+        );
+        final lama = MasterDataRules.stokOf(branch?['stock']);
         detailTokos.add({
           'toko': toko,
           'created': branch == null,
@@ -2250,12 +2200,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         });
       }
 
-      final pusat = await client
-          .from('products')
-          .select('id')
-          .eq('toko_id', 'PUSAT')
-          .eq('sku', sku)
-          .maybeSingle();
+      final pusat = await ProductIdentity.findPusat(sku: sku);
       if (pusat == null) {
         final row = Map<String, dynamic>.from(baseProduct);
         row.remove('id');

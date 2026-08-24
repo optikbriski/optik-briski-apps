@@ -42,6 +42,7 @@ import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/training/training_ops_sync.dart';
 import '../../shared/logistics/inventory_stock_rules.dart';
+import '../../shared/logistics/master_data_rules.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/finance/gl_posting_service.dart';
 import '../../shared/logistics/request_order_service.dart';
@@ -2214,20 +2215,17 @@ class _SalesPageState extends State<SalesPage> {
         select: '*',
       );
       if (res == null && sku.isNotEmpty) {
-        res = await supabase
-            .from('products')
-            .select()
-            .eq('sku', sku)
-            .eq('toko_id', 'PUSAT')
-            .maybeSingle();
+        res = await ProductIdentity.findPusat(sku: sku, barcode: sku);
       }
 
       if (res != null) {
         final stockSku = (res['sku'] ?? res['barcode'] ?? sku).toString();
         // 2. Cek stok dari products.stock toko login (sumber kebenaran tunggal)
         Map<String, dynamic>? localProd;
-        if ((res['toko_id'] ?? '').toString().toUpperCase() ==
-            tokoId.toString().toUpperCase()) {
+        if (MasterDataRules.sameStore(
+          res['toko_id']?.toString(),
+          tokoId.toString(),
+        )) {
           localProd = Map<String, dynamic>.from(res);
         } else {
           // Produk pusat wajib terdaftar di toko (stok tidak disalin dari PUSAT).
@@ -2235,18 +2233,12 @@ class _SalesPageState extends State<SalesPage> {
             tokoId: tokoId.toString(),
             sku: stockSku,
           );
-          localProd = await supabase
-              .from('products')
-              .select('id, stock, reserved_qty, sku, barcode, toko_id')
-              .eq('toko_id', tokoId)
-              .eq('sku', stockSku)
-              .maybeSingle();
-          localProd ??= await supabase
-              .from('products')
-              .select('id, stock, reserved_qty, sku, barcode, toko_id')
-              .eq('toko_id', tokoId)
-              .eq('barcode', stockSku)
-              .maybeSingle();
+          localProd = await ProductIdentity.findAtToko(
+            tokoId: tokoId.toString(),
+            sku: stockSku,
+            barcode: stockSku,
+            select: 'id, stock, reserved_qty, sku, barcode, toko_id',
+          );
         }
         final stokAktif = StockQty.availableOf(
           localProd != null ? Map<String, dynamic>.from(localProd) : null,

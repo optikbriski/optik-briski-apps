@@ -32,6 +32,13 @@ abstract final class MasterDataRules {
   static bool sameStore(String? a, String? b) =>
       AttendanceAdminScope.sameTokoId(a, b);
 
+  /// Satu kunci toko di breakdown. PUSAT = CABANG-PUSAT, jangan dobel.
+  static String canonicalToko(String? tokoId) {
+    final t = (tokoId ?? '').trim().toUpperCase();
+    if (t.isEmpty || sameStore(t, 'PUSAT')) return 'PUSAT';
+    return t;
+  }
+
   /// Harga form / JSON `150000.0` / `150.000`.
   static int hargaOf(Object? raw) => ProductIdentity.moneyOf(raw);
 
