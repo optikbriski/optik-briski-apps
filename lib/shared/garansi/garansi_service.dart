@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../invoice/sale_fulfillment_service.dart';
+import '../tenant/tenant_service.dart';
+import 'garansi_rules.dart';
 
 /// Garansi frame + lensa:
 /// - Kartu dibuat saat jual (status menunggu_ambil) — belum bisa klaim
@@ -130,7 +132,8 @@ class GaransiService {
     final items =
         await _db.from('sales_items').select().eq('sale_id', saleId) as List;
 
-    final tokoId = sale['toko_id']?.toString() ?? 'PUSAT';
+    final tokoId = GaransiRules.requireTokoId(sale['toko_id']);
+    final tenantId = TenantService.instance.id;
     var created = 0;
 
     for (final raw in items) {
@@ -162,6 +165,7 @@ class GaransiService {
             'sale_id': saleId,
             'sale_item_id': saleItemId,
             'toko_id': tokoId,
+            if (tenantId != null && tenantId.isNotEmpty) 'tenant_id': tenantId,
             'no_invoice': sale['no_invoice'],
             'nama_pelanggan': sale['nama_pelanggan'],
             'no_wa': sale['no_wa'],
@@ -189,11 +193,14 @@ class GaransiService {
 
   Future<int> generateFromInvoice(String noInvoice, {String? tokoId}) async {
     var q = _db.from('sales').select('id').eq('no_invoice', noInvoice);
+    final tenantId = TenantService.instance.id;
+    if (tenantId != null && tenantId.isNotEmpty) {
+      q = q.eq('tenant_id', tenantId);
+    }
     if (tokoId != null &&
         tokoId.isNotEmpty &&
-        tokoId.toUpperCase() != 'PUSAT' &&
-        tokoId.toUpperCase() != 'CABANG-PUSAT') {
-      q = q.eq('toko_id', tokoId);
+        !GaransiRules.isPusatToko(tokoId)) {
+      q = q.inFilter('toko_id', GaransiRules.storeAliases(tokoId));
     }
     final sale = await q.maybeSingle();
     if (sale == null) throw 'Invoice tidak ditemukan.';
@@ -206,8 +213,12 @@ class GaransiService {
     bool isPusat = false,
   }) async {
     var q = _db.from('sales').select().eq('no_invoice', noInvoice.trim());
+    final tenantId = TenantService.instance.id;
+    if (tenantId != null && tenantId.isNotEmpty) {
+      q = q.eq('tenant_id', tenantId);
+    }
     if (!isPusat && tokoId != null && tokoId.isNotEmpty) {
-      q = q.eq('toko_id', tokoId);
+      q = q.inFilter('toko_id', GaransiRules.storeAliases(tokoId));
     }
     final row = await q.maybeSingle();
     if (row == null) return null;
@@ -242,11 +253,8 @@ class GaransiService {
     return uploadFotoHasil(saleId: saleId, bytes: bytes, ext: ext);
   }
 
-  static bool isSaleLunas(Map<String, dynamic> sale) {
-    final st = (sale['status_pembayaran'] ?? '').toString().trim().toLowerCase();
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    return st == 'lunas' && sisa <= 0;
-  }
+  static bool isSaleLunas(Map<String, dynamic> sale) =>
+      GaransiRules.isSaleLunas(sale);
 
   /// Legacy / dan halaman Garansi: serah terima item READY + sync line DIAMBIL.
   Future<Map<String, dynamic>> konfirmasiAmbil({
@@ -503,9 +511,13 @@ class GaransiService {
   }) async {
     final q = query.trim();
     var req = _db.from('garansi_kartu').select();
+    final tenantId = TenantService.instance.id;
+    if (tenantId != null && tenantId.isNotEmpty) {
+      req = req.eq('tenant_id', tenantId);
+    }
 
     if (!isPusat && tokoId != null && tokoId.isNotEmpty) {
-      req = req.eq('toko_id', tokoId);
+      req = req.inFilter('toko_id', GaransiRules.storeAliases(tokoId));
     }
 
     if (q.isNotEmpty) {
@@ -530,9 +542,13 @@ class GaransiService {
           '*, garansi_kartu:kartu_id(id, no_invoice, nama_pelanggan, no_wa, '
           'nama_produk, jenis_garansi, tanggal_akhir, status, toko_id)',
         );
+    final tenantId = TenantService.instance.id;
+    if (tenantId != null && tenantId.isNotEmpty) {
+      req = req.eq('tenant_id', tenantId);
+    }
 
     if (!isPusat && tokoId != null && tokoId.isNotEmpty) {
-      req = req.eq('toko_id', tokoId);
+      req = req.inFilter('toko_id', GaransiRules.storeAliases(tokoId));
     }
 
     final rows = await req.order('created_at', ascending: false).limit(limit);
@@ -551,9 +567,13 @@ class GaransiService {
           '*, garansi_kartu:kartu_id(id, no_invoice, nama_pelanggan, no_wa, '
           'nama_produk, jenis_garansi, tanggal_akhir, status, toko_id)',
         );
+    final tenantId = TenantService.instance.id;
+    if (tenantId != null && tenantId.isNotEmpty) {
+      req = req.eq('tenant_id', tenantId);
+    }
 
     if (!isPusat && tokoId != null && tokoId.isNotEmpty) {
-      req = req.eq('toko_id', tokoId);
+      req = req.inFilter('toko_id', GaransiRules.storeAliases(tokoId));
     }
 
     final rows = await req.order('created_at', ascending: false).limit(limit);
@@ -576,17 +596,25 @@ class GaransiService {
   Future<Map<String, int>> statsPusat() async {
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
+    final tenantId = TenantService.instance.id;
 
-    final menunggu = await _db
+    var menungguQ = _db
         .from('garansi_kartu')
         .select('id')
         .eq('status', 'menunggu_ambil');
-    final aktif =
-        await _db.from('garansi_kartu').select('id').eq('status', 'aktif');
-    final klaimBulan = await _db
+    var aktifQ = _db.from('garansi_kartu').select('id').eq('status', 'aktif');
+    var klaimQ = _db
         .from('garansi_klaim')
         .select('id')
         .gte('created_at', monthStart.toUtc().toIso8601String());
+    if (tenantId != null && tenantId.isNotEmpty) {
+      menungguQ = menungguQ.eq('tenant_id', tenantId);
+      aktifQ = aktifQ.eq('tenant_id', tenantId);
+      klaimQ = klaimQ.eq('tenant_id', tenantId);
+    }
+    final menunggu = await menungguQ;
+    final aktif = await aktifQ;
+    final klaimBulan = await klaimQ;
 
     return {
       'menunggu_ambil': (menunggu as List).length,
@@ -769,12 +797,14 @@ class GaransiService {
     }
 
     final uid = _db.auth.currentUser?.id;
+    final tenantId = TenantService.instance.id;
     final row = await _db
         .from('garansi_klaim')
         .insert({
           'kartu_id': kartuId,
           'sale_id': saleId,
           'toko_id': tokoId,
+          if (tenantId != null && tenantId.isNotEmpty) 'tenant_id': tenantId,
           'diajukan_oleh': uid,
           'alasan': alasanTrim,
           'catatan': catatan?.trim(),
@@ -798,6 +828,14 @@ class GaransiService {
         .from('garansi_kartu')
         .update({'klaim_digunakan': true, 'status': 'diklaim'}).eq(
             'sale_id', saleId);
+
+    try {
+      await _db
+          .from('garansi_klaim_request')
+          .update({'status': 'selesai'})
+          .eq('sale_id', saleId)
+          .inFilter('status', const ['diajukan', 'diproses_toko']);
+    } catch (_) {}
 
     if (keputusan == 'ditolak') {
       // Tetap tandai klaim dipakai, tapi kartu bisa ditandai diklaim/habis

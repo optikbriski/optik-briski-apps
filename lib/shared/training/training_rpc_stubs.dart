@@ -31,6 +31,16 @@ class TrainingRpcStubs {
       case 'allocate_export_salinan':
         // Consumer expects a positive int (salinan number), not a Map.
         return 1;
+      case 'list_member_garansi':
+      case 'list_member_claim_requests':
+        return const [];
+      case 'submit_member_garansi_klaim':
+        return {
+          'ok': true,
+          'training': true,
+          'id': 'training-klaim',
+          'status': 'diajukan',
+        };
       case 'lookup_member_promo':
         return {
           'ok': true,

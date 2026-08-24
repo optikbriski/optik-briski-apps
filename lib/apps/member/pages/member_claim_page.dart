@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/garansi/garansi_service.dart';
 import '../../../shared/member/member_repository.dart';
 import '../../../shared/member/member_session.dart';
+import '../../../shared/tenant/tenant_service.dart';
 import '../../../shared/safe_image_picker.dart';
 import '../../../shared/theme.dart';
 import '../member_layout.dart';
@@ -84,6 +85,38 @@ class _MemberClaimPageState extends State<MemberClaimPage> {
     return false;
   }
 
+  Future<List<Map<String, dynamic>>> _loadTenantStores() async {
+    final client = Supabase.instance.client;
+    for (final name in const [
+      'list_member_cabang_stores',
+      'list_member_help_stores',
+      'list_tenant_stores',
+    ]) {
+      try {
+        final raw = await client.rpc(name, params: withTenant({}));
+        final list = _parseStoreRows(raw);
+        if (list.isNotEmpty) return list;
+      } catch (_) {}
+    }
+    return const [];
+  }
+
+  List<Map<String, dynamic>> _parseStoreRows(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final row in raw) {
+      if (row is! Map) continue;
+      final m = Map<String, dynamic>.from(row);
+      final id = (m['toko_id'] ?? m['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+      out.add({
+        'toko_id': id,
+        'shop_name': (m['shop_name'] ?? m['nama'] ?? m['name'] ?? id).toString(),
+      });
+    }
+    return out;
+  }
+
   String _friendlyClaimError(Object e) {
     if (e is PostgrestException) {
       final m = e.message.trim();
@@ -138,16 +171,7 @@ class _MemberClaimPageState extends State<MemberClaimPage> {
         openKnown = false;
         reqs = const [];
       }
-      List<Map<String, dynamic>> toko = [];
-      try {
-        final rows = await Supabase.instance.client
-            .from('invoice_settings')
-            .select('toko_id, shop_name')
-            .order('toko_id');
-        toko = (rows as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      } catch (_) {}
+      final toko = await _loadTenantStores();
       if (!mounted) return;
 
       final claimable = GaransiService.filterClaimableKartu(

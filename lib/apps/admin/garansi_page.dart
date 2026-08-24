@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../shared/garansi/garansi_rules.dart';
 import '../../shared/garansi/garansi_service.dart';
 import '../../shared/invoice/invoice_link.dart';
 import '../../shared/safe_image_picker.dart';
@@ -47,13 +48,8 @@ class _GaransiPageState extends State<GaransiPage>
   String get _tokoId => widget.profile['toko_id']?.toString() ?? '';
   String get _role => widget.profile['role']?.toString() ?? '';
 
-  bool get _isPusat {
-    final t = _tokoId.toUpperCase();
-    return t == 'PUSAT' ||
-        t == 'CABANG-PUSAT' ||
-        _role == 'owner' ||
-        _role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      GaransiRules.canViewAllStores(tokoId: _tokoId, role: _role);
 
   @override
   void initState() {
@@ -663,13 +659,8 @@ class _GaransiKonfirmasiAmbilPageState
 
   String get _tokoId => widget.profile['toko_id']?.toString() ?? '';
   String get _role => widget.profile['role']?.toString() ?? '';
-  bool get _isPusat {
-    final t = _tokoId.toUpperCase();
-    return t == 'PUSAT' ||
-        t == 'CABANG-PUSAT' ||
-        _role == 'owner' ||
-        _role == 'admin_pusat';
-  }
+  bool get _isPusat =>
+      GaransiRules.canViewAllStores(tokoId: _tokoId, role: _role);
 
   @override
   void initState() {

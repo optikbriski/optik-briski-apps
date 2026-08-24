@@ -289,6 +289,21 @@ void main() {
     expect(raw, 1);
   });
 
+  test('member garansi RPCs stay in training sandbox', () async {
+    await TrainingMode.instance.debugActivateForTest(tokoId: 'T1');
+    expect(await TrainingRpcStubs.handle('list_member_garansi', null), []);
+    expect(
+      await TrainingRpcStubs.handle('list_member_claim_requests', null),
+      [],
+    );
+    final submit = await TrainingRpcStubs.handle(
+      'submit_member_garansi_klaim',
+      {'p_kartu_id': 'x'},
+    );
+    expect(submit, isA<Map>());
+    expect((submit as Map)['training'], isTrue);
+  });
+
   test('REST GET while training never hits network (sandbox only)', () async {
     await TrainingMode.instance.debugActivateForTest(tokoId: 'T1');
     await TrainingSandboxStore.instance.insert('products', {
