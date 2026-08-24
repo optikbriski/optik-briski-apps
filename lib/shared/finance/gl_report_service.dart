@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../logistics/product_identity.dart';
+
 class GlAccountBalance {
   const GlAccountBalance({
     required this.kode,
@@ -28,8 +30,8 @@ class GlAccountBalance {
       nama: r['nama']?.toString() ?? '',
       tipe: r['tipe']?.toString() ?? 'ASSET',
       normalBalance: r['normal_balance']?.toString() ?? 'DEBIT',
-      debit: int.tryParse('${r['debit'] ?? 0}') ?? 0,
-      kredit: int.tryParse('${r['kredit'] ?? 0}') ?? 0,
+      debit: ProductIdentity.moneyOf(r['debit']),
+      kredit: ProductIdentity.moneyOf(r['kredit']),
     );
   }
 }

@@ -1966,8 +1966,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                     final tx = txKasManual[index];
                     bool isPemasukan = tx['jenis_transaksi'] == 'PEMASUKAN' ||
                         tx['jenis_transaksi'] == 'PIUTANG';
-                    int nominal =
-                        int.tryParse(tx['nominal']?.toString() ?? '0') ?? 0;
+                    int nominal = ExportReportRules.moneyOf(tx['nominal']);
 
                     final isApproved =
                         tx['status_konfirmasi']?.toString().toUpperCase() ==

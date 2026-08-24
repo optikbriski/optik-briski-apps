@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optik_b_riski/shared/export/export_report_rules.dart';
+import 'package:optik_b_riski/shared/finance/gl_report_service.dart';
 
 void main() {
   group('ExportReportRules', () {
@@ -90,6 +91,19 @@ void main() {
       expect(ExportReportRules.moneyOf('150000.0'), 150000);
       expect(ExportReportRules.moneyOf(150000.0), 150000);
       expect(ExportReportRules.countOf('7.0'), 7);
+    });
+
+    test('GL PDF balance JSON 150000.0 is not Rp0', () {
+      final row = GlAccountBalance.fromRow({
+        'kode': '1-1000',
+        'nama': 'Kas',
+        'tipe': 'ASSET',
+        'normal_balance': 'DEBIT',
+        'debit': '150000.0',
+        'kredit': 0,
+      });
+      expect(row.debit, 150000);
+      expect(row.kredit, 0);
     });
 
     test('sales_items and versi_app have no tenant_id column', () {
