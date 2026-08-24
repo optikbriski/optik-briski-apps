@@ -66,6 +66,8 @@ create policy export_salinan_counter_tenant_staff
 
 drop policy if exists export_salinan_counter_auth_select
   on public.export_salinan_counter;
+drop policy if exists export_salinan_counter_platform
+  on public.export_salinan_counter;
 create policy export_salinan_counter_platform
   on public.export_salinan_counter
   for select
