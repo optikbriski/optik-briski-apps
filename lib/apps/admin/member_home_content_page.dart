@@ -992,8 +992,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       );
       return;
     }
-    if (discType != 'info' &&
-        (int.tryParse(discVal.text) ?? 0) <= 0) {
+    if (!MemberHomeRules.promoDiscountValueOk(discType, discVal.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Nilai diskon harus > 0 untuk Nominal/Persen'),

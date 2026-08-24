@@ -9,6 +9,12 @@ abstract final class MemberHomeRules {
 
   static int countOf(Object? raw) => ProductIdentity.countOf(raw);
 
+  /// Nominal/persen wajib > 0. `150000.0` / `150.000` tetap lolos.
+  static bool promoDiscountValueOk(String discountType, Object? raw) {
+    if (discountType == 'info') return true;
+    return moneyOf(raw) > 0;
+  }
+
   /// Kuota opsional. Kosong = tanpa batas, bukan 0.
   static int? optionalCount(Object? raw) {
     if (raw == null) return null;

@@ -193,5 +193,14 @@ void main() {
       expect(MemberHomeRules.optionalCount('7.0'), 7);
       expect(MemberHomeRules.moneyOf('150000.0'), 150000);
     });
+
+    test('promo form accepts JSON money that int.tryParse would reject', () {
+      expect(MemberHomeRules.promoDiscountValueOk('info', ''), isTrue);
+      expect(MemberHomeRules.promoDiscountValueOk('nominal', '150000.0'), isTrue);
+      expect(MemberHomeRules.promoDiscountValueOk('nominal', '150.000'), isTrue);
+      expect(MemberHomeRules.promoDiscountValueOk('percent', '10.0'), isTrue);
+      expect(MemberHomeRules.promoDiscountValueOk('nominal', '0'), isFalse);
+      expect(MemberHomeRules.promoDiscountValueOk('percent', ''), isFalse);
+    });
   });
 }
