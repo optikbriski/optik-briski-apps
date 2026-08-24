@@ -14,8 +14,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
-APK_PATH="${APK_PATH:-build/optik-member-${VERSION}.apk}"
-OBJECT_NAME="optik-member-${VERSION}.apk"
+# shellcheck source=scripts/brand_env.sh
+source "$ROOT/scripts/brand_env.sh"
+if [[ "$STORE_SLUG" == "optik-briski" ]]; then
+  FILE_PREFIX="optik"
+else
+  FILE_PREFIX="$STORE_SLUG"
+fi
+APK_PATH="${APK_PATH:-build/${FILE_PREFIX}-member-${VERSION}.apk}"
+OBJECT_NAME="${FILE_PREFIX}-member-${VERSION}.apk"
 
 if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
   echo "ERROR: set SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY dulu."

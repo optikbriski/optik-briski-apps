@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'brand/brand_slug_rules.dart';
 import 'training/training_mode.dart';
 
 class AppUpdateInfo {
@@ -315,18 +316,48 @@ class AppUpdateService {
     final flavor = appFlavor.trim().toLowerCase();
 
     Map<String, dynamic>? data;
+    final channel = BrandSlugRules.releaseChannel();
     try {
-      data = await _client
-          .from('versi_app')
-          .select()
-          .eq('app_flavor', flavor)
-          .order('created_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
+      final raw = await _client.rpc(
+        'lookup_app_release',
+        params: {'p_flavor': flavor, 'p_channel': channel},
+      );
+      if (raw is Map && raw['ok'] == true) {
+        data = Map<String, dynamic>.from(raw);
+      } else if (raw is Map && raw['ok'] == false) {
+        data = null;
+      }
     } catch (_) {
       data = null;
     }
-    // Jangan fallback ke flavor lain — Member/Karyawan harus terpisah.
+    if (data == null) {
+      try {
+        data = await _client
+            .from('versi_app')
+            .select()
+            .eq('app_flavor', flavor)
+            .eq('tenant_slug', channel)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      } catch (_) {
+        // 000049 belum: APK Optik boleh baris flavor lama. APK bersama jangan unduh Optik.
+        if (BrandSlugRules.isOptikSlug(channel)) {
+          try {
+            data = await _client
+                .from('versi_app')
+                .select()
+                .eq('app_flavor', flavor)
+                .order('created_at', ascending: false)
+                .limit(1)
+                .maybeSingle();
+          } catch (_) {
+            data = null;
+          }
+        }
+      }
+    }
+    // Jangan fallback ke merek / flavor lain.
 
     final server = (data?['versi_terbaru'] ?? local).toString().trim();
     final url = (data?['url_download'] ?? '').toString().trim();
@@ -420,7 +451,8 @@ class AppUpdateService {
     final flavor = appFlavor.trim().toLowerCase().isEmpty
         ? 'karyawan'
         : appFlavor.trim().toLowerCase();
-    return 'optik_${flavor}_$safe.apk';
+    final channel = BrandSlugRules.releaseChannel();
+    return '${channel}_${flavor}_$safe.apk';
   }
 
   /// Auto-unduh di background. Tidak membuka installer.

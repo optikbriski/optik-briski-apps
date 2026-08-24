@@ -22,10 +22,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
-APK_PATH="${APK_PATH:-build/optik-karyawan-${VERSION}.apk}"
-OBJECT_NAME="optik-karyawan-${VERSION}.apk"
+# shellcheck source=scripts/brand_env.sh
+source "$ROOT/scripts/brand_env.sh"
+if [[ "$STORE_SLUG" == "optik-briski" ]]; then
+  FILE_PREFIX="optik"
+else
+  FILE_PREFIX="$STORE_SLUG"
+fi
+APK_PATH="${APK_PATH:-build/${FILE_PREFIX}-karyawan-${VERSION}.apk}"
+OBJECT_NAME="${FILE_PREFIX}-karyawan-${VERSION}.apk"
 FORCE_UPDATE="${FORCE_UPDATE:-false}"
-CATATAN="${CATATAN:-Update Optik Karyawan ${VERSION}}"
+CATATAN="${CATATAN:-Update ${STORE_SLUG} Karyawan ${VERSION}}"
 
 if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
   echo "ERROR: set SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY dulu."
@@ -79,7 +86,7 @@ echo "HEAD ${PUBLIC_URL} → ${CODE}"
 if [[ "${MANUAL_VERSI_APP:-0}" == "1" ]]; then
   echo "==> MANUAL_VERSI_APP=1 → upsert REST versi_app (flavor=karyawan, versi=${VERSION})"
   curl -sS -X DELETE \
-    "${BASE}/rest/v1/versi_app?app_flavor=eq.karyawan&versi_terbaru=eq.${VERSION}" \
+    "${BASE}/rest/v1/versi_app?app_flavor=eq.karyawan&versi_terbaru=eq.${VERSION}&tenant_slug=eq.${STORE_SLUG}" \
     -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
     -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
     -H "Prefer: return=minimal" >/dev/null || true
@@ -97,6 +104,7 @@ print(json.dumps({
   "force_update": ${FORCE_UPDATE},
   "catatan_rilis": """${CATATAN}""",
   "app_flavor": "karyawan",
+  "tenant_slug": "${STORE_SLUG}",
 }))
 PY
 )"

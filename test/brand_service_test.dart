@@ -21,6 +21,8 @@ void main() {
     final warung = AppBrand.fallbackForSlug('warung-sari');
     expect(warung.displayName, 'warung-sari');
     expect(AppBrand.looksLikeOptikName(warung.displayName), isFalse);
+    expect(AppBrand.looksLikeOptikName('Optik Baru Jaya'), isFalse);
+    expect(AppBrand.looksLikeOptikName('Optik B. Riski'), isTrue);
     expect(AppBrand.fallbackForSlug('optik-briski').displayName, 'Optik B. Riski');
     expect(AppBrand.fallbackForSlug('').displayName, 'Rekasa');
   });

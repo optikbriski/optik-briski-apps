@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../tenant/tenant_service.dart';
 import '../tenant/toko_ids.dart';
+import 'brand_slug_rules.dart';
 
 /// Merek tenant (bukan nama cabang). Nama toko = `invoice_settings.shop_name`.
 class AppBrand {
@@ -33,7 +34,7 @@ class AppBrand {
   );
 
   static bool looksLikeOptikName(String name) =>
-      name.toUpperCase().contains('OPTIK B');
+      BrandSlugRules.isOptikDisplayName(name);
 
   /// APK merek sendiri: slug-nya, kecuali kulit Optik.
   static AppBrand fallbackForSlug(String slug) {
@@ -62,8 +63,9 @@ class BrandService {
   static String get assistantName => _current.assistantName;
 
   static bool get currentIsOptikSkin =>
-      (isBrandedStoreApk && brandedStoreSlug == TenantService.optikSlug) ||
-      AppBrand.looksLikeOptikName(name);
+      (isBrandedStoreApk && BrandSlugRules.isOptikSlug(brandedStoreSlug)) ||
+      BrandSlugRules.isOptikSlug(TenantService.instance.slug) ||
+      BrandSlugRules.isOptikDisplayName(name);
 
   static String guestHelloFallback() =>
       currentIsOptikSkin ? 'Hi, Teman Optik!' : 'Hi!';

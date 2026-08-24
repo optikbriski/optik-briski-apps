@@ -35,6 +35,9 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _codeController = TextEditingController();
+  final _slugController = TextEditingController(
+    text: TenantService.instance.slug,
+  );
   bool isLoading = false;
   bool _isPasswordVisible = false;
   _LoginMode _mode = _LoginMode.code;
@@ -56,6 +59,7 @@ class _LoginPageState extends State<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _codeController.dispose();
+    _slugController.dispose();
     super.dispose();
   }
 
@@ -126,8 +130,9 @@ class _LoginPageState extends State<LoginPage> {
       await client.auth.signOut();
       throw 'Akun ini bukan admin ${BrandService.name}.';
     }
+    // Kode usaha yang sudah di-bind wajib cocok. Platform Rekasa boleh lintas.
     if (!isPlat &&
-        !isRekasaControlPlane &&
+        TenantService.instance.isBound &&
         !TenantService.instance.sessionAllowsAccount(
           profile['tenant_id']?.toString(),
         )) {
@@ -185,7 +190,29 @@ class _LoginPageState extends State<LoginPage> {
     widget.onLoggedIn?.call(merged);
   }
 
+  bool get _showKodeUsaha =>
+      !isBrandedStoreApk && !isRekasaStorefront;
+
+  Future<void> _bindKodeUsahaIfNeeded() async {
+    if (isBrandedStoreApk) {
+      await TenantService.instance.requireResolved();
+      await BrandService.load();
+      return;
+    }
+    if (!_showKodeUsaha) return;
+    final s = _slugController.text.trim();
+    if (s.isEmpty) return;
+    await TenantService.instance.requireResolved(slug: s);
+    await BrandService.load();
+  }
+
   Future<void> handleLogin() async {
+    try {
+      await _bindKodeUsahaIfNeeded();
+    } catch (e) {
+      _snack('$e', OptikAdminTokens.danger);
+      return;
+    }
     if (_mode == _LoginMode.code) {
       await _handleCodeLogin();
     } else {
@@ -451,6 +478,24 @@ class _LoginPageState extends State<LoginPage> {
                                 const SizedBox(height: 18),
                                 _modeToggle(),
                                 const SizedBox(height: 16),
+                                if (_showKodeUsaha) ...[
+                                  TextField(
+                                    controller: _slugController,
+                                    style: const TextStyle(
+                                      color: OptikAdminTokens.navy,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textInputAction: TextInputAction.next,
+                                    textCapitalization:
+                                        TextCapitalization.none,
+                                    autocorrect: false,
+                                    decoration: _fieldDecoration(
+                                      label: 'Kode usaha',
+                                      icon: Icons.storefront_outlined,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
                                 TextField(
                                   controller: _emailController,
                                   style: const TextStyle(
