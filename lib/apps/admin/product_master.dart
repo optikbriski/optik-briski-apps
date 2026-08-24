@@ -8,6 +8,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'request_order_page.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/logistics/master_data_rules.dart';
+import '../../shared/logistics/master_data_service.dart';
 import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
@@ -84,9 +86,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   String? get _viewingTokoScope {
     final userToko =
         widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-    final isHakAksesPusat = userToko == 'PUSAT' ||
-        widget.profile['role'] == 'owner' ||
-        widget.profile['role'] == 'admin_pusat';
+    final isHakAksesPusat = MasterDataRules.lihatSemuaToko(widget.profile);
     final unit = filterUnit.trim().toUpperCase();
     if (!isHakAksesPusat) return userToko;
     if (unit.isNotEmpty && unit != 'SEMUA' && unit != 'BROADCAST_ALL') {
@@ -414,8 +414,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   }
 
   /// Sama dengan RLS `can_edit_product_catalog` + dasbor Master Data.
-  bool get isCanEdit =>
-      AttendanceAdminScope.canEditProductCatalog(widget.profile);
+  bool get isCanEdit => MasterDataRules.bolehBuka(widget.profile);
 
   // 1. FUNGSI AWAL: MENGAMBIL DAFTAR UNIT TOKO/CABANG AKTIF DARI DATABASE
   Future<void> _init() async {
@@ -424,7 +423,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
       final unik = (res as List)
           .map((e) => e['id']?.toString() ?? "")
-          .where((t) => t.isNotEmpty && t != 'PUSAT')
+          .where((t) => MasterDataRules.isCabangToko(t))
           .toSet()
           .toList();
 
@@ -580,11 +579,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     try {
       // Selalu ambil semua toko lalu filter cabang di client,
       // supaya breakdown stok per cabang tetap lengkap.
-      final data = await Supabase.instance.client
-          .from('products')
-          .select()
-          .order('created_at', ascending: false);
-      List<dynamic> rawList = data as List<dynamic>;
+      final data = await MasterDataService().listAllRows();
+      List<dynamic> rawList = data;
 
       // Group by SKU casefold (selaras RPC / ledger), bukan nama.
       Map<String, Map<String, dynamic>> mapGabung = {};
@@ -681,7 +677,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final breakdown = item['breakdown_stok'];
     if (breakdown is! List) {
       final own = (item['toko_id'] ?? '').toString().toUpperCase();
-      if (own == target) {
+      if (MasterDataRules.sameStore(own, target)) {
         final real = StockQty.realOf(Map<String, dynamic>.from(item));
         final pending = StockQty.pendingOf(Map<String, dynamic>.from(item));
         return {
@@ -695,7 +691,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     }
     for (final b in breakdown) {
       if (b is! Map) continue;
-      if ((b['cabang'] ?? '').toString().toUpperCase() == target) {
+      if (MasterDataRules.sameStore((b['cabang'] ?? '').toString(), target)) {
         return Map<String, dynamic>.from(b);
       }
     }
@@ -703,19 +699,17 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   }
 
   int _stockAtToko(Map item, String toko) =>
-      int.tryParse('${_breakdownAtToko(item, toko)?['stok'] ?? 0}') ?? 0;
+      MasterDataRules.stokOf(_breakdownAtToko(item, toko)?['stok']);
 
   int _pendingAtToko(Map item, String toko) =>
-      int.tryParse('${_breakdownAtToko(item, toko)?['pending'] ?? 0}') ?? 0;
+      MasterDataRules.stokOf(_breakdownAtToko(item, toko)?['pending']);
 
   int _availableAtToko(Map item, String toko) {
     final b = _breakdownAtToko(item, toko);
     if (b == null) return 0;
-    final avail = int.tryParse('${b['available']}');
-    if (avail != null) return avail;
     return StockQty.available(
-      int.tryParse('${b['stok'] ?? 0}') ?? 0,
-      int.tryParse('${b['pending'] ?? 0}') ?? 0,
+      MasterDataRules.stokOf(b['stok']),
+      MasterDataRules.stokOf(b['pending']),
     );
   }
 
@@ -723,11 +717,14 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final target = toko.trim().toUpperCase();
     final breakdown = item['breakdown_stok'];
     if (breakdown is! List) {
-      return (item['toko_id'] ?? '').toString().toUpperCase() == target;
+      return MasterDataRules.sameStore(
+        (item['toko_id'] ?? '').toString(),
+        target,
+      );
     }
     for (final b in breakdown) {
       if (b is! Map) continue;
-      if ((b['cabang'] ?? '').toString().toUpperCase() == target) {
+      if (MasterDataRules.sameStore((b['cabang'] ?? '').toString(), target)) {
         return true;
       }
     }
@@ -909,10 +906,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         finalBarcode = barcodeController.text.trim();
       }
 
-      final sell =
-          int.tryParse(hargaController.text.replaceAll('.', '')) ?? 0;
-      final modal =
-          int.tryParse(hargaModalController.text.replaceAll('.', '')) ?? 0;
+      final sell = MasterDataRules.hargaOf(hargaController.text);
+      final modal = MasterDataRules.hargaOf(hargaModalController.text);
       final basePayload = {
         'nama': namaRapi,
         ...ProductIdentity.catalogPriceFields(sell, modal: modal),
@@ -952,7 +947,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           return;
         }
 
-        int stokInput = int.tryParse(stokController.text) ?? 0;
+        int stokInput = MasterDataRules.stokOf(stokController.text);
 
         final mut = StockMutationService();
         final actor =
@@ -1006,7 +1001,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         // Revisi stok: minta alasan DULU sebelum commit metadata.
         final tokoRev =
             (editTokoId ?? 'PUSAT').toString().trim().toUpperCase();
-        final newStock = int.tryParse(stokController.text.trim());
+        final rawStock = stokController.text.trim();
+        final int? newStock =
+            rawStock.isEmpty ? null : MasterDataRules.stokOf(rawStock);
         final before = _editStockBefore ?? 0;
         final pendingBefore = _editPendingBefore ?? 0;
         String? alasanStock;
@@ -1192,7 +1189,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         ],
       ),
     );
-    final newStock = int.tryParse(stockCtrl.text.trim());
+    final rawRev = stockCtrl.text.trim();
+    final int? newStock =
+        rawRev.isEmpty ? null : MasterDataRules.stokOf(rawRev);
     final alasan = alasanCtrl.text.trim();
     stockCtrl.dispose();
     alasanCtrl.dispose();
@@ -1379,18 +1378,18 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   void showProductDetail(dynamic item) {
     final userToko =
         widget.profile['toko_id']?.toString().toUpperCase() ?? 'PUSAT';
-    final isHakAksesPusat = userToko == 'PUSAT' ||
-        widget.profile['role'] == 'owner' ||
-        widget.profile['role'] == 'admin_pusat';
+    final isHakAksesPusat = MasterDataRules.lihatSemuaToko(widget.profile);
 
     var displayTotalStock =
-        int.tryParse('${item['total_stock'] ?? item['stock'] ?? 0}') ?? 0;
+        MasterDataRules.stokOf(item['total_stock'] ?? item['stock']);
     var displayPending =
-        int.tryParse('${item['total_pending'] ?? item['reserved_qty'] ?? 0}') ??
-            0;
-    var displayAvailable = int.tryParse(
-            '${item['total_available'] ?? StockQty.available(displayTotalStock, displayPending)}') ??
-        0;
+        MasterDataRules.stokOf(item['total_pending'] ?? item['reserved_qty']);
+    var displayAvailable = MasterDataRules.stokOf(
+          item['total_available'],
+        ) >
+        0
+        ? MasterDataRules.stokOf(item['total_available'])
+        : StockQty.available(displayTotalStock, displayPending);
     var labelStokAtas = 'Total Real';
 
     final rawBreakdown = List<Map<String, dynamic>>.from(
@@ -1401,15 +1400,21 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
     final visibleBreakdown = rawBreakdown.where((lokasi) {
       final cabang = lokasi['cabang']?.toString().toUpperCase() ?? '';
-      return isHakAksesPusat || cabang == userToko;
+      return isHakAksesPusat || MasterDataRules.sameStore(cabang, userToko);
     }).toList()
       ..sort((a, b) {
         final ca = (a['cabang'] ?? '').toString().toUpperCase();
         final cb = (b['cabang'] ?? '').toString().toUpperCase();
-        if (ca == 'PUSAT' && cb != 'PUSAT') return -1;
-        if (cb == 'PUSAT' && ca != 'PUSAT') return 1;
-        final sa = int.tryParse('${a['stok']}') ?? 0;
-        final sb = int.tryParse('${b['stok']}') ?? 0;
+        if (AttendanceAdminScope.isPusatTokoId(ca) &&
+            !AttendanceAdminScope.isPusatTokoId(cb)) {
+          return -1;
+        }
+        if (AttendanceAdminScope.isPusatTokoId(cb) &&
+            !AttendanceAdminScope.isPusatTokoId(ca)) {
+          return 1;
+        }
+        final sa = MasterDataRules.stokOf(a['stok']);
+        final sb = MasterDataRules.stokOf(b['stok']);
         if (sa != sb) return sb.compareTo(sa);
         return ca.compareTo(cb);
       });
@@ -1420,11 +1425,12 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       displayPending = 0;
       displayAvailable = 0;
       for (final b in visibleBreakdown) {
-        if (b['cabang'].toString().toUpperCase() == userToko) {
-          displayTotalStock = int.tryParse('${b['stok']}') ?? 0;
-          displayPending = int.tryParse('${b['pending'] ?? 0}') ?? 0;
-          displayAvailable = int.tryParse('${b['available'] ?? 0}') ??
-              StockQty.available(displayTotalStock, displayPending);
+        if (MasterDataRules.sameStore(b['cabang']?.toString(), userToko)) {
+          displayTotalStock = MasterDataRules.stokOf(b['stok']);
+          displayPending = MasterDataRules.stokOf(b['pending']);
+          displayAvailable = MasterDataRules.stokOf(b['available']) > 0
+              ? MasterDataRules.stokOf(b['available'])
+              : StockQty.available(displayTotalStock, displayPending);
           break;
         }
       }
@@ -1436,7 +1442,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     final cabangAktif =
         visibleBreakdown
             .where((e) =>
-                (int.tryParse('${e['available'] ?? e['stok']}') ?? 0) > 0)
+                MasterDataRules.stokOf(e['available'] ?? e['stok']) > 0)
             .length;
 
     showDialog(
@@ -1675,14 +1681,17 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             final cabang =
                                 lokasi['cabang']?.toString().toUpperCase() ??
                                     '-';
-                            final stok =
-                                int.tryParse('${lokasi['stok']}') ?? 0;
+                            final stok = MasterDataRules.stokOf(lokasi['stok']);
                             final pending =
-                                int.tryParse('${lokasi['pending'] ?? 0}') ?? 0;
-                            final available = int.tryParse(
-                                    '${lokasi['available'] ?? StockQty.available(stok, pending)}') ??
-                                0;
-                            final isPusat = cabang == 'PUSAT';
+                                MasterDataRules.stokOf(lokasi['pending']);
+                            final available = MasterDataRules.stokOf(
+                                      lokasi['available'],
+                                    ) >
+                                    0
+                                ? MasterDataRules.stokOf(lokasi['available'])
+                                : StockQty.available(stok, pending);
+                            final isPusat =
+                                AttendanceAdminScope.isPusatTokoId(cabang);
                             final label = cabang.startsWith('CABANG-')
                                 ? cabang.replaceFirst('CABANG-', '')
                                 : cabang;
@@ -1764,7 +1773,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                       ),
                                     ),
                                   ),
-                                  if (isHakAksesPusat || cabang == userToko) ...[
+                                  if (isHakAksesPusat ||
+                                      MasterDataRules.sameStore(
+                                          cabang, userToko)) ...[
                                     const SizedBox(width: 6),
                                     IconButton(
                                       tooltip: 'Revisi stok Real',
@@ -2204,7 +2215,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     try {
       final cabangTargets = targets
           .map((t) => t.toString().trim().toUpperCase())
-          .where((t) => t.isNotEmpty && t != 'PUSAT')
+          .where((t) => MasterDataRules.isCabangToko(t))
           .toSet()
           .toList()
         ..sort();
@@ -2592,11 +2603,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       labelStok = 'Real ';
       lokasiLabel = _cabangLabel(viewingToko);
     } else {
-      displayReal =
-          int.tryParse('${item['total_stock'] ?? item['stock'] ?? 0}') ?? 0;
-      displayPending = int.tryParse('${item['total_pending'] ?? 0}') ?? 0;
-      displayAvailable = int.tryParse('${item['total_available'] ?? 0}') ??
-          StockQty.available(displayReal, displayPending);
+      displayReal = MasterDataRules.stokOf(item['total_stock'] ?? item['stock']);
+      displayPending = MasterDataRules.stokOf(item['total_pending']);
+      displayAvailable = MasterDataRules.stokOf(item['total_available']) > 0
+          ? MasterDataRules.stokOf(item['total_available'])
+          : StockQty.available(displayReal, displayPending);
       labelStok = 'Total Real ';
       lokasiLabel = 'Semua cabang';
     }
@@ -2818,8 +2829,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       (sum, item) {
         final m = item as Map;
         if (stockToko != null) return sum + _stockAtToko(m, stockToko);
-        return sum +
-            (int.tryParse('${m['total_stock'] ?? m['stock'] ?? 0}') ?? 0);
+        return sum + MasterDataRules.stokOf(m['total_stock'] ?? m['stock']);
       },
     );
     final frameCount = listProduk

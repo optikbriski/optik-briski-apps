@@ -14,6 +14,8 @@ void main() {
     expect(ProductIdentity.sellPriceOf({'harga_jual': 150000.0}), 150000);
     expect(ProductIdentity.sellPriceOf({'harga_jual': '150.000'}), 150000);
     expect(ProductIdentity.sellPriceOf({'harga_jual': '150.000,50'}), 150001);
+    expect(ProductIdentity.moneyOf(150000.0), 150000);
+    expect(ProductIdentity.countOf(7.0), 7);
   });
 
   test('catalog fields menulis harga + harga_jual + foto', () {

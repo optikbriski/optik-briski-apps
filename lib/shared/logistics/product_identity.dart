@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
+
 /// Canonical product identity: SKU first, then barcode. Never nama-only for stock.
 class ProductIdentity {
   ProductIdentity._();
@@ -32,6 +34,15 @@ class ProductIdentity {
       return int.tryParse(s.replaceAll('.', ''));
     }
     return int.tryParse(s) ?? double.tryParse(s)?.round();
+  }
+
+  /// Harga form / JSON. `150000.0` dan `150.000` sama.
+  static int moneyOf(Object? raw) => _parseMoney(raw) ?? 0;
+
+  /// Qty stok. JSON `7.0` sama dengan 7. Negatif = 0.
+  static int countOf(Object? raw) {
+    final n = _parseMoney(raw) ?? 0;
+    return n < 0 ? 0 : n;
   }
 
   /// Harga jual kasir/etalase. `harga_jual` dulu (diskon), lalu `harga`.
@@ -90,6 +101,7 @@ class ProductIdentity {
   }) async {
     final client = Supabase.instance.client;
     final toko = tokoId.trim().toUpperCase();
+    final aliases = AttendanceAdminScope.storeIdAliases(toko);
     final s = normalizeSku(sku);
     final b = normalizeBarcode(barcode);
 
@@ -97,16 +109,21 @@ class ProductIdentity {
       final bySku = await client
           .from('products')
           .select(select)
-          .eq('toko_id', toko)
+          .inFilter('toko_id', aliases)
           .eq('sku', s)
-          .maybeSingle();
-      if (bySku != null) return Map<String, dynamic>.from(bySku);
+          .limit(5);
+      final skuRows = List<Map<String, dynamic>>.from(bySku);
+      final exactToko = skuRows.where(
+        (r) => (r['toko_id'] ?? '').toString().trim().toUpperCase() == toko,
+      );
+      if (exactToko.isNotEmpty) return exactToko.first;
+      if (skuRows.isNotEmpty) return skuRows.first;
 
       // Fallback case-insensitive (samakan dengan RPC apply_stock_delta).
       final loose = await client
           .from('products')
           .select(select)
-          .eq('toko_id', toko)
+          .inFilter('toko_id', aliases)
           .ilike('sku', s)
           .limit(5);
       final looseRows = List<Map<String, dynamic>>.from(loose);
@@ -120,15 +137,16 @@ class ProductIdentity {
       final byBarcode = await client
           .from('products')
           .select(select)
-          .eq('toko_id', toko)
+          .inFilter('toko_id', aliases)
           .eq('barcode', b)
-          .maybeSingle();
-      if (byBarcode != null) return Map<String, dynamic>.from(byBarcode);
+          .limit(5);
+      final barRows = List<Map<String, dynamic>>.from(byBarcode);
+      if (barRows.length == 1) return barRows.first;
 
       final looseB = await client
           .from('products')
           .select(select)
-          .eq('toko_id', toko)
+          .inFilter('toko_id', aliases)
           .ilike('barcode', b)
           .limit(5);
       final looseRows = List<Map<String, dynamic>>.from(looseB);
@@ -202,7 +220,10 @@ class ProductIdentity {
     final toko = tokoId.trim().toUpperCase();
     final q = (search ?? '').trim();
 
-    var pusatQuery = client.from('products').select().eq('toko_id', 'PUSAT');
+    var pusatQuery = client
+        .from('products')
+        .select()
+        .inFilter('toko_id', AttendanceAdminScope.storeIdAliases('PUSAT'));
     if (kategoriEq != null && kategoriEq.isNotEmpty) {
       pusatQuery = pusatQuery.eq('kategori', kategoriEq);
     }
@@ -243,11 +264,11 @@ class ProductIdentity {
       final s = normalizeSku(m['sku']);
       if (s == null) continue;
       final t = (m['toko_id'] ?? '').toString().trim().toUpperCase();
-      final real = int.tryParse('${m['stock'] ?? 0}') ?? 0;
-      final pend = int.tryParse('${m['reserved_qty'] ?? 0}') ?? 0;
+      final real = countOf(m['stock']);
+      final pend = countOf(m['reserved_qty']);
       totalReal[s] = (totalReal[s] ?? 0) + real;
       totalPending[s] = (totalPending[s] ?? 0) + pend;
-      if (t == toko) bySkuLocal[s] = m;
+      if (AttendanceAdminScope.sameTokoId(t, toko)) bySkuLocal[s] = m;
     }
 
     final missing = <String>[];
@@ -309,7 +330,7 @@ class ProductIdentity {
         final s = normalizeSku(m['sku']);
         if (s == null) continue;
         final t = (m['toko_id'] ?? '').toString().trim().toUpperCase();
-        if (t == toko) bySkuLocal[s] = m;
+        if (AttendanceAdminScope.sameTokoId(t, toko)) bySkuLocal[s] = m;
       }
       for (var i = 0; i < merged.length; i++) {
         final s = skuOf(merged[i]);
