@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../brand/brand_service.dart';
+import 'invoice_lifecycle_rules.dart';
 
 /// Footer nota otomatis per status board: DP · PENDING · READY · CLEAR.
 /// Klasifikasi selaras [RiwayatTransaksiPage] agar tidak tertukar.
@@ -207,7 +208,7 @@ Klaim garansi hanya diproses dengan membawa nota sesuai ketentuan toko.''';
 
   static bool _isDp(Map<String, dynamic> sale) {
     final pay = (sale['status_pembayaran'] ?? '').toString().toUpperCase();
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     return pay == 'DP' || sisa > 0;
   }
 

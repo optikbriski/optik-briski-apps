@@ -1,4 +1,5 @@
 import '../qr/obr_codes.dart';
+import 'invoice_lifecycle_rules.dart';
 
 /// Deep link / QR payload untuk hub invoice.
 ///
@@ -60,7 +61,7 @@ class InvoiceLink {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     final lunasReady = tracking == 'SIAP_DIAMBIL' || tracking == 'CLEAR';
 

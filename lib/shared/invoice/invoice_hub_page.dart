@@ -16,6 +16,7 @@ import 'invoice_delivery_result.dart';
 import 'invoice_delivery_service.dart';
 import 'invoice_detail_page.dart';
 import 'invoice_hub_service.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_lifecycle_service.dart';
 import 'invoice_link.dart';
 import '../pos/pos_midtrans.dart';
@@ -303,7 +304,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     if (saleId == null || raw == null || _busy) return;
     if (!await _ensureCabangOk(h)) return;
 
-    final sisa = int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(h['sisa_tagihan']);
     final metode = await _showPelunasanGateway(sisa);
     if (metode == null || !mounted) return;
 
@@ -752,7 +753,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     try {
       final toko = h['toko_id']?.toString();
       final role = _profileOrToko['role']?.toString() ?? '';
-      final isPusat = toko?.toUpperCase() == 'PUSAT' ||
+      final isPusat = InvoiceLifecycleRules.isPusatToko(toko) ||
           role == 'owner' ||
           role == 'admin_pusat';
       final res = await _lifecycle.handoverAndIssueClaim(
@@ -1205,8 +1206,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final staffToko =
         (_profileOrToko['toko_id'] ?? '').toString().trim().toUpperCase();
     if (saleToko.isEmpty || staffToko.isEmpty) return null;
-    if (staffToko == 'PUSAT') return null;
-    if (saleToko == staffToko) return null;
+    if (InvoiceLifecycleRules.isPusatToko(staffToko)) return null;
+    if (InvoiceLifecycleRules.sameStore(saleToko, staffToko)) return null;
     return 'Nota ini dari cabang $saleToko. '
         'Scan QR di POS $saleToko (bukan $staffToko) agar terdeteksi.';
   }
@@ -1623,20 +1624,20 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                   const Divider(height: 20, color: OptikAdminTokens.lineStrong),
                   _moneyRow(
                     'Total',
-                    _fmt(int.tryParse(h['total_harga']?.toString() ?? '0') ?? 0),
+                    _fmt(InvoiceLifecycleRules.moneyOf(h['total_harga'])),
                     bold: true,
                   ),
                   const SizedBox(height: 6),
                   _moneyRow(
                     'Dibayar',
-                    _fmt(int.tryParse(h['dibayarkan']?.toString() ?? '0') ?? 0),
+                    _fmt(InvoiceLifecycleRules.moneyOf(h['dibayarkan'])),
                   ),
                   const SizedBox(height: 6),
                   _moneyRow(
                     'Sisa',
-                    _fmt(int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0),
+                    _fmt(InvoiceLifecycleRules.moneyOf(h['sisa_tagihan'])),
                     valueColor:
-                        (int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0) >
+                        InvoiceLifecycleRules.moneyOf(h['sisa_tagihan']) >
                                 0
                             ? OptikAdminTokens.danger
                             : OptikAdminTokens.success,
@@ -1972,8 +1973,8 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
 
   /// Panel konfirmasi di bawah — fase mengikuti QR yang di-scan (sekali pakai).
   List<Widget> _confirmPanel(Map<String, dynamic> h) {
-    final sisa = int.tryParse(h['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    final dp = int.tryParse(h['dibayarkan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(h['sisa_tagihan']);
+    final dp = InvoiceLifecycleRules.moneyOf(h['dibayarkan']);
     final phase = _scanPhase ??
         ObrInvoice.normalizePhase(
           ObrInvoice.parse(widget.rawScan)?.phase,

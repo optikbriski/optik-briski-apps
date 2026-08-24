@@ -5,6 +5,7 @@ import '../qr/obr_codes.dart';
 import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'invoice_delivery_result.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_link.dart';
 import 'invoice_lifecycle_service.dart';
 
@@ -214,7 +215,7 @@ class InvoiceDeliveryService {
         final pay = ObrInvoice.normalizePayStatus(
           row['status_pembayaran']?.toString(),
         );
-        final sisa = int.tryParse(row['sisa_tagihan']?.toString() ?? '0') ?? 0;
+        final sisa = InvoiceLifecycleRules.moneyOf(row['sisa_tagihan']);
         if (pay == 'DP' || sisa > 0) {
           return 'Konfirmasi pembayaran DP atas nama $name. '
               'Nota terlampir. QR akan dikirim saat pesanan siap.';
@@ -225,7 +226,7 @@ class InvoiceDeliveryService {
         final pay = ObrInvoice.normalizePayStatus(
           row['status_pembayaran']?.toString(),
         );
-        final sisa = int.tryParse(row['sisa_tagihan']?.toString() ?? '0') ?? 0;
+        final sisa = InvoiceLifecycleRules.moneyOf(row['sisa_tagihan']);
         if (pay == 'DP' || sisa > 0) {
           return 'Pesanan atas nama $name sudah bisa untuk melakukan '
               'pelunasan dan pengambilan barang.';
@@ -240,7 +241,7 @@ class InvoiceDeliveryService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     if (pay == 'DP' || sisa > 0) return 'DP_CONFIRM';
     return 'PENDING_CONFIRM';
   }
@@ -249,7 +250,7 @@ class InvoiceDeliveryService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     if (pay == 'DP' || sisa > 0) {
       return 'Ini konfirmasi pembayaran DP + nota. '
           'QR pelunasan dikirim setelah admin menandai barang ready.';
@@ -267,7 +268,7 @@ class InvoiceDeliveryService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     if (pay == 'DP' || sisa > 0) return 'DP';
     final diambil = sale['diambil_at'] != null ||
         (sale['tracking_status']?.toString().toUpperCase() == 'DIAMBIL');

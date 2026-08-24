@@ -40,7 +40,7 @@ class InvoiceLifecycleService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     final tracking =
         (sale['tracking_status'] ?? '').toString().trim().toUpperCase();
@@ -104,7 +104,7 @@ class InvoiceLifecycleService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     final trackingFull =
         (sale['tracking_status']?.toString().toUpperCase() ?? '');
@@ -201,7 +201,7 @@ class InvoiceLifecycleService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     if (pay != 'DP' && sisa <= 0) {
       throw 'Nota ini bukan DP / tidak ada sisa tagihan.';
     }
@@ -291,7 +291,7 @@ class InvoiceLifecycleService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     final tracking =
         (sale['tracking_status'] ?? '').toString().trim().toUpperCase();

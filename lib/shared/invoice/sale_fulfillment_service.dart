@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../qr/obr_codes.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_lifecycle_service.dart';
 
 /// Per-line fulfillment (PENDING_RO / READY / DIAMBIL) + aggregate tracking.
@@ -91,7 +92,7 @@ class SaleFulfillmentService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     final t = (sale['tracking_status'] ?? '').toString().toUpperCase();
 
@@ -216,7 +217,7 @@ class SaleFulfillmentService {
       final pay = ObrInvoice.normalizePayStatus(
         sale0['status_pembayaran']?.toString(),
       );
-      final sisa = int.tryParse(sale0['sisa_tagihan']?.toString() ?? '0') ?? 0;
+      final sisa = InvoiceLifecycleRules.moneyOf(sale0['sisa_tagihan']);
       final isDp = pay == 'DP' || sisa > 0;
       final t = (sale0['tracking_status'] ?? '').toString().trim().toUpperCase();
 
@@ -346,7 +347,7 @@ class SaleFulfillmentService {
     final pay = ObrInvoice.normalizePayStatus(
       sale['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(sale['sisa_tagihan']);
     final isDp = pay == 'DP' || sisa > 0;
     if (isDp || tracking != 'SIAP_DIAMBIL' && tracking != 'CLEAR') {
       return {...sale, 'qr_rearmed': false};

@@ -7,6 +7,7 @@ import 'package:crop_your_image/crop_your_image.dart';
 import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shared/invoice/invoice_layout.dart';
+import '../../shared/invoice/invoice_lifecycle_rules.dart';
 import '../../shared/invoice/invoice_settings_service.dart';
 import '../../shared/invoice/invoice_status_footer.dart';
 import '../../shared/qr/hid_scan_intake.dart';
@@ -178,7 +179,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
   // Formatter mandiri mengubah angka biner menjadi teks Rupiah lokal
   String _formatRupiah(dynamic angka) {
     if (angka == null) return 'Rp0';
-    int value = int.tryParse(angka.toString()) ?? 0;
+    int value = InvoiceLifecycleRules.moneyOf(angka);
     RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
     String hasil =
         value.toString().replaceAllMapped(reg, (Match m) => '${m[1]}.');

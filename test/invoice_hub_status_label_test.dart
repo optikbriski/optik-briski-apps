@@ -54,6 +54,13 @@ void main() {
         }),
         isTrue,
       );
+      expect(
+        InvoiceHubService.isDpOpen({
+          'status_pembayaran': 'LUNAS',
+          'sisa_tagihan': 150000.0,
+        }),
+        isTrue,
+      );
     });
 
     test('DP + CLEAR matches Beranda siap-ambil-masih-DP', () {

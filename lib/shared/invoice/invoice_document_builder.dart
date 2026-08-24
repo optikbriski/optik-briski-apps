@@ -9,6 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../formatters.dart';
 import '../theme.dart';
 import 'invoice_layout.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_link.dart';
 import 'invoice_settings_service.dart';
 import 'invoice_status_footer.dart';
@@ -75,12 +76,9 @@ abstract final class InvoiceDocumentBuilder {
     );
     final settings = await InvoiceSettingsService().fetchForToko(toko);
 
-    final totalHarga =
-        int.tryParse(map['total_harga']?.toString() ?? '0') ?? 0;
-    final dibayarkan =
-        int.tryParse(map['dibayarkan']?.toString() ?? '0') ?? 0;
-    final sisaTagihan =
-        int.tryParse(map['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final totalHarga = InvoiceLifecycleRules.moneyOf(map['total_harga']);
+    final dibayarkan = InvoiceLifecycleRules.moneyOf(map['dibayarkan']);
+    final sisaTagihan = InvoiceLifecycleRules.moneyOf(map['sisa_tagihan']);
     final isDp = sisaTagihan > 0 ||
         (map['status_pembayaran'] ?? '').toString().toUpperCase() == 'DP';
 
@@ -106,7 +104,7 @@ abstract final class InvoiceDocumentBuilder {
         InvoiceDocLine(
           label: _itemLabel(item),
           amount: formatRupiah(
-            int.tryParse(item['subtotal']?.toString() ?? '0') ?? 0,
+            InvoiceLifecycleRules.moneyOf(item['subtotal']),
           ),
           group: InvoiceLayout.groupOfProduct(
             tipe: item['tipe_produk']?.toString() ??

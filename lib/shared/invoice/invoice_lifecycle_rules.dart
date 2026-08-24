@@ -1,5 +1,8 @@
+import '../attendance/attendance_admin_scope.dart';
+import '../logistics/product_identity.dart';
+
 /// Aturan board DP · PENDING · READY · CLEAR — UI/tes.
-/// RLS + trigger 000025 yang menahan celah saat toko jalan.
+/// RLS + trigger 000025 / 000050 yang menahan celah saat toko jalan.
 abstract final class InvoiceLifecycleRules {
   static const trackPending = 'PENDING_PO';
   static const trackSiapPelunasan = 'SIAP_PELUNASAN';
@@ -44,10 +47,20 @@ abstract final class InvoiceLifecycleRules {
         p == 'BATAL';
   }
 
+  /// JSON `150000.0` / `150.000` — jangan int.tryParse.
+  static int moneyOf(Object? raw) => ProductIdentity.moneyOf(raw);
+
+  /// PUSAT = CABANG-PUSAT.
+  static bool sameStore(String? a, String? b) =>
+      AttendanceAdminScope.sameTokoId(a, b);
+
+  static bool isPusatToko(String? tokoId) =>
+      AttendanceAdminScope.isPusatTokoId(tokoId);
+
   /// DP board: status DP atau masih ada sisa. Bukan angka dari klien.
   static bool isDp(Map<String, dynamic> sale) {
     final pay = normalizePay(sale['status_pembayaran']?.toString());
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = moneyOf(sale['sisa_tagihan']);
     return pay == payDp || sisa > 0;
   }
 
@@ -70,9 +83,9 @@ abstract final class InvoiceLifecycleRules {
 
   /// Sisa pelunasan dari baris nota. Klien tidak boleh kirim nominal sendiri.
   static int remainingFromRow(Map<String, dynamic> sale) {
-    final sisa = int.tryParse(sale['sisa_tagihan']?.toString() ?? '0') ?? 0;
-    final dibayar = int.tryParse(sale['dibayarkan']?.toString() ?? '0') ?? 0;
-    final total = int.tryParse(sale['total_harga']?.toString() ?? '0') ?? 0;
+    final sisa = moneyOf(sale['sisa_tagihan']);
+    final dibayar = moneyOf(sale['dibayarkan']);
+    final total = moneyOf(sale['total_harga']);
     if (sisa > 0) return sisa;
     final gap = total - dibayar;
     return gap < 0 ? 0 : gap;

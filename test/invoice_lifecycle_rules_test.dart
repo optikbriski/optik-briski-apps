@@ -82,6 +82,32 @@ void main() {
       expect(InvoiceLifecycleRules.remainingFromRow(sale(sisa: 80000)), 80000);
     });
 
+    test('uang JSON 150000.0 dan 7.0 tidak jadi 0', () {
+      expect(InvoiceLifecycleRules.moneyOf(150000.0), 150000);
+      expect(InvoiceLifecycleRules.moneyOf('150.000'), 150000);
+      expect(
+        InvoiceLifecycleRules.remainingFromRow({
+          'sisa_tagihan': 50000.0,
+          'dibayarkan': 100000.0,
+          'total_harga': 150000.0,
+        }),
+        50000,
+      );
+      expect(
+        InvoiceLifecycleRules.isDp({
+          'status_pembayaran': 'LUNAS',
+          'sisa_tagihan': 1.0,
+        }),
+        isTrue,
+      );
+    });
+
+    test('PUSAT = CABANG-PUSAT', () {
+      expect(InvoiceLifecycleRules.sameStore('PUSAT', 'CABANG-PUSAT'), isTrue);
+      expect(InvoiceLifecycleRules.isPusatToko('CABANG-PUSAT'), isTrue);
+      expect(InvoiceLifecycleRules.sameStore('PUSAT', 'CABANG-A'), isFalse);
+    });
+
     test('fallback total - dibayar, tidak negatif', () {
       expect(
         InvoiceLifecycleRules.remainingFromRow(

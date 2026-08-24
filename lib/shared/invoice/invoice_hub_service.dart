@@ -5,6 +5,7 @@ import '../garansi/garansi_service.dart';
 import '../karyawan/lab_job_service.dart';
 import '../qr/obr_codes.dart';
 import '../tenant/tenant_service.dart';
+import 'invoice_lifecycle_rules.dart';
 import 'invoice_link.dart';
 
 class InvoiceHubService {
@@ -145,7 +146,7 @@ class InvoiceHubService {
     final st = ObrInvoice.normalizePayStatus(
       hub['status_pembayaran']?.toString(),
     );
-    final sisa = int.tryParse(hub['sisa_tagihan']?.toString() ?? '0') ?? 0;
+    final sisa = InvoiceLifecycleRules.moneyOf(hub['sisa_tagihan']);
     if (sisa > 0) return true;
     return st == 'DP';
   }
@@ -288,7 +289,7 @@ class InvoiceHubService {
     final rows = await _db
         .from('karyawan')
         .select('id, nama, jabatan, toko_id')
-        .eq('toko_id', tokoId)
+        .inFilter('toko_id', AttendanceAdminScope.storeIdAliases(tokoId))
         .eq('status_approval', 'Aktif')
         .order('nama');
     return (rows as List)

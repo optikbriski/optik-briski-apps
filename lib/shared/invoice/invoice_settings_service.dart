@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../attendance/attendance_admin_scope.dart';
 import '../brand/brand_service.dart';
 import 'invoice_status_footer.dart';
 
@@ -155,7 +156,8 @@ class InvoiceSettingsService {
 
   static String normalizeTokoId(String? raw) {
     final t = (raw ?? '').trim().toUpperCase();
-    return t.isEmpty ? 'PUSAT' : t;
+    if (t.isEmpty || AttendanceAdminScope.isPusatTokoId(t)) return 'PUSAT';
+    return t;
   }
 
   /// Banner struk default per cabang dari merek Supabase + kode toko.
@@ -195,15 +197,38 @@ class InvoiceSettingsService {
   }
 
   Future<InvoiceSettings?> _fetchRow(String tokoId) async {
+    final id = normalizeTokoId(tokoId);
     try {
-      final row = await _db
+      var row = await _db
           .from('invoice_settings')
           .select()
-          .eq('toko_id', tokoId)
+          .eq('toko_id', id)
           .maybeSingle();
+      if (row == null && AttendanceAdminScope.isPusatTokoId(id)) {
+        final found = await _db
+            .from('invoice_settings')
+            .select()
+            .inFilter('toko_id', AttendanceAdminScope.storeIdAliases(id))
+            .limit(2);
+        final list = List<Map<String, dynamic>>.from(found as List);
+        if (list.isNotEmpty) {
+          list.sort((a, b) {
+            final ea =
+                (a['toko_id'] ?? '').toString().trim().toUpperCase() == 'PUSAT'
+                    ? 0
+                    : 1;
+            final eb =
+                (b['toko_id'] ?? '').toString().trim().toUpperCase() == 'PUSAT'
+                    ? 0
+                    : 1;
+            return ea.compareTo(eb);
+          });
+          row = list.first;
+        }
+      }
       if (row == null) return null;
       return InvoiceSettings.fromRow(Map<String, dynamic>.from(row),
-          tokoId: tokoId);
+          tokoId: id);
     } catch (_) {
       return null;
     }
@@ -304,7 +329,7 @@ class InvoiceSettingsService {
     final sale = await _db
         .from('sales')
         .select()
-        .eq('toko_id', id)
+        .inFilter('toko_id', AttendanceAdminScope.storeIdAliases(id))
         .order('created_at', ascending: false)
         .limit(1)
         .maybeSingle();
