@@ -353,12 +353,12 @@ class InvoiceHubService {
   }) async {
     final res = await _db.rpc(
       'update_online_order_fulfillment',
-      params: {
+      params: withTenant({
         'p_order_id': onlineOrderId,
         'p_status': 'shipped',
         'p_courier_tracking': courierTracking ?? '',
         'p_store_note': storeNote ?? '',
-      },
+      }),
     );
     if (res is Map) return Map<String, dynamic>.from(res);
     return {'ok': true};

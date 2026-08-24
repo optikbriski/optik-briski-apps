@@ -1209,7 +1209,7 @@ class _OnlineDeliverySettingsPageState
 
   String get _tokoLabel {
     final id = (_tokoId ?? '').toUpperCase();
-    if (id == 'PUSAT' || id == 'CABANG-PUSAT') return 'Pusat';
+    if (MemberOnlineOrderRules.isPusatToko(id)) return 'Pusat';
     return id.replaceFirst(RegExp(r'^CABANG-'), '');
   }
 
@@ -1308,8 +1308,8 @@ class _OnlineDeliverySettingsPageState
           AdminPickerOption(
             value: id,
             label: id,
-            subtitle: id == 'PUSAT' ? 'Pusat' : 'Cabang',
-            icon: id == 'PUSAT'
+            subtitle: MemberOnlineOrderRules.isPusatToko(id) ? 'Pusat' : 'Cabang',
+            icon: MemberOnlineOrderRules.isPusatToko(id)
                 ? Icons.apartment_rounded
                 : Icons.storefront_rounded,
           ),
