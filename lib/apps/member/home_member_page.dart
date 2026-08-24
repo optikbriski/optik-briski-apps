@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../shared/member/member_cart.dart';
 import '../../shared/member/member_home_controller.dart';
 import '../../shared/member/member_home_models.dart';
+import '../../shared/member/member_home_rules.dart';
 import '../../shared/member/member_inbox_unread.dart';
 import '../../shared/member/member_points_grade.dart';
 import '../../shared/member/member_session.dart';
@@ -163,7 +164,8 @@ class _HomeMemberPageState extends State<HomeMemberPage> {
     final loading = _home.loading && snap == null;
     final refreshing = _home.loading && snap != null;
     final name = (session.nama ?? '').trim();
-    final guestHello = snap?.greetingGuest() ?? 'Hi!';
+    final guestHello =
+        snap?.greetingGuest() ?? BrandService.guestHelloFallback();
     final guestSub = snap?.greetingSubtitleGuest() ??
         'Login untuk lihat pesanan & garansi';
     final hello = name.isEmpty ? guestHello : 'Hi, $name!';
@@ -1207,11 +1209,7 @@ class _StoreChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final raw = (tokoId ?? '').trim();
-    final label = raw.isEmpty
-        ? 'Belum dipilih'
-        : raw.toUpperCase() == 'PUSAT'
-            ? 'Pusat'
-            : raw.replaceFirst(RegExp(r'^CABANG-', caseSensitive: false), '');
+    final label = MemberHomeRules.storeChipLabel(tokoId);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(

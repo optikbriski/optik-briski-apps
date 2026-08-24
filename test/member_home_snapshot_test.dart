@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optik_b_riski/shared/brand/brand_service.dart';
 import 'package:optik_b_riski/shared/member/member_home_models.dart';
+import 'package:optik_b_riski/shared/member/member_home_rules.dart';
 
 void main() {
   group('MemberHomeSnapshot', () {
@@ -95,6 +97,101 @@ void main() {
         MemberHomeReminderKind.ready,
         MemberHomeReminderKind.processing,
       ]);
+    });
+
+    test('empty CMS uses BrandService, not silent Optik', () {
+      BrandService.bind(AppBrand.rekasaShell);
+      final snap = MemberHomeSnapshot.emptyGuest();
+      expect(snap.brandLabel(), 'Rekasa');
+      expect(snap.greetingGuest(), 'Hi!');
+
+      BrandService.bind(AppBrand.fallback);
+      expect(MemberHomeSnapshot.emptyGuest().greetingGuest(), 'Hi, Teman Optik!');
+      BrandService.bind(AppBrand.shellFallback);
+    });
+
+    test('promoDiscountLabel parses JSON money', () {
+      expect(
+        MemberHomeSnapshot.promoDiscountLabel({
+          'discount_type': 'nominal',
+          'discount_value': 150000.0,
+        }),
+        'Potongan Rp 150.000',
+      );
+      expect(
+        MemberHomeSnapshot.promoDiscountLabel({
+          'discount_type': 'nominal',
+          'discount_value': '150.000',
+        }),
+        'Potongan Rp 150.000',
+      );
+      expect(
+        MemberHomeSnapshot.promoDiscountLabel({
+          'discount_type': 'percent',
+          'discount_value': '10.0',
+        }),
+        'Diskon 10%',
+      );
+    });
+  });
+
+  group('MemberHomeRules', () {
+    test('CABANG-PUSAT is Pusat on the home chip', () {
+      expect(MemberHomeRules.storeChipLabel(null), 'Belum dipilih');
+      expect(MemberHomeRules.storeChipLabel('PUSAT'), 'Pusat');
+      expect(MemberHomeRules.storeChipLabel('CABANG-PUSAT'), 'Pusat');
+      expect(MemberHomeRules.storeChipLabel('CABANG-A'), 'A');
+    });
+
+    test('banner path is tenant-prefixed', () {
+      expect(
+        MemberHomeRules.bannerObjectPath(
+          tenantId: '00000000-0000-0000-0000-000000000001',
+          fileName: 'Hero Foto.jpg',
+          nowMs: 1,
+        ),
+        '00000000-0000-0000-0000-000000000001/banners/1_Hero_Foto.jpg',
+      );
+      expect(
+        () => MemberHomeRules.bannerObjectPath(tenantId: '  ', fileName: 'a.jpg'),
+        throwsStateError,
+      );
+    });
+
+    test('promoStillAvailable keeps float qty and drops zero/expired', () {
+      expect(
+        MemberHomeRules.promoStillAvailable({'quantity_remaining': 7.0}),
+        isTrue,
+      );
+      expect(
+        MemberHomeRules.promoStillAvailable({'quantity_remaining': '0.0'}),
+        isFalse,
+      );
+      expect(
+        MemberHomeRules.promoStillAvailable({'quantity_remaining': null}),
+        isTrue,
+      );
+      expect(
+        MemberHomeRules.promoStillAvailable(
+          {'valid_until': '2020-01-01'},
+          now: DateTime(2026, 8, 24),
+        ),
+        isFalse,
+      );
+      expect(
+        MemberHomeRules.promoStillAvailable(
+          {'valid_until': '2026-08-24'},
+          now: DateTime(2026, 8, 24),
+        ),
+        isTrue,
+      );
+    });
+
+    test('optionalCount empty is unlimited, not zero', () {
+      expect(MemberHomeRules.optionalCount(null), isNull);
+      expect(MemberHomeRules.optionalCount(''), isNull);
+      expect(MemberHomeRules.optionalCount('7.0'), 7);
+      expect(MemberHomeRules.moneyOf('150000.0'), 150000);
     });
   });
 }

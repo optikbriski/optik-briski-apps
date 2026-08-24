@@ -11,6 +11,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/brand/brand_service.dart';
+import '../../shared/member/member_home_models.dart';
+import '../../shared/member/member_home_rules.dart';
 import '../../shared/tenant/tenant_service.dart';
 
 /// CMS Member: layout hide/show, banner bergambar, promo detail (Member + POS).
@@ -253,20 +255,12 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       final newSections = _parseSections(data['sections']);
       final newFlags = _parseFlags(data['feature_flags']);
 
-      List promoRows = [];
+      List<Map<String, dynamic>> newPromos = const [];
       try {
-        promoRows = await _db
-            .from('member_promos')
-            .select()
-            .eq('tenant_id', TenantService.instance.boundId)
-            .order('sort_order')
-            .order('created_at', ascending: false);
+        newPromos = await _loadPromoRows();
       } catch (_) {
-        promoRows = [];
+        newPromos = [];
       }
-      final newPromos = promoRows
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
 
       if (!mounted) {
         for (final s in newSlides) {
@@ -364,9 +358,35 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     return out;
   }
 
+  static const _promoPageSize = 500;
+
+  Future<List<Map<String, dynamic>>> _loadPromoRows() async {
+    final tenant = TenantService.instance.boundId;
+    final out = <Map<String, dynamic>>[];
+    var offset = 0;
+    while (true) {
+      final chunk = await _db
+          .from('member_promos')
+          .select()
+          .eq('tenant_id', tenant)
+          .order('sort_order')
+          .order('created_at', ascending: false)
+          .range(offset, offset + _promoPageSize - 1);
+      final rows = (chunk as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      out.addAll(rows);
+      if (rows.length < _promoPageSize) break;
+      offset += _promoPageSize;
+    }
+    return out;
+  }
+
   Future<String?> _uploadBanner(Uint8List bytes, String name) async {
-    final path =
-        'banners/${DateTime.now().millisecondsSinceEpoch}_$name';
+    final path = MemberHomeRules.bannerObjectPath(
+      tenantId: TenantService.instance.boundId,
+      fileName: name,
+    );
     await _db.storage.from('Foto Frame').uploadBinary(
           path,
           bytes,
@@ -506,15 +526,15 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         final c = (p['voucher_code'] ?? '').toString().trim();
         return c.isEmpty ? null : c.toUpperCase();
       }(),
-      'points_cost': int.tryParse('${p['points_cost'] ?? 0}') ?? 0,
-      'quantity': int.tryParse('${p['quantity'] ?? ''}'),
-      'quantity_remaining': int.tryParse('${p['quantity_remaining'] ?? ''}'),
+      'points_cost': MemberHomeRules.moneyOf(p['points_cost']),
+      'quantity': MemberHomeRules.optionalCount(p['quantity']),
+      'quantity_remaining': MemberHomeRules.optionalCount(p['quantity_remaining']),
       'discount_type': (p['discount_type'] ?? 'nominal').toString(),
-      'discount_value': int.tryParse('${p['discount_value'] ?? 0}') ?? 0,
+      'discount_value': MemberHomeRules.moneyOf(p['discount_value']),
       'show_on_member': p['show_on_member'] != false,
       'show_on_pos': p['show_on_pos'] != false,
       'active': p['active'] != false,
-      'sort_order': int.tryParse('${p['sort_order'] ?? 0}') ?? 0,
+      'sort_order': MemberHomeRules.countOf(p['sort_order']),
       'terms': () {
         final t = (p['terms'] ?? '').toString().trim();
         return t.isEmpty ? null : t;
@@ -989,18 +1009,17 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       'voucher_code': code.text.trim().isEmpty
           ? null
           : code.text.trim().toUpperCase(),
-      'points_cost': int.tryParse(points.text) ?? 0,
-      'quantity': int.tryParse(qty.text),
-      'quantity_remaining': int.tryParse(qtyLeft.text.isEmpty
-              ? qty.text
-              : qtyLeft.text) ??
-          int.tryParse(qty.text),
+      'points_cost': MemberHomeRules.moneyOf(points.text),
+      'quantity': MemberHomeRules.optionalCount(qty.text),
+      'quantity_remaining': MemberHomeRules.optionalCount(
+        qtyLeft.text.isEmpty ? qty.text : qtyLeft.text,
+      ),
       'discount_type': discType,
-      'discount_value': int.tryParse(discVal.text) ?? 0,
+      'discount_value': MemberHomeRules.moneyOf(discVal.text),
       'show_on_member': onMember,
       'show_on_pos': onPos,
       'active': active,
-      'sort_order': int.tryParse(sort.text) ?? 0,
+      'sort_order': MemberHomeRules.countOf(sort.text),
       'terms': terms.text.trim().isEmpty ? null : terms.text.trim(),
       'image_url': imageUrl.isEmpty ? null : imageUrl,
       'valid_until': validUntil?.toIso8601String().substring(0, 10),
@@ -1261,13 +1280,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     );
   }
 
-  String _promoDiscountPreview(Map<String, dynamic> p) {
-    final type = (p['discount_type'] ?? 'nominal').toString();
-    final value = int.tryParse('${p['discount_value'] ?? 0}') ?? 0;
-    if (type == 'percent') return 'Diskon $value%';
-    if (type == 'nominal' && value > 0) return 'Potongan Rp $value';
-    return (p['title'] ?? 'Promo Member').toString();
-  }
+  String _promoDiscountPreview(Map<String, dynamic> p) =>
+      MemberHomeSnapshot.promoDiscountLabel(p);
 
   @override
   Widget build(BuildContext context) {

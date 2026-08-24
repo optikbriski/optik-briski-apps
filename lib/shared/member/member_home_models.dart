@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import '../brand/brand_service.dart';
+import 'member_home_rules.dart';
 
 enum MemberHomeReminderKind {
   ready,
@@ -197,7 +198,7 @@ class MemberHomeSnapshot {
 
   static String promoDiscountLabel(Map<String, dynamic> p) {
     final type = (p['discount_type'] ?? 'nominal').toString();
-    final value = int.tryParse('${p['discount_value'] ?? 0}') ?? 0;
+    final value = MemberHomeRules.moneyOf(p['discount_value']);
     if (type == 'percent') return 'Diskon $value%';
     if (type == 'nominal' && value > 0) {
       final s = value.toString().replaceAllMapped(

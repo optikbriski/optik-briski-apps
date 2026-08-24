@@ -11,6 +11,7 @@ import '../maps/osm_address_search.dart';
 import '../tenant/tenant_service.dart';
 import '../whatsapp_launcher.dart';
 import 'member_catalog_kategori.dart';
+import 'member_home_rules.dart';
 import 'member_points_grade.dart';
 import 'member_resep_helpers.dart';
 import 'member_session.dart';
@@ -651,21 +652,10 @@ class MemberRepository {
       } catch (_) {}
     }
     if (res is! List) return const [];
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-    return res.map((e) => Map<String, dynamic>.from(e as Map)).where((p) {
-      final left = p['quantity_remaining'];
-      if (left != null && (int.tryParse('$left') ?? 0) <= 0) return false;
-      final untilRaw = p['valid_until'];
-      if (untilRaw != null) {
-        final until = DateTime.tryParse(untilRaw.toString());
-        if (until != null) {
-          final end = DateTime(until.year, until.month, until.day);
-          if (end.isBefore(todayDate)) return false;
-        }
-      }
-      return true;
-    }).toList();
+    return res
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where(MemberHomeRules.promoStillAvailable)
+        .toList();
   }
 
   /// Inbox pemberitahuan pesanan (RPC `list_member_order_alerts`).
