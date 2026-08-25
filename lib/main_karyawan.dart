@@ -1,11 +1,11 @@
 import 'apps/karyawan/karyawan_app.dart';
+import 'apps/karyawan/register_karyawan_invoice_opener.dart';
 import 'shared/bootstrap.dart';
-import 'shared/invoice/register_invoice_hub_opener.dart';
 import 'shared/maps/google_maps_js.dart';
 
 Future<void> main() async {
-  // Karyawan POS/cabang: scan QR nota pelanggan → hub lifecycle (sama web admin).
-  registerInvoiceHubOpener();
+  // Scan QR LUNAS pelanggan → serah terima di HP (duty gate sesi).
+  registerKaryawanInvoiceOpener();
   await ensureGoogleMapsJs();
   await bootstrapApp(
     app: const KaryawanApp(),

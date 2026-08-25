@@ -15,19 +15,24 @@ import 'software_update_page.dart';
 import 'absensi_page.dart';
 import 'admin_login_code_page.dart';
 import 'pengajuan_jadwal_page.dart';
+import 'toko_antrian_page.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
+import '../../shared/karyawan/karyawan_i18n_display.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/karyawan/kpi_fire_service.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/karyawan/streak_fire_level.dart';
+import '../../shared/karyawan/toko_antrian_realtime.dart';
+import '../../shared/karyawan/toko_antrian_service.dart';
 import '../../shared/app_update_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/theme.dart';
 import '../../shared/whatsapp_launcher.dart';
 import '../../shared/widgets/app_brand_mark.dart';
@@ -63,10 +68,19 @@ class KaryawanPageState extends State<KaryawanPage>
   String _cabangKaryawan = "...";
   String? _karyawanId;
   String? _tokoId;
+  String? _nikKaryawan;
   bool _isLoading = true;
   List<Map<String, dynamic>> _labOpenJobs = [];
   List<Map<String, dynamic>> _labMineJobs = [];
   bool _labBusy = false;
+  final GlobalKey _labSectionKey = GlobalKey();
+  final GlobalKey _sopSectionKey = GlobalKey();
+  final GlobalKey _todayPanelKey = GlobalKey();
+  final GlobalKey _antrianSectionKey = GlobalKey();
+  final _antrianService = TokoAntrianService();
+  List<TokoAntrianItem> _antrianItems = [];
+  TokoAntrianRealtimeSubscription? _antrianRt;
+  Timer? _antrianPoll;
 
   // 2. JADWAL MINGGUAN (dari Supabase)
   List<Map<String, String>> _jadwalMingguIni = [];
@@ -101,6 +115,24 @@ class KaryawanPageState extends State<KaryawanPage>
     _tarikDataProfil();
     _cekUpdateApkSilent();
     _cekHasilInstallSetelahResume();
+    unawaited(_bindForceSync());
+  }
+
+  Future<void> _bindForceSync() async {
+    await ClientForceSync.bindFromTenantService(
+      localTokoId: _tokoId,
+      onRemote: (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('client_force_sync_remote_ok'.tr()),
+            backgroundColor: OptikAdminTokens.navy,
+          ),
+        );
+        unawaited(_tarikDataProfil());
+        unawaited(_loadTokoAntrian());
+      },
+    );
   }
 
   void _bindQrHost() {
@@ -114,8 +146,11 @@ class KaryawanPageState extends State<KaryawanPage>
 
   @override
   void dispose() {
+    _antrianPoll?.cancel();
+    unawaited(_antrianRt?.dispose() ?? Future<void>.value());
     WidgetsBinding.instance.removeObserver(this);
     UniversalQrHost.clear();
+    unawaited(ClientForceSync.unbind());
     super.dispose();
   }
 
@@ -126,6 +161,7 @@ class KaryawanPageState extends State<KaryawanPage>
       _syncGeofenceMonitorIfOpenShift();
       // Tarik ulang poin/SOP agar Valid/Curang dari Admin langsung terlihat.
       unawaited(_tarikDataProfil());
+      unawaited(_loadTokoAntrian());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // Auto-unduh di background saat app di-minimize (install tetap konfirmasi).
@@ -257,7 +293,7 @@ class KaryawanPageState extends State<KaryawanPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Mengerti',
+            child: Text('btn_mengerti'.tr(),
                 style: TextStyle(color: OptikKaryawanTokens.muted)),
           ),
           FilledButton(
@@ -266,7 +302,7 @@ class KaryawanPageState extends State<KaryawanPage>
               _storageDialogShown = false;
               _mulaiAutoDownloadUpdate();
             },
-            child: const Text('Coba lagi'),
+            child: Text('btn_coba_lagi'.tr()),
           ),
         ],
       ),
@@ -310,7 +346,7 @@ class KaryawanPageState extends State<KaryawanPage>
             if (!hardForce)
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Nanti',
+                child: Text('btn_nanti'.tr(),
                     style: TextStyle(color: OptikKaryawanTokens.muted)),
               ),
             FilledButton(
@@ -342,7 +378,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   }
                 }
               },
-              child: const Text('Pasang sekarang'),
+              child: Text('btn_pasang_sekarang'.tr()),
             ),
           ],
         ),
@@ -356,6 +392,10 @@ class KaryawanPageState extends State<KaryawanPage>
 
   // MESIN POP-UP PILIHAN BAHASA
   void _tampilkanDialogBahasa(BuildContext context) {
+    final code = context.locale.languageCode;
+    if (code != 'id' && code != 'en') {
+      context.setLocale(const Locale('id'));
+    }
     showDialog(
       context: context,
       builder: (context) {
@@ -378,9 +418,6 @@ class KaryawanPageState extends State<KaryawanPage>
             children: [
               _buildOpsiBahasaItem(context, "lang_id".tr(), const Locale('id')),
               _buildOpsiBahasaItem(context, "lang_en".tr(), const Locale('en')),
-              _buildOpsiBahasaItem(context, "lang_ms".tr(), const Locale('ms')),
-              _buildOpsiBahasaItem(context, "lang_zh".tr(), const Locale('zh')),
-              _buildOpsiBahasaItem(context, "lang_ja".tr(), const Locale('ja')),
             ],
           ),
         ),
@@ -464,7 +501,7 @@ class KaryawanPageState extends State<KaryawanPage>
               if (!hardForce)
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Nanti',
+                  child: Text('btn_nanti'.tr(),
                       style: TextStyle(color: OptikKaryawanTokens.muted)),
                 ),
               FilledButton(
@@ -505,6 +542,7 @@ class KaryawanPageState extends State<KaryawanPage>
       setState(() {
         _karyawanId = snap.karyawan['id']?.toString();
         _tokoId = snap.karyawan['toko_id']?.toString();
+        _nikKaryawan = snap.karyawan['nik']?.toString();
         _namaKaryawan =
             snap.karyawan['nama']?.toString() ?? 'default_karyawan'.tr();
         _jabatanKaryawan =
@@ -532,6 +570,7 @@ class KaryawanPageState extends State<KaryawanPage>
         _isLoading = false;
       });
       _bindQrHost();
+      unawaited(_bindForceSync());
 
       if (_karyawanId != null) {
         await _homeService.ensureTodayReminders(
@@ -541,6 +580,8 @@ class KaryawanPageState extends State<KaryawanPage>
         );
       }
       unawaited(_loadLabQueue());
+      unawaited(_loadTokoAntrian());
+      unawaited(_bindTokoAntrianRealtime());
       unawaited(_syncGeofenceMonitorIfOpenShift(askPermissions: true));
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -583,6 +624,62 @@ class KaryawanPageState extends State<KaryawanPage>
     }
   }
 
+  Future<void> _loadTokoAntrian() async {
+    final toko = (_tokoId ?? '').trim();
+    if (toko.isEmpty) {
+      if (mounted) setState(() => _antrianItems = []);
+      return;
+    }
+    try {
+      final res = await _antrianService.loadDetailed(tokoId: toko);
+      if (!mounted) return;
+      setState(() => _antrianItems = res.items);
+      if (res.hasErrors && res.items.isEmpty) {
+        debugPrint('toko antrian errors: ${res.errors.join(' · ')}');
+      }
+    } catch (e) {
+      debugPrint('toko antrian: $e');
+    }
+  }
+
+  Future<void> _bindTokoAntrianRealtime() async {
+    final toko = (_tokoId ?? '').trim();
+    await _antrianRt?.dispose();
+    _antrianRt = null;
+    _antrianPoll?.cancel();
+    _antrianPoll = null;
+    if (toko.isEmpty) return;
+    _antrianRt = TokoAntrianRealtime.subscribeToko(
+      tokoId: toko,
+      onChanged: () {
+        if (mounted) unawaited(_loadTokoAntrian());
+      },
+    );
+    _antrianPoll = Timer.periodic(const Duration(seconds: 40), (_) {
+      if (mounted) unawaited(_loadTokoAntrian());
+    });
+  }
+
+  void _openTokoAntrianPage() {
+    final toko = (_tokoId ?? _cabangKaryawan).trim();
+    final kid = (_karyawanId ?? '').trim();
+    if (toko.isEmpty || kid.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TokoAntrianPage(
+          tokoId: toko,
+          karyawanId: kid,
+          karyawanNama: _namaKaryawan,
+          karyawanNik: (_nikKaryawan ?? '').trim(),
+          initialItems: _antrianItems,
+        ),
+      ),
+    ).then((_) {
+      if (mounted) unawaited(_loadTokoAntrian());
+    });
+  }
+
   Future<void> _claimLabJob(Map<String, dynamic> job) async {
     final id = job['id']?.toString() ?? '';
     if (id.isEmpty || _labBusy) return;
@@ -600,10 +697,81 @@ class KaryawanPageState extends State<KaryawanPage>
         OptikKaryawanTokens.success,
       );
       await _loadLabQueue();
+      unawaited(_loadTokoAntrian());
     } catch (e) {
       if (!mounted) return;
       _showPremiumSnackbar(
         'lab_claim_gagal_judul'.tr(),
+        '$e',
+        OptikKaryawanTokens.danger,
+      );
+      await _loadLabQueue();
+    } finally {
+      if (mounted) setState(() => _labBusy = false);
+    }
+  }
+
+  Future<void> _completeLabJob(Map<String, dynamic> job) async {
+    final id = job['id']?.toString() ?? '';
+    final inv = job['no_invoice']?.toString() ?? '-';
+    final qty = job['unit_qty']?.toString() ?? '1';
+    if (id.isEmpty || _labBusy) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('lab_complete_confirm_judul'.tr()),
+        content: Text(
+          'lab_complete_confirm_msg'.tr(namedArgs: {
+            'invoice': inv,
+            'qty': qty,
+          }),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('sop_batal'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('lab_queue_btn_selesai'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _labBusy = true);
+    try {
+      final res = await _labService.complete(jobId: id);
+      if (!mounted) return;
+      final track = (res['tracking_status'] ?? '').toString().toUpperCase();
+      final isDp = res['is_dp'] == true;
+      final pendingLeft = (res['pending_left'] is num)
+          ? (res['pending_left'] as num).toInt()
+          : int.tryParse('${res['pending_left'] ?? ''}') ?? 0;
+      final okMsg = pendingLeft > 0
+          ? 'lab_complete_ok_partial'.tr(namedArgs: {
+              'invoice': inv,
+              'left': '$pendingLeft',
+            })
+          : isDp
+              ? 'lab_complete_ok_dp'.tr(namedArgs: {'invoice': inv})
+              : 'lab_complete_ok_lunas'.tr(namedArgs: {
+                  'invoice': inv,
+                  'track': track.isEmpty ? 'SIAP_DIAMBIL' : track,
+                });
+      _showPremiumSnackbar(
+        'lab_complete_ok_judul'.tr(),
+        okMsg,
+        OptikKaryawanTokens.success,
+      );
+      await _loadLabQueue();
+      unawaited(_loadTokoAntrian());
+    } catch (e) {
+      if (!mounted) return;
+      _showPremiumSnackbar(
+        'lab_complete_gagal_judul'.tr(),
         '$e',
         OptikKaryawanTokens.danger,
       );
@@ -707,14 +875,32 @@ class KaryawanPageState extends State<KaryawanPage>
             "sop_batal".tr(), "sop_foto_batal".tr(), Colors.orange);
       }
     } else if (jenisBukti == 'scan') {
-      // Pakai scanner universal yang sama (bukan menu scanner terpisah).
+      // Scanner universal — isi QR yang menentukan; bukti SOP hanya jika surat jalan.
       final routed = await UniversalQrScanPage.scanRouted(
         context,
-        allowedTypes: {QrPayloadType.receiveStock},
+        hintKey: 'universal_qr_scan_hint',
       );
       if (routed == null || !mounted) {
         _showPremiumSnackbar(
             "sop_batal".tr(), "sop_scan_batal_msg".tr(), Colors.orange);
+        return;
+      }
+      if (routed.type != QrPayloadType.receiveStock) {
+        await UniversalQrNav.dispatch(
+          context,
+          routed,
+          callerRole: UniversalQrCallerRole.karyawan,
+          cabangKaryawan: _cabangKaryawan,
+          karyawanId: _karyawanId,
+          karyawanNama: _namaKaryawan,
+          profile: {
+            'toko_id': _tokoId ?? _cabangKaryawan,
+            'role': 'karyawan',
+            'id': _karyawanId,
+            'nama': _namaKaryawan,
+            'nik': _nikKaryawan,
+          },
+        );
         return;
       }
       final result = await Navigator.push(
@@ -808,24 +994,43 @@ class KaryawanPageState extends State<KaryawanPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${jadwal['hari']} • ${jadwal['tanggal']}',
-                style: const TextStyle(
-                    color: OptikKaryawanTokens.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
+            Text(
+              '${KaryawanI18nDisplay.hariLabel(jadwal['hari'] ?? '')} • ${KaryawanI18nDisplay.tanggalLabel(dateKey: jadwal['date_key'], fallback: jadwal['tanggal'], locale: context.locale)}',
+              style: const TextStyle(
+                color: OptikKaryawanTokens.ink,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
-            Text('Shift: ${jadwal['shift']}',
-                style: const TextStyle(color: OptikKaryawanTokens.muted, fontSize: 15)),
+            Text(
+              'jadwal_shift_label'.tr(
+                namedArgs: {
+                  'shift': KaryawanI18nDisplay.shiftLabel(
+                    jadwal['shift'] ?? '-',
+                  ),
+                },
+              ),
+              style: const TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 15,
+              ),
+            ),
             if (catatan != null && catatan.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('Catatan: $catatan',
-                  style: const TextStyle(color: OptikKaryawanTokens.muted)),
+              Text(
+                'jadwal_catatan_label'.tr(namedArgs: {'note': catatan}),
+                style: const TextStyle(color: OptikKaryawanTokens.muted),
+              ),
             ],
             const SizedBox(height: 16),
-            const Text(
-              'Butuh ijin / cuti / tukar jadwal? Ajukan lewat tombol di bawah. '
-              'Admin cabang yang menyetujui.',
-              style: TextStyle(color: OptikKaryawanTokens.muted, fontSize: 12, height: 1.4),
+            Text(
+              'jadwal_ajukan_hint'.tr(),
+              style: const TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 12,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -841,7 +1046,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   );
                 },
                 icon: const Icon(Icons.event_available_rounded, size: 18),
-                label: const Text('Ajukan ijin / tukar jadwal'),
+                label: Text('home_ajukan_ijin_tukar'.tr()),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: OptikKaryawanTokens.gold,
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1073,7 +1278,7 @@ class KaryawanPageState extends State<KaryawanPage>
           fillBar: const Color(0xFFFFECB3),
           track: const Color(0xFF3A2808),
           lit: true,
-          badge: 'GOLD',
+          badge: 'kpi_badge_gold',
           badgeGrad: const [
             Color(0xFFFFF8E1),
             Color(0xFFE0B43A),
@@ -1088,7 +1293,7 @@ class KaryawanPageState extends State<KaryawanPage>
           fillBar: const Color(0xFFF8BBD0),
           track: const Color(0xFF2A0618),
           lit: true,
-          badge: 'ELITE',
+          badge: 'kpi_badge_elite',
           badgeGrad: const [Color(0xFFFFE0EC), Color(0xFFFF80AB)],
           badgeText: const Color(0xFF4A0A28),
         );
@@ -1099,7 +1304,7 @@ class KaryawanPageState extends State<KaryawanPage>
           fillBar: const Color(0xFFE8D4FF),
           track: const Color(0xFF140828),
           lit: true,
-          badge: 'MAX',
+          badge: 'kpi_badge_max',
           badgeGrad: const [Color(0xFFF0E0FF), Color(0xFFB48CFF)],
           badgeText: const Color(0xFF2A1058),
         );
@@ -1911,7 +2116,7 @@ class KaryawanPageState extends State<KaryawanPage>
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: IconButton(
-                  tooltip: 'Keluar',
+                  tooltip: 'nav_keluar'.tr(),
                   style: IconButton.styleFrom(
                     backgroundColor:
                         OptikKaryawanTokens.cyan.withOpacity(0.12),
@@ -1948,21 +2153,25 @@ class KaryawanPageState extends State<KaryawanPage>
           ),
         ),
         child: FloatingActionButton(
-          tooltip: 'scan_qr'.tr(),
-          onPressed: () {
-            UniversalQrNav.open(
+          // Universal: absensi, penerimaan DO/RO, pickup LUNAS, dll (tanpa filter tipe).
+          tooltip: 'scan_qr_universal'.tr(),
+          onPressed: () async {
+            await UniversalQrNav.open(
               context,
               callerRole: UniversalQrCallerRole.karyawan,
               cabangKaryawan: _cabangKaryawan,
               karyawanId: _karyawanId,
               karyawanNama: _namaKaryawan,
+              hintKey: 'universal_qr_scan_hint',
               profile: {
-                'toko_id': _cabangKaryawan,
+                'toko_id': _tokoId ?? _cabangKaryawan,
                 'role': 'karyawan',
                 'id': _karyawanId,
                 'nama': _namaKaryawan,
+                'nik': _nikKaryawan,
               },
             );
+            if (mounted) unawaited(_loadTokoAntrian());
           },
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -2157,7 +2366,10 @@ class KaryawanPageState extends State<KaryawanPage>
                             child: child,
                           ),
                         ),
-                        child: _buildTodayCommandPanel(),
+                        child: KeyedSubtree(
+                          key: _todayPanelKey,
+                          child: _buildTodayCommandPanel(),
+                        ),
                       ),
                       if (_pengumuman.isNotEmpty) ...[
                         const SizedBox(height: 14),
@@ -2165,16 +2377,44 @@ class KaryawanPageState extends State<KaryawanPage>
                       ],
                       const SizedBox(height: 22),
                       _buildQuickShortcuts(),
+                      const SizedBox(height: 22),
+                      KeyedSubtree(
+                        key: _antrianSectionKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionLabel('antrian_home_judul'.tr()),
+                            const SizedBox(height: 10),
+                            _buildTokoAntrianCard(),
+                          ],
+                        ),
+                      ),
                       if (_showLabQueue) ...[
                         const SizedBox(height: 22),
-                        _sectionLabel('lab_queue_judul'.tr()),
-                        const SizedBox(height: 10),
-                        _buildLabQueueCard(),
+                        KeyedSubtree(
+                          key: _labSectionKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _sectionLabel('lab_queue_judul'.tr()),
+                              const SizedBox(height: 10),
+                              _buildLabQueueCard(),
+                            ],
+                          ),
+                        ),
                       ],
                       const SizedBox(height: 22),
-                      _sectionLabel('home_sop_judul'.tr()),
-                      const SizedBox(height: 10),
-                      _buildSopHariIniCard(),
+                      KeyedSubtree(
+                        key: _sopSectionKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionLabel('home_sop_judul'.tr()),
+                            const SizedBox(height: 10),
+                            _buildSopHariIniCard(),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 18),
                       _sectionLabel('home_pengajuan_judul'.tr()),
                       const SizedBox(height: 10),
@@ -2213,10 +2453,13 @@ class KaryawanPageState extends State<KaryawanPage>
                           itemCount: _jadwalMingguIni.length,
                           itemBuilder: (context, index) {
                             final jadwal = _jadwalMingguIni[index];
-                            final shift = jadwal['shift'] ?? '-';
+                            final shiftRaw = jadwal['shift'] ?? '-';
+                            final shift =
+                                KaryawanI18nDisplay.shiftLabel(shiftRaw);
                             final isLibur =
-                                shift.toLowerCase().contains('libur') ||
-                                    shift.contains("shift_libur".tr());
+                                shiftRaw.toLowerCase().contains('libur') ||
+                                    shiftRaw.contains("shift_libur".tr()) ||
+                                    shift == 'jadwal_libur'.tr();
                             final isToday =
                                 jadwal['date_key'] ==
                                     _jadwalHariIni?['date_key'];
@@ -2256,7 +2499,9 @@ class KaryawanPageState extends State<KaryawanPage>
                                       CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      jadwal['hari']!,
+                                      KaryawanI18nDisplay.hariLabel(
+                                        jadwal['hari'] ?? '',
+                                      ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -2269,7 +2514,11 @@ class KaryawanPageState extends State<KaryawanPage>
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      jadwal['tanggal']!,
+                                      KaryawanI18nDisplay.tanggalLabel(
+                                        dateKey: jadwal['date_key'],
+                                        fallback: jadwal['tanggal'],
+                                        locale: context.locale,
+                                      ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -2281,7 +2530,7 @@ class KaryawanPageState extends State<KaryawanPage>
                                     ),
                                     const Spacer(),
                                     Text(
-                                      jadwal['shift']!,
+                                      shift,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -2350,8 +2599,8 @@ class KaryawanPageState extends State<KaryawanPage>
     if (!TenantModules.instance.allows('attendance')) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Absensi tidak aktif di paket usaha ini.'),
+        SnackBar(
+          content: Text('absensi_modul_off'.tr()),
         ),
       );
       return;
@@ -2371,9 +2620,50 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Future<void> _bukaPengingat() async {
-    await Navigator.push(
+    final result = await Navigator.push<PengingatNavResult>(
       context,
       MaterialPageRoute(builder: (_) => const PengingatPage()),
+    );
+    if (!mounted || result == null) return;
+    await _applyPengingatNav(result);
+  }
+
+  Future<void> _applyPengingatNav(PengingatNavResult result) async {
+    setState(() => _currentIndex = 0);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
+    switch (result.dest) {
+      case PengingatDest.lab:
+        await _loadLabQueue();
+        if (!mounted) return;
+        _scrollToKey(_labSectionKey);
+        break;
+      case PengingatDest.sop:
+        _scrollToKey(_sopSectionKey);
+        break;
+      case PengingatDest.shift:
+        _scrollToKey(_todayPanelKey);
+        final j = _jadwalHariIni;
+        if (j != null) {
+          await Future<void>.delayed(const Duration(milliseconds: 280));
+          if (!mounted) return;
+          _tampilkanDetailJadwal(j);
+        }
+        break;
+      case PengingatDest.home:
+        break;
+    }
+  }
+
+  void _scrollToKey(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
     );
   }
 
@@ -2566,7 +2856,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   ),
                 ),
                 child: Text(
-                  'EMPLOYEE DESK',
+                  'home_employee_desk'.tr(),
                   style: TextStyle(
                     color: OptikKaryawanTokens.ink.withOpacity(0.78),
                     fontSize: 9.5,
@@ -2655,10 +2945,20 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildTodayCommandPanel() {
-    final shift = _jadwalHariIni?['shift'] ?? 'home_shift_kosong'.tr();
-    final isLibur = shift.toLowerCase().contains('libur');
-    final hari = _jadwalHariIni?['hari'] ?? 'home_hari_ini'.tr();
-    final tgl = _jadwalHariIni?['tanggal'] ?? '';
+    final shiftRaw = (_jadwalHariIni?['shift'] ?? '').trim();
+    final shift = shiftRaw.isEmpty
+        ? 'home_shift_kosong'.tr()
+        : KaryawanI18nDisplay.shiftLabel(shiftRaw);
+    final isLibur = shiftRaw.toLowerCase().contains('libur');
+    final hariRaw = (_jadwalHariIni?['hari'] ?? '').trim();
+    final hari = hariRaw.isEmpty
+        ? 'home_hari_ini'.tr()
+        : KaryawanI18nDisplay.hariLabel(hariRaw);
+    final tgl = KaryawanI18nDisplay.tanggalLabel(
+      dateKey: _jadwalHariIni?['date_key'],
+      fallback: _jadwalHariIni?['tanggal'] ?? '',
+      locale: context.locale,
+    );
     final hasOpenAbsen = _absenStatus == 'sedang_bekerja';
     final ctaLabel = isLibur && !hasOpenAbsen
         ? 'home_cta_lihat_absen'.tr()
@@ -2876,7 +3176,9 @@ class KaryawanPageState extends State<KaryawanPage>
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${p['judul'] ?? '-'}',
+                      KaryawanI18nDisplay.pengumumanJudul(
+                        p['judul']?.toString(),
+                      ),
                       style: const TextStyle(
                         color: OptikKaryawanTokens.ink,
                         fontSize: 13,
@@ -2885,7 +3187,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${p['isi'] ?? ''}',
+                      KaryawanI18nDisplay.pengumumanIsi(p['isi']?.toString()),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -2953,7 +3255,7 @@ class KaryawanPageState extends State<KaryawanPage>
             ...pending.map((t) => Padding(
                   padding: const EdgeInsets.only(bottom: 5),
                   child: Text(
-                    '• ${t['tugas']}',
+                    '• ${KaryawanI18nDisplay.sopTugas(t['tugas']?.toString())}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -3032,7 +3334,7 @@ class KaryawanPageState extends State<KaryawanPage>
                   children: [
                     Expanded(
                       child: Text(
-                        '${r['tipe'] ?? '-'} · ${r['tanggal'] ?? '-'}',
+                        '${KaryawanI18nDisplay.pengajuanTipe(r['tipe']?.toString())} · ${r['tanggal'] ?? '-'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -3060,6 +3362,165 @@ class KaryawanPageState extends State<KaryawanPage>
             }),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildTokoAntrianCard() {
+    final n = _antrianItems.length;
+    final preview = _antrianItems.take(3).toList();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(OptikKaryawanTokens.radiusXl),
+        onTap: _openTokoAntrianPage,
+        child: _softSurface(
+          emphasize: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: OptikKaryawanTokens.navyGradient,
+                      borderRadius:
+                          BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+                    ),
+                    child: const Icon(
+                      Icons.storefront_rounded,
+                      color: OptikKaryawanTokens.ink,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      n == 0
+                          ? 'antrian_home_kosong'.tr()
+                          : 'antrian_home_count'
+                              .tr(namedArgs: {'count': '$n'}),
+                      style: GoogleFonts.fraunces(
+                        color: OptikKaryawanTokens.ink,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  if (n > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: OptikKaryawanTokens.ink,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        '$n',
+                        style: const TextStyle(
+                          color: OptikKaryawanTokens.snow,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 13,
+                      color: OptikKaryawanTokens.muted.withOpacity(0.7),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'antrian_home_desc'.tr(),
+                style: TextStyle(
+                  color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                ),
+              ),
+              if (preview.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...preview.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: const BoxDecoration(
+                            color: OptikKaryawanTokens.cyan,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            e.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: OptikKaryawanTokens.ink.withOpacity(0.88),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    UniversalQrNav.open(
+                      context,
+                      callerRole: UniversalQrCallerRole.karyawan,
+                      cabangKaryawan: _cabangKaryawan,
+                      karyawanId: _karyawanId,
+                      karyawanNama: _namaKaryawan,
+                      profile: {
+                        'toko_id': _tokoId ?? _cabangKaryawan,
+                        'role': 'karyawan',
+                        'id': _karyawanId,
+                        'nama': _namaKaryawan,
+                        'nik': _nikKaryawan,
+                      },
+                    ).then((_) {
+                      if (mounted) unawaited(_loadTokoAntrian());
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: OptikKaryawanTokens.ink,
+                    side: BorderSide(
+                      color: OptikKaryawanTokens.cyan.withOpacity(0.55),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(OptikKaryawanTokens.radiusMd),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                  label: Text(
+                    'scan_qr_universal'.tr(),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -3181,19 +3642,25 @@ class KaryawanPageState extends State<KaryawanPage>
               ),
             )
           else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: OptikKaryawanTokens.cyan.withOpacity(0.14),
-                borderRadius:
-                    BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+            FilledButton(
+              onPressed: _labBusy ? null : () => _completeLabJob(job),
+              style: FilledButton.styleFrom(
+                backgroundColor: OptikKaryawanTokens.seasideMid,
+                foregroundColor: OptikKaryawanTokens.ink,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(OptikKaryawanTokens.radiusSm),
+                ),
               ),
               child: Text(
-                'lab_queue_status_claimed'.tr(),
+                'lab_queue_btn_selesai'.tr(),
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w800,
-                  color: OptikKaryawanTokens.ink,
                 ),
               ),
             ),
@@ -3360,7 +3827,7 @@ class KaryawanPageState extends State<KaryawanPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${t['tugas']}',
+                        KaryawanI18nDisplay.sopTugas(t['tugas']?.toString()),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -3854,9 +4321,9 @@ class KaryawanPageState extends State<KaryawanPage>
                                             ),
                                           ],
                                         ),
-                                        child: const Text(
-                                          'GOLD',
-                                          style: TextStyle(
+                                        child: Text(
+                                          'kpi_badge_gold'.tr(),
+                                          style: const TextStyle(
                                             color: Color(0xFF3A2808),
                                             fontSize: 9,
                                             fontWeight: FontWeight.w900,
@@ -3887,9 +4354,9 @@ class KaryawanPageState extends State<KaryawanPage>
                                             ),
                                           ],
                                         ),
-                                        child: const Text(
-                                          'ELITE',
-                                          style: TextStyle(
+                                        child: Text(
+                                          'kpi_badge_elite'.tr(),
+                                          style: const TextStyle(
                                             color: Color(0xFF4A0A28),
                                             fontSize: 9,
                                             fontWeight: FontWeight.w900,
@@ -3920,9 +4387,9 @@ class KaryawanPageState extends State<KaryawanPage>
                                             ),
                                           ],
                                         ),
-                                        child: const Text(
-                                          'MAX',
-                                          style: TextStyle(
+                                        child: Text(
+                                          'kpi_badge_max'.tr(),
+                                          style: const TextStyle(
                                             color: Color(0xFF2A1058),
                                             fontSize: 9,
                                             fontWeight: FontWeight.w900,
@@ -4610,7 +5077,9 @@ class KaryawanPageState extends State<KaryawanPage>
                       const SizedBox(width: 15),
                       Expanded(
                         child: Text(
-                          tugas['tugas'],
+                          KaryawanI18nDisplay.sopTugas(
+                            tugas['tugas']?.toString(),
+                          ),
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight:
@@ -4797,42 +5266,147 @@ class KaryawanPageState extends State<KaryawanPage>
             ),
             child: Column(
               children: [
-                _buildMenuProfil(Icons.person_rounded,
-                    "menu_detail_profil".tr(), "sub_detail_profil".tr(), true),
+                _buildMenuProfil(
+                  Icons.person_rounded,
+                  "menu_detail_profil".tr(),
+                  "sub_detail_profil".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DetailDataPribadiPage(),
+                      ),
+                    );
+                  },
+                ),
                 if (TenantModules.instance.allows('attendance'))
                   _buildMenuProfil(
-                      Icons.face_retouching_natural_rounded,
-                      'Absensi',
-                      'Masuk/pulang: GPS toko + AWS Face Liveness + wajah',
-                      true),
+                    Icons.face_retouching_natural_rounded,
+                    'menu_absensi'.tr(),
+                    'sub_absensi'.tr(),
+                    true,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AbsensiPage(),
+                        ),
+                      );
+                    },
+                  ),
                 _buildMenuProfil(
-                    Icons.face_outlined,
-                    'Bentuk Wajah',
-                    'Referensi bentuk wajah + rekomendasi frame',
-                    true),
+                  Icons.face_outlined,
+                  'menu_bentuk_wajah'.tr(),
+                  'sub_bentuk_wajah'.tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const MemberFaceShapePage(),
+                      ),
+                    );
+                  },
+                ),
                 _buildMenuProfil(
-                    Icons.settings_rounded,
-                    "menu_pengaturan_akun".tr(),
-                    "sub_pengaturan_akun".tr(),
-                    true),
+                  Icons.settings_rounded,
+                  "menu_pengaturan_akun".tr(),
+                  "sub_pengaturan_akun".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PengaturanAkunPage(),
+                      ),
+                    );
+                  },
+                ),
                 if (_canShowAdminLoginCode)
                   _buildMenuProfil(
-                      Icons.phonelink_lock_rounded,
-                      'Kode Login Admin',
-                      (_tokoId ?? '').trim().toUpperCase() == 'PUSAT'
-                          ? 'Admin Pusat — kode unik, login web ter-track ke Anda'
-                          : 'Kepala Toko / Kepala Area — kode login web Admin',
-                      true),
-                _buildMenuProfil(Icons.headset_mic_rounded,
-                    "menu_pusat_bantuan".tr(), "sub_pusat_bantuan".tr(), true),
-                _buildMenuProfil(Icons.warning_rounded, "menu_pengaduan".tr(),
-                    "sub_pengaduan".tr(), true),
-                _buildMenuProfil(Icons.notifications_active_rounded,
-                    "menu_pengingat".tr(), "sub_pengingat".tr(), true),
-                _buildMenuProfil(Icons.system_update_rounded,
-                    "menu_update".tr(), "sub_update".tr(), true),
-                _buildMenuProfil(Icons.translate_rounded,
-                    "menu_ganti_bahasa".tr(), "sub_ganti_bahasa".tr(), false),
+                    Icons.phonelink_lock_rounded,
+                    'menu_kode_login_admin'.tr(),
+                    (_tokoId ?? '').trim().toUpperCase() == 'PUSAT'
+                        ? 'sub_kode_login_admin_pusat'.tr()
+                        : 'sub_kode_login_admin_cabang'.tr(),
+                    true,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AdminLoginCodePage(),
+                        ),
+                      );
+                    },
+                  ),
+                _buildMenuProfil(
+                  Icons.headset_mic_rounded,
+                  "menu_pusat_bantuan".tr(),
+                  "sub_pusat_bantuan".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BantuanPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuProfil(
+                  Icons.warning_rounded,
+                  "menu_pengaduan".tr(),
+                  "sub_pengaduan".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PengaduanPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuProfil(
+                  Icons.notifications_active_rounded,
+                  "menu_pengingat".tr(),
+                  "sub_pengingat".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push<PengingatNavResult>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PengingatPage(),
+                      ),
+                    ).then((result) {
+                      if (result != null && mounted) {
+                        unawaited(_applyPengingatNav(result));
+                      }
+                    });
+                  },
+                ),
+                _buildMenuProfil(
+                  Icons.system_update_rounded,
+                  "menu_update".tr(),
+                  "sub_update".tr(),
+                  true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SoftwareUpdatePage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuProfil(
+                  Icons.translate_rounded,
+                  "menu_ganti_bahasa".tr(),
+                  "sub_ganti_bahasa".tr(),
+                  false,
+                  onTap: () => _tampilkanDialogBahasa(context),
+                ),
               ],
             ),
           ),
@@ -4842,7 +5416,12 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildMenuProfil(
-      IconData icon, String title, String subtitle, bool showDivider) {
+    IconData icon,
+    String title,
+    String subtitle,
+    bool showDivider, {
+    required VoidCallback onTap,
+  }) {
     return Column(
       children: [
         Material(
@@ -4851,56 +5430,7 @@ class KaryawanPageState extends State<KaryawanPage>
             borderRadius: BorderRadius.circular(20),
             highlightColor: OptikKaryawanTokens.seasideWash.withOpacity(0.55),
             splashColor: OptikKaryawanTokens.seasidePale.withOpacity(0.45),
-            onTap: () {
-              if (title == "menu_detail_profil".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const DetailDataPribadiPage()));
-              } else if (title == 'Absensi') {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const AbsensiPage()));
-              } else if (title == 'Bentuk Wajah') {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const MemberFaceShapePage()));
-              } else if (title == "menu_pengaturan_akun".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const PengaturanAkunPage()));
-              } else if (title == 'Kode Login Admin') {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const AdminLoginCodePage()));
-              } else if (title == "menu_pusat_bantuan".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const BantuanPage()));
-              } else if (title == "menu_pengaduan".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const PengaduanPage()));
-              } else if (title == "menu_pengingat".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const PengingatPage()));
-              } else if (title == "menu_update".tr()) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const SoftwareUpdatePage()));
-              } else if (title == "menu_ganti_bahasa".tr()) {
-                _tampilkanDialogBahasa(context);
-              }
-            },
+            onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               child: Row(
@@ -4911,7 +5441,8 @@ class KaryawanPageState extends State<KaryawanPage>
                       color: OptikKaryawanTokens.gold.withOpacity(0.15),
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: OptikKaryawanTokens.gold.withOpacity(0.3), width: 1),
+                          color: OptikKaryawanTokens.gold.withOpacity(0.3),
+                          width: 1),
                     ),
                     child:
                         Icon(icon, color: OptikKaryawanTokens.seasideMid, size: 22),
@@ -4935,7 +5466,8 @@ class KaryawanPageState extends State<KaryawanPage>
                     ),
                   ),
                   Icon(Icons.arrow_forward_ios_rounded,
-                      color: OptikKaryawanTokens.muted.withOpacity(0.45), size: 16),
+                      color: OptikKaryawanTokens.muted.withOpacity(0.45),
+                      size: 16),
                 ],
               ),
             ),
