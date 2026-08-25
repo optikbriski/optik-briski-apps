@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
+import '../../shared/karyawan/karyawan_i18n_display.dart';
 
 /// Karyawan: ajukan ijin / cuti / tukar jadwal + lihat status.
 class PengajuanJadwalPage extends StatefulWidget {
@@ -385,40 +386,61 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
           Row(
             children: [
               Expanded(
-                child: Text(tipe,
-                    style: const TextStyle(
-                        color: OptikKaryawanTokens.ink,
-                        fontWeight: FontWeight.bold)),
+                child: Text(
+                  KaryawanI18nDisplay.pengajuanTipe(tipe),
+                  style: const TextStyle(
+                    color: OptikKaryawanTokens.ink,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              Text(status,
-                  style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11)),
+              Text(
+                KaryawanI18nDisplay.pengajuanStatus(status),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             item['tanggal']?.toString().substring(0, 10) ?? '-',
             style: const TextStyle(
-                color: OptikKaryawanTokens.muted, fontSize: 13),
+              color: OptikKaryawanTokens.muted,
+              fontSize: 13,
+            ),
           ),
           if (tipe == 'TUKAR' && partnerNama != null)
-            Text('dengan $partnerNama',
-                style: const TextStyle(
-                    color: OptikKaryawanTokens.muted, fontSize: 12)),
+            Text(
+              'pengajuan_dengan'.tr(namedArgs: {'nama': partnerNama}),
+              style: const TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 12,
+              ),
+            ),
           const SizedBox(height: 4),
-          Text(item['alasan']?.toString() ?? '-',
-              style: TextStyle(
-                  color: OptikKaryawanTokens.muted.withOpacity(0.85),
-                  fontSize: 12)),
+          Text(
+            item['alasan']?.toString() ?? '-',
+            style: TextStyle(
+              color: OptikKaryawanTokens.muted.withOpacity(0.85),
+              fontSize: 12,
+            ),
+          ),
           if ((item['reviewer_note']?.toString() ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Catatan: ${item['reviewer_note']}',
+                'jadwal_catatan_label'.tr(
+                  namedArgs: {
+                    'note': item['reviewer_note'].toString(),
+                  },
+                ),
                 style: const TextStyle(
-                    color: OptikKaryawanTokens.muted, fontSize: 12),
+                  color: OptikKaryawanTokens.muted,
+                  fontSize: 12,
+                ),
               ),
             ),
           if (status == 'PENDING') ...[
@@ -429,19 +451,31 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                 onPressed: () async {
                   try {
                     await _svc.cancel(
-                        item['id'].toString(), _me!['id'].toString());
+                      item['id'].toString(),
+                      _me!['id'].toString(),
+                    );
                     await _bootstrap();
                   } catch (e) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                          content: Text('Gagal batal: $e'),
-                          backgroundColor: Colors.red),
+                        content: Text(
+                          'pengajuan_err_batal'.tr(
+                            namedArgs: {'error': '$e'},
+                          ),
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
                 },
-                child: const Text('Batalkan',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                child: Text(
+                  'pengajuan_btn_batal'.tr(),
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ),
           ],

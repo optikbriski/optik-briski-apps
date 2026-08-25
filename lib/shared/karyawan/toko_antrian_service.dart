@@ -166,11 +166,15 @@ class TokoAntrianService {
           final m = Map<String, dynamic>.from(raw as Map);
           final nama = (m['customer_name'] ?? m['phone_e164'] ?? '-').toString();
           final st = (m['status'] ?? '').toString();
+          final note = (m['store_note'] ?? '').toString().trim();
+          final phone = (m['phone_e164'] ?? '').toString();
           return TokoAntrianItem(
             kind: TokoAntrianKind.pickupOnline,
             id: (m['id'] ?? '').toString(),
             title: nama,
-            subtitle: 'Online · $st',
+            subtitle: note.isEmpty
+                ? 'Online · $st${phone.isEmpty ? '' : ' · $phone'}'
+                : 'Online · $st · $note',
             when: _parseTs(m['paid_at'] ?? m['created_at']),
             status: st,
             meta: m,
@@ -204,11 +208,12 @@ class TokoAntrianService {
           final phone = (m['phone_e164'] ?? '-').toString();
           final jenis = (m['jenis'] ?? 'kontrol').toString();
           final st = (m['status'] ?? '').toString();
+          final note = (m['catatan'] ?? '').toString().trim();
           return TokoAntrianItem(
             kind: TokoAntrianKind.booking,
             id: (m['id'] ?? '').toString(),
             title: phone,
-            subtitle: '$jenis · $st',
+            subtitle: note.isEmpty ? '$jenis · $st' : '$jenis · $st · $note',
             when: _parseTs(m['scheduled_at']),
             status: st,
             meta: m,
@@ -290,23 +295,32 @@ class TokoAntrianService {
     _assertRpcOk(res);
   }
 
-  /// Online pickup: paid/packing → ready, atau ready → fulfilled
+  /// Online pickup: paid → packing → ready → fulfilled
   Future<void> advanceOnlinePickup({
     required String orderId,
     required String currentStatus,
   }) async {
     final cur = currentStatus.trim().toLowerCase();
-    final next = switch (cur) {
-      'paid' || 'packing' => 'ready',
-      'ready' => 'fulfilled',
-      _ => throw 'Status online tidak bisa diproses dari HP: $cur',
-    };
+    final next = nextOnlinePickupStatus(cur);
+    if (next == null) {
+      throw 'Status online tidak bisa diproses dari HP: $cur';
+    }
     final res = await _db.rpc('karyawan_antrian_action', params: {
       'p_kind': 'online',
       'p_id': orderId,
       'p_action': next,
     });
     _assertRpcOk(res);
+  }
+
+  /// Mapping status advance (uji unit + UI label).
+  static String? nextOnlinePickupStatus(String currentStatus) {
+    return switch (currentStatus.trim().toLowerCase()) {
+      'paid' => 'packing',
+      'packing' => 'ready',
+      'ready' => 'fulfilled',
+      _ => null,
+    };
   }
 
   void _assertRpcOk(dynamic res) {

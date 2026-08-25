@@ -3,19 +3,23 @@ import 'package:optik_b_riski/shared/karyawan/kpi_fire_service.dart';
 import 'package:optik_b_riski/shared/karyawan/streak_fire_level.dart';
 
 void main() {
+  // Target: 26×45=1170, 27×45=1215 (absen 20 + SOP penuh 25).
+  const t26 = 1170;
+  const t27 = 1215;
+
   group('targetFromWorkDays', () {
-    test('fallback 26 hari → 1040', () {
-      expect(KpiFireSnapshot.targetFromWorkDays(0), 1040);
-      expect(KpiFireSnapshot.monthlyPointTarget, 1040);
-      expect(KpiFireSnapshot.pointsPerLevel(1040), 208);
+    test('fallback 26 hari → 1170', () {
+      expect(KpiFireSnapshot.targetFromWorkDays(0), t26);
+      expect(KpiFireSnapshot.monthlyPointTarget, t26);
+      expect(KpiFireSnapshot.pointsPerLevel(t26), 234);
     });
 
     test('clamp 26–27', () {
-      expect(KpiFireSnapshot.targetFromWorkDays(20), 1040); // naik ke min 26
-      expect(KpiFireSnapshot.targetFromWorkDays(26), 1040);
-      expect(KpiFireSnapshot.targetFromWorkDays(27), 1080);
-      expect(KpiFireSnapshot.targetFromWorkDays(30), 1080); // turun ke max 27
-      expect(KpiFireSnapshot.pointsPerLevel(1080), 216);
+      expect(KpiFireSnapshot.targetFromWorkDays(20), t26);
+      expect(KpiFireSnapshot.targetFromWorkDays(26), t26);
+      expect(KpiFireSnapshot.targetFromWorkDays(27), t27);
+      expect(KpiFireSnapshot.targetFromWorkDays(30), t27);
+      expect(KpiFireSnapshot.pointsPerLevel(t27), 243);
     });
   });
 
@@ -42,23 +46,23 @@ void main() {
       }
     }
 
-    test('setiap poin di target 1040 masuk band level yang benar', () {
-      expectBandMatchesLevel(1040);
+    test('setiap poin di target 1170 masuk band level yang benar', () {
+      expectBandMatchesLevel(t26);
     });
 
-    test('setiap poin di target 1080 masuk band level yang benar', () {
-      expectBandMatchesLevel(1080);
+    test('setiap poin di target 1215 masuk band level yang benar', () {
+      expectBandMatchesLevel(t27);
     });
 
-    test('batas naik level 1040', () {
-      expect(StreakFireLevel.forKpiProgress(208 / 1040).level, 1);
-      expect(StreakFireLevel.forKpiProgress(209 / 1040).level, 2);
-      expect(StreakFireLevel.forKpiProgress(416 / 1040).level, 2);
-      expect(StreakFireLevel.forKpiProgress(417 / 1040).level, 3);
-      expect(StreakFireLevel.forKpiProgress(624 / 1040).level, 3);
-      expect(StreakFireLevel.forKpiProgress(625 / 1040).level, 4);
-      expect(StreakFireLevel.forKpiProgress(832 / 1040).level, 4);
-      expect(StreakFireLevel.forKpiProgress(833 / 1040).level, 5);
+    test('batas naik level 1170', () {
+      expect(StreakFireLevel.forKpiProgress(234 / t26).level, 1);
+      expect(StreakFireLevel.forKpiProgress(235 / t26).level, 2);
+      expect(StreakFireLevel.forKpiProgress(468 / t26).level, 2);
+      expect(StreakFireLevel.forKpiProgress(469 / t26).level, 3);
+      expect(StreakFireLevel.forKpiProgress(702 / t26).level, 3);
+      expect(StreakFireLevel.forKpiProgress(703 / t26).level, 4);
+      expect(StreakFireLevel.forKpiProgress(936 / t26).level, 4);
+      expect(StreakFireLevel.forKpiProgress(937 / t26).level, 5);
       expect(StreakFireLevel.forKpiProgress(1.0).level, 5);
       expect(StreakFireLevel.forKpiProgress(0).level, 1);
     });
@@ -69,12 +73,11 @@ void main() {
       expect(base.progress, 0);
       expect(base.totalPoin, 0);
 
-      final mid = base.syncedWithPoints(417);
+      final mid = base.syncedWithPoints(469);
       expect(mid.pointTarget, base.pointTarget);
-      expect(mid.totalPoin, 417);
-      // 417/1040 = 0.401 → ceil(2.005)=3
+      expect(mid.totalPoin, 469);
       expect(mid.fire.level, 3);
-      expect(mid.pointsToNextLevel(), 625 - 417);
+      expect(mid.pointsToNextLevel(), 703 - 469);
 
       final maxed = mid.syncedWithPoints(2000);
       expect(maxed.progress, 1.0);
@@ -84,25 +87,25 @@ void main() {
 
     test('pointsToNextLevel dari 0', () {
       final s = KpiFireSnapshot.empty();
-      expect(s.pointsToNextLevel(), 209); // L2 mulai 209 di target 1040
+      expect(s.pointsToNextLevel(), 235);
     });
   });
 
   group('pointBandForLevel', () {
-    test('rentang 1040', () {
-      expect(KpiFireSnapshot.pointBandForLevel(1, 1040), (lo: 0, hi: 208));
-      expect(KpiFireSnapshot.pointBandForLevel(2, 1040), (lo: 209, hi: 416));
-      expect(KpiFireSnapshot.pointBandForLevel(3, 1040), (lo: 417, hi: 624));
-      expect(KpiFireSnapshot.pointBandForLevel(4, 1040), (lo: 625, hi: 832));
-      expect(KpiFireSnapshot.pointBandForLevel(5, 1040), (lo: 833, hi: 1040));
+    test('rentang 1170', () {
+      expect(KpiFireSnapshot.pointBandForLevel(1, t26), (lo: 0, hi: 234));
+      expect(KpiFireSnapshot.pointBandForLevel(2, t26), (lo: 235, hi: 468));
+      expect(KpiFireSnapshot.pointBandForLevel(3, t26), (lo: 469, hi: 702));
+      expect(KpiFireSnapshot.pointBandForLevel(4, t26), (lo: 703, hi: 936));
+      expect(KpiFireSnapshot.pointBandForLevel(5, t26), (lo: 937, hi: t26));
     });
 
-    test('rentang 1080', () {
-      expect(KpiFireSnapshot.pointBandForLevel(1, 1080), (lo: 0, hi: 216));
-      expect(KpiFireSnapshot.pointBandForLevel(2, 1080), (lo: 217, hi: 432));
-      expect(KpiFireSnapshot.pointBandForLevel(3, 1080), (lo: 433, hi: 648));
-      expect(KpiFireSnapshot.pointBandForLevel(4, 1080), (lo: 649, hi: 864));
-      expect(KpiFireSnapshot.pointBandForLevel(5, 1080), (lo: 865, hi: 1080));
+    test('rentang 1215', () {
+      expect(KpiFireSnapshot.pointBandForLevel(1, t27), (lo: 0, hi: 243));
+      expect(KpiFireSnapshot.pointBandForLevel(2, t27), (lo: 244, hi: 486));
+      expect(KpiFireSnapshot.pointBandForLevel(3, t27), (lo: 487, hi: 729));
+      expect(KpiFireSnapshot.pointBandForLevel(4, t27), (lo: 730, hi: 972));
+      expect(KpiFireSnapshot.pointBandForLevel(5, t27), (lo: 973, hi: t27));
     });
   });
 }

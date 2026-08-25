@@ -47,17 +47,19 @@ class KpiFireSnapshot {
   static const weightTetap = 0.40;
   static const weightToko = 0.60;
 
-  /// Envelope harian skor tetap (absen ontime 20 + SOP tipikal 2×10).
-  static const tetapEnvelope = 40;
-
   /// Absen ontime (Admin Valid) — samakan dengan config absensi.
   static const absenOntimePoints = AttendanceVerificationConfig.validDayPoints;
 
-  /// SOP harian tipikal di seed: 2 tugas × 10 poin.
-  static const sopTypicalDaily = 20;
+  /// Envelope skor tetap: absen ontime 20 + SOP ±25 → −25…+45.
+  static const sopEnvelope = 25;
+  static const tetapMinDaily = -sopEnvelope;
+  static const tetapEnvelope = absenOntimePoints + sopEnvelope; // 45
 
-  /// Inti poin yang realistis dikunci tiap hari kerja.
-  static const dailyCorePoints = absenOntimePoints + sopTypicalDaily; // 40
+  /// SOP penuh (semua komponen beres) = +25.
+  static const sopTypicalDaily = sopEnvelope;
+
+  /// Inti poin hari kerja bila absen ontime + SOP penuh.
+  static const dailyCorePoints = absenOntimePoints + sopTypicalDaily; // 45
 
   /// Fallback hari kerja/bulan toko (~Sen–Sab, ± libur nasional).
   static const fallbackWorkDays = 26;
@@ -66,10 +68,10 @@ class KpiFireSnapshot {
   static const minWorkDays = 26;
   static const maxWorkDays = 27;
 
-  /// Alias UI — fallback 26×40.
-  static const monthlyPointTarget = fallbackWorkDays * dailyCorePoints; // 1040
+  /// Alias UI — fallback 26×45.
+  static const monthlyPointTarget = fallbackWorkDays * dailyCorePoints; // 1170
 
-  /// Target level 5 = hari kerja terjadwal bulan ini × inti harian 40.
+  /// Target level 5 = hari kerja terjadwal bulan ini × inti harian 45.
   /// Kalau jadwal ada: pakai jumlah aktual (clamp 26–27).
   /// Kalau belum ada jadwal: fallback 26 hari.
   static int targetFromWorkDays(int scheduledWorkDays) {
@@ -418,11 +420,16 @@ class KpiFireService {
     }
 
     var sum = 0.0;
+    final span = (KpiFireSnapshot.tetapEnvelope - KpiFireSnapshot.tetapMinDaily)
+        .clamp(1, 9999);
     for (final day in validDays) {
       final raw = perDay[day] ?? 0;
-      final s = (raw.clamp(0, KpiFireSnapshot.tetapEnvelope)) /
-          KpiFireSnapshot.tetapEnvelope;
-      sum += s;
+      final clipped = raw.clamp(
+        KpiFireSnapshot.tetapMinDaily,
+        KpiFireSnapshot.tetapEnvelope,
+      );
+      final s = (clipped - KpiFireSnapshot.tetapMinDaily) / span;
+      sum += s.clamp(0.0, 1.0);
     }
     return (sum / validDays.length).clamp(0.0, 1.0);
   }

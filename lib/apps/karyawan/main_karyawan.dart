@@ -25,6 +25,9 @@ import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/karyawan/kpi_fire_service.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
+import '../../shared/karyawan/sop_daily_service.dart';
+import '../../shared/karyawan/sop_score.dart';
+import '../../shared/karyawan/sop_score_panel.dart';
 import '../../shared/karyawan/streak_fire_level.dart';
 import '../../shared/karyawan/toko_antrian_realtime.dart';
 import '../../shared/karyawan/toko_antrian_service.dart';
@@ -73,6 +76,11 @@ class KaryawanPageState extends State<KaryawanPage>
   List<Map<String, dynamic>> _labOpenJobs = [];
   List<Map<String, dynamic>> _labMineJobs = [];
   bool _labBusy = false;
+  final _sopDaily = SopDailyService();
+  SopBranchState? _sopBranch;
+  SopScoreResult? _sopScore;
+  bool _sopBusy = false;
+  bool _sopIsPagi = true;
   final GlobalKey _labSectionKey = GlobalKey();
   final GlobalKey _sopSectionKey = GlobalKey();
   final GlobalKey _todayPanelKey = GlobalKey();
@@ -582,6 +590,7 @@ class KaryawanPageState extends State<KaryawanPage>
       unawaited(_loadLabQueue());
       unawaited(_loadTokoAntrian());
       unawaited(_bindTokoAntrianRealtime());
+      unawaited(_loadSopScore());
       unawaited(_syncGeofenceMonitorIfOpenShift(askPermissions: true));
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -3207,12 +3216,11 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildSopHariIniCard() {
-    final total = _daftarSOPTugas.length;
-    final done = _daftarSOPTugas.where((e) => e['selesai'] == true).length;
-    final pending = _daftarSOPTugas
-        .where((e) => e['selesai'] != true)
-        .take(2)
-        .toList();
+    final sc = _sopScore;
+    final branch = _sopBranch;
+    final poin = sc?.poin;
+    final story = branch?.storyCount ?? 0;
+    final fatal = sc?.fatalStory == true;
     return _softSurface(
       onTap: () => setState(() => _currentIndex = 1),
       child: Column(
@@ -3222,9 +3230,13 @@ class KaryawanPageState extends State<KaryawanPage>
             children: [
               Expanded(
                 child: Text(
-                  total == 0
+                  poin == null
                       ? 'home_sop_kosong'.tr()
-                      : 'home_sop_progress'.tr(args: ['$done', '$total']),
+                      : 'home_sop_score'.tr(namedArgs: {
+                          'poin': poin >= 0 ? '+$poin' : '$poin',
+                          'story': '$story',
+                          'target': '${SopScore.storyTarget}',
+                        }),
                   style: const TextStyle(
                     color: OptikKaryawanTokens.ink,
                     fontSize: 14,
@@ -3237,42 +3249,14 @@ class KaryawanPageState extends State<KaryawanPage>
                   color: OptikKaryawanTokens.muted.withOpacity(0.7)),
             ],
           ),
-          if (total > 0) ...[
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(
-                value: done / total,
-                minHeight: 5,
-                backgroundColor: OptikKaryawanTokens.cyan.withOpacity(0.12),
-                valueColor:
-                    const AlwaysStoppedAnimation(OptikKaryawanTokens.cyan),
-              ),
-            ),
-          ],
-          if (pending.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ...pending.map((t) => Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
-                  child: Text(
-                    '• ${KaryawanI18nDisplay.sopTugas(t['tugas']?.toString())}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: OptikKaryawanTokens.ink.withOpacity(0.85),
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )),
-          ] else if (total > 0) ...[
-            const SizedBox(height: 10),
+          if (fatal) ...[
+            const SizedBox(height: 8),
             Text(
-              'home_sop_semua_selesai'.tr(),
+              'sop_score_fatal'.tr(),
               style: TextStyle(
-                color: OptikKaryawanTokens.muted.withOpacity(0.95),
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
+                color: Colors.orange.shade800,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -4967,11 +4951,89 @@ class KaryawanPageState extends State<KaryawanPage>
     );
   }
 
+  Future<void> _loadSopScore() async {
+    final kid = (_karyawanId ?? '').trim();
+    final toko = (_tokoId ?? '').trim();
+    if (kid.isEmpty || toko.isEmpty) return;
+    try {
+      final jam = _jadwalHariIni?['jam_masuk']?.toString();
+      final shift = _jadwalHariIni?['shift']?.toString() ??
+          _jadwalHariIni?['keterangan']?.toString();
+      final isLibur = (_jadwalHariIni?['status'] ?? '')
+              .toString()
+              .toLowerCase()
+              .contains('libur') ||
+          '${_jadwalHariIni?['is_libur']}'.toLowerCase() == 'true' ||
+          _absenStatus == 'libur';
+      final isAktif = _absenStatus == 'sedang_bekerja' ||
+          _absenStatus == 'sudah_pulang' ||
+          _absenStatus == 'belum_absen';
+      final isPagi = SopScore.isPagiShift(jamMasuk: jam, shiftLabel: shift);
+      final branch = await _sopDaily.fetchBranchState(tokoId: toko);
+      final score = SopScore.compute(
+        SopScoreInput(
+          layer: officeLayerOf(_jabatanKaryawan),
+          isPagi: isPagi,
+          isAktif: isAktif && !isLibur,
+          isLibur: isLibur,
+          storyCount: branch.storyCount,
+          displayDone: branch.displayDone,
+          displayRequired: branch.displayRequired,
+          stokDone: branch.stokDone,
+          sapuDone: branch.sapuDone,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _sopBranch = branch;
+        _sopScore = score;
+        _sopIsPagi = isPagi;
+      });
+    } catch (e) {
+      debugPrint('sop score: $e');
+    }
+  }
+
+  Future<void> _runSopAction(Future<void> Function() action) async {
+    if (_sopBusy) return;
+    setState(() => _sopBusy = true);
+    try {
+      await action();
+      await _loadSopScore();
+      final kid = (_karyawanId ?? '').trim();
+      final sc = _sopScore;
+      if (kid.isNotEmpty && sc != null) {
+        await _sopDaily.syncMyPoin(karyawanId: kid, score: sc);
+        if (mounted) {
+          setState(() => _sudahKlaimPoinHariIni = true);
+          _showPremiumSnackbar(
+            'sop_score_sync_ok_judul'.tr(),
+            'sop_score_sync_ok_msg'.tr(namedArgs: {
+              'poin': sc.poin >= 0 ? '+${sc.poin}' : '${sc.poin}',
+            }),
+            OptikKaryawanTokens.success,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showPremiumSnackbar(
+          'sop_error_judul'.tr(),
+          '$e',
+          OptikKaryawanTokens.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sopBusy = false);
+    }
+  }
+
   Widget _buildTodoTab() {
     int tugasSelesai =
         _daftarSOPTugas.where((e) => e['selesai'] == true).length;
     double progress =
         _daftarSOPTugas.isEmpty ? 0 : tugasSelesai / _daftarSOPTugas.length;
+    final layer = officeLayerOf(_jabatanKaryawan);
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + _fabBottomPad(context)),
@@ -4980,6 +5042,56 @@ class KaryawanPageState extends State<KaryawanPage>
         children: [
           _buildMetricTwinRow(),
           const SizedBox(height: 22),
+          SopScorePanel(
+            state: _sopBranch,
+            score: _sopScore,
+            layer: layer,
+            isPagi: _sopIsPagi,
+            busy: _sopBusy,
+            onAddStory: () => _runSopAction(() async {
+              final kid = _karyawanId!;
+              final toko = _tokoId!;
+              await _sopDaily.addStoryPost(tokoId: toko, karyawanId: kid);
+            }),
+            onCompleteDisplay: (slot) => _runSopAction(() async {
+              await _sopDaily.completeDisplaySlot(
+                tokoId: _tokoId!,
+                karyawanId: _karyawanId!,
+                slotIndex: slot,
+              );
+            }),
+            onClaimSapu: () => _runSopAction(() async {
+              await _sopDaily.claimSapu(
+                tokoId: _tokoId!,
+                karyawanId: _karyawanId!,
+              );
+            }),
+            onClaimStok: () => _runSopAction(() async {
+              await _sopDaily.claimStokCheck(
+                tokoId: _tokoId!,
+                karyawanId: _karyawanId!,
+              );
+            }),
+            onSync: () => _runSopAction(() async {}),
+          ),
+          const SizedBox(height: 28),
+          Text(
+            'sop_bukti_tambahan'.tr(),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: OptikKaryawanTokens.navyDeep,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'sop_bukti_tambahan_desc'.tr(),
+            style: TextStyle(
+              color: OptikKaryawanTokens.muted.withOpacity(0.95),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -5018,7 +5130,9 @@ class KaryawanPageState extends State<KaryawanPage>
               value: progress,
               minHeight: 8,
               backgroundColor: Colors.grey.shade200,
-              color: progress == 1.0 ? OptikKaryawanTokens.seasideMid : OptikKaryawanTokens.gold,
+              color: progress == 1.0
+                  ? OptikKaryawanTokens.seasideMid
+                  : OptikKaryawanTokens.gold,
             ),
           ),
           const SizedBox(height: 25),
@@ -5039,58 +5153,50 @@ class KaryawanPageState extends State<KaryawanPage>
                   decoration: BoxDecoration(
                     color: isSelesai
                         ? OptikKaryawanTokens.seasideWash
-                        : Colors.white,
-                    borderRadius: BorderRadius.circular(15),
+                        : OptikKaryawanTokens.surface,
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: isSelesai
-                          ? OptikKaryawanTokens.seasidePale
+                          ? OptikKaryawanTokens.seasideMid.withOpacity(0.45)
                           : Colors.grey.shade200,
-                      width: 1.5,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withOpacity(0.02),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4))
-                    ],
                   ),
                   child: Row(
                     children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
+                      Container(
                         width: 26,
                         height: 26,
                         decoration: BoxDecoration(
-                          color: isSelesai ? OptikKaryawanTokens.seasideMid : Colors.transparent,
                           shape: BoxShape.circle,
+                          color: isSelesai
+                              ? OptikKaryawanTokens.seasideMid
+                              : Colors.transparent,
                           border: Border.all(
-                            color:
-                                isSelesai ? OptikKaryawanTokens.seasideMid : Colors.grey.shade400,
-                            width: 2,
+                            color: isSelesai
+                                ? OptikKaryawanTokens.seasideMid
+                                : Colors.grey.shade400,
                           ),
                         ),
                         child: isSelesai
-                            ? const Icon(Icons.check_rounded,
-                                color: OptikKaryawanTokens.ink, size: 16)
+                            ? const Icon(Icons.check,
+                                size: 16, color: OptikKaryawanTokens.ink)
                             : null,
                       ),
-                      const SizedBox(width: 15),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Text(
                           KaryawanI18nDisplay.sopTugas(
                             tugas['tugas']?.toString(),
                           ),
                           style: TextStyle(
-                            fontSize: 14,
                             fontWeight:
                                 isSelesai ? FontWeight.w700 : FontWeight.w600,
                             color: isSelesai
                                 ? OptikKaryawanTokens.ink
-                                : OptikKaryawanTokens.navyDeep,
+                                : OptikKaryawanTokens.ink.withOpacity(0.85),
                             decoration: isSelesai
                                 ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                            decorationColor: OptikKaryawanTokens.ink,
+                                : null,
                           ),
                         ),
                       ),
@@ -5099,70 +5205,6 @@ class KaryawanPageState extends State<KaryawanPage>
                 ),
               );
             },
-          ),
-          const SizedBox(height: 30),
-          Container(
-            decoration: BoxDecoration(
-              gradient: OptikKaryawanTokens.navyGradient,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                    color: OptikKaryawanTokens.gold.withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8))
-              ],
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
-                ),
-                onPressed: () async {
-                  if (_karyawanId == null) return;
-                  if (_sudahKlaimPoinHariIni) {
-                    _showPremiumSnackbar("sop_sudah_disimpan_judul".tr(),
-                        "sop_sudah_disimpan_desc".tr(), OptikKaryawanTokens.gold);
-                    return;
-                  }
-                  try {
-                    final claimed = await _homeService.claimDailySopPoints(
-                      karyawanId: _karyawanId!,
-                      tasks: _daftarSOPTugas,
-                      streakHari: currentStreakHari,
-                    );
-                    setState(() {
-                      _sudahKlaimPoinHariIni = true;
-                      _applyPoinBulan(totalPoinBulanIni + claimed);
-                      isStreakBonusActive = currentStreakHari >= 3;
-                    });
-                    if (isStreakBonusActive) {
-                      _showPremiumSnackbar(
-                          "poin_streak_bonus_judul".tr(),
-                          "${'poin_streak_bonus_msg'.tr()} $currentStreakHari",
-                          Colors.orange.shade700);
-                    } else {
-                      _showPremiumSnackbar("poin_selesai_judul".tr(),
-                          "poin_selesai_msg".tr(), OptikKaryawanTokens.seasideMid);
-                    }
-                  } catch (e) {
-                    _showPremiumSnackbar(
-                        "sop_error_judul".tr(), '$e', Colors.orange);
-                  }
-                },
-                icon:
-                    const Icon(Icons.cloud_upload_rounded, color: OptikKaryawanTokens.ink),
-                label: Text("sop_btn_simpan".tr(),
-                    style: const TextStyle(
-                        color: OptikKaryawanTokens.ink,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2)),
-              ),
-            ),
           ),
         ],
       ),

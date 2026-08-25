@@ -49,8 +49,9 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
           readyVer == _info!.serverVersion) {
         _readyToInstall = true;
         _readyApkPath = readyPath;
-        _statusHint =
-            'Update ${_info!.serverVersion} sudah diunduh. Konfirmasi untuk memasang.';
+        _statusHint = 'update_ready_hint'.tr(
+          namedArgs: {'version': _info!.serverVersion},
+        );
       }
     } catch (e) {
       debugPrint('cek versi: $e');
@@ -70,8 +71,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
         (_info?.hasUpdate ?? false) &&
         !(_info?.urlReachable ?? true)) {
       setState(() {
-        _statusHint =
-            'Link APK belum bisa diakses. App lama tetap aman. Periksa URL di versi_app.';
+        _statusHint = 'update_link_apk_fail'.tr();
       });
     }
   }
@@ -275,9 +275,9 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                             Text("update_auto".tr(),
                                 style: const TextStyle(
                                     color: OptikKaryawanTokens.ink, fontSize: 15)),
-                            const Text(
-                              'Auto-unduh di background; pasang tetap perlu konfirmasi',
-                              style: TextStyle(
+                            Text(
+                              'update_auto_hint'.tr(),
+                              style: const TextStyle(
                                   color: OptikKaryawanTokens.muted, fontSize: 11),
                             ),
                           ],
@@ -347,10 +347,10 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                             ),
                             if (!info.urlReachable) ...[
                               const SizedBox(height: 12),
-                              const Text(
-                                'Link unduhan belum siap. App yang terpasang tetap aman dipakai.',
+                              Text(
+                                'update_link_belum_siap'.tr(),
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                     color: Colors.orangeAccent, height: 1.35),
                               ),
                             ],
@@ -388,7 +388,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                               FilledButton.icon(
                                 onPressed: _pasangUpdate,
                                 icon: const Icon(Icons.install_mobile_rounded),
-                                label: const Text('Pasang sekarang'),
+                                label: Text('btn_pasang_sekarang'.tr()),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: OptikKaryawanTokens.seasideMid,
                                   padding: const EdgeInsets.symmetric(
@@ -430,7 +430,7 @@ class _SoftwareUpdatePageState extends State<SoftwareUpdatePage> {
                                     await _inisialisasiData();
                                   },
                             icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('Cek ulang'),
+                            label: Text('update_cek_ulang'.tr()),
                           ),
                         ],
                       ),

@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import '../../shared/invoice/invoice_qr_opener.dart';
 import '../../shared/qr/obr_codes.dart';
 import '../../shared/theme.dart';
+import 'karyawan_claim_page.dart';
 import 'karyawan_pickup_page.dart';
 
 /// Karyawan invoice opener:
-/// - QR **LUNAS** lifecycle → serah terima di HP
-/// - DP / CLAIM / view-only → snack (tipe QR lain tetap di-route UniversalQrNav)
+/// - QR **LUNAS** → serah terima di HP (wajib shift OPEN)
+/// - QR **CLAIM** → klaim garansi di HP (wajib shift OPEN)
+/// - DP / view-only → snack petunjuk
 void registerKaryawanInvoiceOpener() {
   InvoiceQrOpener.open = (
     context, {
@@ -20,17 +22,30 @@ void registerKaryawanInvoiceOpener() {
   }) async {
     final raw = (rawScan ?? '').trim();
     final phase = ObrInvoice.parse(raw)?.phase;
+    final prof = profile ?? const <String, dynamic>{};
 
-    final isLunasPickup = !viewOnly && raw.isNotEmpty && phase == 'LUNAS';
-
-    if (isLunasPickup) {
+    if (!viewOnly && raw.isNotEmpty && phase == 'LUNAS') {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
           builder: (_) => KaryawanPickupPage(
             noInvoice: noInvoice,
             rawScan: raw,
-            profile: profile ?? const {},
+            profile: prof,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!viewOnly && raw.isNotEmpty && phase == 'CLAIM') {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KaryawanClaimPage(
+            noInvoice: noInvoice,
+            rawScan: raw,
+            profile: prof,
           ),
         ),
       );

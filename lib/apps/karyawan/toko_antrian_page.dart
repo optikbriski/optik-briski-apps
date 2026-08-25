@@ -155,8 +155,45 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
     if (mounted) await _reload();
   }
 
+  Future<bool> _confirm(String title, String body) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('antrian_aksi_batal'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('antrian_aksi_ya'.tr()),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _act(TokoAntrianItem item) async {
+    if (item.kind == TokoAntrianKind.booking) {
+      await _openBookingSheet(item);
+      return;
+    }
     if (!await _ensureDuty()) return;
+
+    if (item.kind == TokoAntrianKind.pickupOnline) {
+      final st = (item.status ?? '').toLowerCase();
+      if (st == 'ready') {
+        final ok = await _confirm(
+          'antrian_confirm_serahkan_title'.tr(),
+          'antrian_confirm_serahkan_body'.tr(),
+        );
+        if (!ok || !mounted) return;
+      }
+    }
+
     setState(() => _busyId = item.id);
     try {
       switch (item.kind) {
@@ -170,15 +207,115 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
           );
           break;
         case TokoAntrianKind.booking:
-          final next = (item.status ?? '').toLowerCase() == 'checked_in'
-              ? 'done'
-              : 'checked_in';
-          await _svc.updateBookingStatus(bookingId: item.id, status: next);
           break;
         case TokoAntrianKind.klaim:
           await _svc.markKlaimDiproses(requestId: item.id);
           break;
       }
+      if (mounted) await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
+  Future<void> _openBookingSheet(TokoAntrianItem item) async {
+    final st = (item.status ?? '').toLowerCase();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: OptikKaryawanTokens.snow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  item.title,
+                  style: GoogleFonts.fraunces(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: OptikKaryawanTokens.ink,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.subtitle,
+                  style: TextStyle(
+                    color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                    fontSize: 13,
+                  ),
+                ),
+                if (item.when != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat('EEE, d MMM · HH:mm').format(item.when!),
+                    style: TextStyle(
+                      color: OptikKaryawanTokens.muted.withOpacity(0.8),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                if (st == 'booked')
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'checked_in'),
+                    child: Text('antrian_aksi_checkin'.tr()),
+                  ),
+                if (st == 'checked_in') ...[
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, 'done'),
+                    child: Text('antrian_aksi_selesai'.tr()),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (st == 'booked' || st == 'checked_in') ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, 'no_show'),
+                    child: Text('antrian_aksi_no_show'.tr()),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('antrian_aksi_batal'.tr()),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (action == null || !mounted) return;
+    if (action == 'done' || action == 'no_show') {
+      final ok = await _confirm(
+        action == 'done'
+            ? 'antrian_confirm_booking_done_title'.tr()
+            : 'antrian_confirm_no_show_title'.tr(),
+        action == 'done'
+            ? 'antrian_confirm_booking_done_body'.tr()
+            : 'antrian_confirm_no_show_body'.tr(),
+      );
+      if (!ok || !mounted) return;
+    }
+    if (!await _ensureDuty()) return;
+    setState(() => _busyId = item.id);
+    try {
+      await _svc.updateBookingStatus(bookingId: item.id, status: action);
       if (mounted) await _reload();
     } catch (e) {
       if (!mounted) return;
@@ -199,13 +336,14 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
         return 'antrian_aksi_scan'.tr();
       case TokoAntrianKind.pickupOnline:
         final st = (item.status ?? '').toLowerCase();
-        return st == 'ready'
-            ? 'antrian_aksi_serahkan'.tr()
-            : 'antrian_aksi_siap'.tr();
+        return switch (st) {
+          'paid' => 'antrian_aksi_kemas'.tr(),
+          'packing' => 'antrian_aksi_siap'.tr(),
+          'ready' => 'antrian_aksi_serahkan'.tr(),
+          _ => 'antrian_aksi_siap'.tr(),
+        };
       case TokoAntrianKind.booking:
-        return (item.status ?? '').toLowerCase() == 'checked_in'
-            ? 'antrian_aksi_selesai'.tr()
-            : 'antrian_aksi_checkin'.tr();
+        return 'antrian_aksi_detail'.tr();
       case TokoAntrianKind.klaim:
         return 'antrian_aksi_proses'.tr();
     }

@@ -89,7 +89,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
               child: Text("sop_batal".tr())),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Simpan')),
+              child: Text('btn_simpan'.tr())),
         ],
       ),
     );
@@ -222,7 +222,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
               child: Text("sop_batal".tr())),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Simpan')),
+              child: Text('btn_simpan'.tr())),
         ],
       ),
     );
@@ -356,7 +356,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 16)),
                 SwitchListTile(
-                  title: const Text('Pengingat SOP'),
+                  title: Text('pengaturan_notif_sop'.tr()),
                   value: _notifSop,
                   onChanged: (v) async {
                     final prefs = await SharedPreferences.getInstance();
@@ -366,7 +366,7 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
                   },
                 ),
                 SwitchListTile(
-                  title: const Text('Pengingat shift'),
+                  title: Text('pengaturan_notif_shift'.tr()),
                   value: _notifShift,
                   onChanged: (v) async {
                     final prefs = await SharedPreferences.getInstance();

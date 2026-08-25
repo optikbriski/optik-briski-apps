@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../shared/theme.dart';
 import 'package:flutter/services.dart';
@@ -171,9 +172,9 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
         backgroundColor: OptikKaryawanTokens.surface,
         elevation: 0,
         foregroundColor: _ink,
-        title: const Text(
-          'Kode Login Admin',
-          style: TextStyle(
+        title: Text(
+          'menu_kode_login_admin'.tr(),
+          style: const TextStyle(
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
             color: _ink,
@@ -391,7 +392,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
                   border: Border.all(color: _accent.withOpacity(0.45)),
                 ),
                 child: Text(
-                  'LIVE',
+                  'admin_code_live'.tr(),
                   style: TextStyle(
                     color: _ink.withOpacity(0.95),
                     fontSize: 10,
@@ -454,7 +455,7 @@ class _AdminLoginCodePageState extends State<AdminLoginCodePage>
             child: Column(
               children: [
                 Text(
-                  'ONE-TIME ACCESS',
+                  'admin_code_onetime'.tr(),
                   style: TextStyle(
                     color: _muted.withOpacity(0.85),
                     fontSize: 11,

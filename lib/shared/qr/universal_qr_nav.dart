@@ -20,6 +20,8 @@ class UniversalQrNav {
   const UniversalQrNav._();
 
   /// Buka scanner lalu buka fitur sesuai tipe QR.
+  ///
+  /// [allowedTypes] `null` = **universal** (invoice / absensi / surat jalan / dll).
   static Future<void> open(
     BuildContext context, {
     Map<String, dynamic>? profile,
@@ -28,31 +30,31 @@ class UniversalQrNav {
     String? cabangKaryawan,
     String? karyawanId,
     String? karyawanNama,
+    String? hintKey,
   }) async {
     final result = await UniversalQrScanPage.scanRouted(
       context,
       allowedTypes: allowedTypes,
-      hintKey: callerRole == UniversalQrCallerRole.member
-          ? 'member_scan_qr_sub'
-          : 'universal_qr_scan_hint',
+      hintKey: hintKey ??
+          (callerRole == UniversalQrCallerRole.member
+              ? 'member_scan_qr_sub'
+              : 'universal_qr_scan_hint'),
     );
     if (result == null || !context.mounted) return;
     final toko = (cabangKaryawan ?? profile?['toko_id'] ?? '')
         .toString()
         .trim()
         .toUpperCase();
-    final nik = (karyawanId ?? profile?['nik'] ?? profile?['id'] ?? '')
-        .toString()
-        .trim();
+    // Jangan campur UUID karyawan dengan NIK — NIK hanya di [profile].
+    final staffId = (karyawanId ?? profile?['id'] ?? '').toString().trim();
     final nama = (karyawanNama ?? profile?['nama'] ?? 'Admin').toString().trim();
-    // Kamera HP / Scan QR — bukan scanner HID web admin → lifecycle view-only.
     await dispatch(
       context,
       result,
       profile: profile,
       callerRole: callerRole,
       cabangKaryawan: toko.isEmpty ? cabangKaryawan : toko,
-      karyawanId: nik.isEmpty ? karyawanId : nik,
+      karyawanId: staffId.isEmpty ? karyawanId : staffId,
       karyawanNama: nama.isEmpty ? karyawanNama : nama,
       fromAdminHidScanner: false,
     );

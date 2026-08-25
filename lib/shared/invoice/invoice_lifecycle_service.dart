@@ -584,15 +584,28 @@ class InvoiceLifecycleService {
   }
 
   /// Hanguskan QR CLAIM setelah klaim berhasil dibuat.
+  ///
+  /// Tidak memanggil [validateClaimScan] (yang butuh kartu masih claimable) —
+  /// setelah `ajukanDanPutuskan` kartu sudah `diklaim`, jadi burn hanya cek
+  /// fase/token QR masih valid & belum dipakai.
   Future<void> consumeClaimQr({
     required String rawScan,
     required String staffNik,
   }) async {
-    final validated = await validateClaimScan(rawScan);
+    final nik = staffNik.trim().toUpperCase();
+    if (nik.isEmpty) throw 'NIK staf wajib untuk hanguskan QR CLAIM.';
+
+    final validated = await validateCustomerScan(rawScan);
+    if (validated.phase != 'CLAIM') {
+      throw 'Scan QR CLAIM pelanggan untuk hanguskan klaim.';
+    }
+    if (validated.sale['qr_claim_used_at'] != null) {
+      return; // sudah hangus — idempotent
+    }
     final now = DateTime.now().toUtc().toIso8601String();
     await _updateSale(validated.sale['id'].toString(), {
       'qr_claim_used_at': now,
-      'qr_claim_used_by': staffNik,
+      'qr_claim_used_by': nik,
     });
   }
 

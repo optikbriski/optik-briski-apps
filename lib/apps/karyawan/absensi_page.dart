@@ -15,6 +15,7 @@ import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/geofence_exit_monitor.dart';
 import '../../shared/qr/hid_scan_intake.dart';
 import '../../shared/qr/qr_route.dart';
+import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/qr/universal_qr_scan_page.dart';
 
 /// Absensi karyawan di HP pribadi.
@@ -49,6 +50,36 @@ class _AbsensiPageState extends State<AbsensiPage> {
   bool get _storeDeviceOnly => AttendanceConfig.faceMatchOnStoreDeviceOnly;
 
   bool _startedFromInitialQr = false;
+
+  /// Scanner tanpa filter tipe — jika bukan absensi, route universal lalu batal alur ini.
+  Future<String?> _scanUniversalForAttendance() async {
+    if (!mounted) return null;
+    final routed = await UniversalQrScanPage.scanRouted(
+      context,
+      hintKey: 'universal_qr_scan_hint',
+    );
+    if (routed == null || !mounted) return null;
+    if (routed.type == QrPayloadType.attendance) {
+      return routed.raw;
+    }
+    final k = _karyawan;
+    await UniversalQrNav.dispatch(
+      context,
+      routed,
+      callerRole: UniversalQrCallerRole.karyawan,
+      cabangKaryawan: (k?['toko_id'] ?? k?['cabang'] ?? '').toString(),
+      karyawanId: (k?['id'] ?? '').toString(),
+      karyawanNama: (k?['nama'] ?? '').toString(),
+      profile: {
+        'toko_id': k?['toko_id'],
+        'role': 'karyawan',
+        'id': k?['id'],
+        'nama': k?['nama'],
+        'nik': k?['nik'],
+      },
+    );
+    return null;
+  }
 
   @override
   void initState() {
@@ -143,12 +174,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       if (!mounted) return;
       final raw = (preScannedAttendanceRaw ?? '').trim().isNotEmpty
           ? preScannedAttendanceRaw!.trim()
-          : await UniversalQrScanPage.scanRaw(
-              context,
-              allowedTypes: {QrPayloadType.attendance},
-              titleKey: 'scan_qr',
-              hintKey: 'attendance_qr_scan_hint',
-            );
+          : await _scanUniversalForAttendance();
       if (raw == null || raw.trim().isEmpty) {
         _snack('attendance_qr_scan_cancelled'.tr(), Colors.orange);
         return;
@@ -315,12 +341,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
         if (!mounted) return;
         final raw = (preScannedAttendanceRaw ?? '').trim().isNotEmpty
             ? preScannedAttendanceRaw!.trim()
-            : await UniversalQrScanPage.scanRaw(
-                context,
-                allowedTypes: {QrPayloadType.attendance},
-                titleKey: 'scan_qr',
-                hintKey: 'attendance_qr_scan_hint',
-              );
+            : await _scanUniversalForAttendance();
         if (raw == null || raw.trim().isEmpty) {
           _snack('attendance_qr_scan_cancelled'.tr(), Colors.orange);
           return;
@@ -423,7 +444,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       return true;
     }
     if (_openShift != null) {
-      _snack('Shift sudah aktif.', OptikKaryawanTokens.gold);
+      _snack('absensi_shift_aktif'.tr(), OptikKaryawanTokens.gold);
       return true;
     }
     if (_karyawan == null || !_faceEnrolled) {
@@ -443,7 +464,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       child: Scaffold(
         backgroundColor: OptikKaryawanTokens.darkBg,
         appBar: AppBar(
-          title: const Text('Absensi'),
+          title: Text('absensi_title'.tr()),
           backgroundColor: OptikKaryawanTokens.darkBg,
           actions: [
             IconButton(
@@ -493,16 +514,24 @@ class _AbsensiPageState extends State<AbsensiPage> {
                             children: [
                               _statusChip(
                                 _faceEnrolled
-                                    ? 'Wajah terdaftar'
-                                    : 'Wajah belum didaftarkan',
+                                    ? 'absensi_chip_wajah_ok'.tr()
+                                    : 'absensi_chip_wajah_belum'.tr(),
                                 _faceEnrolled
                                     ? OptikKaryawanTokens.seasideMid
                                     : Colors.orange,
                               ),
                               _statusChip(
                                 _openShift == null
-                                    ? 'Belum absen masuk'
-                                    : 'Shift aktif sejak ${df.format(DateTime.parse(_openShift!['masuk_at']))}',
+                                    ? 'absensi_chip_belum_masuk'.tr()
+                                    : 'absensi_chip_shift_aktif'.tr(
+                                        namedArgs: {
+                                          'time': df.format(
+                                            DateTime.parse(
+                                              _openShift!['masuk_at'],
+                                            ),
+                                          ),
+                                        },
+                                      ),
                                 _openShift == null
                                     ? OptikKaryawanTokens.gold
                                     : OptikKaryawanTokens.goldLite,
@@ -539,7 +568,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     const SizedBox(height: 24),
                     if (!_faceEnrolled)
                       _actionButton(
-                        label: 'Daftarkan wajah (sekali)',
+                        label: 'absensi_btn_daftar_wajah'.tr(),
                         color: OptikKaryawanTokens.navyMid,
                         onTap: _busy ? null : () => _runFlow(action: 'ENROLL'),
                       ),
@@ -575,7 +604,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     ] else ...[
                       if (_faceEnrolled && _openShift == null) ...[
                         _actionButton(
-                          label: 'Absen masuk',
+                          label: 'absensi_btn_masuk'.tr(),
                           color: OptikKaryawanTokens.seasideMid,
                           onTap:
                               _busy ? null : () => _runFlow(action: 'MASUK'),
@@ -594,7 +623,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                         ),
                         const SizedBox(height: 12),
                         _actionButton(
-                          label: 'Absen pulang',
+                          label: 'absensi_btn_pulang'.tr(),
                           color: Colors.orangeAccent,
                           onTap:
                               _busy ? null : () => _runFlow(action: 'PULANG'),

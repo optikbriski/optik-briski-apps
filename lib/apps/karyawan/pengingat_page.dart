@@ -7,8 +7,19 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/brand/brand_service.dart';
+import '../../shared/karyawan/karyawan_i18n_display.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/theme.dart';
+
+/// Hasil tap pengingat — home membuka section terkait.
+enum PengingatDest { lab, sop, shift, home }
+
+class PengingatNavResult {
+  const PengingatNavResult({required this.dest, this.labJobId});
+
+  final PengingatDest dest;
+  final String? labJobId;
+}
 
 class PengingatPage extends StatefulWidget {
   const PengingatPage({super.key});
@@ -78,7 +89,11 @@ class _PengingatPageState extends State<PengingatPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal muat pengingat: $e')),
+        SnackBar(
+          content: Text(
+            'pengingat_err_muat'.tr(namedArgs: {'error': '$e'}),
+          ),
+        ),
       );
     }
   }
@@ -100,13 +115,56 @@ class _PengingatPageState extends State<PengingatPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('pengingat_err_umum'.tr(namedArgs: {'error': '$e'})),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
 
-  Future<void> _onTapNotif(Map<String, dynamic> n) async {
+  PengingatNavResult _destFor(Map<String, dynamic> n) {
     final tipe = (n['tipe'] ?? '').toString().toUpperCase();
+    final judul = (n['judul'] ?? '').toString();
+    final isi = (n['isi'] ?? '').toString();
+    final jobId = LabJobService.jobIdFromNotifikasiIsi(isi);
+
+    if (jobId != null ||
+        tipe == 'LAB' ||
+        judul.toLowerCase().contains('lab') ||
+        isi.contains('LAB_JOB:')) {
+      return PengingatNavResult(
+        dest: PengingatDest.lab,
+        labJobId: jobId,
+      );
+    }
+    if (tipe == 'SOP' || judul.toUpperCase().contains('SOP')) {
+      return const PengingatNavResult(dest: PengingatDest.sop);
+    }
+    if (tipe == 'SHIFT' ||
+        judul.toLowerCase().contains('jadwal') ||
+        judul.toLowerCase().contains('shift') ||
+        judul.toLowerCase().contains('sif')) {
+      return const PengingatNavResult(dest: PengingatDest.shift);
+    }
+    return const PengingatNavResult(dest: PengingatDest.home);
+  }
+
+  String? _footerFor(Map<String, dynamic> n) {
+    switch (_destFor(n).dest) {
+      case PengingatDest.lab:
+        return 'lab_queue_btn_kerjakan'.tr();
+      case PengingatDest.sop:
+        return 'pengingat_buka_sop'.tr();
+      case PengingatDest.shift:
+        return 'pengingat_buka_jadwal'.tr();
+      case PengingatDest.home:
+        return null;
+    }
+  }
+
+  Future<void> _onTapNotif(Map<String, dynamic> n) async {
+    if (_claimBusy) return;
     final id = n['id']?.toString();
     if (id != null && n['read_at'] == null) {
       try {
@@ -116,41 +174,41 @@ class _PengingatPageState extends State<PengingatPage> {
       } catch (_) {}
     }
 
-    if (tipe != 'LAB') {
-      await _load();
-      return;
+    final nav = _destFor(n);
+    if (!mounted) return;
+
+    // Lab dengan job id: klaim dulu, lalu balik ke Beranda → Antrian lab.
+    if (nav.dest == PengingatDest.lab &&
+        nav.labJobId != null &&
+        nav.labJobId!.isNotEmpty) {
+      setState(() => _claimBusy = true);
+      try {
+        final res = await _lab.claim(nav.labJobId!);
+        if (!mounted) return;
+        final inv = res['no_invoice']?.toString() ?? '-';
+        final nama = res['nama']?.toString() ?? '-';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('lab_claim_ok_msg'.tr(args: [inv, nama])),
+            backgroundColor: OptikKaryawanTokens.success,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: OptikKaryawanTokens.danger,
+          ),
+        );
+        // Tetap buka antrian lab supaya user bisa Kerjakan manual.
+      } finally {
+        if (mounted) setState(() => _claimBusy = false);
+      }
     }
 
-    final jobId = LabJobService.jobIdFromNotifikasiIsi(n['isi']?.toString());
-    if (jobId == null || _claimBusy) {
-      await _load();
-      return;
-    }
-
-    setState(() => _claimBusy = true);
-    try {
-      final res = await _lab.claim(jobId);
-      if (!mounted) return;
-      final inv = res['no_invoice']?.toString() ?? '-';
-      final nama = res['nama']?.toString() ?? '-';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('lab_claim_ok_msg'.tr(args: [inv, nama])),
-          backgroundColor: OptikKaryawanTokens.success,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$e'),
-          backgroundColor: OptikKaryawanTokens.danger,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _claimBusy = false);
-      await _load();
-    }
+    if (!mounted) return;
+    Navigator.pop(context, nav);
   }
 
   IconData _iconFor(String? tipe) {
@@ -358,7 +416,8 @@ class _PengingatPageState extends State<PengingatPage> {
           final unread = n['read_at'] == null;
           final created =
               DateTime.tryParse(n['created_at']?.toString() ?? '');
-          final isLab = (tipe ?? '').toUpperCase() == 'LAB';
+          final dest = _destFor(n);
+          final isLab = dest.dest == PengingatDest.lab;
           final delay = (itemIndex.clamp(0, 8)) * 35;
           itemIndex += 1;
           return TweenAnimationBuilder<double>(
@@ -383,15 +442,20 @@ class _PengingatPageState extends State<PengingatPage> {
                   child: _buildReminderCard(
                     icon: _iconFor(tipe),
                     iconColor: _colorFor(tipe),
-                    title: n['judul']?.toString() ?? '-',
-                    description: n['isi']?.toString() ?? '',
+                    title: KaryawanI18nDisplay.notifJudul(
+                      n['judul']?.toString(),
+                    ),
+                    description: KaryawanI18nDisplay.notifIsi(
+                      n['isi']?.toString(),
+                    ),
                     waktu: created != null
                         ? df.format(created.toLocal())
                         : '-',
                     unread: unread,
                     isUrgent: unread &&
                         ((tipe ?? '').toUpperCase() == 'SOP' || isLab),
-                    footer: isLab ? 'lab_queue_btn_kerjakan'.tr() : null,
+                    footer: _footerFor(n),
+                    showChevron: true,
                   ),
                 ),
               ),
@@ -486,7 +550,7 @@ class _PengingatPageState extends State<PengingatPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Belum ada pengingat.',
+                'pengingat_empty_title'.tr(),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.fraunces(
                   color: OptikKaryawanTokens.ink,
@@ -496,7 +560,7 @@ class _PengingatPageState extends State<PengingatPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Jadwal, SOP, dan update lab akan muncul di sini.',
+                'pengingat_empty_desc'.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: OptikKaryawanTokens.muted.withOpacity(0.95),
@@ -521,6 +585,7 @@ class _PengingatPageState extends State<PengingatPage> {
     required bool unread,
     bool isUrgent = false,
     String? footer,
+    bool showChevron = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -635,6 +700,16 @@ class _PengingatPageState extends State<PengingatPage> {
                 ],
               ),
             ),
+            if (showChevron) ...[
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: OptikKaryawanTokens.muted.withOpacity(0.75),
+                ),
+              ),
+            ],
           ],
         ),
       ),

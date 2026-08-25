@@ -503,6 +503,19 @@ class GaransiService {
     };
   }
 
+  Future<List<Map<String, dynamic>>> kartuForSale(String saleId) async {
+    final id = saleId.trim();
+    if (id.isEmpty) return const [];
+    final rows = await _db
+        .from('garansi_kartu')
+        .select()
+        .eq('sale_id', id)
+        .order('created_at', ascending: true);
+    return (rows as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
   Future<List<Map<String, dynamic>>> searchKartu({
     required String query,
     String? tokoId,

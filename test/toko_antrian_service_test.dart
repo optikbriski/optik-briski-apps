@@ -76,14 +76,10 @@ void main() {
   });
 
   test('online status advance mapping', () {
-    String nextOf(String cur) => switch (cur.trim().toLowerCase()) {
-          'paid' || 'packing' => 'ready',
-          'ready' => 'fulfilled',
-          _ => 'invalid',
-        };
-    expect(nextOf('paid'), 'ready');
-    expect(nextOf('PACKING'), 'ready');
-    expect(nextOf('ready'), 'fulfilled');
-    expect(nextOf('cancelled'), 'invalid');
+    expect(TokoAntrianService.nextOnlinePickupStatus('paid'), 'packing');
+    expect(TokoAntrianService.nextOnlinePickupStatus('PACKING'), 'ready');
+    expect(TokoAntrianService.nextOnlinePickupStatus('ready'), 'fulfilled');
+    expect(TokoAntrianService.nextOnlinePickupStatus('cancelled'), isNull);
+    expect(TokoAntrianService.nextOnlinePickupStatus('fulfilled'), isNull);
   });
 }

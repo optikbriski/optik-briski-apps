@@ -604,9 +604,9 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                         .withOpacity(0.45),
                                   ),
                                 ),
-                                child: const Text(
-                                  'PORTAL KARYAWAN',
-                                  style: TextStyle(
+                                child: Text(
+                                  'login_portal_karyawan'.tr(),
+                                  style: const TextStyle(
                                     color: OptikKaryawanTokens.ink,
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
@@ -697,7 +697,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                                                           .start,
                                                   children: [
                                                     Text(
-                                                      'EMPLOYEE ACCESS',
+                                                      'login_employee_access'.tr(),
                                                       style: TextStyle(
                                                         color:
                                                             OptikKaryawanTokens
@@ -1017,7 +1017,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
                               ),
                               const SizedBox(height: 22),
                               Text(
-                                'PRIVATE · SECURE · SEASIDE',
+                                'login_secure_tagline'.tr(),
                                 style: TextStyle(
                                   color: OptikKaryawanTokens.ink
                                       .withOpacity(0.32),
