@@ -26,6 +26,7 @@ import 'monthly_export_page.dart';
 import 'garansi_page.dart';
 import 'toko_geofence_page.dart';
 import 'tinjauan_mencurigakan_page.dart';
+import 'pengaduan_inbox_page.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
@@ -397,6 +398,21 @@ class _DashboardPageState extends State<DashboardPage> {
                                     cabangAdmin: widget.profile['toko_id']
                                             ?.toString() ??
                                         '',
+                                    profile: widget.profile,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          if (!training)
+                            PremiumMenuTile(
+                              title: 'pengaduan_admin_title'.tr(),
+                              icon: Icons.report_gmailerrorred_rounded,
+                              color: OptikAdminTokens.slate,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PengaduanInboxPage(
                                     profile: widget.profile,
                                   ),
                                 ),

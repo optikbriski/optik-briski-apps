@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../../shared/brand/brand_service.dart';
 import '../../shared/theme.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../shared/safe_image_picker.dart';
 
@@ -19,6 +19,8 @@ class _PengaduanPageState extends State<PengaduanPage> {
   String? kategoriPilihan;
   File? buktiFoto;
   bool isSubmitting = false;
+  bool _loadingMine = true;
+  List<Map<String, dynamic>> _mine = [];
 
   List<String> get _kategoriList => [
         'pengaduan_kat_sistem'.tr(),
@@ -27,12 +29,10 @@ class _PengaduanPageState extends State<PengaduanPage> {
         'pengaduan_kat_pelanggaran'.tr(),
       ];
 
-  Future<void> pilihBuktiFoto() async {
-    final pickedFile =
-        await pickImageSafe(context: context, imageQuality: 70);
-    if (pickedFile != null) {
-      setState(() => buktiFoto = File(pickedFile.path));
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadMine();
   }
 
   Future<Map<String, dynamic>?> _fetchKaryawan() async {
@@ -51,6 +51,41 @@ class _PengaduanPageState extends State<PengaduanPage> {
         .select('id, toko_id')
         .eq('email', email)
         .maybeSingle();
+  }
+
+  Future<void> _loadMine() async {
+    setState(() => _loadingMine = true);
+    try {
+      final karyawan = await _fetchKaryawan();
+      if (karyawan == null) {
+        if (mounted) setState(() { _mine = []; _loadingMine = false; });
+        return;
+      }
+      final rows = await Supabase.instance.client
+          .from('pengaduan')
+          .select(
+            'id, kategori, isi, status, balasan, dibalas_at, dibalas_oleh, created_at',
+          )
+          .eq('karyawan_id', karyawan['id'])
+          .order('created_at', ascending: false)
+          .limit(30);
+      if (!mounted) return;
+      setState(() {
+        _mine = List<Map<String, dynamic>>.from(rows as List);
+        _loadingMine = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingMine = false);
+    }
+  }
+
+  Future<void> pilihBuktiFoto() async {
+    final pickedFile =
+        await pickImageSafe(context: context, imageQuality: 70);
+    if (pickedFile != null) {
+      setState(() => buktiFoto = File(pickedFile.path));
+    }
   }
 
   Future<void> kirimLaporan() async {
@@ -102,13 +137,18 @@ class _PengaduanPageState extends State<PengaduanPage> {
       }
 
       if (!mounted) return;
+      deskripsiCtrl.clear();
+      setState(() {
+        kategoriPilihan = null;
+        buktiFoto = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("pengaduan_msg_sukses".tr()),
           backgroundColor: OptikKaryawanTokens.seasideMid,
         ),
       );
-      Navigator.pop(context);
+      await _loadMine();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,148 +162,202 @@ class _PengaduanPageState extends State<PengaduanPage> {
     }
   }
 
+  InputDecoration inputStyle(String hint) => InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+      );
+
   @override
   Widget build(BuildContext context) {
-    return KaryawanPremiumScaffold(
-      title: "pengaduan_title".tr(),
-      eyebrow: BrandService.name.toUpperCase(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: OptikKaryawanTokens.gold.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+    return Scaffold(
+      backgroundColor: OptikKaryawanTokens.bg,
+      appBar: AppBar(
+        title: Text("pengaduan_title".tr()),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: OptikKaryawanTokens.cyan.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              "pengaduan_info_desc".tr(),
+              style: const TextStyle(height: 1.35, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Form(
+            key: formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text("pengaduan_label_kategori".tr(),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: kategoriPilihan,
+                  decoration: inputStyle("pengaduan_hint_kategori".tr()),
+                  items: _kategoriList
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => kategoriPilihan = v),
+                  validator: (v) =>
+                      v == null ? "pengaduan_err_kategori".tr() : null,
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded,
-                        color: OptikKaryawanTokens.gold),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text("pengaduan_info_desc".tr(),
-                          style: const TextStyle(
-                              color: OptikKaryawanTokens.navyMid, fontSize: 13)),
-                    ),
-                  ],
+                const SizedBox(height: 12),
+                Text("pengaduan_label_penjelasan".tr(),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: deskripsiCtrl,
+                  maxLines: 4,
+                  decoration: inputStyle("pengaduan_hint_penjelasan".tr()),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? "pengaduan_err_penjelasan".tr()
+                      : null,
                 ),
-              ),
-              const SizedBox(height: 25),
-              Text("pengaduan_label_kategori".tr(),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: kategoriPilihan,
-                decoration: inputStyle("pengaduan_hint_kategori".tr()),
-                items: _kategoriList
-                    .map((k) => DropdownMenuItem(value: k, child: Text(k)))
-                    .toList(),
-                onChanged: (v) => setState(() => kategoriPilihan = v),
-                validator: (v) =>
-                    v == null ? "pengaduan_err_kategori".tr() : null,
-              ),
-              const SizedBox(height: 20),
-              Text("pengaduan_label_penjelasan".tr(),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: deskripsiCtrl,
-                maxLines: 5,
-                decoration: inputStyle("pengaduan_hint_penjelasan".tr()),
-                validator: (v) => (v == null || v.isEmpty)
-                    ? "pengaduan_err_penjelasan".tr()
-                    : null,
-              ),
-              const SizedBox(height: 20),
-              Text("pengaduan_label_foto".tr(),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: OptikKaryawanTokens.navyDeep)),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: pilihBuktiFoto,
-                child: Container(
-                  width: double.infinity,
-                  height: buktiFoto == null ? 120 : 250,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                    image: buktiFoto != null
-                        ? DecorationImage(
-                            image: FileImage(buktiFoto!), fit: BoxFit.cover)
-                        : null,
-                  ),
-                  child: buktiFoto == null
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_a_photo_rounded,
-                                color: Colors.grey.shade400, size: 40),
-                            const SizedBox(height: 10),
-                            Text("pengaduan_hint_foto".tr(),
-                                style: TextStyle(color: Colors.grey.shade500)),
-                          ],
-                        )
-                      : Align(
-                          alignment: Alignment.topRight,
-                          child: IconButton(
-                            icon: const Icon(Icons.cancel, color: Colors.red),
-                            onPressed: () => setState(() => buktiFoto = null),
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: OptikKaryawanTokens.seasideMid,
-                    foregroundColor: OptikKaryawanTokens.ink,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                            OptikKaryawanTokens.radiusSm)),
-                  ),
-                  onPressed: isSubmitting ? null : kirimLaporan,
-                  icon: isSubmitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: OptikKaryawanTokens.ink, strokeWidth: 2))
-                      : const Icon(Icons.send_rounded,
-                          color: OptikKaryawanTokens.ink),
+                const SizedBox(height: 12),
+                Text("pengaduan_label_foto".tr(),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: pilihBuktiFoto,
+                  icon: const Icon(Icons.photo_camera_outlined),
                   label: Text(
+                    buktiFoto == null
+                        ? "pengaduan_hint_foto".tr()
+                        : buktiFoto!.path.split('/').last,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: isSubmitting ? null : kirimLaporan,
+                  child: Text(
                     isSubmitting
                         ? "pengaduan_btn_mengirim".tr()
                         : "pengaduan_btn_kirim".tr(),
-                    style: const TextStyle(
-                        color: OptikKaryawanTokens.ink,
-                        fontWeight: FontWeight.bold),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 28),
+          Text(
+            'pengaduan_riwayat_title'.tr(),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 10),
+          if (_loadingMine)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_mine.isEmpty)
+            Text(
+              'pengaduan_riwayat_empty'.tr(),
+              style: TextStyle(color: OptikKaryawanTokens.muted),
+            )
+          else
+            ..._mine.map(_mineCard),
+        ],
       ),
     );
   }
 
-  InputDecoration inputStyle(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  Widget _mineCard(Map<String, dynamic> row) {
+    final st = (row['status'] ?? 'OPEN').toString().toUpperCase();
+    final balasan = (row['balasan'] ?? '').toString().trim();
+    final when = DateTime.tryParse((row['created_at'] ?? '').toString());
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: OptikKaryawanTokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  (row['kategori'] ?? '-').toString(),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                st,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  color: st == 'DONE'
+                      ? OptikKaryawanTokens.cyan
+                      : Colors.orange.shade800,
+                ),
+              ),
+            ],
+          ),
+          if (when != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              DateFormat('d MMM yyyy · HH:mm').format(when.toLocal()),
+              style: TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 11.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            (row['isi'] ?? '').toString(),
+            style: const TextStyle(height: 1.35, fontSize: 13),
+          ),
+          if (balasan.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: OptikKaryawanTokens.cyan.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'pengaduan_riwayat_balasan'.tr(namedArgs: {
+                      'oleh': (row['dibalas_oleh'] ?? 'Admin').toString(),
+                    }),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(balasan, style: const TextStyle(height: 1.35, fontSize: 13)),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 8),
+            Text(
+              'pengaduan_riwayat_menunggu'.tr(),
+              style: TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

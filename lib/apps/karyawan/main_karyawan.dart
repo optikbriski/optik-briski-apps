@@ -10,6 +10,7 @@ import 'pengaturan_akun_karyawan.dart';
 import 'bantuan_page.dart';
 import 'pengaduan_page.dart';
 import 'pengingat_page.dart';
+import 'contribution_rekap_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
@@ -23,6 +24,7 @@ import '../../shared/karyawan/karyawan_home_service.dart';
 import '../../shared/karyawan/karyawan_i18n_display.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/karyawan/kpi_fire_service.dart';
+import '../../shared/karyawan/karyawan_ops_watch.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/karyawan/sop_daily_service.dart';
@@ -159,6 +161,7 @@ class KaryawanPageState extends State<KaryawanPage>
     WidgetsBinding.instance.removeObserver(this);
     UniversalQrHost.clear();
     unawaited(ClientForceSync.unbind());
+    unawaited(KaryawanOpsWatch.instance.stop());
     super.dispose();
   }
 
@@ -592,6 +595,14 @@ class KaryawanPageState extends State<KaryawanPage>
       unawaited(_bindTokoAntrianRealtime());
       unawaited(_loadSopScore());
       unawaited(_syncGeofenceMonitorIfOpenShift(askPermissions: true));
+      final tokoOps = (_tokoId ?? _cabangKaryawan).trim();
+      final kidOps = (_karyawanId ?? '').trim();
+      if (tokoOps.isNotEmpty && kidOps.isNotEmpty) {
+        unawaited(KaryawanOpsWatch.instance.start(
+          tokoId: tokoOps,
+          karyawanId: kidOps,
+        ));
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       debugPrint("Gagal menarik data profil: $e");
@@ -1726,6 +1737,28 @@ class KaryawanPageState extends State<KaryawanPage>
               '${_kpiFire.hariValid}',
             ),
           ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () {
+            final toko = (_tokoId ?? _cabangKaryawan).trim();
+            if (toko.isEmpty) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ContributionRekapPage(
+                  tokoId: toko,
+                  jabatan: _jabatanKaryawan,
+                  highlightKaryawanId: _karyawanId,
+                ),
+              ),
+            );
+          },
+          icon: const Icon(Icons.groups_rounded, size: 18),
+          label: Text('rekap_kontribusi_buka'.tr()),
         ),
       ),
       const SizedBox(height: 28),
