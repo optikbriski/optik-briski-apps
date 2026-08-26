@@ -14,6 +14,7 @@ import '../../shared/logistics/product_identity.dart';
 import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/stock_realtime.dart';
+import '../../shared/print/admin_label_print_service.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/tenant/tenant_service.dart';
@@ -1242,9 +1243,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   }
 
   /// Produk: 1D + 2D berisi payload khusus produk ([ProductCode]), bukan invoice/DO.
-  Widget _buildProductCodes(String sku, {String? productId}) {
+  Widget _buildProductCodes(String sku, {String? productId, String? nama}) {
     final payload = ProductCode.encode(sku: sku, productId: productId);
     if (payload.isEmpty) return const SizedBox.shrink();
+    final title = (nama ?? '').trim().isEmpty ? sku.trim() : nama!.trim();
 
     Widget panel({required String title, required Widget child}) {
       return Container(
@@ -1317,6 +1319,26 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             color: OptikAdminTokens.navy.withOpacity(0.55),
             fontSize: 10,
             fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => AdminLabelPrintSheet.show(
+              context,
+              data: payload,
+              title: title,
+              subtitle: 'SKU ${sku.trim()}',
+              initialSymbol: AdminLabelSymbol.barcode1d,
+            ),
+            icon: const Icon(Icons.print_rounded, size: 18),
+            label: Text('label_print_btn'.tr()),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: OptikAdminTokens.navy,
+              side: const BorderSide(color: OptikAdminTokens.navy),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
           ),
         ),
       ],
@@ -1456,6 +1478,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         _buildProductCodes(
                           sku,
                           productId: item['id']?.toString(),
+                          nama: item['nama']?.toString(),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -2642,10 +2665,30 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         label: stockBadge,
                         icon: Icons.view_week_rounded,
                       ),
+                      const AdminPickerOption(
+                        value: 'print_label',
+                        label: 'Cetak label barcode / QR',
+                        icon: Icons.print_rounded,
+                      ),
                     ],
                   );
-                  if (sel == null || sel.isClear) return;
+                  if (sel == null || sel.isClear || sel.value == null) return;
                   if (sel.value == 'detail') showProductDetail(item);
+                  if (sel.value == 'print_label') {
+                    final sku =
+                        (item['sku'] ?? item['barcode'] ?? '').toString();
+                    final payload = ProductCode.encode(
+                      sku: sku,
+                      productId: item['id']?.toString(),
+                    );
+                    if (payload.isEmpty || !mounted) return;
+                    await AdminLabelPrintSheet.show(
+                      context,
+                      data: payload,
+                      title: (item['nama'] ?? sku).toString(),
+                      subtitle: 'SKU $sku',
+                    );
+                  }
                 },
               )
             : Row(
@@ -2844,6 +2887,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             _buildProductCodes(
                               barcodeController.text,
                               productId: editId,
+                              nama: nameController.text,
                             ),
                             const SizedBox(height: 8),
                             Text(

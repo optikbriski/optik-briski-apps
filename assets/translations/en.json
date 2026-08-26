@@ -1804,5 +1804,7 @@
   "sop_tugas_buka_area_belakang": "Open store: prepare back workspace",
   "sop_tugas_tutup_amankan_stok": "Close store: secure stock & documents",
   "sop_tugas_buka_briefing_tim": "Open store: briefing & team readiness",
-  "sop_tugas_tutup_rekap_kunci": "Close store: daily recap & lock up"
+  "sop_tugas_tutup_rekap_kunci": "Close store: daily recap & lock up",
+  "label_print_btn": "Print barcode / QR label",
+  "label_print_ok": "Label ready to print"
 }

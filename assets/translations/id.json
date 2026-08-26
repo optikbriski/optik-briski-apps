@@ -1772,5 +1772,7 @@
   "sop_tugas_buka_area_belakang": "Buka toko: siapkan area kerja belakang",
   "sop_tugas_tutup_amankan_stok": "Tutup toko: amankan stok & dokumen",
   "sop_tugas_buka_briefing_tim": "Buka toko: briefing & cek kesiapan tim",
-  "sop_tugas_tutup_rekap_kunci": "Tutup toko: rekap harian & kunci toko"
+  "sop_tugas_tutup_rekap_kunci": "Tutup toko: rekap harian & kunci toko",
+  "label_print_btn": "Cetak label barcode / QR",
+  "label_print_ok": "Label siap dicetak"
 }
