@@ -1,21 +1,26 @@
 import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'invoice/invoice_document_builder.dart';
 import 'invoice/invoice_layout.dart';
+import 'print/pos_cups_print_stub.dart'
+    if (dart.library.io) 'print/pos_cups_print_io.dart' as cups;
 import 'theme.dart';
 import 'widgets/admin/admin_picker.dart';
 
 const _prefPrinterMac = 'pos_bt_printer_mac';
 const _prefPrinterName = 'pos_bt_printer_name';
+const _prefCupsQueue = 'pos_cups_queue';
 
 class PosPrintService {
-  /// Picker Frozen Lake: Print PDF / Share PDF / Bluetooth thermal.
+  /// Picker: Print PDF / Share PDF / USB POS-80 / Bluetooth thermal.
   /// Semua jalur memakai setting Adjust Invoice (kit yang sama).
   static Future<void> showPrintOptions(
     BuildContext context, {
@@ -23,41 +28,72 @@ class PosPrintService {
     required List<dynamic> items,
     required String Function(num) formatRupiah,
   }) async {
-    final sel = await showAdminPicker<String>(
-      context: context,
-      title: 'Pilih cara cetak',
-      subtitle: 'PDF sistem, share, atau thermal Bluetooth',
-      headerIcon: Icons.print_rounded,
-      searchable: false,
-      selected: null,
-      options: const [
+    final options = <AdminPickerOption<String>>[
+      const AdminPickerOption(
+        value: 'thermal80',
+        label: 'Cetak thermal 80mm',
+        subtitle: 'Ukuran gulungan POS-80 — pilih printer POS-80 di dialog',
+        icon: Icons.receipt_long_rounded,
+      ),
+      const AdminPickerOption(
+        value: 'pdf',
+        label: 'Print PDF A5',
+        subtitle: 'Layout Adjust Invoice (kertas A5)',
+        icon: Icons.print_outlined,
+      ),
+      const AdminPickerOption(
+        value: 'share',
+        label: 'Share PDF',
+        subtitle: 'Kirim file PDF layout Adjust Invoice',
+        icon: Icons.share_outlined,
+      ),
+      if (!kIsWeb) ...const [
         AdminPickerOption(
-          value: 'pdf',
-          label: 'Print PDF (sistem)',
-          subtitle: 'Layout sama Adjust Invoice (A5)',
-          icon: Icons.print_outlined,
-        ),
-        AdminPickerOption(
-          value: 'share',
-          label: 'Share PDF',
-          subtitle: 'Kirim file PDF layout Adjust Invoice',
-          icon: Icons.share_outlined,
+          value: 'usb',
+          label: 'USB POS-80 (ESC/POS raw)',
+          subtitle: 'Langsung ke printer USB lewat CUPS',
+          icon: Icons.usb_rounded,
         ),
         AdminPickerOption(
           value: 'bluetooth',
           label: 'Bluetooth thermal (ESC/POS)',
-          subtitle: 'Isi & footer ikut Adjust Invoice (58mm)',
+          subtitle: 'Printer BT 58mm',
           icon: Icons.bluetooth_outlined,
         ),
       ],
+    ];
+
+    final sel = await showAdminPicker<String>(
+      context: context,
+      title: 'Pilih cara cetak',
+      subtitle: kIsWeb
+          ? 'Web: pilih thermal 80mm, lalu Destination = POS-80 (bukan Save as PDF)'
+          : 'Thermal 80mm, PDF A5, USB raw, atau Bluetooth',
+      headerIcon: Icons.print_rounded,
+      searchable: false,
+      selected: null,
+      options: options,
     );
     if (sel == null || sel.isClear || sel.value == null) return;
     if (!context.mounted) return;
     switch (sel.value) {
+      case 'thermal80':
+        await printThermal80(
+          sale: sale,
+          items: items,
+          formatRupiah: formatRupiah,
+        );
       case 'pdf':
         await printPdf(sale: sale, items: items, formatRupiah: formatRupiah);
       case 'share':
         await sharePdf(sale: sale, items: items, formatRupiah: formatRupiah);
+      case 'usb':
+        await printUsb(
+          context,
+          sale: sale,
+          items: items,
+          formatRupiah: formatRupiah,
+        );
       case 'bluetooth':
         await printBluetooth(
           context,
@@ -100,7 +136,30 @@ class PosPrintService {
   }) async {
     final bytes = await buildReceiptPdfBytes(
         sale: sale, items: items, formatRupiah: formatRupiah);
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      format: PdfPageFormat.a5,
+      name: 'nota_${sale['no_invoice'] ?? 'invoice'}',
+    );
+  }
+
+  /// Struk gulungan 80mm — di dialog Chrome pilih Destination = POS-80 agar tombol jadi Print.
+  static Future<void> printThermal80({
+    required Map<String, dynamic> sale,
+    required List<dynamic> items,
+    required String Function(num) formatRupiah,
+  }) async {
+    final doc = await _doc(
+      sale: sale,
+      items: items,
+      loadLogoForPdf: true,
+    );
+    final bytes = await InvoiceDocumentBuilder.buildThermalPdfBytes(doc);
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      format: InvoiceDocumentBuilder.thermal80Format,
+      name: 'struk_${sale['no_invoice'] ?? 'invoice'}',
+    );
   }
 
   static Future<void> sharePdf({
@@ -114,12 +173,86 @@ class PosPrintService {
     await Printing.sharePdf(bytes: bytes, filename: name);
   }
 
+  /// Cetak ESC/POS ke POS-80 (USB) via antrian CUPS — macOS/Linux desktop.
+  static Future<void> printUsb(
+    BuildContext context, {
+    required Map<String, dynamic> sale,
+    required List<dynamic> items,
+    required String Function(num) formatRupiah,
+  }) async {
+    if (kIsWeb) {
+      await printThermal80(
+        sale: sale,
+        items: items,
+        formatRupiah: formatRupiah,
+      );
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final known = await cups.PosCupsPrint.listQueues();
+      var queue = prefs.getString(_prefCupsQueue);
+      if (queue == null ||
+          queue.isEmpty ||
+          !known.any((q) => q.toLowerCase() == queue!.toLowerCase())) {
+        queue = await cups.PosCupsPrint.ensureQueue(
+          queue: 'POS-80',
+          nameHint: 'POS-80',
+        );
+      }
+      if (queue == null || queue.isEmpty) {
+        throw 'Printer POS-80 belum siap di Mac.\n'
+            'System Settings → Printers & Scanners → Add Printer → pilih POS-80 '
+            '(Generic/Raw), namakan POS-80, lalu coba lagi.';
+      }
+      await prefs.setString(_prefCupsQueue, queue);
+
+      final doc = await _doc(sale: sale, items: items);
+      final bytes = await buildEscPos(doc, paper: PaperSize.mm80);
+      final title = 'nota_${sale['no_invoice'] ?? 'invoice'}';
+      await cups.PosCupsPrint.printRaw(
+        queue: queue,
+        bytes: bytes,
+        jobTitle: title,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Nota terkirim ke $queue (USB ESC/POS 80mm).'),
+          backgroundColor: OptikAdminTokens.success,
+        ));
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$e'),
+        backgroundColor: OptikAdminTokens.danger,
+        action: SnackBarAction(
+          label: '80mm',
+          textColor: OptikAdminTokens.snow,
+          onPressed: () => printThermal80(
+            sale: sale,
+            items: items,
+            formatRupiah: formatRupiah,
+          ),
+        ),
+      ));
+    }
+  }
+
   static Future<void> printBluetooth(
     BuildContext context, {
     required Map<String, dynamic> sale,
     required List<dynamic> items,
     required String Function(num) formatRupiah,
   }) async {
+    if (kIsWeb) {
+      await printThermal80(
+        sale: sale,
+        items: items,
+        formatRupiah: formatRupiah,
+      );
+      return;
+    }
     try {
       final granted = await PrintBluetoothThermal.isPermissionBluetoothGranted;
       if (!granted) {
@@ -140,12 +273,12 @@ class PosPrintService {
         if (mac == null) return;
         final ok = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
         if (!ok) {
-          throw 'Gagal konek printer Bluetooth. Pakai Print PDF saja.';
+          throw 'Gagal konek printer Bluetooth. Pakai USB POS-80 atau Print PDF.';
         }
       }
 
       final doc = await _doc(sale: sale, items: items);
-      final bytes = await _buildEscPos(doc);
+      final bytes = await buildEscPos(doc, paper: PaperSize.mm58);
       final sent = await PrintBluetoothThermal.writeBytes(bytes);
       if (!sent) {
         throw 'Gagal mengirim data ke printer.';
@@ -162,9 +295,9 @@ class PosPrintService {
         content: Text('$e'),
         backgroundColor: OptikAdminTokens.danger,
         action: SnackBarAction(
-          label: 'PDF',
+          label: '80mm',
           textColor: OptikAdminTokens.snow,
-          onPressed: () => printPdf(
+          onPressed: () => printThermal80(
             sale: sale,
             items: items,
             formatRupiah: formatRupiah,
@@ -220,10 +353,13 @@ class PosPrintService {
     return mac;
   }
 
-  /// Thermal 58mm — teks mengikuti settings + footer status Adjust Invoice.
-  static Future<List<int>> _buildEscPos(InvoiceDocumentModel doc) async {
+  /// ESC/POS thermal — [PaperSize.mm80] untuk POS-80 USB, [PaperSize.mm58] BT.
+  static Future<List<int>> buildEscPos(
+    InvoiceDocumentModel doc, {
+    PaperSize paper = PaperSize.mm80,
+  }) async {
     final profile = await CapabilityProfile.load();
-    final g = Generator(PaperSize.mm58, profile);
+    final g = Generator(paper, profile);
     final bytes = <int>[];
     final s = doc.settings;
     final m = doc.meta;

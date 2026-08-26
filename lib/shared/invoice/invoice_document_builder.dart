@@ -491,4 +491,59 @@ abstract final class InvoiceDocumentBuilder {
     );
     return pdf.save();
   }
+
+  /// Lebar gulungan POS-80 (80 mm). Tinggi dinamis lewat MultiPage.
+  static final PdfPageFormat thermal80Format = PdfPageFormat(
+    80 * PdfPageFormat.mm,
+    297 * PdfPageFormat.mm,
+    marginAll: 3 * PdfPageFormat.mm,
+  );
+
+  /// PDF struk thermal 80mm — cocok dialog print → destination POS-80.
+  static Future<Uint8List> buildThermalPdfBytes(
+    InvoiceDocumentModel doc, {
+    String? qrOverride,
+  }) async {
+    final pdf = pw.Document();
+    final qrData = (qrOverride ?? doc.qrPayload).trim();
+    final showQr = doc.settings.showQrInvoice && qrData.isNotEmpty;
+    final compact = doc.settings.copyWith(
+      fontSizeBody: 8,
+      fontSizeHeader: 11,
+    );
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: thermal80Format,
+        maxPages: 8,
+        build: (_) => [
+          InvoiceLayout.documentBodyPdf(
+            settings: compact,
+            footerText: doc.footerTextPdf,
+            logoImage: doc.logoImage,
+            meta: doc.meta,
+            lines: doc.lines,
+            totalFormatted: doc.totalFormatted,
+            paidLabel: doc.paidLabel,
+            paidFormatted: doc.paidFormatted,
+            remainingFormatted: doc.remainingFormatted,
+            hasRemainingDebt: doc.hasRemainingDebt,
+            extras: doc.hasLensa ? lensTablePdf(doc.detailResep) : null,
+            qrChild: showQr
+                ? pw.Container(
+                    height: 36,
+                    width: 36,
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.qrCode(),
+                      data: qrData,
+                      padding: pw.EdgeInsets.zero,
+                    ),
+                  )
+                : null,
+            itemsTitle: 'ITEM',
+          ),
+        ],
+      ),
+    );
+    return pdf.save();
+  }
 }
