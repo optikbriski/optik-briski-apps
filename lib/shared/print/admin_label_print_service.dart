@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../qr/product_code.dart';
 import '../theme.dart';
 import '../widgets/admin/admin_picker.dart';
 import 'admin_label_download_stub.dart'
@@ -39,6 +40,15 @@ class AdminLabelPrintService {
         marginAll: 2 * PdfPageFormat.mm,
       );
 
+  /// Kode yang dicetak di simbol: plain SKU/barcode (bukan `OBRPROD|…`).
+  static String printableSku(String data) {
+    final raw = data.trim();
+    if (raw.isEmpty) return '';
+    return ProductCode.resolveSku(raw) ??
+        ProductCode.parse(raw)?.sku ??
+        raw;
+  }
+
   static Future<Uint8List> buildPdf({
     required String data,
     required String title,
@@ -47,11 +57,16 @@ class AdminLabelPrintService {
     int copies = 1,
     String? subtitle,
   }) async {
-    final payload = data.trim();
+    final payload = printableSku(data);
     if (payload.isEmpty) throw 'Data label kosong.';
     final n = copies.clamp(1, 50);
     final pageFormat = formatOf(size);
     final doc = pw.Document();
+    final h = pageFormat.availableHeight;
+    final w = pageFormat.availableWidth;
+    // Nama + SKU ringkas; sisa tinggi untuk simbol (tanpa string OBR di bawah).
+    final barcodeH = h * 0.72;
+    final qrSide = w < h * 0.78 ? w : h * 0.78;
 
     for (var i = 0; i < n; i++) {
       doc.addPage(
@@ -80,31 +95,25 @@ class AdminLabelPrintService {
                     style: const pw.TextStyle(fontSize: 6),
                   ),
                 ],
-                pw.SizedBox(height: 3),
+                pw.SizedBox(height: 2),
                 if (symbol == AdminLabelSymbol.barcode1d)
                   pw.BarcodeWidget(
                     barcode: pw.Barcode.code128(),
                     data: payload,
-                    width: pageFormat.availableWidth,
-                    height: pageFormat.availableHeight * 0.42,
-                    drawText: false,
+                    width: w,
+                    height: barcodeH,
+                    drawText: true,
+                    textStyle: pw.TextStyle(
+                      fontSize: size.heightMm < 35 ? 6 : 7,
+                    ),
                   )
                 else
                   pw.BarcodeWidget(
                     barcode: pw.Barcode.qrCode(),
                     data: payload,
-                    width: pageFormat.availableHeight * 0.55,
-                    height: pageFormat.availableHeight * 0.55,
+                    width: qrSide,
+                    height: qrSide,
                   ),
-                pw.SizedBox(height: 2),
-                pw.Text(
-                  payload,
-                  maxLines: 2,
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(
-                    fontSize: size.heightMm < 35 ? 5 : 6,
-                  ),
-                ),
               ],
             ),
           ),

@@ -2,9 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optik_b_riski/shared/print/admin_label_print_service.dart';
 
 void main() {
+  test('printableSku strips OBRPROD to plain SKU', () {
+    expect(
+      AdminLabelPrintService.printableSku(
+        'OBRPROD|v1|BC-123|440b835a-33fb-4c4f-ae14-0b1ee33101f1',
+      ),
+      'BC-123',
+    );
+    expect(AdminLabelPrintService.printableSku('BC-123'), 'BC-123');
+  });
+
   test('buildPdf barcode and qr produce non-empty bytes', () async {
     final barcode = await AdminLabelPrintService.buildPdf(
-      data: 'OBRPROD|v1|SKU-TEST',
+      data: 'SKU-TEST',
       title: 'Frame Test',
       subtitle: 'SKU SKU-TEST',
       symbol: AdminLabelSymbol.barcode1d,

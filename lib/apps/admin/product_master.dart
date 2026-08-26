@@ -15,7 +15,6 @@ import '../../shared/logistics/stock_actor_gate.dart';
 import '../../shared/logistics/stock_mutation_service.dart';
 import '../../shared/logistics/stock_realtime.dart';
 import '../../shared/print/admin_label_print_service.dart';
-import '../../shared/qr/product_code.dart';
 import '../../shared/responsive.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
@@ -1242,11 +1241,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return "Rp$hasilFormat";
   }
 
-  /// Produk: 1D + 2D berisi payload khusus produk ([ProductCode]), bukan invoice/DO.
+  /// Produk: label pakai plain SKU/barcode (nama + kode), bukan payload OBRPROD.
   Widget _buildProductCodes(String sku, {String? productId, String? nama}) {
-    final payload = ProductCode.encode(sku: sku, productId: productId);
-    if (payload.isEmpty) return const SizedBox.shrink();
-    final title = (nama ?? '').trim().isEmpty ? sku.trim() : nama!.trim();
+    final code = sku.trim();
+    if (code.isEmpty) return const SizedBox.shrink();
+    final title = (nama ?? '').trim().isEmpty ? code : nama!.trim();
 
     Widget panel({required String title, required Widget child}) {
       return Container(
@@ -1282,9 +1281,14 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             height: 72,
             child: BarcodeWidget(
               barcode: Barcode.code128(),
-              data: payload,
-              drawText: false,
+              data: code,
+              drawText: true,
               color: OptikAdminTokens.bg,
+              style: const TextStyle(
+                color: OptikAdminTokens.bg,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),
@@ -1296,7 +1300,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             height: 140,
             child: BarcodeWidget(
               barcode: Barcode.qrCode(),
-              data: payload,
+              data: code,
               drawText: false,
               color: OptikAdminTokens.bg,
             ),
@@ -1304,21 +1308,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'SKU: ${sku.trim()}',
+          'SKU: $code',
           style: const TextStyle(
             color: OptikAdminTokens.warning,
             fontSize: 12,
             fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 4),
-        SelectableText(
-          payload,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: OptikAdminTokens.navy.withOpacity(0.55),
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 12),
@@ -1327,9 +1321,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           child: OutlinedButton.icon(
             onPressed: () => AdminLabelPrintSheet.show(
               context,
-              data: payload,
+              data: code,
               title: title,
-              subtitle: 'SKU ${sku.trim()}',
+              subtitle: 'SKU $code',
               initialSymbol: AdminLabelSymbol.barcode1d,
             ),
             icon: const Icon(Icons.print_rounded, size: 18),
@@ -2676,15 +2670,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   if (sel.value == 'detail') showProductDetail(item);
                   if (sel.value == 'print_label') {
                     final sku =
-                        (item['sku'] ?? item['barcode'] ?? '').toString();
-                    final payload = ProductCode.encode(
-                      sku: sku,
-                      productId: item['id']?.toString(),
-                    );
-                    if (payload.isEmpty || !mounted) return;
+                        (item['sku'] ?? item['barcode'] ?? '').toString().trim();
+                    if (sku.isEmpty || !mounted) return;
                     await AdminLabelPrintSheet.show(
                       context,
-                      data: payload,
+                      data: sku,
                       title: (item['nama'] ?? sku).toString(),
                       subtitle: 'SKU $sku',
                     );
