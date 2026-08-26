@@ -12,25 +12,43 @@ void main() {
     expect(AdminLabelPrintService.printableSku('BC-123'), 'BC-123');
   });
 
-  test('buildPdf barcode and qr produce non-empty bytes', () async {
-    final barcode = await AdminLabelPrintService.buildPdf(
-      data: 'SKU-TEST',
-      title: 'Frame Test',
-      subtitle: 'SKU SKU-TEST',
-      symbol: AdminLabelSymbol.barcode1d,
-      size: AdminLabelSize.mm50x30,
-      copies: 2,
-    );
-    expect(barcode.length, greaterThan(100));
+  test('symbolAreaFor fits inside each selected label size', () {
+    for (final size in AdminLabelSize.values) {
+      final area = AdminLabelPrintService.symbolAreaFor(
+        size: size,
+        hasSubtitle: true,
+      );
+      final page = AdminLabelPrintService.formatOf(size);
+      expect(area.width, lessThanOrEqualTo(page.availableWidth + 0.01));
+      expect(area.height, lessThan(page.availableHeight));
+      expect(area.height, greaterThan(10));
+      // QR side harus muat di kotak sisa.
+      final qrSide = area.width < area.height ? area.width : area.height;
+      expect(qrSide, lessThanOrEqualTo(area.width + 0.01));
+      expect(qrSide, lessThanOrEqualTo(area.height + 0.01));
+    }
+  });
 
-    final qr = await AdminLabelPrintService.buildPdf(
-      data: 'OBRPROD|v1|SKU-TEST',
-      title: 'Frame Test',
-      symbol: AdminLabelSymbol.qr,
-      size: AdminLabelSize.mm40x30,
-      copies: 1,
-    );
-    expect(qr.length, greaterThan(100));
+  test('buildPdf barcode and qr produce non-empty bytes', () async {
+    for (final size in AdminLabelSize.values) {
+      final barcode = await AdminLabelPrintService.buildPdf(
+        data: 'BC-1784688575572',
+        title: 'Aviator - Dark Chiaroscuro',
+        subtitle: 'SKU BC-1784688575572',
+        symbol: AdminLabelSymbol.barcode1d,
+        size: size,
+      );
+      expect(barcode.length, greaterThan(100), reason: 'barcode $size');
+
+      final qr = await AdminLabelPrintService.buildPdf(
+        data: 'BC-1784688575572',
+        title: 'Aviator - Dark Chiaroscuro',
+        subtitle: 'SKU BC-1784688575572',
+        symbol: AdminLabelSymbol.qr,
+        size: size,
+      );
+      expect(qr.length, greaterThan(100), reason: 'qr $size');
+    }
   });
 
   test('buildPdf rejects empty data', () async {

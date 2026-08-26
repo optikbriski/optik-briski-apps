@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -34,11 +35,15 @@ enum AdminLabelSize {
 class AdminLabelPrintService {
   AdminLabelPrintService._();
 
-  static PdfPageFormat formatOf(AdminLabelSize size) => PdfPageFormat(
-        size.widthMm * PdfPageFormat.mm,
-        size.heightMm * PdfPageFormat.mm,
-        marginAll: 2 * PdfPageFormat.mm,
-      );
+  static PdfPageFormat formatOf(AdminLabelSize size) {
+    // Margin kecil proporsional agar area simbol ikut ukuran label.
+    final marginMm = size.heightMm <= 30 ? 1.5 : 2.0;
+    return PdfPageFormat(
+      size.widthMm * PdfPageFormat.mm,
+      size.heightMm * PdfPageFormat.mm,
+      marginAll: marginMm * PdfPageFormat.mm,
+    );
+  }
 
   /// Kode yang dicetak di simbol: plain SKU/barcode (bukan `OBRPROD|…`).
   static String printableSku(String data) {
@@ -47,6 +52,22 @@ class AdminLabelPrintService {
     return ProductCode.resolveSku(raw) ??
         ProductCode.parse(raw)?.sku ??
         raw;
+  }
+
+  /// Sisa area setelah nama (+ SKU) — dipakai untuk ukuran barcode/QR.
+  static ({double width, double height, double titleSize}) symbolAreaFor({
+    required AdminLabelSize size,
+    required bool hasSubtitle,
+  }) {
+    final page = formatOf(size);
+    final titleSize = size.heightMm <= 30 ? 6.5 : (size.heightMm <= 40 ? 8.0 : 9.0);
+    final titleBlock = titleSize * 1.25 * 2; // max 2 baris
+    final subBlock = hasSubtitle ? (6.0 * 1.2 + 1.0) : 0.0;
+    final gap = 2.0;
+    final used = titleBlock + subBlock + gap;
+    final h = math.max(10.0, page.availableHeight - used);
+    final w = page.availableWidth;
+    return (width: w, height: h, titleSize: titleSize);
   }
 
   static Future<Uint8List> buildPdf({
@@ -62,61 +83,70 @@ class AdminLabelPrintService {
     final n = copies.clamp(1, 50);
     final pageFormat = formatOf(size);
     final doc = pw.Document();
-    final h = pageFormat.availableHeight;
-    final w = pageFormat.availableWidth;
-    // Nama + SKU ringkas; sisa tinggi untuk simbol (tanpa string OBR di bawah).
-    final barcodeH = h * 0.72;
-    final qrSide = w < h * 0.78 ? w : h * 0.78;
+    final titleText = title.trim().isEmpty ? 'LABEL' : title.trim();
+    final subText = (subtitle ?? '').trim();
+    final area = symbolAreaFor(size: size, hasSubtitle: subText.isNotEmpty);
 
     for (var i = 0; i < n; i++) {
       doc.addPage(
         pw.Page(
           pageFormat: pageFormat,
-          build: (ctx) => pw.Center(
-            child: pw.Column(
-              mainAxisAlignment: pw.MainAxisAlignment.center,
+          build: (ctx) {
+            final pw.Widget symbolWidget;
+            if (symbol == AdminLabelSymbol.barcode1d) {
+              symbolWidget = pw.BarcodeWidget(
+                barcode: pw.Barcode.code128(),
+                data: payload,
+                width: area.width,
+                height: area.height,
+                drawText: true,
+                textStyle: pw.TextStyle(
+                  fontSize: size.heightMm <= 30 ? 5.5 : 6.5,
+                ),
+              );
+            } else {
+              // QR kotak: sisi = min(lebar, tinggi sisa) sesuai ukuran dipilih.
+              final side = math.min(area.width, area.height);
+              symbolWidget = pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.qrCode(),
+                  data: payload,
+                  width: side,
+                  height: side,
+                ),
+              );
+            }
+
+            return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
                 pw.Text(
-                  title.trim().isEmpty ? 'LABEL' : title.trim(),
+                  titleText,
                   maxLines: 2,
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(
-                    fontSize: size.heightMm < 35 ? 7 : 9,
+                    fontSize: area.titleSize,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
-                if ((subtitle ?? '').trim().isNotEmpty) ...[
+                if (subText.isNotEmpty) ...[
                   pw.SizedBox(height: 1),
                   pw.Text(
-                    subtitle!.trim(),
+                    subText,
                     maxLines: 1,
                     textAlign: pw.TextAlign.center,
                     style: const pw.TextStyle(fontSize: 6),
                   ),
                 ],
                 pw.SizedBox(height: 2),
-                if (symbol == AdminLabelSymbol.barcode1d)
-                  pw.BarcodeWidget(
-                    barcode: pw.Barcode.code128(),
-                    data: payload,
-                    width: w,
-                    height: barcodeH,
-                    drawText: true,
-                    textStyle: pw.TextStyle(
-                      fontSize: size.heightMm < 35 ? 6 : 7,
-                    ),
-                  )
-                else
-                  pw.BarcodeWidget(
-                    barcode: pw.Barcode.qrCode(),
-                    data: payload,
-                    width: qrSide,
-                    height: qrSide,
-                  ),
+                pw.SizedBox(
+                  width: area.width,
+                  height: area.height,
+                  child: symbolWidget,
+                ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       );
     }
