@@ -373,7 +373,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     _filterHistory();
   }
 
-  static const _panelSoft = OptikAdminTokens.bgMid;
+  static Color get _panelSoft => OptikAdminTokens.bgMid;
 
   int _countKind(String kind) {
     if (kind == 'all') return allHistory.length;
@@ -397,18 +397,18 @@ class _StockMoveReportState extends State<StockMoveReport> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("smr_konfirmasi_terima".tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 14)),
         content: Text(
           "smr_tanya_terima".tr(),
-          style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text("BATAL", style: TextStyle(color: OptikAdminTokens.textMuted))),
+              child: Text('appr_btn_batal'.tr(), style: TextStyle(color: OptikAdminTokens.textMuted))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: OptikAdminTokens.accent),
             onPressed: () {
@@ -416,7 +416,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
               _prosesTerimaPaket(item);
             },
             child: Text("smr_btn_foto_terima".tr(),
-                style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 12)),
+                style: TextStyle(color: OptikAdminTokens.navy, fontSize: 12)),
           )
         ],
       ),
@@ -435,8 +435,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
         .maybeSingle();
     if (fresh == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Surat jalan tidak ditemukan.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_a59ed2aec5'.tr()),
         backgroundColor: OptikAdminTokens.danger,
       ));
       return;
@@ -444,8 +444,8 @@ class _StockMoveReportState extends State<StockMoveReport> {
     final st = (fresh['status'] ?? '').toString().toUpperCase();
     if (st == 'SUCCESS') {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Paket sudah diterima sebelumnya.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_bb975cbe2f'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       _fetchMoveHistory();
@@ -526,7 +526,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal terima paket: $e'),
+          content: Text('admin_auto_81f1f4d587'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
       setState(() => isLoading = false);
     } finally {
@@ -632,7 +632,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             const SizedBox(height: 2),
                             Text(
                               resi,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
@@ -643,9 +643,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Tutup',
+                        tooltip: 'admin_btn_close'.tr(),
                         onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close_rounded,
+                        icon: Icon(Icons.close_rounded,
                             color: OptikAdminTokens.textMuted, size: 20),
                       ),
                     ],
@@ -670,14 +670,14 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         _detailRouteCard(dari, ke),
                         const SizedBox(height: 12),
                         _detailInfoCard(
-                          label: 'Dibuat',
+                          label: 'admin_auto_b3d3796e4a'.tr(),
                           value: createdLabel,
                           icon: Icons.schedule_rounded,
                         ),
                         if (kurirNama.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           _detailInfoCard(
-                            label: 'Kurir',
+                            label: 'admin_auto_e9be6e58b5'.tr(),
                             value: kurirNama,
                             icon: Icons.delivery_dining_rounded,
                           ),
@@ -750,7 +750,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         ],
                         const SizedBox(height: 18),
                         PremiumSectionHeader(
-                          label: 'Bukti foto',
+                          label: 'admin_auto_ca6638c9e7'.tr(),
                           padding: const EdgeInsets.only(bottom: 10),
                         ),
                         _buildFotoSection(
@@ -761,7 +761,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                         ),
                         const SizedBox(height: 12),
                         _buildFotoSection(
-                          title: 'Bukti kurir',
+                          title: 'admin_auto_a06ae43bb0'.tr(),
                           url: _resolveFotoUrl(item['bukti_foto_kurir']) ??
                               item['bukti_foto_kurir'],
                           accent: OptikAdminTokens.warning,
@@ -781,7 +781,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             children: [
                               Expanded(
                                 child: _detailInfoCard(
-                                  label: 'Diterima oleh',
+                                  label: 'scan_terima_oleh'.tr(),
                                   value: verifiedName.isEmpty
                                       ? '-'
                                       : verifiedName,
@@ -791,7 +791,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: _detailInfoCard(
-                                  label: 'Waktu terima',
+                                  label: 'scan_terima_waktu'.tr(),
                                   value: verifiedAt,
                                   icon: Icons.schedule_rounded,
                                 ),
@@ -902,7 +902,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 const SizedBox(height: 4),
                 Text(
                   dari,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -939,7 +939,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Text(
                   ke,
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -1241,7 +1241,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 Expanded(
                   child: Text(
                     '${item['product_name'] ?? '-'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -1267,7 +1267,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
             const SizedBox(height: 3),
             Text(
               kurir.isEmpty ? when : '$when · Kurir $kurir',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 color: OptikAdminTokens.textMuted,
                 fontWeight: FontWeight.w600,
@@ -1276,7 +1276,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
             const SizedBox(height: 4),
             Text(
               _cleanKeterangan(item['keterangan'] ?? ''),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: OptikAdminTokens.textMuted,
                 height: 1.3,
@@ -1296,7 +1296,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.info_outline_rounded, size: 16),
-                    label: const Text('Detail',
+                    label: Text('admin_btn_detail'.tr(),
                         style: TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w700)),
                   ),
@@ -1323,7 +1323,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     icon: const Icon(Icons.fact_check_rounded, size: 15),
-                    label: const Text('Disiapkan',
+                    label: Text('admin_auto_f96b78a3e4'.tr(),
                         style: TextStyle(
                             fontSize: 11.5, fontWeight: FontWeight.w800)),
                   ),
@@ -1367,9 +1367,9 @@ class _StockMoveReportState extends State<StockMoveReport> {
         subtitle: "smr_subtitle".tr(),
         actions: [
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: () => _fetchMoveHistory(),
-            icon: const Icon(Icons.refresh_rounded,
+            icon: Icon(Icons.refresh_rounded,
                 size: 18, color: OptikAdminTokens.textSecondary),
           ),
           const SizedBox(width: 4),
@@ -1386,25 +1386,25 @@ class _StockMoveReportState extends State<StockMoveReport> {
                 children: [
                   _kindTile(
                     kind: 'all',
-                    label: 'Semua',
+                    label: 'antrian_filter_semua'.tr(),
                     icon: Icons.layers_rounded,
                     color: OptikAdminTokens.textSecondary,
                   ),
                   _kindTile(
                     kind: 'do',
-                    label: 'DO',
+                    label: 'admin_auto_c23fa99969'.tr(),
                     icon: Icons.local_shipping_rounded,
                     color: OptikAdminTokens.warning,
                   ),
                   _kindTile(
                     kind: 'ro',
-                    label: 'RO',
+                    label: 'admin_auto_f5b15f58ca'.tr(),
                     icon: Icons.playlist_add_check_rounded,
                     color: OptikAdminTokens.navy,
                   ),
                   _kindTile(
                     kind: 'retur',
-                    label: 'Retur',
+                    label: 'admin_auto_9710079f11'.tr(),
                     icon: Icons.undo_rounded,
                     color: OptikAdminTokens.slate,
                   ),
@@ -1417,29 +1417,29 @@ class _StockMoveReportState extends State<StockMoveReport> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const PremiumSectionHeader(
-                  label: 'Ringkasan (pcs)',
+                PremiumSectionHeader(
+                  label: 'admin_auto_850e1146fe'.tr(),
                   padding: EdgeInsets.only(bottom: 8, top: 2),
                 ),
                 PremiumStatGrid(
                   items: [
                     PremiumStatItem(
-                      label: 'Disiapkan',
+                      label: 'admin_auto_f96b78a3e4'.tr(),
                       value: '$kpiDisiapkan',
                       color: OptikAdminTokens.ice,
                     ),
                     PremiumStatItem(
-                      label: 'Jalan',
+                      label: 'admin_auto_aaee4bd708'.tr(),
                       value: '$kpiJalan',
                       color: OptikAdminTokens.warning,
                     ),
                     PremiumStatItem(
-                      label: 'Diterima',
+                      label: 'admin_auto_ad41c3d803'.tr(),
                       value: '$kpiDiterima',
                       color: OptikAdminTokens.success,
                     ),
                     PremiumStatItem(
-                      label: 'Batal',
+                      label: 'appr_btn_batal'.tr(),
                       value: '$kpiBatal',
                       color: OptikAdminTokens.danger,
                     ),
@@ -1459,13 +1459,13 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   TextField(
                     controller: searchController,
                     onChanged: _runSearch,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.textPrimary, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Cari resi, cabang, kurir…',
-                      hintStyle: const TextStyle(
+                      hintText: 'admin_auto_f8904e132a'.tr(),
+                      hintStyle: TextStyle(
                           color: OptikAdminTokens.textMuted, fontSize: 12.5),
-                      prefixIcon: const Icon(Icons.search_rounded,
+                      prefixIcon: Icon(Icons.search_rounded,
                           color: OptikAdminTokens.textMuted, size: 20),
                       filled: true,
                       fillColor: OptikAdminTokens.bg.withOpacity(0.55),
@@ -1473,12 +1473,12 @@ class _StockMoveReportState extends State<StockMoveReport> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
+                        borderSide: BorderSide(
                             color: OptikAdminTokens.lineStrong),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
+                        borderSide: BorderSide(
                             color: OptikAdminTokens.navy, width: 1.3),
                       ),
                       border: OutlineInputBorder(
@@ -1492,7 +1492,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                       Expanded(
                         child: Text(
                           unitLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             color: OptikAdminTokens.textMuted,
                             fontWeight: FontWeight.w700,
@@ -1510,7 +1510,7 @@ class _StockMoveReportState extends State<StockMoveReport> {
                             foregroundColor: OptikAdminTokens.textMuted,
                             padding: EdgeInsets.zero,
                           ),
-                          child: const Text('Reset filter',
+                          child: Text('admin_auto_c9735d44ad'.tr(),
                               style: TextStyle(fontSize: 11)),
                         ),
                     ],
@@ -1519,27 +1519,27 @@ class _StockMoveReportState extends State<StockMoveReport> {
                   PremiumChipWrap(
                     children: [
                       _buildStatusChip(
-                        label: 'Disiapkan',
+                        label: 'admin_auto_f96b78a3e4'.tr(),
                         codes: const ['PREPARING', 'WAITING'],
                         badgeColor: OptikAdminTokens.ice,
                       ),
                       _buildStatusChip(
-                        label: 'Dalam perjalanan',
+                        label: 'admin_auto_7e3b1ad08c'.tr(),
                         codes: const ['TRANSIT'],
                         badgeColor: OptikAdminTokens.warning,
                       ),
                       _buildStatusChip(
-                        label: 'Menunggu',
+                        label: 'pengajuan_status_pending'.tr(),
                         codes: const ['PENDING'],
                         badgeColor: OptikAdminTokens.warning,
                       ),
                       _buildStatusChip(
-                        label: 'Diterima',
+                        label: 'admin_auto_ad41c3d803'.tr(),
                         codes: const ['SUCCESS'],
                         badgeColor: OptikAdminTokens.success,
                       ),
                       _buildStatusChip(
-                        label: 'Dibatalkan',
+                        label: 'pengajuan_status_cancelled'.tr(),
                         codes: const ['BATAL', 'REJECTED'],
                         badgeColor: OptikAdminTokens.danger,
                       ),
@@ -1552,17 +1552,17 @@ class _StockMoveReportState extends State<StockMoveReport> {
           const SizedBox(height: 8),
           Expanded(
             child: isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
                         color: OptikAdminTokens.ice))
                 : errorLog.isNotEmpty
                     ? PremiumEmptyState(
-                        message: 'Gagal memuat riwayat.\n$errorLog',
+                        message: 'admin_err_load_riwayat'.tr(namedArgs: {'error': errorLog}),
                         icon: Icons.error_outline_rounded,
                         accent: OptikAdminTokens.danger,
                         action: FilledButton(
                           onPressed: () => _fetchMoveHistory(),
-                          child: const Text('Coba lagi'),
+                          child: Text('common_retry'.tr()),
                         ),
                       )
                     : filteredHistory.isEmpty

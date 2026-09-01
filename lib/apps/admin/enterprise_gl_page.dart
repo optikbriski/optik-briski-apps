@@ -1,6 +1,9 @@
 // ignore_for_file: use_build_context_synchronously
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../shared/admin/admin_format.dart';
 
 import '../../shared/export/gl_report_pdf_service.dart';
 import '../../shared/finance/gl_posting_service.dart';
@@ -27,8 +30,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     with SingleTickerProviderStateMixin {
   final _reports = GlReportService();
   final _poster = GlPostingService();
-  final _rp = NumberFormat.currency(
-      locale: 'id_ID', symbol: 'Rp', decimalDigits: 0);
+  NumberFormat get _rp => AdminFormat.currency(context);
+  DateFormat _df(String pattern) => AdminFormat.date(context, pattern);
 
   late TabController _tabs;
   bool _loading = true;
@@ -73,7 +76,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   }
 
   String get _periodLabel {
-    final m = DateFormat('MMMM yyyy', 'id_ID')
+    final m = _df('MMMM yyyy')
         .format(DateTime(_tahun, _bulan));
     return m;
   }
@@ -186,7 +189,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih periode',
+      title: 'admin_auto_37a41325d9'.tr(),
       searchable: true,
       headerIcon: Icons.calendar_month_rounded,
       selected: '$_tahun-$_bulan',
@@ -195,7 +198,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           for (var m = 12; m >= 1; m--)
             AdminPickerOption(
               value: '$y-$m',
-              label: DateFormat('MMMM yyyy', 'id_ID').format(DateTime(y, m)),
+              label: _df('MMMM yyyy').format(DateTime(y, m)),
               subtitle: _periodStatus(y, m),
             ),
       ],
@@ -209,13 +212,24 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     await _reload();
   }
 
-  String _periodStatus(int y, int m) {
+  String _periodStatusCode(int y, int m) {
     for (final p in _periods) {
       if (p['tahun'] == y && p['bulan'] == m) {
-        return p['status'] == 'CLOSED' ? 'Ditutup' : 'Terbuka';
+        return p['status'] == 'CLOSED' ? 'CLOSED' : 'OPEN';
       }
     }
-    return 'Belum dibuat';
+    return 'NONE';
+  }
+
+  String _periodStatus(int y, int m) {
+    switch (_periodStatusCode(y, m)) {
+      case 'CLOSED':
+        return 'admin_lbl_ditutup'.tr();
+      case 'OPEN':
+        return 'admin_lbl_terbuka'.tr();
+      default:
+        return 'admin_lbl_belum_dibuat'.tr();
+    }
   }
 
   Future<void> _backfill() async {
@@ -223,23 +237,23 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text('Sinkronkan GL historis?',
+        title: Text('admin_auto_cbca5abeef'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 15)),
-        content: const Text(
-          'Sistem akan mem-posting ulang penjualan & transaksi kas yang belum masuk jurnal GL. Aman dijalankan berulang (idempotent).',
+        content: Text(
+          'admin_gl_row_8127856e60'.tr(),
           style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sinkronkan'),
+            child: Text('admin_btn_sinkronkan'.tr()),
           ),
         ],
       ),
@@ -263,7 +277,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal sinkron GL: $e'),
+        content: Text('admin_auto_bf1c3e0034'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -274,24 +288,24 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: Text('Tutup periode $_periodLabel?',
-            style: const TextStyle(
+        title: Text('admin_auto_269eddd101'.tr(namedArgs: {'period': _periodLabel}),
+            style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 15)),
-        content: const Text(
-          'Setelah ditutup, tidak ada jurnal baru yang bisa diposting ke bulan ini.',
+        content: Text(
+          'admin_gl_msg_period_closed'.tr(),
           style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+              child: Text('appr_btn_batal'.tr())),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: OptikAdminTokens.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Tutup periode'),
+            child: Text('admin_auto_8219933f3d'.tr()),
           ),
         ],
       ),
@@ -305,14 +319,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       );
       await _reload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Periode berhasil ditutup'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_8530c4ae9d'.tr()),
         backgroundColor: OptikAdminTokens.navy,
       ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal menutup periode: $e'),
+        content: Text('admin_auto_25bc916884'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -323,14 +337,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       await _poster.reopenPeriod(tahun: _tahun, bulan: _bulan);
       await _reload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Periode dibuka kembali'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_d322e92ee5'.tr()),
         backgroundColor: OptikAdminTokens.navy,
       ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal membuka periode: $e'),
+        content: Text('admin_auto_c13d511dbd'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -423,7 +437,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.calendar_month_rounded,
+              Icon(Icons.calendar_month_rounded,
                   size: 15, color: OptikAdminTokens.navy),
               const SizedBox(width: 6),
               ConstrainedBox(
@@ -432,7 +446,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                   '$_periodLabel · $_tokoContextLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -449,18 +463,18 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   PreferredSizeWidget _glTabBar() {
     // Anggaran: insights (bukan celengan babi) — cocok "anggaran vs aktual".
     final tabs = <(String, IconData)>[
-      ('Bagan akun', Icons.account_tree_rounded),
-      ('Jurnal', Icons.menu_book_rounded),
-      ('Neraca saldo', Icons.table_chart_rounded),
-      ('Laba rugi', Icons.show_chart_rounded),
-      ('Neraca', Icons.balance_rounded),
-      ('Konsolidasi', Icons.hub_rounded),
-      ('Aging', Icons.hourglass_bottom_rounded),
-      ('Bank', Icons.account_balance_rounded),
-      ('Anggaran', Icons.insights_rounded),
-      ('e-Faktur', Icons.receipt_long_rounded),
-      ('Periode', Icons.lock_clock_rounded),
-      ('Audit', Icons.fact_check_rounded),
+      ('admin_gl_tab_coa'.tr(), Icons.account_tree_rounded),
+      ('admin_gl_tab_journal'.tr(), Icons.menu_book_rounded),
+      ('admin_gl_tab_trial_balance'.tr(), Icons.table_chart_rounded),
+      ('admin_gl_tab_pl'.tr(), Icons.show_chart_rounded),
+      ('admin_gl_tab_balance_sheet'.tr(), Icons.balance_rounded),
+      ('admin_gl_tab_consolidation'.tr(), Icons.hub_rounded),
+      ('admin_gl_tab_aging'.tr(), Icons.hourglass_bottom_rounded),
+      ('admin_gl_tab_bank'.tr(), Icons.account_balance_rounded),
+      ('admin_gl_tab_budget'.tr(), Icons.insights_rounded),
+      ('admin_gl_tab_efaktur'.tr(), Icons.receipt_long_rounded),
+      ('admin_gl_tab_period'.tr(), Icons.lock_clock_rounded),
+      ('admin_gl_tab_audit'.tr(), Icons.fact_check_rounded),
     ];
     return PreferredSize(
       preferredSize: const Size.fromHeight(52),
@@ -539,8 +553,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   Widget build(BuildContext context) {
     if (!_isOwnerOrPusat) {
       return PremiumScaffold(
-        appBar: const PremiumAppBar(
-          title: 'General Ledger',
+        appBar: PremiumAppBar(
+          title: 'admin_auto_99df167760'.tr(),
           centerTitle: true,
         ),
         body: PremiumEmptyState(
@@ -549,7 +563,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           icon: Icons.lock_outline_rounded,
           accent: OptikAdminTokens.warning,
           action: PremiumPrimaryButton(
-            label: 'Kembali',
+            label: 'leave_discard_sure_no'.tr(),
             onPressed: () => Navigator.maybePop(context),
           ),
         ),
@@ -558,7 +572,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'General Ledger',
+        title: 'admin_auto_99df167760'.tr(),
         centerTitle: true,
         actions: [
           Padding(
@@ -567,13 +581,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ),
           const SizedBox(width: 2),
           IconButton(
-            tooltip: 'Sinkronkan GL historis',
-            icon: const Icon(Icons.sync_rounded, color: OptikAdminTokens.navy),
+            tooltip: 'admin_auto_bd55324eb3'.tr(),
+            icon: Icon(Icons.sync_rounded, color: OptikAdminTokens.navy),
             onPressed: _backfill,
           ),
           IconButton(
-            tooltip: 'Muat ulang',
-            icon: const Icon(Icons.refresh_rounded,
+            tooltip: 'admin_btn_refresh'.tr(),
+            icon: Icon(Icons.refresh_rounded,
                 color: OptikAdminTokens.navy),
             onPressed: _reload,
           ),
@@ -581,7 +595,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         bottom: _glTabBar(),
       ),
       body: _loading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? PremiumEmptyState(
@@ -590,7 +604,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                   icon: Icons.error_outline_rounded,
                   accent: OptikAdminTokens.warning,
                   action: PremiumPrimaryButton(
-                    label: 'Coba lagi',
+                    label: 'common_retry'.tr(),
                     onPressed: _reload,
                   ),
                 )
@@ -699,13 +713,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       return;
     }
     await _showInfoDetail(
-      title: 'Akun $k',
-      subtitle: '$_periodLabel · $_tokoContextLabel',
+      title: 'admin_auto_d294bedfd8'.tr(namedArgs: {'k': k}),
+      subtitle: 'admin_auto_4c6c8ff79c'.tr(namedArgs: {'period': _periodLabel, 'tokoContextLabel': _tokoContextLabel}),
       icon: Icons.tag_rounded,
       rows: [
-        ('Kode', k),
-        ('Nama', 'Tidak ada di bagan akun lokal'),
-        ('Catatan', 'Muat ulang COA atau cek migrasi seed.'),
+        ('admin_gl_row_25cf262d90'.tr(), k),
+        ('admin_auto_c6e88f1b17'.tr(), 'Tidak ada di bagan akun lokal'),
+        ('admin_lbl_catatan'.tr(), 'Muat ulang COA atau cek migrasi seed.'),
       ],
     );
   }
@@ -751,18 +765,18 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       ));
     }
     await _showInfoDetail(
-      title: 'Jurnal ${je['sumber'] ?? '-'}',
+      title: 'admin_gl_journal_title'.tr(namedArgs: {'source': '${je['sumber'] ?? '-'}'}),
       subtitle: '${je['tanggal']} · ${je['toko_id']} · ${je['status']}',
       icon: voided ? Icons.block_rounded : Icons.menu_book_rounded,
       rows: [
-        ('ID', je['id']?.toString() ?? '-'),
-        ('Status', je['status']?.toString() ?? '-'),
-        ('Sumber', je['sumber']?.toString() ?? '-'),
-        ('Referensi', (je['referensi_id'] ?? '-').toString()),
-        ('Memo', (je['memo'] ?? '-').toString()),
-        ('Total debit', _fmt(totalD)),
-        ('Total kredit', _fmt(totalK)),
-        ('Jumlah baris', '${lines.length}'),
+        ('smr_id'.tr(), je['id']?.toString() ?? '-'),
+        ('invoice_hub_status'.tr(), je['status']?.toString() ?? '-'),
+        ('admin_gl_row_d435393ca3'.tr(), je['sumber']?.toString() ?? '-'),
+        ('admin_gl_row_7a12cb6c8f'.tr(), (je['referensi_id'] ?? '-').toString()),
+        ('admin_gl_row_53b1a0b1fe'.tr(), (je['memo'] ?? '-').toString()),
+        ('admin_gl_row_af7fd0e818'.tr(), _fmt(totalD)),
+        ('admin_gl_row_26d01a8786'.tr(), _fmt(totalK)),
+        ('admin_gl_row_4d28f474ed'.tr(), '${lines.length}'),
         ...lineRows,
       ],
     );
@@ -774,25 +788,25 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Future<void> _openAgingDetail(GlAgingRow r, {required bool piutang}) async {
     await _showInfoDetail(
-      title: piutang ? 'Detail piutang' : 'Detail hutang',
+      title: piutang ? 'admin_lbl_detail_piutang'.tr() : 'admin_lbl_detail_hutang'.tr(),
       subtitle: '${r.bucket} · ${r.umurHari} hari',
       icon: piutang
           ? Icons.hourglass_bottom_rounded
           : Icons.receipt_long_rounded,
       rows: [
-        ('Referensi', r.ref),
-        ('Nama', r.nama),
-        ('Toko', r.tokoId),
-        ('Tanggal', DateFormat('dd MMM yyyy', 'id_ID').format(r.tanggal)),
-        ('Umur', '${r.umurHari} hari'),
-        ('Bucket', r.bucket),
-        ('Nominal', _fmt(r.nominal)),
-        ('Jenis', piutang ? 'Piutang usaha' : 'Hutang usaha'),
+        ('admin_gl_row_7a12cb6c8f'.tr(), r.ref),
+        ('admin_auto_c6e88f1b17'.tr(), r.nama),
+        ('admin_auto_a5629553de'.tr(), r.tokoId),
+        ('fin_tanggal'.tr(), _df('dd MMM yyyy').format(r.tanggal)),
+        ('profil_label_umur'.tr(), '${r.umurHari} hari'),
+        ('admin_lbl_bucket'.tr(), r.bucket),
+        ('admin_auto_8c28d7c312'.tr(), _fmt(r.nominal)),
+        ('admin_lbl_jenis'.tr(), piutang ? 'Piutang usaha' : 'Hutang usaha'),
       ],
       actions: [
         if (piutang && r.ref.trim().isNotEmpty)
           PremiumPrimaryButton(
-            label: 'Lihat akun piutang (1103)',
+            label: 'admin_auto_485e4b9b94'.tr(),
             onPressed: () {
               Navigator.pop(context);
               _openAccountByKode('1103');
@@ -800,7 +814,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ),
         if (!piutang)
           PremiumPrimaryButton(
-            label: 'Lihat akun hutang (2101)',
+            label: 'admin_auto_a0fb079673'.tr(),
             onPressed: () {
               Navigator.pop(context);
               _openAccountByKode('2101');
@@ -812,21 +826,21 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Future<void> _openConsolDetail(GlTokoConsolidate c) async {
     await _showInfoDetail(
-      title: 'Konsolidasi ${c.tokoId}',
+      title: 'admin_lbl_konsolidasi_toko'.tr(namedArgs: {'toko': c.tokoId}),
       subtitle: _periodLabel,
       icon: Icons.hub_rounded,
       rows: [
-        ('Toko', c.tokoId),
-        ('Pendapatan', _fmt(c.pendapatan)),
-        ('Beban', _fmt(c.beban)),
-        ('Laba', _fmt(c.laba)),
-        ('Kas/Bank', _fmt(c.kasBank)),
-        ('Piutang', _fmt(c.piutang)),
-        ('Hutang', _fmt(c.hutang)),
+        ('admin_auto_a5629553de'.tr(), c.tokoId),
+        ('admin_auto_ec0673e5d8'.tr(), _fmt(c.pendapatan)),
+        ('admin_auto_2d1b44e2d2'.tr(), _fmt(c.beban)),
+        ('admin_gl_row_250bbb14f2'.tr(), _fmt(c.laba)),
+        ('admin_gl_row_d50276d77f'.tr(), _fmt(c.kasBank)),
+        ('admin_lbl_piutang'.tr(), _fmt(c.piutang)),
+        ('admin_lbl_hutang'.tr(), _fmt(c.hutang)),
       ],
       actions: [
         PremiumPrimaryButton(
-          label: 'Filter ke toko ini',
+          label: 'admin_auto_5358bd9ae2'.tr(),
           onPressed: () {
             Navigator.pop(context);
             setState(() => _tokoFilter = c.tokoId);
@@ -839,22 +853,22 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Future<void> _openBankAccountDetail(Map<String, dynamic> b) async {
     await _showInfoDetail(
-      title: b['nama']?.toString() ?? 'Rekening bank',
+      title: b['nama']?.toString() ?? 'admin_lbl_rekening_bank'.tr(),
       subtitle: b['toko_id']?.toString() ?? _tokoContextLabel,
       icon: Icons.account_balance_rounded,
       rows: [
-        ('ID', b['id']?.toString() ?? '-'),
-        ('Nama', b['nama']?.toString() ?? '-'),
-        ('Bank', b['bank_name']?.toString() ?? '-'),
-        ('No. rekening', b['no_rekening']?.toString() ?? '-'),
-        ('Akun GL', b['akun_gl']?.toString() ?? '1102'),
-        ('Toko', b['toko_id']?.toString() ?? '-'),
-        ('Aktif', b['aktif'] == true ? 'Ya' : 'Tidak'),
-        ('Mutasi termuat', '${_bankLines.length} baris'),
+        ('smr_id'.tr(), b['id']?.toString() ?? '-'),
+        ('admin_auto_c6e88f1b17'.tr(), b['nama']?.toString() ?? '-'),
+        ('admin_gl_tab_bank'.tr(), b['bank_name']?.toString() ?? '-'),
+        ('admin_auto_6d1d6fbe3b'.tr(), b['no_rekening']?.toString() ?? '-'),
+        ('admin_gl_row_cd1a97ee26'.tr(), b['akun_gl']?.toString() ?? '1102'),
+        ('admin_auto_a5629553de'.tr(), b['toko_id']?.toString() ?? '-'),
+        ('admin_lbl_aktif'.tr(), b['aktif'] == true ? 'Ya' : 'Tidak'),
+        ('admin_gl_row_beb39ac37f'.tr(), '${_bankLines.length} baris'),
       ],
       actions: [
         PremiumPrimaryButton(
-          label: 'Lihat akun Bank (1102)',
+          label: 'admin_auto_7e94e1d1ef'.tr(),
           onPressed: () {
             Navigator.pop(context);
             _openAccountByKode((b['akun_gl'] ?? '1102').toString());
@@ -868,18 +882,18 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     final d = int.tryParse('${l['debit'] ?? 0}') ?? 0;
     final k = int.tryParse('${l['kredit'] ?? 0}') ?? 0;
     await _showInfoDetail(
-      title: 'Mutasi bank',
+      title: 'admin_auto_54a7803b8f'.tr(),
       subtitle: l['tanggal']?.toString() ?? _periodLabel,
       icon: Icons.account_balance_wallet_rounded,
       rows: [
-        ('ID', l['id']?.toString() ?? '-'),
-        ('Tanggal', l['tanggal']?.toString() ?? '-'),
-        ('Deskripsi', l['deskripsi']?.toString() ?? '-'),
-        ('Debit', d > 0 ? _fmt(d) : '-'),
-        ('Kredit', k > 0 ? _fmt(k) : '-'),
-        ('Status', l['status']?.toString() ?? '-'),
-        ('Match journal', l['matched_journal_id']?.toString() ?? '-'),
-        ('Bank account', l['bank_account_id']?.toString() ?? '-'),
+        ('smr_id'.tr(), l['id']?.toString() ?? '-'),
+        ('fin_tanggal'.tr(), l['tanggal']?.toString() ?? '-'),
+        ('admin_gl_row_cb3572abdb'.tr(), l['deskripsi']?.toString() ?? '-'),
+        ('admin_auto_009534719f'.tr(), d > 0 ? _fmt(d) : '-'),
+        ('admin_gl_row_aa9bb38bf8'.tr(), k > 0 ? _fmt(k) : '-'),
+        ('invoice_hub_status'.tr(), l['status']?.toString() ?? '-'),
+        ('admin_gl_row_6b7ad510b4'.tr(), l['matched_journal_id']?.toString() ?? '-'),
+        ('admin_gl_row_7ec35321dd'.tr(), l['bank_account_id']?.toString() ?? '-'),
       ],
     );
   }
@@ -887,21 +901,21 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   Future<void> _openBudgetDetail(GlBudgetRow b) async {
     await _showInfoDetail(
       title: '${b.akunKode} · ${b.akunNama}',
-      subtitle: 'Anggaran $_periodLabel',
+      subtitle: 'admin_auto_cd0b5e94bc'.tr(namedArgs: {'period': _periodLabel}),
       icon: Icons.insights_rounded,
       rows: [
-        ('Akun', '${b.akunKode} ${b.akunNama}'),
-        ('Anggaran', _fmt(b.anggaran)),
-        ('Aktual', _fmt(b.aktual)),
-        ('Selisih', _fmt(b.selisih)),
-        ('% pakai', b.anggaran <= 0
+        ('admin_gl_row_2799e7f29b'.tr(), '${b.akunKode} ${b.akunNama}'),
+        ('admin_gl_tab_budget'.tr(), _fmt(b.anggaran)),
+        ('admin_gl_row_59de6f9595'.tr(), _fmt(b.aktual)),
+        ('admin_gl_row_d0e2ca844b'.tr(), _fmt(b.selisih)),
+        ('admin_gl_row_a354b9f123'.tr(), b.anggaran <= 0
             ? '-'
             : '${((b.aktual / b.anggaran) * 100).toStringAsFixed(1)}%'),
-        ('Konteks', _tokoContextLabel),
+        ('admin_gl_row_1b23c1bf25'.tr(), _tokoContextLabel),
       ],
       actions: [
         PremiumPrimaryButton(
-          label: 'Lihat mutasi akun',
+          label: 'admin_auto_ed7274f697'.tr(),
           onPressed: () {
             Navigator.pop(context);
             _openAccountByKode(b.akunKode);
@@ -913,24 +927,24 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Future<void> _openEfakturDetail(Map<String, dynamic> e) async {
     await _showInfoDetail(
-      title: e['no_invoice']?.toString() ?? 'e-Faktur',
+      title: e['no_invoice']?.toString() ?? 'admin_lbl_efaktur_fallback'.tr(),
       subtitle: e['status']?.toString() ?? '-',
       icon: Icons.receipt_long_rounded,
       rows: [
-        ('ID', e['id']?.toString() ?? '-'),
-        ('Invoice', e['no_invoice']?.toString() ?? '-'),
-        ('Pembeli', e['nama_pembeli']?.toString() ?? '-'),
-        ('NPWP', e['npwp_pembeli']?.toString() ?? '-'),
-        ('Tanggal', e['tanggal']?.toString() ?? '-'),
-        ('Toko', e['toko_id']?.toString() ?? '-'),
-        ('DPP', _fmt(int.tryParse('${e['dpp'] ?? 0}') ?? 0)),
-        ('PPN', _fmt(int.tryParse('${e['ppn'] ?? 0}') ?? 0)),
-        ('Status', e['status']?.toString() ?? '-'),
-        ('Sale ID', e['sale_id']?.toString() ?? '-'),
+        ('smr_id'.tr(), e['id']?.toString() ?? '-'),
+        ('admin_gl_row_466eadd40b'.tr(), e['no_invoice']?.toString() ?? '-'),
+        ('admin_gl_row_4cf0d83de6'.tr(), e['nama_pembeli']?.toString() ?? '-'),
+        ('admin_gl_row_a21fc8d16d'.tr(), e['npwp_pembeli']?.toString() ?? '-'),
+        ('fin_tanggal'.tr(), e['tanggal']?.toString() ?? '-'),
+        ('admin_auto_a5629553de'.tr(), e['toko_id']?.toString() ?? '-'),
+        ('admin_gl_row_07b4f3d54b'.tr(), _fmt(int.tryParse('${e['dpp'] ?? 0}') ?? 0)),
+        ('admin_gl_row_d78752bf2e'.tr(), _fmt(int.tryParse('${e['ppn'] ?? 0}') ?? 0)),
+        ('invoice_hub_status'.tr(), e['status']?.toString() ?? '-'),
+        ('admin_gl_row_af6d67da82'.tr(), e['sale_id']?.toString() ?? '-'),
       ],
       actions: [
         PremiumPrimaryButton(
-          label: 'Lihat akun PPN (2102)',
+          label: 'admin_auto_dec1ec3e54'.tr(),
           onPressed: () {
             Navigator.pop(context);
             _openAccountByKode('2102');
@@ -945,22 +959,22 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     final m = p['bulan'] as int;
     final st = p['status']?.toString() ?? '';
     final label =
-        DateFormat('MMMM yyyy', 'id_ID').format(DateTime(y, m));
+        _df('MMMM yyyy').format(DateTime(y, m));
     await _showInfoDetail(
       title: label,
-      subtitle: st == 'CLOSED' ? 'Ditutup' : 'Terbuka',
+      subtitle: st == 'CLOSED' ? 'admin_lbl_ditutup'.tr() : 'admin_lbl_terbuka'.tr(),
       icon: st == 'CLOSED' ? Icons.lock_rounded : Icons.lock_open_rounded,
       rows: [
-        ('Tahun', '$y'),
-        ('Bulan', '$m'),
-        ('Status', st == 'CLOSED' ? 'CLOSED (Ditutup)' : 'OPEN (Terbuka)'),
-        ('Closed at', p['closed_at']?.toString() ?? '-'),
-        ('Closed by', p['closed_by']?.toString() ?? '-'),
-        ('ID periode', p['id']?.toString() ?? '-'),
+        ('admin_lbl_tahun'.tr(), '$y'),
+        ('admin_lbl_bulan_short'.tr(), '$m'),
+        ('invoice_hub_status'.tr(), st == 'CLOSED' ? 'admin_lbl_status_closed_full'.tr() : 'admin_lbl_status_open_full'.tr()),
+        ('admin_gl_row_421902d8f2'.tr(), p['closed_at']?.toString() ?? '-'),
+        ('admin_gl_row_b0810d0148'.tr(), p['closed_by']?.toString() ?? '-'),
+        ('admin_gl_row_bca9e80a76'.tr(), p['id']?.toString() ?? '-'),
       ],
       actions: [
         PremiumPrimaryButton(
-          label: 'Jadikan periode aktif',
+          label: 'admin_auto_ffa9c4028d'.tr(),
           onPressed: () {
             Navigator.pop(context);
             setState(() {
@@ -985,14 +999,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       }
     }
     await _showInfoDetail(
-      title: 'Ringkasan laba rugi',
-      subtitle: '$_periodLabel · $_tokoContextLabel',
+      title: 'admin_auto_871b8ecd59'.tr(),
+      subtitle: 'admin_auto_4c6c8ff79c'.tr(namedArgs: {'period': _periodLabel, 'tokoContextLabel': _tokoContextLabel}),
       icon: Icons.show_chart_rounded,
       rows: [
-        ('Pendapatan', _fmt(pendapatan)),
-        ('Beban (+HPP)', _fmt(beban)),
-        ('Laba bersih', _fmt(pendapatan - beban)),
-        ('Jumlah akun', '${_pl.length}'),
+        ('admin_auto_ec0673e5d8'.tr(), _fmt(pendapatan)),
+        ('admin_gl_row_579211bae2'.tr(), _fmt(beban)),
+        ('admin_auto_37dd72eafb'.tr(), _fmt(pendapatan - beban)),
+        ('admin_gl_row_458c422fc6'.tr(), '${_pl.length}'),
         (
           'Catatan HPP',
           'Akun 5100 baru terisi jika jurnal HPP/persediaan sudah di-post.'
@@ -1003,17 +1017,17 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Future<void> _openBsSummaryDetail() async {
     await _showInfoDetail(
-      title: 'Ringkasan neraca',
-      subtitle: '$_periodLabel · $_tokoContextLabel',
+      title: 'admin_auto_c291d8714b'.tr(),
+      subtitle: 'admin_auto_4c6c8ff79c'.tr(namedArgs: {'period': _periodLabel, 'tokoContextLabel': _tokoContextLabel}),
       icon: Icons.balance_rounded,
       rows: [
-        ('Laba berjalan', _fmt(_labaBerjalan)),
-        ('Jumlah akun neraca', '${_bs.length}'),
-        ('Aset lines',
+        ('admin_auto_7c3f655331'.tr(), _fmt(_labaBerjalan)),
+        ('admin_gl_row_16445e4564'.tr(), '${_bs.length}'),
+        ('admin_gl_row_c46beb1b37'.tr(),
             '${_bs.where((e) => e.tipe == 'ASSET').length}'),
-        ('Kewajiban lines',
+        ('admin_gl_row_fac642eecc'.tr(),
             '${_bs.where((e) => e.tipe == 'LIABILITY').length}'),
-        ('Ekuitas lines',
+        ('admin_gl_row_0e1de39ac6'.tr(),
             '${_bs.where((e) => e.tipe == 'EQUITY').length}'),
       ],
     );
@@ -1027,8 +1041,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Widget _buildCoaTab() {
     if (_coa.isEmpty) {
-      return const PremiumEmptyState(
-        message: 'Bagan akun belum tersedia.',
+      return PremiumEmptyState(
+        message: 'admin_auto_342e85bdd2'.tr(),
         icon: Icons.account_tree_outlined,
       );
     }
@@ -1083,7 +1097,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                             ),
                             child: Text(
                               a['kode']?.toString() ?? '',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 11,
@@ -1122,9 +1136,9 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                             OptikAdminTokens.slate,
                           ),
                           if (!postable)
-                            _metaChip('Header', OptikAdminTokens.navy),
+                            _metaChip('admin_gl_row_bf50d5e661'.tr(), OptikAdminTokens.navy),
                           if (a['aktif'] != true)
-                            _metaChip('Nonaktif', OptikAdminTokens.danger),
+                            _metaChip('admin_gl_row_af5dff8c9e'.tr(), OptikAdminTokens.danger),
                         ],
                       ),
                     ],
@@ -1166,11 +1180,11 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   Widget _buildJournalTab() {
     if (_journals.isEmpty) {
       return PremiumEmptyState(
-        message: 'Belum ada jurnal. Jalankan sinkron GL historis atau buat transaksi baru.',
+        message: 'admin_auto_999ff59ef9'.tr(),
         icon: Icons.menu_book_outlined,
         action: _isOwnerOrPusat
             ? PremiumPrimaryButton(
-                label: 'Sinkronkan GL',
+                label: 'admin_auto_ed8217c023'.tr(),
                 onPressed: _backfill,
               )
             : null,
@@ -1198,7 +1212,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                   Expanded(
                     child: Text(
                       '${je['tanggal']} · ${je['sumber']} · ${je['toko_id']}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 12),
@@ -1216,11 +1230,11 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               ),
               const SizedBox(height: 4),
               Text(je['memo']?.toString() ?? '-',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: OptikAdminTokens.textSecondary, fontSize: 11)),
               if ((je['referensi_id'] ?? '').toString().isNotEmpty)
                 Text('Ref: ${je['referensi_id']}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.textMuted, fontSize: 10)),
               const SizedBox(height: 8),
               ...lines.map((raw) {
@@ -1243,7 +1257,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                         width: 90,
                         child: Text(d > 0 ? _fmt(d) : '',
                             textAlign: TextAlign.right,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11,
                                 color: OptikAdminTokens.navy)),
                       ),
@@ -1271,7 +1285,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       rows: _trial,
       empty: 'Tidak ada mutasi di periode ini.',
       onExport: () => GlReportPdfService.shareTrialBalance(
-        title: 'Neraca saldo',
+        title: 'admin_auto_412d96eda7'.tr(),
         subtitle: '$_periodLabel${_tokoFilter != null ? ' · $_tokoFilter' : ''}',
         rows: _trial,
       ),
@@ -1299,17 +1313,17 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             padding: EdgeInsets.zero,
             items: [
               PremiumStatItem(
-                  label: 'Pendapatan',
+                  label: 'admin_auto_ec0673e5d8'.tr(),
                   value: _fmt(pendapatan),
                   color: OptikAdminTokens.success,
                   onTap: _openPlSummaryDetail),
               PremiumStatItem(
-                  label: 'Beban',
+                  label: 'admin_auto_2d1b44e2d2'.tr(),
                   value: _fmt(beban),
                   color: OptikAdminTokens.danger,
                   onTap: _openPlSummaryDetail),
               PremiumStatItem(
-                  label: 'Laba bersih',
+                  label: 'admin_auto_37dd72eafb'.tr(),
                   value: _fmt(laba),
                   color: OptikAdminTokens.navy,
                   onTap: _openPlSummaryDetail),
@@ -1321,7 +1335,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             rows: _pl,
             empty: 'Belum ada akun laba rugi di periode ini.',
             onExport: () => GlReportPdfService.shareIncomeStatement(
-              title: 'Laba rugi',
+              title: 'admin_auto_9e57093419'.tr(),
               subtitle:
                   '$_periodLabel${_tokoFilter != null ? ' · $_tokoFilter' : ''}',
               rows: _pl,
@@ -1348,13 +1362,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Laba berjalan',
+                Text('admin_auto_7c3f655331'.tr(),
                     style: TextStyle(
                         color: OptikAdminTokens.textSecondary, fontSize: 12)),
                 Row(
                   children: [
                     Text(_fmt(_labaBerjalan),
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontWeight: FontWeight.w900,
                             fontSize: 14)),
@@ -1371,7 +1385,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             rows: _bs,
             empty: 'Belum ada akun neraca di periode ini.',
             onExport: () => GlReportPdfService.shareBalanceSheet(
-              title: 'Neraca',
+              title: 'admin_auto_601ff9152d'.tr(),
               subtitle:
                   '$_periodLabel${_tokoFilter != null ? ' · $_tokoFilter' : ''}',
               rows: _bs,
@@ -1400,19 +1414,19 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         Align(
           alignment: Alignment.centerRight,
           child: IconButton(
-            tooltip: 'Ekspor PDF',
+            tooltip: 'admin_auto_3fbb445bd2'.tr(),
             onPressed: () async {
               try {
                 await onExport();
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('Gagal ekspor: $e'),
+                  content: Text('admin_auto_d21f848032'.tr(namedArgs: {'error': '$e'})),
                   backgroundColor: OptikAdminTokens.danger,
                 ));
               }
             },
-            icon: const Icon(Icons.download_rounded,
+            icon: Icon(Icons.download_rounded,
                 color: OptikAdminTokens.navy),
           ),
         ),
@@ -1433,7 +1447,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                     SizedBox(
                       width: 48,
                       child: Text(r.kode,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: OptikAdminTokens.navy,
                               fontSize: 11)),
@@ -1459,7 +1473,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                       ),
                     ] else
                       Text(_fmt(v ?? r.saldo),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: OptikAdminTokens.navy,
                               fontSize: 12)),
@@ -1478,7 +1492,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
-        const Text('Aging piutang',
+        Text('admin_auto_e86e75c9e7'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
@@ -1493,13 +1507,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                 value: _fmt(b.amount),
                 color: OptikAdminTokens.warning,
                 onTap: () => _showInfoDetail(
-                  title: 'Aging piutang ${b.label}',
+                  title: 'admin_lbl_aging_piutang'.tr(namedArgs: {'label': b.label}),
                   icon: Icons.hourglass_bottom_rounded,
                   rows: [
-                    ('Bucket', b.label),
-                    ('Jumlah dokumen', '${b.count}'),
-                    ('Total', _fmt(b.amount)),
-                    ('Jenis', 'Piutang'),
+                    ('admin_lbl_bucket'.tr(), b.label),
+                    ('admin_lbl_jumlah_dokumen'.tr(), '${b.count}'),
+                    ('fin_total'.tr(), _fmt(b.amount)),
+                    ('admin_lbl_jenis'.tr(), 'admin_lbl_piutang'.tr()),
                   ],
                 ),
               ),
@@ -1507,9 +1521,9 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         ),
         const SizedBox(height: 8),
         if (_arRows.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Tidak ada piutang terbuka.',
+            child: Text('admin_auto_8192548cae'.tr(),
                 style: TextStyle(color: OptikAdminTokens.textMuted)),
           )
         else
@@ -1517,7 +1531,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               .take(40)
               .map((r) => _agingTile(r, piutang: true)),
         const SizedBox(height: 20),
-        const Text('Aging hutang',
+        Text('admin_auto_d88370aba1'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
@@ -1532,13 +1546,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                 value: _fmt(b.amount),
                 color: OptikAdminTokens.danger,
                 onTap: () => _showInfoDetail(
-                  title: 'Aging hutang ${b.label}',
+                  title: 'admin_lbl_aging_hutang'.tr(namedArgs: {'label': b.label}),
                   icon: Icons.receipt_long_rounded,
                   rows: [
-                    ('Bucket', b.label),
-                    ('Jumlah dokumen', '${b.count}'),
-                    ('Total', _fmt(b.amount)),
-                    ('Jenis', 'Hutang'),
+                    ('admin_lbl_bucket'.tr(), b.label),
+                    ('admin_lbl_jumlah_dokumen'.tr(), '${b.count}'),
+                    ('fin_total'.tr(), _fmt(b.amount)),
+                    ('admin_lbl_jenis'.tr(), 'admin_lbl_hutang'.tr()),
                   ],
                 ),
               ),
@@ -1546,9 +1560,9 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         ),
         const SizedBox(height: 8),
         if (_apRows.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Tidak ada hutang terbuka.',
+            child: Text('admin_auto_518f0a2408'.tr(),
                 style: TextStyle(color: OptikAdminTokens.textMuted)),
           )
         else
@@ -1571,20 +1585,20 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(r.nama,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: OptikAdminTokens.navy,
                         fontSize: 12)),
                 Text(
                   '${r.ref} · ${r.tokoId} · ${r.umurHari} hari · ${r.bucket}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: OptikAdminTokens.textMuted, fontSize: 10),
                 ),
               ],
             ),
           ),
           Text(_fmt(r.nominal),
-              style: const TextStyle(
+              style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: OptikAdminTokens.navy,
                   fontSize: 12)),
@@ -1597,14 +1611,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
 
   Widget _buildConsolTab() {
     if (!_isOwnerOrPusat) {
-      return const PremiumEmptyState(
-        message: 'Konsolidasi multi-cabang hanya untuk owner/pusat.',
+      return PremiumEmptyState(
+        message: 'admin_auto_fdf3cdd6ef'.tr(),
         icon: Icons.lock_outline_rounded,
       );
     }
     if (_consol.isEmpty) {
-      return const PremiumEmptyState(
-        message: 'Belum ada data konsolidasi periode ini. Jalankan sinkron GL historis.',
+      return PremiumEmptyState(
+        message: 'admin_auto_a36089960f'.tr(),
         icon: Icons.hub_outlined,
       );
     }
@@ -1617,32 +1631,32 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             padding: EdgeInsets.zero,
             items: [
               PremiumStatItem(
-                label: 'Cabang',
+                label: 'work_sum_toko'.tr(),
                 value: '${_consol.length}',
                 color: OptikAdminTokens.navy,
                 onTap: () => _showInfoDetail(
-                  title: 'Konsolidasi cabang',
+                  title: 'admin_auto_ec35d8b532'.tr(),
                   icon: Icons.hub_rounded,
                   rows: [
-                    ('Jumlah cabang', '${_consol.length}'),
-                    ('Total laba', _fmt(totalLaba)),
-                    ('Periode', _periodLabel),
+                    ('admin_gl_row_8aa60f05d2'.tr(), '${_consol.length}'),
+                    ('admin_auto_4973cedec9'.tr(), _fmt(totalLaba)),
+                    ('admin_gl_tab_period'.tr(), _periodLabel),
                     for (final c in _consol.take(12))
                       (c.tokoId, 'Laba ${_fmt(c.laba)}'),
                   ],
                 ),
               ),
               PremiumStatItem(
-                label: 'Total laba',
+                label: 'admin_auto_4973cedec9'.tr(),
                 value: _fmt(totalLaba),
                 color: OptikAdminTokens.success,
                 onTap: () => _showInfoDetail(
-                  title: 'Total laba konsolidasi',
+                  title: 'admin_auto_af2661f403'.tr(),
                   icon: Icons.show_chart_rounded,
                   rows: [
-                    ('Total laba', _fmt(totalLaba)),
-                    ('Cabang', '${_consol.length}'),
-                    ('Periode', _periodLabel),
+                    ('admin_auto_4973cedec9'.tr(), _fmt(totalLaba)),
+                    ('admin_lbl_cabang'.tr(), '${_consol.length}'),
+                    ('admin_gl_tab_period'.tr(), _periodLabel),
                   ],
                 ),
               ),
@@ -1666,7 +1680,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(c.tokoId,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   color: OptikAdminTokens.navy,
                                   fontSize: 13)),
@@ -1677,7 +1691,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                           ),
                           Text(
                             'Kas/Bank ${_fmt(c.kasBank)} · Piutang ${_fmt(c.piutang)} · Hutang ${_fmt(c.hutang)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 10,
                                 color: OptikAdminTokens.textMuted),
                           ),
@@ -1701,8 +1715,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Rekonsiliasi bank',
+            Expanded(
+              child: Text('admin_auto_10de71d44c'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.bold,
@@ -1711,18 +1725,18 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             TextButton.icon(
               onPressed: _addBankAccount,
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Rekening'),
+              label: Text('admin_lbl_rekening'.tr()),
             ),
             TextButton.icon(
               onPressed: _selectedBankId == null ? null : _addBankLine,
               icon: const Icon(Icons.playlist_add_rounded, size: 18),
-              label: const Text('Mutasi'),
+              label: Text('admin_lbl_mutasi'.tr()),
             ),
           ],
         ),
         if (_bankAccounts.isEmpty)
-          const PremiumEmptyState(
-            message: 'Belum ada rekening bank. Tambah rekening per toko.',
+          PremiumEmptyState(
+            message: 'admin_auto_318580f609'.tr(),
             icon: Icons.account_balance_outlined,
           )
         else ...[
@@ -1770,7 +1784,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ),
           const SizedBox(height: 12),
           if (_bankLines.isEmpty)
-            const Text('Belum ada mutasi bank.',
+            Text('admin_auto_550fcce865'.tr(),
                 style: TextStyle(color: OptikAdminTokens.textMuted))
           else
             ..._bankLines.map((l) {
@@ -1822,7 +1836,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text('Tambah rekening bank',
+        title: Text('admin_auto_001b2a5883'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: Column(
@@ -1830,19 +1844,19 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           children: [
             TextField(
                 controller: namaCtrl,
-                decoration: const InputDecoration(labelText: 'Nama rekening')),
+                decoration: InputDecoration(labelText: 'admin_auto_557b80293a'.tr())),
             TextField(
                 controller: rekCtrl,
-                decoration: const InputDecoration(labelText: 'No. rekening')),
+                decoration: InputDecoration(labelText: 'admin_auto_6d1d6fbe3b'.tr())),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+              child: Text('appr_btn_batal'.tr())),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Simpan')),
+              child: Text('btn_simpan'.tr())),
         ],
       ),
     );
@@ -1869,7 +1883,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       builder: (ctx) => StatefulBuilder(
         builder: (context, setInner) => AlertDialog(
           backgroundColor: OptikAdminTokens.card,
-          title: const Text('Tambah mutasi bank',
+          title: Text('admin_auto_bc12a78c37'.tr(),
               style: TextStyle(
                   color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
           content: Column(
@@ -1877,13 +1891,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             children: [
               TextField(
                   controller: deskCtrl,
-                  decoration: const InputDecoration(labelText: 'Keterangan')),
+                  decoration: InputDecoration(labelText: 'admin_auto_6bd515e701'.tr())),
               TextField(
                   controller: nomCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Nominal')),
+                  decoration: InputDecoration(labelText: 'admin_auto_8c28d7c312'.tr())),
               SwitchListTile(
-                title: Text(isKredit ? 'Kredit (masuk)' : 'Debit (keluar)'),
+                title: Text(isKredit ? 'admin_lbl_kredit_masuk'.tr() : 'admin_lbl_debit_keluar'.tr()),
                 value: isKredit,
                 onChanged: (v) => setInner(() => isKredit = v),
               ),
@@ -1892,10 +1906,10 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Batal')),
+                child: Text('appr_btn_batal'.tr())),
             FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Simpan')),
+                child: Text('btn_simpan'.tr())),
           ],
         ),
       ),
@@ -1919,8 +1933,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Anggaran vs aktual',
+            Expanded(
+              child: Text('admin_auto_f5bfb6eccc'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.bold,
@@ -1930,13 +1944,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               TextButton.icon(
                 onPressed: _addBudget,
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Anggaran'),
+                label: Text('admin_lbl_anggaran'.tr()),
               ),
           ],
         ),
         if (_budgets.isEmpty)
-          const PremiumEmptyState(
-            message: 'Belum ada anggaran periode ini.',
+          PremiumEmptyState(
+            message: 'admin_auto_3e7c8c0bed'.tr(),
             icon: Icons.insights_outlined,
           )
         else
@@ -1951,13 +1965,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('${b.akunKode} ${b.akunNama}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: OptikAdminTokens.navy,
                                   fontSize: 12)),
                           Text(
                             'Anggaran ${_fmt(b.anggaran)} · Aktual ${_fmt(b.aktual)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11,
                                 color: OptikAdminTokens.textSecondary),
                           ),
@@ -1983,7 +1997,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     if (postable.isEmpty) return;
     final akunSel = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih akun',
+      title: 'admin_auto_2026becb41'.tr(),
       searchable: true,
       options: [
         for (final a in postable)
@@ -1999,21 +2013,21 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text('Set anggaran',
+        title: Text('admin_auto_a99959bace'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: nomCtrl,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Nominal anggaran'),
+          decoration: InputDecoration(labelText: 'admin_auto_532b77b54d'.tr()),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+              child: Text('appr_btn_batal'.tr())),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Simpan')),
+              child: Text('btn_simpan'.tr())),
         ],
       ),
     );
@@ -2038,8 +2052,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Draft e-Faktur',
+            Expanded(
+              child: Text('admin_auto_3631853eb1'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.bold,
@@ -2048,23 +2062,23 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             TextButton.icon(
               onPressed: _buildEfaktur,
               icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-              label: const Text('Generate'),
+              label: Text('admin_btn_generate'.tr()),
             ),
             TextButton.icon(
               onPressed: _exportEfaktur,
               icon: const Icon(Icons.upload_file_rounded, size: 18),
-              label: const Text('Tandai ekspor'),
+              label: Text('admin_auto_54f775e776'.tr()),
             ),
           ],
         ),
-        const Text(
-          'Draft siap unggah ke DJP. Integrasi API Coretax/e-Faktur tetap manual di portal.',
+        Text(
+          'admin_gl_msg_efaktur_draft'.tr(),
           style: TextStyle(fontSize: 11, color: OptikAdminTokens.textMuted),
         ),
         const SizedBox(height: 10),
         if (_efaktur.isEmpty)
-          const PremiumEmptyState(
-            message: 'Belum ada draft e-Faktur periode/toko ini.',
+          PremiumEmptyState(
+            message: 'admin_auto_3ba356a8ff'.tr(),
             icon: Icons.receipt_long_outlined,
           )
         else
@@ -2079,13 +2093,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('${e['no_invoice']} · ${e['nama_pembeli'] ?? '-'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: OptikAdminTokens.navy,
                                   fontSize: 12)),
                           Text(
                             'DPP ${_fmt(int.tryParse('${e['dpp'] ?? 0}') ?? 0)} · PPN ${_fmt(int.tryParse('${e['ppn'] ?? 0}') ?? 0)} · ${e['status']}',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 11,
                                 color: OptikAdminTokens.textSecondary),
                           ),
@@ -2110,7 +2124,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('e-Faktur: ${res.created} dibuat'),
+        content: Text('admin_msg_efaktur_created'.tr(namedArgs: {'n': '${res.created}'})),
         backgroundColor: OptikAdminTokens.navy,
       ));
       await _reload();
@@ -2118,7 +2132,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal generate e-Faktur: $e'),
+        content: Text('admin_auto_add0b5e698'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -2131,8 +2145,8 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         .whereType<String>()
         .toList();
     if (ids.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Tidak ada draft siap ditandai ekspor'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_2325fe5fad'.tr()),
       ));
       return;
     }
@@ -2140,7 +2154,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
     await _reload();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${ids.length} draft ditandai EXPORTED'),
+        content: Text('admin_msg_draft_exported'.tr(namedArgs: {'n': '${ids.length}'})),
       backgroundColor: OptikAdminTokens.navy,
     ));
   }
@@ -2195,7 +2209,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Audit E2E General Ledger',
                 style: TextStyle(
                   color: OptikAdminTokens.navy,
@@ -2208,14 +2222,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                 _tokoFilter == null || _tokoFilter!.isEmpty
                     ? 'Scope: SEMUA TOKO · $_periodLabel · cek angka + integritas'
                     : 'Scope: ${_tokoFilter!.toUpperCase()} · $_periodLabel · cek angka + integritas',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Angka dihitung ulang dari sales/FT vs jurnal GL (bukan ringkasan palsu). Temuan = selisih nyata.',
                 style: TextStyle(
                   color: OptikAdminTokens.textMuted,
@@ -2224,7 +2238,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               ),
               const SizedBox(height: 14),
               PremiumPrimaryButton(
-                label: 'Jalankan audit penuh',
+                label: 'admin_auto_79ce3597b2'.tr(),
                 loading: _auditRunning,
                 onPressed: _runFullAudit,
               ),
@@ -2251,24 +2265,24 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           PremiumStatGrid(
             items: [
               PremiumStatItem(
-                label: 'Status',
+                label: 'invoice_hub_status'.tr(),
                 value: report.allClear ? 'CLEAR' : 'TEMUAN',
                 color: report.allClear
                     ? OptikAdminTokens.success
                     : OptikAdminTokens.danger,
               ),
               PremiumStatItem(
-                label: 'Critical',
+                label: 'admin_auto_278d01e5af'.tr(),
                 value: '${report.criticalFailed}',
                 color: OptikAdminTokens.danger,
               ),
               PremiumStatItem(
-                label: 'High',
+                label: 'admin_auto_655d20c1ca'.tr(),
                 value: '${report.highFailed}',
                 color: const Color(0xFFE67E22),
               ),
               PremiumStatItem(
-                label: 'Medium',
+                label: 'admin_auto_87f8a6ab85'.tr(),
                 value: '${report.mediumFailed}',
                 color: OptikAdminTokens.warning,
               ),
@@ -2276,10 +2290,10 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ),
           const SizedBox(height: 8),
           Text(
-            'Dihasilkan: ${DateFormat('dd MMM yyyy HH:mm', 'id_ID').format(report.generatedAt.toLocal())}'
+            'Dihasilkan: ${_df('dd MMM yyyy HH:mm').format(report.generatedAt.toLocal())}'
             ' · Cek: ${report.checksRun} · Scope: ${report.scopeToko}'
             '${report.finance != null ? ' · Periode ${report.finance!.periode}' : ''}',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.textMuted,
               fontSize: 11,
             ),
@@ -2288,7 +2302,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ...report.checks.map(_buildAuditCheckCard),
         ] else if (!_auditRunning) ...[
           const SizedBox(height: 24),
-          const PremiumEmptyState(
+          PremiumEmptyState(
             message:
                 'Belum ada hasil audit.\nTekan “Jalankan audit penuh” untuk memeriksa seluruh toko.',
             icon: Icons.fact_check_outlined,
@@ -2296,7 +2310,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         ],
         if (_auditRunning) ...[
           const SizedBox(height: 32),
-          const Center(
+          Center(
             child: CircularProgressIndicator(color: OptikAdminTokens.ice),
           ),
         ],
@@ -2314,14 +2328,14 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
         children: [
           Text(
             'Angka periode ${f.periode} · ${f.scopeToko}',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w900,
               fontSize: 14,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Sales/FT di kiri · GL di kanan · harus sama (selisih 0)',
             style: TextStyle(
               color: OptikAdminTokens.textMuted,
@@ -2332,22 +2346,22 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           PremiumStatGrid(
             items: [
               PremiumStatItem(
-                label: 'Omzet bruto GL',
+                label: 'admin_auto_53db4186a8'.tr(),
                 value: _fmt(f.omzetBrutoGl),
                 color: matchColor(f.omzetBrutoMatch),
               ),
               PremiumStatItem(
-                label: 'Omzet DPP GL',
+                label: 'admin_auto_71780c5700'.tr(),
                 value: _fmt(f.omzetDppGl),
                 color: matchColor(f.omzetDppMatch),
               ),
               PremiumStatItem(
-                label: 'Pengeluaran GL',
+                label: 'admin_auto_7c80ed9f78'.tr(),
                 value: _fmt(f.pengeluaranGl),
                 color: OptikAdminTokens.navy,
               ),
               PremiumStatItem(
-                label: 'Bersih GL',
+                label: 'admin_auto_ab18da4943'.tr(),
                 value: _fmt(f.bersihGl),
                 color: f.bersihGl >= 0
                     ? OptikAdminTokens.success
@@ -2384,7 +2398,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           Text(
             'Bersih ops (DPP sales − FT): ${_fmt(f.bersihOps)}'
             ' · Semua beban GL: ${_fmt(f.pengeluaranGl)}',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -2424,7 +2438,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                 Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -2446,7 +2460,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             const SizedBox(height: 4),
             Text(
               'Sumber ${_fmt(sumber)}  →  GL ${_fmt(gl)}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -2491,7 +2505,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
             ),
             title: Text(
               check.title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.w800,
                 fontSize: 13,
@@ -2540,7 +2554,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                   children: [
                     Text(
                       check.definition,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.textSecondary,
                         fontSize: 12,
                         height: 1.35,
@@ -2560,7 +2574,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                               Expanded(
                                 child: Text(
                                   m.label,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.textSecondary,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -2593,9 +2607,9 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                               title: '${f.tokoId} · ${f.ref}',
                               icon: Icons.fact_check_rounded,
                               rows: [
-                                ('Toko', f.tokoId),
-                                ('Ref', f.ref),
-                                ('Detail', f.detail),
+                                ('admin_auto_a5629553de'.tr(), f.tokoId),
+                                ('admin_gl_row_60baadb22e'.tr(), f.ref),
+                                ('admin_btn_detail'.tr(), f.detail),
                                 for (final e in f.raw.entries)
                                   if (![
                                     'toko_id',
@@ -2621,7 +2635,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                                 children: [
                                   Text(
                                     '${f.tokoId} · ${f.ref}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 12,
@@ -2630,7 +2644,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                                   const SizedBox(height: 3),
                                   Text(
                                     f.detail,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textSecondary,
                                       fontSize: 11,
                                       height: 1.3,
@@ -2645,7 +2659,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                       if (check.count > check.findings.length)
                         Text(
                           'Menampilkan ${check.findings.length} dari ${check.count} temuan (batas RPC).',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.textMuted,
                             fontSize: 11,
                           ),
@@ -2681,8 +2695,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
   }
 
   Widget _buildPeriodTab() {
-    final status = _periodStatus(_tahun, _bulan);
-    final closed = status == 'Ditutup';
+    final closed = _periodStatusCode(_tahun, _bulan) == 'CLOSED';
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -2709,12 +2722,12 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                         title: _periodLabel,
                         icon: Icons.lock_clock_rounded,
                         rows: [
-                          ('Status', status),
-                          ('Tahun', '$_tahun'),
-                          ('Bulan', '$_bulan'),
+                          ('invoice_hub_status'.tr(), _periodStatus(_tahun, _bulan)),
+                          ('admin_lbl_tahun'.tr(), '$_tahun'),
+                          ('admin_lbl_bulan_short'.tr(), '$_bulan'),
                           (
                             'Catatan',
-                            'Periode belum ada di tabel fiscal_periods.'
+                            'admin_gl_msg_period_missing'.tr()
                           ),
                         ],
                       );
@@ -2728,13 +2741,13 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Periode aktif: $_periodLabel',
-                                  style: const TextStyle(
+                              Text('admin_auto_1a0a0a952d'.tr(namedArgs: {'period': _periodLabel}),
+                                  style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w900,
                                       fontSize: 14)),
                               const SizedBox(height: 6),
-                              Text('Status: $status',
+                              Text('admin_auto_76590d5f97'.tr(namedArgs: {'status': _periodStatus(_tahun, _bulan)}),
                                   style: TextStyle(
                                       color: closed
                                           ? OptikAdminTokens.danger
@@ -2753,22 +2766,22 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
               if (_isOwnerOrPusat) ...[
                 if (!closed)
                   PremiumPrimaryButton(
-                    label: 'Tutup periode ini',
+                    label: 'admin_auto_4cf38f08ca'.tr(),
                     onPressed: _closePeriod,
                   )
                 else
                   PremiumPrimaryButton(
-                    label: 'Buka kembali periode',
+                    label: 'admin_auto_7e3e3fcc77'.tr(),
                     onPressed: _reopenPeriod,
                   ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: _backfill,
                   icon: const Icon(Icons.sync_rounded),
-                  label: const Text('Sinkronkan GL historis'),
+                  label: Text('admin_auto_bd55324eb3'.tr()),
                 ),
               ] else
-                const Text(
+                Text(
                   'Hanya owner yang dapat menutup/membuka periode.',
                   style: TextStyle(
                       color: OptikAdminTokens.textMuted, fontSize: 12),
@@ -2777,7 +2790,7 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           ),
         ),
         const SizedBox(height: 16),
-        const Text('Riwayat periode',
+        Text('admin_auto_a954223199'.tr(),
             style: TextStyle(
                 color: OptikAdminTokens.textSecondary,
                 fontWeight: FontWeight.bold)),
@@ -2787,9 +2800,9 @@ class _EnterpriseGlPageState extends State<EnterpriseGlPage>
           final m = p['bulan'];
           final st = p['status']?.toString() ?? '';
           return PremiumListTile(
-            title: DateFormat('MMMM yyyy', 'id_ID')
+            title: _df('MMMM yyyy')
                 .format(DateTime(y as int, m as int)),
-            subtitle: st == 'CLOSED' ? 'Ditutup' : 'Terbuka',
+            subtitle: st == 'CLOSED' ? 'admin_lbl_ditutup'.tr() : 'admin_lbl_terbuka'.tr(),
             icon: st == 'CLOSED'
                 ? Icons.lock_rounded
                 : Icons.lock_open_rounded,
@@ -2875,7 +2888,7 @@ class _GlInfoDetailSheet extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -2885,7 +2898,7 @@ class _GlInfoDetailSheet extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -2896,7 +2909,7 @@ class _GlInfoDetailSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: Icon(Icons.close_rounded,
                       color: OptikAdminTokens.navy),
                 ),
               ],
@@ -2941,7 +2954,7 @@ class _GlInfoDetailSheet extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   rows[i].$2,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -3049,7 +3062,7 @@ class _GlLedgerLineDetailSheet extends StatelessWidget {
     final accent = isDebit ? OptikAdminTokens.navy : OptikAdminTokens.danger;
     final h = MediaQuery.sizeOf(context).height;
     final dateLabel =
-        DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(line.tanggal);
+        AdminFormat.date(context, 'EEEE, dd MMMM yyyy').format(line.tanggal);
 
     return Container(
       height: h * 0.72,
@@ -3100,7 +3113,7 @@ class _GlLedgerLineDetailSheet extends StatelessWidget {
                     children: [
                       Text(
                         dateLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -3109,7 +3122,7 @@ class _GlLedgerLineDetailSheet extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         'Mutasi akun ${line.akunKode}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
@@ -3119,7 +3132,7 @@ class _GlLedgerLineDetailSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: Icon(Icons.close_rounded,
                       color: OptikAdminTokens.navy),
                 ),
               ],
@@ -3180,28 +3193,28 @@ class _GlLedgerLineDetailSheet extends StatelessWidget {
                   borderRadius: 18,
                   child: Column(
                     children: [
-                      _field('Akun', line.akunKode),
+                      _field('admin_gl_row_2799e7f29b'.tr(), line.akunKode),
                       Divider(height: 1, color: OptikAdminTokens.ice.withOpacity(0.55)),
                       _field(
                         'Referensi',
                         line.referensiId.isEmpty ? '-' : line.referensiId,
                       ),
                       Divider(height: 1, color: OptikAdminTokens.ice.withOpacity(0.55)),
-                      _field('Memo baris',
+                      _field('admin_gl_row_4c09cd0949'.tr(),
                           line.lineMemo.isEmpty ? '-' : line.lineMemo),
                       Divider(height: 1, color: OptikAdminTokens.ice.withOpacity(0.55)),
-                      _field('Memo jurnal',
+                      _field('admin_gl_row_241b210f93'.tr(),
                           line.entryMemo.isEmpty ? '-' : line.entryMemo),
                       Divider(height: 1, color: OptikAdminTokens.ice.withOpacity(0.55)),
-                      _field('Entry ID', _shortId(line.entryId), mono: true),
+                      _field('admin_gl_row_9390efb0ab'.tr(), _shortId(line.entryId), mono: true),
                       Divider(height: 1, color: OptikAdminTokens.ice.withOpacity(0.55)),
-                      _field('Line ID', _shortId(line.id), mono: true),
+                      _field('admin_gl_row_7bc1046ea8'.tr(), _shortId(line.id), mono: true),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
                 PremiumPrimaryButton(
-                  label: 'Tutup',
+                  label: 'admin_btn_close'.tr(),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
@@ -3307,7 +3320,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
 
     return Container(
       height: h * 0.88,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: OptikAdminTokens.bgMid,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -3343,7 +3356,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                     children: [
                       Text(
                         '${a['kode']} · ${a['nama']}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -3352,7 +3365,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                       const SizedBox(height: 2),
                       Text(
                         '${widget.periodLabel} · ${widget.tokoLabel}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 11.5,
                         ),
@@ -3362,7 +3375,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: Icon(Icons.close_rounded,
                       color: OptikAdminTokens.navy),
                 ),
               ],
@@ -3383,7 +3396,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                 ),
                 _chip(postable ? 'Postable' : 'Header', OptikAdminTokens.navy),
                 if (a['aktif'] != true)
-                  _chip('Nonaktif', OptikAdminTokens.danger),
+                  _chip('admin_gl_row_af5dff8c9e'.tr(), OptikAdminTokens.danger),
               ],
             ),
           ),
@@ -3392,17 +3405,17 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
             child: Row(
               children: [
                 Expanded(
-                  child: _kpi('Debit', widget.fmt(_totalDebit),
+                  child: _kpi('admin_auto_009534719f'.tr(), widget.fmt(_totalDebit),
                       OptikAdminTokens.navy),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _kpi('Kredit', widget.fmt(_totalKredit),
+                  child: _kpi('admin_gl_row_aa9bb38bf8'.tr(), widget.fmt(_totalKredit),
                       OptikAdminTokens.danger),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _kpi('Saldo', widget.fmt(_saldo),
+                  child: _kpi('fin_saldo'.tr(), widget.fmt(_saldo),
                       OptikAdminTokens.success),
                 ),
               ],
@@ -3414,7 +3427,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
               children: [
                 if (!postable && widget.children.isNotEmpty) ...[
-                  const Text(
+                  Text(
                     'Akun turunan',
                     style: TextStyle(
                       color: OptikAdminTokens.navy,
@@ -3437,7 +3450,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                           Expanded(
                             child: Text(
                               '${c['kode']}  ${c['nama']}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 12.5,
@@ -3446,7 +3459,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                           ),
                           Text(
                             c['is_postable'] == true ? 'Postable' : 'Header',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.slate,
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
@@ -3460,14 +3473,14 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                                   _trialFor(c['kode']?.toString() ?? '')!
                                       .saldo,
                                 ),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 11.5,
                                 ),
                               ),
                             ),
-                          const Icon(Icons.chevron_right_rounded,
+                          Icon(Icons.chevron_right_rounded,
                               size: 20, color: OptikAdminTokens.slate),
                         ],
                       ),
@@ -3476,7 +3489,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                 ],
                 Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Mutasi periode',
                         style: TextStyle(
@@ -3489,14 +3502,14 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                     if (!_loading)
                       Text(
                         '${_lines.length} baris',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     IconButton(
-                      tooltip: 'Muat ulang',
+                      tooltip: 'admin_btn_refresh'.tr(),
                       onPressed: _loading ? null : _load,
                       icon: const Icon(Icons.refresh_rounded, size: 18),
                       color: OptikAdminTokens.navy,
@@ -3504,7 +3517,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                   ],
                 ),
                 if (_loading)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 36),
                     child: Center(
                       child: CircularProgressIndicator(
@@ -3513,23 +3526,23 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                   )
                 else if (_error != null)
                   PremiumEmptyState(
-                    message: 'Gagal memuat mutasi.\n$_error',
+                    message: 'admin_err_load_mutasi'.tr(namedArgs: {'error': '$_error'}),
                     icon: Icons.error_outline_rounded,
                     accent: OptikAdminTokens.warning,
                     action: PremiumPrimaryButton(
-                      label: 'Coba lagi',
+                      label: 'common_retry'.tr(),
                       onPressed: _load,
                     ),
                   )
                 else if (widget.ledgerCodes.isEmpty)
-                  const PremiumEmptyState(
+                  PremiumEmptyState(
                     message:
                         'Header ini belum punya akun postable di bawahnya.',
                     icon: Icons.account_tree_outlined,
                   )
                 else if (_lines.isEmpty)
-                  const PremiumEmptyState(
-                    message: 'Belum ada mutasi di periode ini.',
+                  PremiumEmptyState(
+                    message: 'admin_auto_882280b7b1'.tr(),
                     icon: Icons.receipt_long_outlined,
                   )
                 else
@@ -3556,9 +3569,9 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  DateFormat('dd MMM yyyy', 'id_ID')
+                                  AdminFormat.date(context, 'dd MMM yyyy')
                                       .format(l.tanggal),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontWeight: FontWeight.w800,
                                     fontSize: 12.5,
@@ -3589,7 +3602,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                                 ),
                               ),
                               const SizedBox(width: 2),
-                              const Icon(Icons.chevron_right_rounded,
+                              Icon(Icons.chevron_right_rounded,
                                   size: 18, color: OptikAdminTokens.slate),
                             ],
                           ),
@@ -3618,7 +3631,7 @@ class _CoaDetailSheetState extends State<_CoaDetailSheet> {
                                     : l.entryMemo,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.textSecondary,
                                   fontSize: 11.5,
                                 ),

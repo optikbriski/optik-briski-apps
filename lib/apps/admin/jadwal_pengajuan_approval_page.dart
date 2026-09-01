@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 
+import '../../shared/admin/admin_nav_badge_service.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/responsive.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_nav_badge.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/zoomable_network_image.dart';
 
 /// Admin Pusat: approval ijin / cuti / tukar — dikelompok per toko
 /// (hanya toko yang punya pengajuan pending).
@@ -27,7 +34,11 @@ class JadwalPengajuanApprovalPage extends StatefulWidget {
 class _JadwalPengajuanApprovalPageState
     extends State<JadwalPengajuanApprovalPage> {
   final _svc = JadwalPengajuanService();
-  final _dayFmt = DateFormat('EEE, d MMM yyyy', 'id_ID');
+
+  String _formatDay(BuildContext context, DateTime? d, String fallback) {
+    if (d == null) return fallback;
+    return AdminFormat.date(context, 'EEE, d MMM yyyy').format(d);
+  }
 
   bool _loading = true;
   String? _error;
@@ -117,6 +128,8 @@ class _JadwalPengajuanApprovalPageState
         return 'Cuti';
       case 'TUKAR':
         return 'Tukar';
+      case 'DINAS':
+        return 'Dinas luar';
       default:
         return t ?? '-';
     }
@@ -130,6 +143,8 @@ class _JadwalPengajuanApprovalPageState
         return OptikAdminTokens.slate;
       case 'TUKAR':
         return OptikAdminTokens.navy;
+      case 'DINAS':
+        return OptikAdminTokens.ice;
       default:
         return OptikAdminTokens.slate;
     }
@@ -140,11 +155,11 @@ class _JadwalPengajuanApprovalPageState
     return fallback;
   }
 
-  String _fmtDate(dynamic v) {
+  String _fmtDate(BuildContext context, dynamic v) {
     if (v == null) return '-';
     final s = v.toString();
     final d = DateTime.tryParse(s.length >= 10 ? s.substring(0, 10) : s);
-    return d == null ? s : _dayFmt.format(d);
+    return _formatDay(context, d, s);
   }
 
   String _dateKey(dynamic v) {
@@ -171,6 +186,10 @@ class _JadwalPengajuanApprovalPageState
   }
 
   Future<void> _decide(Map<String, dynamic> item, bool approve) async {
+    final itemId = item['id']?.toString() ?? '';
+    if (itemId.isNotEmpty) {
+      unawaited(AdminNavBadgeService.instance.markEntitySeen('jadwal', itemId));
+    }
     final noteCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -178,11 +197,11 @@ class _JadwalPengajuanApprovalPageState
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Text(
           approve ? 'Setujui pengajuan?' : 'Tolak pengajuan?',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
           ),
@@ -198,7 +217,7 @@ class _JadwalPengajuanApprovalPageState
                 approve
                     ? 'Jadwal akan langsung diubah sesuai pengajuan.'
                     : 'Pengajuan akan ditolak tanpa mengubah jadwal.',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 13,
                   height: 1.4,
@@ -207,11 +226,11 @@ class _JadwalPengajuanApprovalPageState
               const SizedBox(height: 12),
               TextField(
                 controller: noteCtrl,
-                style: const TextStyle(color: OptikAdminTokens.navy),
+                style: TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: InputDecoration(
-                  labelText: 'Catatan admin (opsional)',
-                  labelStyle: const TextStyle(color: OptikAdminTokens.slate),
+                  labelText: 'admin_auto_008282a7f8'.tr(),
+                  labelStyle: TextStyle(color: OptikAdminTokens.slate),
                   filled: true,
                   fillColor: OptikAdminTokens.bgMid,
                   contentPadding: const EdgeInsets.symmetric(
@@ -220,18 +239,18 @@ class _JadwalPengajuanApprovalPageState
                     borderRadius:
                         BorderRadius.circular(OptikAdminTokens.radiusSm),
                     borderSide:
-                        const BorderSide(color: OptikAdminTokens.lineStrong),
+                        BorderSide(color: OptikAdminTokens.lineStrong),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(OptikAdminTokens.radiusSm),
                     borderSide:
-                        const BorderSide(color: OptikAdminTokens.lineStrong),
+                        BorderSide(color: OptikAdminTokens.lineStrong),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(OptikAdminTokens.radiusSm),
-                    borderSide: const BorderSide(
+                    borderSide: BorderSide(
                       color: OptikAdminTokens.navy,
                       width: 1.4,
                     ),
@@ -245,7 +264,7 @@ class _JadwalPengajuanApprovalPageState
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -254,7 +273,7 @@ class _JadwalPengajuanApprovalPageState
               foregroundColor: OptikAdminTokens.snow,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(approve ? 'Setujui' : 'Tolak'),
+            child: Text(approve ? 'appr_btn_setujui'.tr() : 'appr_btn_tolak'.tr()),
           ),
         ],
       ),
@@ -275,8 +294,8 @@ class _JadwalPengajuanApprovalPageState
           backgroundColor:
               approve ? OptikAdminTokens.success : OptikAdminTokens.warning,
           content: Text(
-            approve ? 'Pengajuan disetujui.' : 'Pengajuan ditolak.',
-            style: const TextStyle(
+            approve ? 'admin_auto_schedule_approved'.tr() : 'admin_auto_schedule_rejected'.tr(),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -290,8 +309,8 @@ class _JadwalPengajuanApprovalPageState
         SnackBar(
           backgroundColor: OptikAdminTokens.danger,
           content: Text(
-            'Gagal: $e\nPastikan migration jadwal_pengajuan sudah dijalankan.',
-            style: const TextStyle(
+            'admin_auto_6cfe178664'.tr(namedArgs: {'error': '$e'}),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -303,6 +322,10 @@ class _JadwalPengajuanApprovalPageState
 
   void _showDetail(Map<String, dynamic> item,
       {required List<Map<String, dynamic>> siblings}) {
+    final itemId = item['id']?.toString() ?? '';
+    if (itemId.isNotEmpty) {
+      unawaited(AdminNavBadgeService.instance.markEntitySeen('jadwal', itemId));
+    }
     final tipe = item['tipe']?.toString();
     final color = _tipeColor(tipe);
     final nama = _nama(item['karyawan']);
@@ -329,7 +352,7 @@ class _JadwalPengajuanApprovalPageState
               maxHeight: MediaQuery.sizeOf(ctx).height * 0.85,
             ),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OptikAdminTokens.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -371,7 +394,7 @@ class _JadwalPengajuanApprovalPageState
                       Expanded(
                         child: Text(
                           item['toko_id']?.toString() ?? '-',
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.slate, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -380,24 +403,41 @@ class _JadwalPengajuanApprovalPageState
                   ),
                   const SizedBox(height: 12),
                   Text(nama,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 18,
                           fontWeight: FontWeight.bold)),
                   if (jabatan != null && jabatan.isNotEmpty)
                     Text(jabatan,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: OptikAdminTokens.slate, fontSize: 13)),
                   const SizedBox(height: 14),
-                  _detailRow('Tanggal', _fmtDate(item['tanggal'])),
+                  _detailRow('fin_tanggal'.tr(), _fmtDate(context,item['tanggal'])),
                   if ((tipe ?? '').toUpperCase() == 'TUKAR') ...[
                     _detailRow(
                         'Tukar dengan', partner.isEmpty ? '-' : partner),
                     _detailRow(
-                        'Hari partner', _fmtDate(item['tanggal_tukar'])),
+                        'Hari partner', _fmtDate(context,item['tanggal_tukar'])),
+                  ],
+                  if ((tipe ?? '').toUpperCase() == 'DINAS') ...[
+                    if (item['lat'] != null && item['lng'] != null)
+                      _detailRow(
+                        'GPS',
+                        '${item['lat']}, ${item['lng']}',
+                      ),
+                    if ((item['foto_url'] ?? '').toString().trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 180,
+                        child: ZoomableNetworkImagePane(
+                          url: item['foto_url'].toString(),
+                          aspectRatio: 16 / 9,
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 8),
-                  const Text('Alasan',
+                  Text('admin_lbl_alasan'.tr(),
                       style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 11,
@@ -405,7 +445,7 @@ class _JadwalPengajuanApprovalPageState
                   const SizedBox(height: 4),
                   Text(
                     item['alasan']?.toString() ?? '-',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.slate, fontSize: 14, height: 1.4),
                   ),
                   if (bentrok) ...[
@@ -444,7 +484,7 @@ class _JadwalPengajuanApprovalPageState
                             side: const BorderSide(color: OptikAdminTokens.danger),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: const Text('Tolak'),
+                          child: Text('appr_btn_tolak'.tr()),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -459,7 +499,7 @@ class _JadwalPengajuanApprovalPageState
                             foregroundColor: OptikAdminTokens.snow,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: const Text('Setujui'),
+                          child: Text('appr_btn_setujui'.tr()),
                         ),
                       ),
                     ],
@@ -482,11 +522,11 @@ class _JadwalPengajuanApprovalPageState
           SizedBox(
             width: 110,
             child: Text(label,
-                style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
+                style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy, fontSize: 13, height: 1.3)),
           ),
         ],
@@ -496,28 +536,37 @@ class _JadwalPengajuanApprovalPageState
 
   @override
   Widget build(BuildContext context) {
-    final tokoKeys = _byToko.keys.toList();
-    final totalPending =
-        _byToko.values.fold<int>(0, (sum, rows) => sum + rows.length);
-    final clashTokoCount = tokoKeys
-        .where((toko) => _clashDays(_byToko[toko]!).isNotEmpty)
-        .length;
+    return ListenableBuilder(
+      listenable: AdminNavBadgeService.instance,
+      builder: (context, _) {
+        final tokoKeys = _byToko.keys.toList();
+        final totalPending =
+            AdminNavBadgeService.instance.displayCount('jadwal');
+        final clashTokoCount = tokoKeys
+            .where((toko) => _clashDays(_byToko[toko]!).isNotEmpty)
+            .length;
 
-    return PremiumScaffold(
+        return PremiumScaffold(
       appBar: PremiumAppBar(
         title: widget.initialTokoId == null || widget.initialTokoId!.isEmpty
             ? 'Approval Jadwal'
             : 'Approval — ${widget.initialTokoId}',
+        subtitle: totalPending > 0 ? '$totalPending menunggu' : null,
         actions: [
+          if (totalPending > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(child: AdminNavBadge(count: totalPending)),
+            ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? Center(
                   child: Padding(
@@ -532,7 +581,7 @@ class _JadwalPengajuanApprovalPageState
                         ),
                         const SizedBox(height: 12),
                         PremiumPrimaryButton(
-                          label: 'Coba lagi',
+                          label: 'common_retry'.tr(),
                           onPressed: _load,
                           expand: false,
                         ),
@@ -541,7 +590,7 @@ class _JadwalPengajuanApprovalPageState
                   ),
                 )
               : tokoKeys.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
@@ -562,17 +611,17 @@ class _JadwalPengajuanApprovalPageState
                             padding: const EdgeInsets.only(bottom: 12),
                             items: [
                               PremiumStatItem(
-                                label: 'Pengajuan',
+                                label: 'admin_auto_f99af9329d'.tr(),
                                 value: '$totalPending',
                                 color: OptikAdminTokens.slate,
                               ),
                               PremiumStatItem(
-                                label: 'Cabang',
+                                label: 'work_sum_toko'.tr(),
                                 value: '${tokoKeys.length}',
                                 color: OptikAdminTokens.navy,
                               ),
                               PremiumStatItem(
-                                label: 'Bentrok hari',
+                                label: 'admin_auto_baaa802998'.tr(),
                                 value: '$clashTokoCount',
                                 color: clashTokoCount > 0
                                     ? OptikAdminTokens.warning
@@ -582,7 +631,7 @@ class _JadwalPengajuanApprovalPageState
                           );
                         }
                         if (index == 1) {
-                          return const Padding(
+                          return Padding(
                             padding: EdgeInsets.only(bottom: 14),
                             child: Text(
                               'Dikelompok per cabang yang ada pengajuan. '
@@ -600,6 +649,8 @@ class _JadwalPengajuanApprovalPageState
                         return _tokoSection(toko, rows, clash);
                       },
                     ),
+    );
+      },
     );
   }
 
@@ -625,7 +676,7 @@ class _JadwalPengajuanApprovalPageState
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: OptikAdminTokens.navy.withOpacity(0.1),
-                  child: const Icon(Icons.storefront_rounded,
+                  child: Icon(Icons.storefront_rounded,
                       color: OptikAdminTokens.navy, size: 18),
                 ),
                 const SizedBox(width: 10),
@@ -637,7 +688,7 @@ class _JadwalPengajuanApprovalPageState
                         toko,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
@@ -645,7 +696,7 @@ class _JadwalPengajuanApprovalPageState
                       ),
                       Text(
                         '${rows.length} pengajuan menunggu',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: OptikAdminTokens.slate, fontSize: 11),
                       ),
                     ],
@@ -680,7 +731,7 @@ class _JadwalPengajuanApprovalPageState
                 ),
               ),
             ),
-          const Divider(height: 1, color: OptikAdminTokens.line),
+          Divider(height: 1, color: OptikAdminTokens.line),
           ...rows.map((item) {
             final tipe = item['tipe']?.toString();
             final color = _tipeColor(tipe);
@@ -689,6 +740,10 @@ class _JadwalPengajuanApprovalPageState
             final bentrok = (tipe == 'IJIN' || tipe == 'CUTI') &&
                 clashDays.contains(dayKey);
 
+            final itemId = item['id']?.toString() ?? '';
+            final unread = itemId.isNotEmpty &&
+                AdminNavBadgeService.instance.isEntityUnread('jadwal', itemId);
+
             return ListTile(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -696,11 +751,11 @@ class _JadwalPengajuanApprovalPageState
                 nama,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy, fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                '${_tipeLabel(tipe)} • ${_fmtDate(item['tanggal'])}'
+                '${_tipeLabel(tipe)} • ${_fmtDate(context,item['tanggal'])}'
                 '${bentrok ? ' • bentrok?' : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -709,7 +764,9 @@ class _JadwalPengajuanApprovalPageState
                   fontSize: 11,
                 ),
               ),
-              leading: Container(
+              leading: AdminNavBadgeOverlay(
+                count: unread ? 1 : 0,
+                child: Container(
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
@@ -717,13 +774,14 @@ class _JadwalPengajuanApprovalPageState
                   shape: BoxShape.circle,
                 ),
               ),
+              ),
               trailing: TextButton(
                 onPressed: () => _showDetail(item, siblings: rows),
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.navy,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
-                child: const Text('Detail',
+                child: Text('admin_btn_detail'.tr(),
                     style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               onTap: () => _showDetail(item, siblings: rows),

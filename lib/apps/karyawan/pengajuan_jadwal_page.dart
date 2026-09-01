@@ -1,15 +1,22 @@
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../shared/theme.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/attendance/jadwal_kerja_rules.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/karyawan/karyawan_i18n_display.dart';
+import '../../shared/safe_image_picker.dart';
 
-/// Karyawan: ajukan ijin / cuti / tukar jadwal + lihat status.
+/// Karyawan: ajukan ijin / cuti / tukar / dinas luar + lihat status.
 class PengajuanJadwalPage extends StatefulWidget {
-  const PengajuanJadwalPage({super.key});
+  const PengajuanJadwalPage({super.key, this.initialTipe});
+
+  final String? initialTipe;
 
   @override
   State<PengajuanJadwalPage> createState() => _PengajuanJadwalPageState();
@@ -31,10 +38,16 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
   DateTime? _tanggal;
   DateTime? _tanggalTukar;
   String? _partnerId;
+  double? _lat;
+  double? _lng;
+  File? _foto;
+  bool _gpsBusy = false;
 
   @override
   void initState() {
     super.initState();
+    final init = (widget.initialTipe ?? '').trim().toUpperCase();
+    if (JadwalKerjaRules.isAllowedTipe(init)) _tipe = init;
     _bootstrap();
   }
 
@@ -103,6 +116,42 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
     });
   }
 
+  Future<void> _pinGps() async {
+    setState(() => _gpsBusy = true);
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) throw 'GPS perangkat mati. Nyalakan lokasi dulu.';
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        throw 'Izin lokasi ditolak.';
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw 'Izin lokasi diblokir. Buka pengaturan HP.';
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _lat = pos.latitude;
+        _lng = pos.longitude;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _gpsBusy = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (_me == null || _tanggal == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,6 +161,25 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
     }
     setState(() => _submitting = true);
     try {
+      String? fotoUrl;
+      if (_tipe == 'DINAS' && _foto != null) {
+        final bytes = await _foto!.readAsBytes();
+        final path =
+            'dinas/${_me!['id']}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await Supabase.instance.client.storage
+            .from('pengaduan_photos')
+            .uploadBinary(
+              path,
+              bytes,
+              fileOptions: const FileOptions(
+                contentType: 'image/jpeg',
+                upsert: true,
+              ),
+            );
+        fotoUrl = Supabase.instance.client.storage
+            .from('pengaduan_photos')
+            .getPublicUrl(path);
+      }
       await _svc.submit(
         karyawanId: _me!['id'].toString(),
         tokoId: _me!['toko_id']?.toString() ?? '',
@@ -120,11 +188,17 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
         alasan: _alasanCtrl.text,
         tanggalTukar: _tipe == 'TUKAR' ? _tanggalTukar : null,
         partnerKaryawanId: _tipe == 'TUKAR' ? _partnerId : null,
+        lat: _tipe == 'DINAS' ? _lat : null,
+        lng: _tipe == 'DINAS' ? _lng : null,
+        fotoUrl: _tipe == 'DINAS' ? fotoUrl : null,
       );
       _alasanCtrl.clear();
       _tanggal = null;
       _tanggalTukar = null;
       _partnerId = null;
+      _lat = null;
+      _lng = null;
+      _foto = null;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -194,10 +268,9 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
-                    const Text(
-                      'Ajukan ijin, cuti, atau tukar jadwal. '
-                      'Admin cabang / pusat yang menyetujui.',
-                      style: TextStyle(
+                    Text(
+                      'pengajuan_form_hint'.tr(),
+                      style: const TextStyle(
                           color: OptikKaryawanTokens.muted,
                           fontSize: 12,
                           height: 1.35),
@@ -224,14 +297,19 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                             dropdownColor: OptikKaryawanTokens.surface,
                             style: const TextStyle(color: OptikKaryawanTokens.ink),
                             decoration: _fieldDeco('Jenis'),
-                            items: const [
+                            items: [
                               DropdownMenuItem(
-                                  value: 'IJIN', child: Text('Ijin')),
+                                  value: 'IJIN',
+                                  child: Text('pengajuan_tipe_ijin'.tr())),
                               DropdownMenuItem(
-                                  value: 'CUTI', child: Text('Cuti')),
+                                  value: 'CUTI',
+                                  child: Text('pengajuan_tipe_cuti'.tr())),
                               DropdownMenuItem(
                                   value: 'TUKAR',
-                                  child: Text('Tukar jadwal')),
+                                  child: Text('pengajuan_tipe_tukar'.tr())),
+                              DropdownMenuItem(
+                                  value: 'DINAS',
+                                  child: Text('pengajuan_tipe_dinas'.tr())),
                             ],
                             onChanged: (v) =>
                                 setState(() => _tipe = v ?? 'IJIN'),
@@ -271,6 +349,50 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
                               label: 'Hari partner',
                               value: _tanggalTukar,
                               onTap: () => _pickDate(forTukar: true),
+                            ),
+                          ],
+                          if (_tipe == 'DINAS') ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'pengajuan_dinas_hint'.tr(),
+                              style: const TextStyle(
+                                color: OptikKaryawanTokens.muted,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _gpsBusy ? null : _pinGps,
+                              icon: const Icon(Icons.my_location_outlined),
+                              label: Text(
+                                _lat == null
+                                    ? 'pengajuan_dinas_gps'.tr()
+                                    : 'pengajuan_dinas_gps_ok'.tr(
+                                        namedArgs: {
+                                          'lat': _lat!.toStringAsFixed(5),
+                                          'lng': _lng!.toStringAsFixed(5),
+                                        },
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                final f = await pickImageSafe(
+                                  context: context,
+                                  imageQuality: 70,
+                                );
+                                if (f != null) {
+                                  setState(() => _foto = File(f.path));
+                                }
+                              },
+                              icon: const Icon(Icons.photo_camera_outlined),
+                              label: Text(
+                                _foto == null
+                                    ? 'pengajuan_dinas_foto'.tr()
+                                    : 'pengajuan_dinas_foto_ok'.tr(),
+                              ),
                             ),
                           ],
                           const SizedBox(height: 12),
@@ -428,6 +550,14 @@ class _PengajuanJadwalPageState extends State<PengajuanJadwalPage> {
               fontSize: 12,
             ),
           ),
+          if (tipe == 'DINAS' && item['lat'] != null && item['lng'] != null)
+            Text(
+              'GPS ${item['lat']} , ${item['lng']}',
+              style: const TextStyle(
+                color: OptikKaryawanTokens.muted,
+                fontSize: 11,
+              ),
+            ),
           if ((item['reviewer_note']?.toString() ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),

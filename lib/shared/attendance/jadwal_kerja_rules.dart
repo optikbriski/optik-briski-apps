@@ -4,7 +4,7 @@ abstract final class JadwalKerjaRules {
   static const maxKuota = 40;
   static const maxCatatanChars = 500;
 
-  static const allowedTipe = {'IJIN', 'CUTI', 'TUKAR'};
+  static const allowedTipe = {'IJIN', 'CUTI', 'TUKAR', 'DINAS'};
   static const pending = 'PENDING';
   static const approved = 'APPROVED';
   static const rejected = 'REJECTED';

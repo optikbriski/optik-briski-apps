@@ -79,8 +79,8 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
 
   @override
   Widget build(BuildContext context) {
-    const accent = OptikAdminTokens.ice;
-    const ok = OptikAdminTokens.success;
+    final accent = OptikAdminTokens.ice;
+    final ok = OptikAdminTokens.success;
 
     return PopScope(
       canPop: false,
@@ -136,7 +136,7 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
                   ),
                   const SizedBox(height: 28),
                   if (_done)
-                    const Icon(Icons.check_circle_rounded, color: ok, size: 48)
+                    Icon(Icons.check_circle_rounded, color: ok, size: 48)
                   else
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -153,7 +153,7 @@ class _FaceVerifyGimmickPageState extends State<FaceVerifyGimmickPage>
                       ),
                     ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Liveness OK. Validasi wajah final di Monitor Absensi '
                     '(Valid / Mencurigakan) — bukan reject otomatis di kiosk.',
                     textAlign: TextAlign.center,

@@ -32,6 +32,11 @@
 # Geolocator foreground location service (shift OPEN monitoring)
 -keep class com.baseflow.geolocator.** { *; }
 
+# Firebase Messaging (FCM kill-state)
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+
 # Supabase / OkHttp / Gson-style serializers
 -keepattributes Signature
 -keepattributes *Annotation*

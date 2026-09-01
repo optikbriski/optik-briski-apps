@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/admin/admin_nav_badge_service.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/jadwal_kerja_rules.dart';
 import '../../shared/karyawan/jadwal_pengajuan_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/responsive.dart';
 import 'jadwal_pengajuan_approval_page.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
@@ -147,37 +150,44 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
         actions: [
           if (_selectedTokoId != null && _isPusat)
             IconButton(
-              tooltip: 'Ganti cabang',
+              tooltip: 'member_help_change_store'.tr(),
               onPressed: () => setState(() => _selectedTokoId = null),
-              icon: const Icon(Icons.store_mall_directory_rounded,
+              icon: Icon(Icons.store_mall_directory_rounded,
                   color: OptikAdminTokens.navy),
             ),
-          IconButton(
-            tooltip: 'Approval ijin / tukar',
-            onPressed: () => _openApproval(
-              tokoId: _selectedTokoId ??
-                  (_isPusat ? null : widget.profile['toko_id']?.toString()),
-            ),
-            icon: Badge(
-              isLabelVisible: _pendingCount > 0,
-              label: Text(
-                '$_pendingCount',
-                style: const TextStyle(color: OptikAdminTokens.snow, fontSize: 10),
-              ),
-              backgroundColor: OptikAdminTokens.danger,
-              child: const Icon(Icons.fact_check_outlined,
-                  color: OptikAdminTokens.navy),
-            ),
+          ListenableBuilder(
+            listenable: AdminNavBadgeService.instance,
+            builder: (context, _) {
+              final pending =
+                  AdminNavBadgeService.instance.displayCount('jadwal');
+              return IconButton(
+                tooltip: 'admin_auto_8b92dd6b39'.tr(),
+                onPressed: () => _openApproval(
+                  tokoId: _selectedTokoId ??
+                      (_isPusat ? null : widget.profile['toko_id']?.toString()),
+                ),
+                icon: Badge(
+                  isLabelVisible: pending > 0,
+                  label: Text(
+                    '$pending',
+                    style: TextStyle(color: OptikAdminTokens.snow, fontSize: 10),
+                  ),
+                  backgroundColor: OptikAdminTokens.danger,
+                  child: Icon(Icons.fact_check_outlined,
+                      color: OptikAdminTokens.navy),
+                ),
+              );
+            },
           ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _bootstrap,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? Center(
                   child: Padding(
@@ -192,7 +202,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                         ),
                         const SizedBox(height: 12),
                         PremiumPrimaryButton(
-                          label: 'Coba lagi',
+                          label: 'common_retry'.tr(),
                           onPressed: _bootstrap,
                           expand: false,
                         ),
@@ -222,8 +232,8 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
 
   Widget _buildCabangList() {
     if (_cabang.isEmpty) {
-      return const Center(
-        child: Text('Belum ada data cabang di toko_id.',
+      return Center(
+        child: Text('admin_auto_df05241a51'.tr(),
             style: TextStyle(color: OptikAdminTokens.slate)),
       );
     }
@@ -234,15 +244,15 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
             controller: _searchCtrl,
-            style: const TextStyle(color: OptikAdminTokens.navy),
+            style: TextStyle(color: OptikAdminTokens.navy),
             onChanged: (v) => setState(() => _query = v),
             decoration: InputDecoration(
-              hintText: 'Cari nama / kode toko…',
+              hintText: 'admin_auto_6d8e42b780'.tr(),
               hintStyle: TextStyle(
                 color: OptikAdminTokens.slate.withOpacity(0.75),
               ),
               prefixIcon:
-                  const Icon(Icons.search_rounded, color: OptikAdminTokens.slate),
+                  Icon(Icons.search_rounded, color: OptikAdminTokens.slate),
               suffixIcon: _query.isEmpty
                   ? null
                   : IconButton(
@@ -250,7 +260,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                         _searchCtrl.clear();
                         setState(() => _query = '');
                       },
-                      icon: const Icon(Icons.clear, color: OptikAdminTokens.slate),
+                      icon: Icon(Icons.clear, color: OptikAdminTokens.slate),
                     ),
               filled: true,
               fillColor: OptikAdminTokens.bgMid,
@@ -258,15 +268,15 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-                borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+                borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-                borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+                borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-                borderSide: const BorderSide(
+                borderSide: BorderSide(
                   color: OptikAdminTokens.navy,
                   width: 1.4,
                 ),
@@ -277,7 +287,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: PremiumListTile(
-            title: 'Approval ijin / tukar jadwal',
+            title: 'admin_auto_b7a08b7a8b'.tr(),
             subtitle: _pendingCount == 0
                 ? 'Tidak ada pengajuan menunggu'
                 : '$_pendingCount menunggu approval',
@@ -288,13 +298,13 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
               backgroundColor: OptikAdminTokens.danger,
               label: Text(
                 '$_pendingCount',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.snow,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: const PremiumIconBadge(
+              child: PremiumIconBadge(
                 icon: Icons.fact_check_outlined,
                 color: OptikAdminTokens.navy,
                 size: 44,
@@ -306,8 +316,8 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
         ),
         Expanded(
           child: list.isEmpty
-              ? const Center(
-                  child: Text('Tidak ada cabang cocok.',
+              ? Center(
+                  child: Text('admin_auto_6b73ea15d5'.tr(),
                       style: TextStyle(color: OptikAdminTokens.slate)),
                 )
               : ListView.separated(
@@ -319,7 +329,7 @@ class _JadwalKerjaPageState extends State<JadwalKerjaPage> {
                     final id = t['id']?.toString() ?? '-';
                     return PremiumListTile(
                       title: _namaCabang(t),
-                      subtitle: 'Kode: $id',
+                      subtitle: 'admin_auto_77bc1b5e79'.tr(namedArgs: {'id': id}),
                       icon: Icons.storefront_rounded,
                       iconColor: OptikAdminTokens.slate,
                       onTap: () => setState(() => _selectedTokoId = id),
@@ -366,7 +376,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
   TokoShiftSettings? _shiftSettings;
 
   static final _dateKey = DateFormat('yyyy-MM-dd');
-  static final _dayFmt = DateFormat('EEE d MMM', 'id_ID');
+  DateFormat get _dayFmt => AdminFormat.date(context, 'EEE d MMM');
   static const _hari = [
     'Senin',
     'Selasa',
@@ -408,10 +418,10 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
 
   String get _rangeLabel {
     if (_mode == _JadwalMode.minggu) {
-      return '${DateFormat('d MMM', 'id_ID').format(_rangeStart)} – '
-          '${DateFormat('d MMM yyyy', 'id_ID').format(_rangeEnd)}';
+      return '${AdminFormat.date(context, 'd MMM').format(_rangeStart)} – '
+          '${AdminFormat.date(context, 'd MMM yyyy').format(_rangeEnd)}';
     }
-    return DateFormat('MMMM yyyy', 'id_ID').format(_rangeStart);
+    return AdminFormat.date(context, 'MMMM yyyy').format(_rangeStart);
   }
 
   @override
@@ -594,7 +604,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             backgroundColor: OptikAdminTokens.card,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              side: const BorderSide(color: OptikAdminTokens.lineStrong),
+              side: BorderSide(color: OptikAdminTokens.lineStrong),
             ),
             insetPadding:
                 const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
@@ -617,7 +627,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   ),
                   child: Text(
                     '${day.day}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w900,
                       fontSize: 18,
@@ -634,7 +644,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         karyawan['nama']?.toString() ?? '-',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
@@ -701,7 +711,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                 children: [
                                   Text(
                                     isLibur ? 'Hari libur' : 'Hari kerja',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 13,
@@ -740,7 +750,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         Expanded(
                           child: _editDayField(
                             controller: masukCtrl,
-                            label: 'Jam masuk',
+                            label: 'admin_auto_291a7ca578'.tr(),
                             hint: '08:30',
                             icon: Icons.login_rounded,
                           ),
@@ -749,7 +759,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         Expanded(
                           child: _editDayField(
                             controller: pulangCtrl,
-                            label: 'Jam pulang',
+                            label: 'admin_auto_4ce8d394e6'.tr(),
                             hint: '17:00',
                             icon: Icons.logout_rounded,
                           ),
@@ -760,7 +770,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   const SizedBox(height: 12),
                   _editDayField(
                     controller: catatanCtrl,
-                    label: 'Catatan',
+                    label: 'admin_lbl_catatan'.tr(),
                     hint: 'Opsional',
                     icon: Icons.notes_rounded,
                   ),
@@ -773,7 +783,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.slate,
                 ),
-                child: const Text('Batal'),
+                child: Text('appr_btn_batal'.tr()),
               ),
               if (existing != null)
                 TextButton(
@@ -793,8 +803,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         SnackBar(
                           backgroundColor: OptikAdminTokens.danger,
                           content: Text(
-                            'Gagal hapus: $e',
-                            style: const TextStyle(
+                            'admin_auto_f4b4c27206'.tr(namedArgs: {'error': '$e'}),
+                            style: TextStyle(
                               color: OptikAdminTokens.snow,
                               fontWeight: FontWeight.w600,
                             ),
@@ -806,7 +816,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   style: TextButton.styleFrom(
                     foregroundColor: OptikAdminTokens.danger,
                   ),
-                  child: const Text('Hapus'),
+                  child: Text('btn_hapus'.tr()),
                 ),
               FilledButton(
                 style: FilledButton.styleFrom(
@@ -832,8 +842,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         SnackBar(
                           backgroundColor: OptikAdminTokens.warning,
                           content: Text(
-                            'Format jam harus HH:mm',
-                            style: const TextStyle(
+                            'admin_gl_row_4c0ec286fb'.tr(),
+                            style: TextStyle(
                               color: OptikAdminTokens.snow,
                               fontWeight: FontWeight.w600,
                             ),
@@ -864,8 +874,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                       SnackBar(
                         backgroundColor: OptikAdminTokens.danger,
                         content: Text(
-                          'Gagal simpan: $e',
-                          style: const TextStyle(
+                          'admin_auto_b2cf0f702b'.tr(namedArgs: {'error': '$e'}),
+                          style: TextStyle(
                             color: OptikAdminTokens.snow,
                             fontWeight: FontWeight.w600,
                           ),
@@ -900,7 +910,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
   }) {
     return TextField(
       controller: controller,
-      style: const TextStyle(
+      style: TextStyle(
         color: OptikAdminTokens.navy,
         fontWeight: FontWeight.w700,
         fontSize: 14,
@@ -908,7 +918,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(
+        labelStyle: TextStyle(
           color: OptikAdminTokens.slate,
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -924,15 +934,15 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-          borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+          borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-          borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+          borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-          borderSide: const BorderSide(
+          borderSide: BorderSide(
             color: OptikAdminTokens.navy,
             width: 1.4,
           ),
@@ -958,11 +968,11 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           backgroundColor: OptikAdminTokens.card,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-            side: const BorderSide(color: OptikAdminTokens.lineStrong),
+            side: BorderSide(color: OptikAdminTokens.lineStrong),
           ),
           insetPadding:
               const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          title: const Text(
+          title: Text(
             'Setting shift cabang',
             style: TextStyle(
               color: OptikAdminTokens.navy,
@@ -986,11 +996,11 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                     'Tutup khusus Lebaran atur manual di kalender. '
                     'Auto-random hanya menggilir libur karyawan '
                     '(1 hari/minggu), bukan tutup toko.',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.slate, fontSize: 12, height: 1.35),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Shift 1',
+                  Text('admin_auto_4ee6e80826'.tr(),
                       style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800)),
@@ -1003,7 +1013,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   ]),
                   _settingField(s1Kuota, 'Kuota orang', number: true),
                   const SizedBox(height: 8),
-                  const Text('Shift 2',
+                  Text('admin_auto_213a451b79'.tr(),
                       style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800)),
@@ -1025,7 +1035,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-              child: const Text('Batal'),
+              child: Text('appr_btn_batal'.tr()),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
@@ -1033,7 +1043,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                 backgroundColor: OptikAdminTokens.navy,
                 foregroundColor: OptikAdminTokens.snow,
               ),
-              child: const Text('Simpan'),
+              child: Text('btn_simpan'.tr()),
             ),
           ],
         ),
@@ -1050,8 +1060,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.warning,
           content: Text(
-            'Format jam harus HH:mm',
-            style: const TextStyle(
+            'admin_gl_row_4c0ec286fb'.tr(),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1090,7 +1100,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           content: Text(
             'Setting tersimpan. Kuota harian: ${next.totalKuotaHarian} '
             '(S1 ${next.shift1Kuota} + S2 ${next.shift2Kuota}).',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1103,8 +1113,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.danger,
           content: Text(
-            'Gagal simpan setting: $e',
-            style: const TextStyle(
+            'admin_auto_ad1426c3b6'.tr(namedArgs: {'error': '$e'}),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1121,10 +1131,10 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         controller: c,
         keyboardType: number ? TextInputType.number : TextInputType.text,
         inputFormatters: number ? [FilteringTextInputFormatter.digitsOnly] : null,
-        style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 14, height: 1.3),
+        style: TextStyle(color: OptikAdminTokens.navy, fontSize: 14, height: 1.3),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+          labelStyle: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
           floatingLabelBehavior: FloatingLabelBehavior.auto,
           filled: true,
           fillColor: OptikAdminTokens.bgMid,
@@ -1132,15 +1142,15 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+            borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+            borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: OptikAdminTokens.navy, width: 1.4),
+            borderSide: BorderSide(color: OptikAdminTokens.navy, width: 1.4),
           ),
         ),
       ),
@@ -1158,9 +1168,9 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
-        title: const Text(
+        title: Text(
           'Auto random shift?',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -1185,7 +1195,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               'Front & Back office digilir terpisah — tidak boleh semua '
               'back office libur di hari yang sama (jika ≥2 orang).\n'
               'Jadwal periode ini akan ditimpa.',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.slate,
                 height: 1.4,
               ),
@@ -1196,7 +1206,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -1204,7 +1214,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               backgroundColor: OptikAdminTokens.navy,
               foregroundColor: OptikAdminTokens.snow,
             ),
-            child: const Text('Jalankan'),
+            child: Text('admin_auto_2d04a9cd1d'.tr()),
           ),
         ],
       ),
@@ -1232,7 +1242,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           content: Text(
             'Selesai: ${result.daysProcessed} hari, '
             '${result.rowsWritten} baris jadwal.$warn',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1246,9 +1256,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.danger,
           content: Text(
-            'Gagal auto-random: $e\n'
-            'Pastikan migration toko_shift_settings sudah dijalankan.',
-            style: const TextStyle(
+            'admin_auto_63209706a5'.tr(namedArgs: {'error': '$e'}),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1270,11 +1279,11 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Text(
           'Isi default $periode?',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
           ),
@@ -1284,13 +1293,13 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           '(${(_shiftSettings ?? TokoShiftSettings.defaults(widget.tokoId)).shift1Masuk}'
           '–${(_shiftSettings ?? TokoShiftSettings.defaults(widget.tokoId)).shift1Pulang}). '
           'Toko buka tiap hari; libur Lebaran atur manual.',
-          style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+          style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -1298,7 +1307,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               backgroundColor: OptikAdminTokens.navy,
               foregroundColor: OptikAdminTokens.snow,
             ),
-            child: const Text('Ya'),
+            child: Text('antrian_aksi_ya'.tr()),
           ),
         ],
       ),
@@ -1316,8 +1325,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.success,
           content: Text(
-            'Jadwal default tersimpan.',
-            style: const TextStyle(
+            'admin_gl_row_b2268ac77c'.tr(),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1331,8 +1340,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.danger,
           content: Text(
-            'Gagal: $e',
-            style: const TextStyle(
+            'pengingat_err_umum'.tr(namedArgs: {'error': '$e'}),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1352,11 +1361,11 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Text(
           'Isi default semua ($periode)?',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
           ),
@@ -1367,14 +1376,14 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
           '–${(_shiftSettings ?? TokoShiftSettings.defaults(widget.tokoId)).shift1Pulang} '
           'setiap hari untuk ${_karyawan.length} karyawan × '
           '${_daysInRange.length} hari. Toko buka tiap hari; '
-          'libur Lebaran atur manual.',
-          style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+          'admin_auto_lebaran_manual'.tr(),
+          style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -1382,7 +1391,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               backgroundColor: OptikAdminTokens.navy,
               foregroundColor: OptikAdminTokens.snow,
             ),
-            child: const Text('Ya, isi semua'),
+            child: Text('admin_auto_e4753d6b96'.tr()),
           ),
         ],
       ),
@@ -1403,8 +1412,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.success,
           content: Text(
-            'Jadwal default semua karyawan tersimpan.',
-            style: const TextStyle(
+            'admin_gl_row_ae2523336d'.tr(),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1418,8 +1427,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
         SnackBar(
           backgroundColor: OptikAdminTokens.danger,
           content: Text(
-            'Gagal: $e',
-            style: const TextStyle(
+            'pengingat_err_umum'.tr(namedArgs: {'error': '$e'}),
+            style: TextStyle(
               color: OptikAdminTokens.snow,
               fontWeight: FontWeight.w600,
             ),
@@ -1432,7 +1441,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice));
+      return Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice));
     }
     if (_error != null) {
       return Center(
@@ -1448,7 +1457,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
               ),
               const SizedBox(height: 12),
               PremiumPrimaryButton(
-                label: 'Coba lagi',
+                label: 'common_retry'.tr(),
                 onPressed: _load,
                 expand: false,
               ),
@@ -1478,7 +1487,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const PremiumIconBadge(
+                            PremiumIconBadge(
                               icon: Icons.storefront_rounded,
                               color: OptikAdminTokens.ice,
                               size: 46,
@@ -1492,7 +1501,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                     widget.tokoLabel,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16.5,
@@ -1532,12 +1541,12 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                               color: OptikAdminTokens.slate,
                             ),
                             PremiumStatItem(
-                              label: 'Kuota/hari',
+                              label: 'admin_auto_ce2a3838e8'.tr(),
                               value: '${s.totalKuotaHarian}',
                               color: OptikAdminTokens.navy,
                             ),
                             PremiumStatItem(
-                              label: 'Karyawan',
+                              label: 'default_karyawan'.tr(),
                               value: '${_karyawan.length}',
                               color: OptikAdminTokens.slate,
                             ),
@@ -1572,7 +1581,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
+                                      Text(
                                         'Kuota melebihi karyawan',
                                         style: TextStyle(
                                           color: OptikAdminTokens.navy,
@@ -1600,34 +1609,34 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                           ),
                         ],
                         const SizedBox(height: 6),
-                        const PremiumSectionHeader(
-                          label: 'Periode',
+                        PremiumSectionHeader(
+                          label: 'admin_auto_2fc86aedd7'.tr(),
                           padding: EdgeInsets.only(top: 10, bottom: 10),
                         ),
                         AdminPickerField(
-                          label: 'Tampilan jadwal',
+                          label: 'admin_auto_3648b6ad6a'.tr(),
                           valueText: _mode == _JadwalMode.minggu
-                              ? (narrow ? 'Minggu' : 'Per minggu')
-                              : (narrow ? 'Bulan' : 'Per bulan'),
+                              ? (narrow ? 'admin_lbl_minggu_short'.tr() : 'admin_lbl_per_minggu'.tr())
+                              : (narrow ? 'admin_lbl_bulan_short'.tr() : 'admin_lbl_per_bulan'.tr()),
                           icon: _mode == _JadwalMode.minggu
                               ? Icons.view_week_rounded
                               : Icons.calendar_view_month_rounded,
                           onTap: () async {
                             final sel = await showAdminPicker<_JadwalMode>(
                               context: context,
-                              title: 'Tampilan jadwal',
+                              title: 'admin_auto_3648b6ad6a'.tr(),
                               searchable: false,
                               selected: _mode,
                               headerIcon: Icons.calendar_month_outlined,
                               options: [
                                 AdminPickerOption(
                                   value: _JadwalMode.minggu,
-                                  label: narrow ? 'Minggu' : 'Per minggu',
+                                  label: narrow ? 'admin_lbl_minggu_short'.tr() : 'admin_lbl_per_minggu'.tr(),
                                   icon: Icons.view_week_rounded,
                                 ),
                                 AdminPickerOption(
                                   value: _JadwalMode.bulan,
-                                  label: narrow ? 'Bulan' : 'Per bulan',
+                                  label: narrow ? 'admin_lbl_bulan_short'.tr() : 'admin_lbl_per_bulan'.tr(),
                                   icon: Icons.calendar_view_month_rounded,
                                 ),
                               ],
@@ -1657,30 +1666,30 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                             ),
                           ],
                         ),
-                        const PremiumSectionHeader(
-                          label: 'Aksi cepat',
+                        PremiumSectionHeader(
+                          label: 'home_shortcut_judul'.tr(),
                           padding: EdgeInsets.only(top: 14, bottom: 10),
                         ),
                         PremiumChipWrap(
                           children: [
                             PremiumActionChip(
                               icon: Icons.tune_rounded,
-                              label: 'Kuota & jam',
+                              label: 'admin_auto_7067fbc448'.tr(),
                               onPressed: _busy ? null : _editShiftSettings,
                             ),
                             PremiumActionChip(
                               icon: Icons.casino_rounded,
-                              label: 'Auto random',
+                              label: 'admin_auto_9cc9d8a049'.tr(),
                               onPressed: _busy ? null : _autoRandomPeriod,
                             ),
                             PremiumActionChip(
                               icon: Icons.playlist_add_check_rounded,
-                              label: 'Default sama',
+                              label: 'admin_auto_df089f461e'.tr(),
                               onPressed: _busy ? null : _isiDefaultSemua,
                             ),
                             PremiumActionChip(
                               icon: Icons.fact_check_outlined,
-                              label: 'Approval ijin',
+                              label: 'admin_auto_a2091ac16c'.tr(),
                               onPressed: widget.onOpenApproval,
                             ),
                           ],
@@ -1695,11 +1704,11 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
               child: PremiumSectionHeader(
-                label: 'Karyawan',
+                label: 'default_karyawan'.tr(),
                 padding: EdgeInsets.zero,
                 trailing: Text(
                   '${_karyawan.length}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
@@ -1709,8 +1718,8 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             ),
             Expanded(
               child: _karyawan.isEmpty
-                  ? const PremiumEmptyState(
-                      message: 'Belum ada karyawan di cabang ini.',
+                  ? PremiumEmptyState(
+                      message: 'admin_auto_4f260c7967'.tr(),
                       icon: Icons.groups_rounded,
                     )
                   : RefreshIndicator(
@@ -1763,7 +1772,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     color:
                                                         OptikAdminTokens.navy,
                                                     fontWeight:
@@ -1819,10 +1828,10 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                           IconButton(
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            tooltip: 'Isi default periode',
+                                            tooltip: 'admin_auto_2d6a453b44'.tr(),
                                             onPressed: () =>
                                                 _isiDefaultPeriode(k),
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.auto_awesome_rounded,
                                               color: OptikAdminTokens.navy,
                                               size: 20,
@@ -1832,7 +1841,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                             turns: expanded ? 0.5 : 0,
                                             duration: const Duration(
                                                 milliseconds: 180),
-                                            child: const Icon(
+                                            child: Icon(
                                               Icons.expand_more_rounded,
                                               color: OptikAdminTokens.slate,
                                             ),
@@ -1847,7 +1856,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                                   firstChild: const SizedBox.shrink(),
                                   secondChild: Column(
                                     children: [
-                                      const Divider(
+                                      Divider(
                                         height: 1,
                                         color: OptikAdminTokens.line,
                                       ),
@@ -1894,7 +1903,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
             color: OptikAdminTokens.bg.withOpacity(0.4),
           ),
         if (_busy)
-          const Center(
+          Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice)),
       ],
     );
@@ -1960,7 +1969,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
       ),
       child: Text(
         initials,
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.snow,
           fontWeight: FontWeight.w800,
           fontSize: 13,
@@ -2055,7 +2064,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                 ),
                 child: Text(
                   '${day.day}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
@@ -2070,7 +2079,7 @@ class _JadwalCabangEditorState extends State<_JadwalCabangEditor> {
                   children: [
                     Text(
                       _hari[day.weekday - 1],
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.w700,
                         fontSize: 12.5,

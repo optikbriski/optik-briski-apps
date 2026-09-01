@@ -377,7 +377,9 @@ class _PengaturanAkunPageState extends State<PengaturanAkunPage> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Preferensi disimpan di HP. Push notification cloud menyusul.',
+                  'Saat Anda sedang absen (shift OPEN), pengingat SOP & jadwal '
+                  'tetap aktif meski toggle dimatikan. Push cloud menyusul bila '
+                  'Firebase dikonfigurasi di build toko.',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],

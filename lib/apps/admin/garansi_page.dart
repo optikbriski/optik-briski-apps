@@ -156,7 +156,7 @@ class _GaransiPageState extends State<GaransiPage>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -201,7 +201,7 @@ class _GaransiPageState extends State<GaransiPage>
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
+        iconTheme: IconThemeData(color: OptikAdminTokens.textPrimary),
         title: Text('garansi_page_title'.tr()),
         bottom: TabBar(
           controller: _tabs,
@@ -248,12 +248,12 @@ class _GaransiPageState extends State<GaransiPage>
       children: [
         if (_error != null)
           MaterialBanner(
-            content: Text(_error!, style: const TextStyle(color: OptikAdminTokens.navy)),
+            content: Text(_error!, style: TextStyle(color: OptikAdminTokens.navy)),
             backgroundColor: OptikAdminTokens.danger,
             actions: [
               TextButton(
                 onPressed: _reload,
-                child: const Text('Retry', style: TextStyle(color: OptikAdminTokens.navy)),
+                child: Text('common_retry'.tr(), style: TextStyle(color: OptikAdminTokens.navy)),
               ),
             ],
           ),
@@ -272,7 +272,7 @@ class _GaransiPageState extends State<GaransiPage>
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: TextField(
             controller: _searchCtrl,
-            style: const TextStyle(color: OptikAdminTokens.navy),
+            style: TextStyle(color: OptikAdminTokens.navy),
             decoration: InputDecoration(
               hintText: 'garansi_search_hint'.tr(),
               hintStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.4)),
@@ -284,7 +284,7 @@ class _GaransiPageState extends State<GaransiPage>
                 borderSide: BorderSide.none,
               ),
               suffixIcon: IconButton(
-                icon: const Icon(Icons.arrow_forward_rounded,
+                icon: Icon(Icons.arrow_forward_rounded,
                     color: OptikAdminTokens.textSecondary),
                 onPressed: _reload,
               ),
@@ -299,7 +299,7 @@ class _GaransiPageState extends State<GaransiPage>
               Expanded(
                 child: TextField(
                   controller: _invoiceCtrl,
-                  style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+                  style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'garansi_generate_hint'.tr(),
                     hintStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.4)),
@@ -359,7 +359,7 @@ class _GaransiPageState extends State<GaransiPage>
                       ),
                       title: Text(
                         k['nama_produk']?.toString() ?? '-',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
@@ -377,7 +377,7 @@ class _GaransiPageState extends State<GaransiPage>
                         ),
                       ),
                       isThreeLine: true,
-                      trailing: const Icon(Icons.chevron_right,
+                      trailing: Icon(Icons.chevron_right,
                           color: OptikAdminTokens.textMuted),
                     );
                   },
@@ -405,7 +405,7 @@ class _GaransiPageState extends State<GaransiPage>
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
             'Pengajuan Member (${_claimRequests.length})',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
               fontSize: 14,
@@ -443,7 +443,7 @@ class _GaransiPageState extends State<GaransiPage>
                 Text(
                   kMap['nama_produk']?.toString() ??
                       'garansi_klaim_label'.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w700,
                   ),
@@ -488,7 +488,7 @@ class _GaransiPageState extends State<GaransiPage>
                 const SizedBox(height: 6),
                 Text(
                   row['alasan']?.toString() ?? '-',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.textSecondary,
                     fontSize: 13,
                   ),
@@ -502,7 +502,7 @@ class _GaransiPageState extends State<GaransiPage>
                       height: 72,
                       width: 72,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (_, __, ___) => Icon(
                         Icons.broken_image_outlined,
                         color: OptikAdminTokens.textMuted,
                       ),
@@ -525,7 +525,7 @@ class _GaransiPageState extends State<GaransiPage>
           ),
           child: Text(
             'Keputusan toko (${_klaim.length})',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
               fontSize: 14,
@@ -552,7 +552,7 @@ class _GaransiPageState extends State<GaransiPage>
                 Text(
                   kMap['nama_produk']?.toString() ??
                       'garansi_klaim_label'.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w700,
                   ),
@@ -569,7 +569,7 @@ class _GaransiPageState extends State<GaransiPage>
                 const SizedBox(height: 6),
                 Text(
                   row['alasan']?.toString() ?? '-',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.textSecondary,
                     fontSize: 13,
                   ),
@@ -599,7 +599,7 @@ class _GaransiPageState extends State<GaransiPage>
         PremiumStatGrid(
           items: [
             PremiumStatItem(
-              label: 'Menunggu ambil',
+              label: 'admin_auto_65fd6bf6f8'.tr(),
               value: '${_stats['menunggu_ambil'] ?? 0}',
               color: OptikAdminTokens.trainingSoft,
             ),
@@ -746,7 +746,7 @@ class _GaransiKonfirmasiAmbilPageState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -770,9 +770,9 @@ class _GaransiKonfirmasiAmbilPageState
           const SizedBox(height: 20),
           TextField(
             controller: _invoiceCtrl,
-            style: const TextStyle(color: OptikAdminTokens.navy),
+            style: TextStyle(color: OptikAdminTokens.navy),
             decoration: InputDecoration(
-              labelText: 'No. Invoice',
+              labelText: 'member_rating_invoice_label'.tr(),
               labelStyle: TextStyle(color: OptikAdminTokens.navy.withOpacity(0.5)),
               filled: true,
               fillColor: OptikAdminTokens.snow.withOpacity(0.06),
@@ -809,7 +809,7 @@ class _GaransiKonfirmasiAmbilPageState
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.camera_alt_rounded,
+                        Icon(Icons.camera_alt_rounded,
                             color: OptikAdminTokens.textMuted, size: 40),
                         const SizedBox(height: 8),
                         Text(
@@ -943,53 +943,53 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
     if (mounted) setState(() => _riwayat = rows);
   }
 
-  static const _kategoriOptions = [
+  static List<AdminPickerOption<String>> get _kategoriOptions => [
     AdminPickerOption(
       value: 'fitur_tidak_berfungsi',
-      label: 'Fitur gagal (anti-baret/bluechromic/elastis)',
+      label: 'admin_auto_2d2ba1019b'.tr(),
       icon: Icons.build_circle_outlined,
     ),
     AdminPickerOption(
       value: 'ukuran_lensa',
-      label: 'Ukuran / kenyamanan lensa',
+      label: 'admin_auto_c671f73014'.tr(),
       icon: Icons.straighten_outlined,
     ),
     AdminPickerOption(
       value: 'cacat_pabrik',
-      label: 'Cacat pabrik',
+      label: 'admin_auto_e149cf80f5'.tr(),
       icon: Icons.report_problem_outlined,
     ),
     AdminPickerOption(
       value: 'kelalaian_customer',
-      label: 'Kelalaian customer (bukan fitur)',
+      label: 'admin_auto_9a8d839721'.tr(),
       icon: Icons.person_off_outlined,
     ),
     AdminPickerOption(
       value: 'lainnya',
-      label: 'Lainnya',
+      label: 'pengaduan_kat_lainnya'.tr(),
       icon: Icons.more_horiz_rounded,
     ),
   ];
 
-  static const _keputusanOptions = [
+  static List<AdminPickerOption<String>> get _keputusanOptions => [
     AdminPickerOption(
       value: 'selesai_perbaikan',
-      label: 'Selesai perbaikan',
+      label: 'admin_auto_9a63d739dd'.tr(),
       icon: Icons.handyman_outlined,
     ),
     AdminPickerOption(
       value: 'selesai_ganti',
-      label: 'Selesai ganti',
+      label: 'admin_auto_c8b598b550'.tr(),
       icon: Icons.swap_horiz_rounded,
     ),
     AdminPickerOption(
       value: 'diterima',
-      label: 'Diterima (proses)',
+      label: 'admin_auto_eb8442f1d1'.tr(),
       icon: Icons.hourglass_top_rounded,
     ),
     AdminPickerOption(
       value: 'ditolak',
-      label: 'Ditolak',
+      label: 'pengajuan_status_rejected'.tr(),
       icon: Icons.block_rounded,
     ),
   ];
@@ -1007,7 +1007,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
   Future<void> _pickKategori() async {
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Kategori masalah',
+      title: 'antrian_claim_kategori'.tr(),
       selected: _kategori,
       searchable: false,
       options: _kategoriOptions,
@@ -1068,7 +1068,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1103,7 +1103,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
             ),
             Text(
               k['nama_produk']?.toString() ?? '-',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -1188,14 +1188,14 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               const SizedBox(height: 18),
               Text(
                 'garansi_form_title'.tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
               AdminPickerField(
-                label: 'Kategori masalah',
+                label: 'antrian_claim_kategori'.tr(),
                 valueText: _kategoriLabel(_kategori),
                 icon: Icons.category_outlined,
                 onTap: _pickKategori,
@@ -1213,7 +1213,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _spekGantiCtrl,
-                  style: const TextStyle(color: OptikAdminTokens.navy),
+                  style: TextStyle(color: OptikAdminTokens.navy),
                   maxLines: 2,
                   decoration: _fieldDeco('Spek barang pengganti (sama yang dibeli)'),
                 ),
@@ -1235,7 +1235,7 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
                 ),
                 TextField(
                   controller: _resepRecheckCtrl,
-                  style: const TextStyle(color: OptikAdminTokens.navy),
+                  style: TextStyle(color: OptikAdminTokens.navy),
                   maxLines: 2,
                   decoration: _fieldDeco('Hasil cek mata ulang (resep baru)'),
                 ),
@@ -1263,14 +1263,14 @@ class _KartuDetailSheetState extends State<_KartuDetailSheet> {
               const SizedBox(height: 8),
               TextField(
                 controller: _alasanCtrl,
-                style: const TextStyle(color: OptikAdminTokens.navy),
+                style: TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: _fieldDeco('garansi_alasan'.tr()),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _catatanCtrl,
-                style: const TextStyle(color: OptikAdminTokens.navy),
+                style: TextStyle(color: OptikAdminTokens.navy),
                 maxLines: 2,
                 decoration: _fieldDeco('garansi_catatan'.tr()),
               ),

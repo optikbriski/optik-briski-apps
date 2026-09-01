@@ -8,6 +8,7 @@ import '../training/training_data_client.dart';
 import '../training/training_mode.dart';
 import 'attendance_admin_scope.dart';
 import 'attendance_config.dart';
+import 'attendance_dinas.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'attendance_verification_service.dart';
@@ -339,15 +340,24 @@ class AttendanceService {
     AttendanceAdminScope.assertKaryawanTenant(karyawan);
     TrainingMode.instance.assertSameToko(tokoId);
 
-    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+    if (geo.latitude == null || geo.longitude == null) {
+      throw 'Absen masuk ditolak: GPS wajib.';
+    }
+    final dinas = await AttendanceDinas.isApprovedToday(
+      karyawanId,
+      client: _client,
+    );
+    if (!dinas && !geo.inside) {
       throw 'Absen masuk ditolak: GPS harus di dalam geofence toko.';
     }
 
     final open = await fetchOpenShift(karyawanId);
     if (open != null) throw 'Shift masih OPEN. Absen pulang dulu.';
 
-    // Wajib dijadwalkan hari ini; absen boleh sebelum jam standby.
-    await assertCanAbsenMasukNow(karyawanId);
+    // Dinas luar yang disetujui = hari kerja di lapangan, termasuk jika roster libur.
+    if (!dinas) {
+      await assertCanAbsenMasukNow(karyawanId);
+    }
 
     // Maksimal 1× MASUK per tanggal (Asia/Jakarta), meski shift sebelumnya sudah CLOSED.
     await _assertOncePerDay(karyawanId: karyawanId, tipe: 'MASUK');
@@ -629,7 +639,15 @@ class AttendanceService {
     bool storeKiosk = true,
     String? qrTokenId,
   }) async {
-    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+    if (geo.latitude == null || geo.longitude == null) {
+      throw 'Absen pulang ditolak: GPS wajib.';
+    }
+    final karyawanId = (karyawan['id'] ?? '').toString();
+    final dinas = await AttendanceDinas.isApprovedToday(
+      karyawanId,
+      client: _client,
+    );
+    if (!dinas && !geo.inside) {
       throw 'Absen pulang ditolak: GPS harus di dalam area toko.';
     }
     await _clockOutCore(

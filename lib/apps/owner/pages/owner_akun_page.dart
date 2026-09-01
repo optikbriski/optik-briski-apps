@@ -72,7 +72,7 @@ class OwnerAkunPage extends StatelessWidget {
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.person_rounded,
                     color: OptikAdminTokens.snow,
                     size: 30,
@@ -162,7 +162,7 @@ class _InfoRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: OptikAdminTokens.line)),
+            : Border(bottom: BorderSide(color: OptikAdminTokens.line)),
       ),
       child: Row(
         children: [

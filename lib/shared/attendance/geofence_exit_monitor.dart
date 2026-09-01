@@ -4,11 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'android_battery_optimization.dart';
+import 'attendance_dinas.dart';
 import 'attendance_late_penalty.dart';
 import 'attendance_schedule_rules.dart';
 import 'geofence_service.dart';
@@ -67,7 +67,6 @@ class GeofenceExitMonitor {
   static const _pollEvery = Duration(seconds: 45);
   static const _minTickGap = Duration(seconds: 20);
   static const _ijinCacheFor = Duration(minutes: 3);
-  static final _dateKey = DateFormat('yyyy-MM-dd');
   static const _prefsBatteryDismissed = 'geofence_battery_opt_dismissed';
 
   static const _exitNotifId = 4401;
@@ -157,7 +156,7 @@ class GeofenceExitMonitor {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Izinkan lokasi selama shift',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -241,7 +240,7 @@ class GeofenceExitMonitor {
           backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
+          title: Text(
             'Optimasi baterai',
             style: TextStyle(
               color: OptikAdminTokens.navy,
@@ -255,7 +254,7 @@ class GeofenceExitMonitor {
             '/ “Tidak ada batasan”).\n\n'
             'Ini tidak membuat app kebal force-stop — hanya mengurangi '
             'pematian otomatis oleh sistem.',
-            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
+            style: TextStyle(color: OptikAdminTokens.slate, height: 1.45, fontSize: 13.5),
           ),
           actions: [
             TextButton(
@@ -432,18 +431,18 @@ class GeofenceExitMonitor {
     }
   }
 
-  /// Ijin/cuti APPROVED yang mencakup hari ini (tanggal lokal perangkat).
+  /// Ijin/cuti/dinas APPROVED yang mencakup hari ini (kalender Asia/Jakarta).
   @visibleForTesting
   Future<bool> hasApprovedLeaveCoveringNow(String karyawanId) async {
     if (karyawanId.isEmpty) return false;
-    final today = _dateKey.format(DateTime.now());
+    final today = AttendanceDinas.todayKey();
     try {
       final row = await _db
           .from('jadwal_pengajuan')
           .select('id')
           .eq('karyawan_id', karyawanId)
           .eq('status', 'APPROVED')
-          .inFilter('tipe', const ['IJIN', 'CUTI'])
+          .inFilter('tipe', const ['IJIN', 'CUTI', 'DINAS'])
           .eq('tanggal', today)
           .limit(1)
           .maybeSingle();

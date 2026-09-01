@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -127,38 +128,38 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buat tagihan'),
+        title: Text('admin_auto_36e943f02f'.tr()),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: period,
-                decoration: const InputDecoration(
-                  labelText: 'Periode (YYYY-MM)',
+                decoration: InputDecoration(
+                  labelText: 'admin_auto_9562db598e'.tr(),
                 ),
               ),
               TextField(
                 controller: amount,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Nominal (Rp)'),
+                decoration: InputDecoration(labelText: 'admin_lbl_nominal_rp'.tr()),
               ),
               TextField(
                 controller: due,
-                decoration: const InputDecoration(
-                  labelText: 'Jatuh tempo (YYYY-MM-DD)',
+                decoration: InputDecoration(
+                  labelText: 'admin_auto_4b72608256'.tr(),
                 ),
               ),
               TextField(
                 controller: notes,
-                decoration: const InputDecoration(labelText: 'Catatan'),
+                decoration: InputDecoration(labelText: 'admin_lbl_catatan'.tr()),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kirim')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('appr_btn_batal'.tr())),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('admin_btn_kirim'.tr())),
         ],
       ),
     );
@@ -195,7 +196,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buat kontrak online'),
+        title: Text('admin_auto_4710aa2222'.tr()),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -208,28 +209,28 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
               const SizedBox(height: 8),
               TextField(
                 controller: title,
-                decoration: const InputDecoration(
-                  labelText: 'Judul (opsional)',
+                decoration: InputDecoration(
+                  labelText: 'admin_auto_269b82e35d'.tr(),
                 ),
               ),
               TextField(
                 controller: amount,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Nilai acuan (Rp)'),
+                decoration: InputDecoration(labelText: 'admin_auto_c1456912d4'.tr()),
               ),
               TextField(
                 controller: extra,
                 maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Pasal tambahan (opsional)',
+                decoration: InputDecoration(
+                  labelText: 'admin_auto_e3659c3a61'.tr(),
                 ),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Buat tautan')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('appr_btn_batal'.tr())),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('admin_auto_a80accd5f7'.tr())),
         ],
       ),
     );
@@ -266,7 +267,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
       if (token.isNotEmpty) {
         final url = TenantBilling.publicSignUrl(token);
         await Clipboard.setData(ClipboardData(text: url));
-        _snack('Tautan disalin. Kirim via WA/email.', OptikAdminTokens.success);
+        _snack('admin_gl_row_ab42f34873'.tr(), OptikAdminTokens.success);
       }
       await _boot();
     } catch (e) {
@@ -279,7 +280,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
   Future<void> _copyLink(String token) async {
     final url = TenantBilling.publicSignUrl(token);
     await Clipboard.setData(ClipboardData(text: url));
-    _snack('Tautan kontrak disalin', OptikAdminTokens.success);
+    _snack('admin_gl_row_6e51e7fc18'.tr(), OptikAdminTokens.success);
   }
 
   @override
@@ -288,7 +289,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: Text('Tagihan · $_name'),
+        title: Text('admin_auto_7b68f68832'.tr(namedArgs: {'name': _name})),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
       ),
@@ -319,12 +320,12 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                     FilledButton.icon(
                       onPressed: _busy || !_isPlatform ? null : _createInvoice,
                       icon: const Icon(Icons.receipt_long_rounded),
-                      label: const Text('Buat tagihan'),
+                      label: Text('admin_auto_36e943f02f'.tr()),
                     ),
                     FilledButton.tonalIcon(
                       onPressed: _busy || !_isPlatform ? null : _createContract,
                       icon: const Icon(Icons.draw_rounded),
-                      label: const Text('Buat kontrak'),
+                      label: Text('admin_auto_60da1788eb'.tr()),
                     ),
                     OutlinedButton(
                       onPressed: _busy || !_isPlatform
@@ -334,7 +335,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                                 const {},
                                 'Tagihan jatuh tempo ditandai. UMKM menunggak dimatikan.',
                               ),
-                      child: const Text('Tegakkan hari H'),
+                      child: Text('admin_auto_074e2b8a70'.tr()),
                     ),
                     if (status != 'suspend')
                       OutlinedButton(
@@ -350,7 +351,7 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                                   },
                                   'Sistem UMKM dimatikan (manual).',
                                 ),
-                        child: const Text('Matikan sekarang'),
+                        child: Text('admin_auto_f48b11dcae'.tr()),
                       )
                     else
                       OutlinedButton(
@@ -365,14 +366,14 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                                   },
                                   'Sistem dinyalakan lagi.',
                                 ),
-                        child: const Text('Nyalakan (force)'),
+                        child: Text('admin_auto_877a60543f'.tr()),
                       ),
                   ],
                 ),
                 const SizedBox(height: 22),
-                const PremiumSectionHeader(label: 'Tagihan'),
+                PremiumSectionHeader(label: 'admin_auto_50a3a70af9'.tr()),
                 const SizedBox(height: 8),
-                if (_invoices.isEmpty) const Text('Belum ada tagihan.'),
+                if (_invoices.isEmpty) Text('admin_auto_4f740f09b8'.tr()),
                 for (final i in _invoices)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -410,18 +411,18 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                                     );
                                   }
                                 },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(value: 'paid', child: Text('Tandai lunas')),
-                                  PopupMenuItem(value: 'void', child: Text('Batalkan')),
+                                itemBuilder: (_) => [
+                                  PopupMenuItem(value: 'paid', child: Text('admin_auto_91c6fd7d72'.tr())),
+                                  PopupMenuItem(value: 'void', child: Text('pengajuan_btn_batal'.tr())),
                                 ],
                               ),
                       ),
                     ),
                   ),
                 const SizedBox(height: 22),
-                const PremiumSectionHeader(label: 'Kontrak online'),
+                PremiumSectionHeader(label: 'admin_auto_fb6e235f71'.tr()),
                 const SizedBox(height: 8),
-                if (_contracts.isEmpty) const Text('Belum ada kontrak.'),
+                if (_contracts.isEmpty) Text('admin_auto_7c3b3356af'.tr()),
                 for (final c in _contracts)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -441,12 +442,12 @@ class _TenantBillingPageState extends State<TenantBillingPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              tooltip: 'Salin tautan',
+                              tooltip: 'admin_auto_a4d4c9981c'.tr(),
                               onPressed: () => _copyLink('${c['public_token']}'),
                               icon: const Icon(Icons.link_rounded),
                             ),
                             IconButton(
-                              tooltip: 'Lihat',
+                              tooltip: 'admin_auto_de56c4f710'.tr(),
                               onPressed: () {
                                 Navigator.push(
                                   context,

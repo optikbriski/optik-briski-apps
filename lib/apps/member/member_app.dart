@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/connectivity/connectivity_app_shell.dart';
 import '../../shared/member/member_notification_payload.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/theme.dart';
 import '../../shared/tenant/tenant_billing.dart';
 import '../../shared/tenant/tenant_service.dart';
@@ -43,6 +47,7 @@ class _MemberAppState extends State<MemberApp> {
     )) {
       MemberStatusWatch.instance.onNotificationOpen = null;
     }
+    ClientForceSync.unbind();
     super.dispose();
   }
 
@@ -82,6 +87,21 @@ class _MemberAppState extends State<MemberApp> {
     await MemberSession.instance.load();
     if (MemberSession.instance.isLoggedIn) {
       await MemberStatusWatch.instance.start();
+      await ClientForceSync.bindFromTenantService(
+        onRemote: (_) {
+          unawaited(MemberStatusWatch.instance.start());
+          final ctx = _navKey.currentContext;
+          if (ctx == null || !ctx.mounted) return;
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text('client_force_sync_remote_ok'.tr()),
+              backgroundColor: OptikAdminTokens.navy,
+            ),
+          );
+        },
+      );
+    } else {
+      await ClientForceSync.unbind();
     }
     if (mounted) setState(() => _ready = true);
     // Cek update juga dari layar login (belum login) — jangan lewatkan.
@@ -104,6 +124,7 @@ class _MemberAppState extends State<MemberApp> {
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       theme: buildMemberTheme(),
+      builder: (context, child) => connectivityAppShell(child: child),
       home: !_ready
           ? const Scaffold(
               backgroundColor: OptikMemberTokens.canvas,

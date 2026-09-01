@@ -1,36 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Design tokens — Admin **Frozen Lake** on white canvas
-/// Canvas: snow/white · accents: ice `#ADD8E6` · slate · navy
+import 'admin_appearance.dart';
+
+/// Design tokens Admin. Default **Frozen Lake**; bisa ganti ke kombo terang/gelap
+/// lewat [AdminAppearance] (3 mode, Frozen Lake tidak dihapus).
 ///
-/// Fungsi warna teks (wajib):
-/// - **navy** → judul, nilai data, teks primer
+/// Fungsi warna:
+/// - **bg / snow** → 1 kanvas
+/// - **navy** → 2 highlight / teks primer / tombol isi
+/// - **accent** → 3 garnish (tick, ikon, hover) — bukan wash besar
+/// - **ice** → wash pucat (Frozen Lake: es; Kombo: highlight yang diencerkan)
 /// - **slate** → label, meta, hint
-/// - **ice** → aksen UI (border/badge/progress), bukan body text di putih
-/// - **snow** → hanya di atas permukaan navy/gelap (tombol navy, hero navy, overlay)
 /// - **success/warning/danger** → status semantik saja
 abstract final class OptikAdminTokens {
-  // Core palette (Frozen Lake) — exact hex
-  static const Color slate = Color(0xFF6D8196);
-  static const Color ice = Color(0xFFADD8E6);
-  static const Color snow = Color(0xFFFFFAFA);
-  static const Color navy = Color(0xFF000080);
+  static AdminSwatch get _s => AdminAppearance.instance.swatch;
 
-  /// Kanvas putih — ice hanya aksen (badge, border, wash).
-  static const Color bg = snow;
-  static const Color bgMid = Color(0xFFF7FBFC);
-  static const Color panel = Color(0xFFFFFFFF);
-  static const Color card = Color(0xFFFFFFFF);
-  static const Color cardElevated = Color(0xFFF4FAFC);
-  static const Color line = Color(0x336D8196);
-  static const Color lineStrong = Color(0x4D6D8196);
-  static const Color textPrimary = navy;
-  static const Color textSecondary = Color(0xFF2A3F55);
-  static const Color textMuted = slate;
-  static const Color accent = ice;
-  static const Color accentDeep = Color(0xFF8EC4D6);
-  static const Color accentSoft = Color(0xFFC9E7F1);
+  static Color get slate => _s.slate;
+  static Color get ice => _s.ice;
+  static Color get snow => _s.snow;
+  static Color get navy => _s.navy;
+
+  static Color get bg => _s.bg;
+  static Color get bgMid => _s.bgMid;
+  static Color get panel => _s.panel;
+  static Color get card => _s.card;
+  static Color get cardElevated => _s.cardElevated;
+  static Color get line => _s.line;
+  static Color get lineStrong => _s.lineStrong;
+  static Color get textPrimary => _s.textPrimary;
+  static Color get textSecondary => _s.textSecondary;
+  static Color get textMuted => _s.textMuted;
+  static Color get accent => _s.accent;
+  static Color get accentDeep => _s.accentDeep;
+  static Color get accentSoft => _s.accentSoft;
+
+  static bool get isKombo => AdminAppearance.instance.isKombo;
+  static bool get isDark => AdminAppearance.instance.isDark;
+
+  /// Teks/ikon di atas isi highlight (tombol navy / krim).
+  static Color get onHighlight => isDark ? bg : snow;
+
+  /// Tepi kartu. Gelap: hairline hampir tak terlihat — bukan outline krim.
+  static Color get chromeEdge =>
+      isDark ? line : (isKombo ? lineStrong : ice);
+
+  /// Ikon & glyph fungsi — selalu highlight, bukan garnish.
+  static Color get chromeMark => navy;
+
+  /// Pemanis tipis (tick 3px, hover). Frozen Lake: es. Kombo: terracotta/emas.
+  static Color get chromeGarnish => isKombo ? accent : ice;
   static const Color success = Color(0xFF3D8F7A);
   static const Color warning = Color(0xFF9A7B3C);
   static const Color danger = Color(0xFFA65D5D);
@@ -42,41 +61,43 @@ abstract final class OptikAdminTokens {
   static const double radiusLg = 20;
   static const double radiusXl = 24;
 
-  /// Minimum gutters — jangan biarkan kontrol/kartu nempel.
   static const double spaceXs = 6;
   static const double spaceSm = 10;
   static const double spaceMd = 14;
   static const double spaceLg = 20;
   static const double spaceXl = 28;
 
-  /// Soft luxury depth — ambient + tight contact.
-  static List<BoxShadow> get cardShadow => [
-        BoxShadow(
-          color: navy.withOpacity(0.04),
-          blurRadius: 32,
-          spreadRadius: -4,
-          offset: const Offset(0, 16),
-        ),
-        BoxShadow(
-          color: slate.withOpacity(0.06),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ];
+  static List<BoxShadow> get cardShadow => isDark
+      ? const <BoxShadow>[]
+      : [
+          BoxShadow(
+            color: navy.withOpacity(0.04),
+            blurRadius: 32,
+            spreadRadius: -4,
+            offset: const Offset(0, 16),
+          ),
+          BoxShadow(
+            color: slate.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ];
 
-  static List<BoxShadow> get cardShadowHover => [
-        BoxShadow(
-          color: navy.withOpacity(0.055),
-          blurRadius: 36,
-          spreadRadius: -2,
-          offset: const Offset(0, 18),
-        ),
-        BoxShadow(
-          color: ice.withOpacity(0.28),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
-        ),
-      ];
+  static List<BoxShadow> get cardShadowHover => isDark
+      ? const <BoxShadow>[]
+      : [
+          BoxShadow(
+            color: navy.withOpacity(0.055),
+            blurRadius: 36,
+            spreadRadius: -2,
+            offset: const Offset(0, 18),
+          ),
+          BoxShadow(
+            color: (isKombo ? navy : ice).withOpacity(isKombo ? 0.08 : 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ];
 
   static List<BoxShadow> glow(Color color) => [
         BoxShadow(
@@ -86,54 +107,58 @@ abstract final class OptikAdminTokens {
         ),
       ];
 
-  static LinearGradient get bgGradient => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFFFFFAFA),
-          Color(0xFFF5FAFC),
-          Color(0xFFFFFAFA),
-        ],
-        stops: [0.0, 0.5, 1.0],
-      );
+  static LinearGradient get bgGradient => _s.bgGradient;
 
-  static LinearGradient get accentGradient => const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFC5E8F2), ice, accentDeep],
-      );
+  static LinearGradient get accentGradient => _s.accentGradient;
 
   static LinearGradient get cardSheen => LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFFFFFFFF),
-          Color.lerp(const Color(0xFFFFFFFF), ice, 0.04)!,
-        ],
+        colors: isKombo
+            ? [
+                _s.cardSheenTop,
+                _s.cardSheenTop,
+                Color.lerp(
+                  _s.cardSheenTop,
+                  isDark ? _s.cardSheenTop : navy,
+                  0.04,
+                )!,
+              ]
+            : [
+                _s.cardSheenTop,
+                Color.lerp(_s.cardSheenTop, ice, 0.12)!,
+                Color.lerp(_s.cardSheenTop, accentDeep, 0.08)!,
+              ],
       );
 }
 
-/// Shared Frozen Lake theme (Admin / default) — light, ice-dominant.
+/// Admin theme. Mengikuti [AdminAppearance] (Frozen Lake / kombo terang / gelap).
 ThemeData buildAdminTheme() {
+  final dark = AdminAppearance.instance.isDark;
   final base = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.light,
+    brightness: dark ? Brightness.dark : Brightness.light,
     fontFamily: null,
   );
 
   return base.copyWith(
     scaffoldBackgroundColor: OptikAdminTokens.bg,
-    colorScheme: const ColorScheme.light(
+    canvasColor: OptikAdminTokens.bg,
+    applyElevationOverlayColor: false,
+    colorScheme: (dark ? ColorScheme.dark : ColorScheme.light)(
       primary: OptikAdminTokens.navy,
-      secondary: OptikAdminTokens.ice,
-      surface: OptikAdminTokens.card,
+      secondary: OptikAdminTokens.isKombo
+          ? OptikAdminTokens.accent
+          : OptikAdminTokens.ice,
+      surface: OptikAdminTokens.bg,
+      surfaceTint: Colors.transparent,
       error: OptikAdminTokens.danger,
-      onPrimary: OptikAdminTokens.snow,
-      onSecondary: OptikAdminTokens.navy,
+      onPrimary: OptikAdminTokens.onHighlight,
+      onSecondary: OptikAdminTokens.onHighlight,
       onSurface: OptikAdminTokens.navy,
-      onError: OptikAdminTokens.snow,
+      onError: OptikAdminTokens.onHighlight,
     ),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -147,32 +172,32 @@ ThemeData buildAdminTheme() {
       ),
     ),
     cardTheme: CardThemeData(
-      color: OptikAdminTokens.snow,
+      color: OptikAdminTokens.card,
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-        side: const BorderSide(color: OptikAdminTokens.line, width: 1),
+        side: BorderSide(color: OptikAdminTokens.line, width: 1),
       ),
     ),
-    dividerTheme: const DividerThemeData(
+    dividerTheme: DividerThemeData(
       color: OptikAdminTokens.line,
       thickness: 1,
       space: 1,
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: OptikAdminTokens.snow,
+      backgroundColor: OptikAdminTokens.card,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusXl),
-        side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        side: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         color: OptikAdminTokens.navy,
         fontSize: 18,
         fontWeight: FontWeight.w800,
       ),
-      contentTextStyle: const TextStyle(
+      contentTextStyle: TextStyle(
         color: OptikAdminTokens.textSecondary,
         fontSize: 14,
         height: 1.4,
@@ -181,38 +206,37 @@ ThemeData buildAdminTheme() {
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: OptikAdminTokens.navy,
-      contentTextStyle: const TextStyle(color: OptikAdminTokens.snow),
+      contentTextStyle: TextStyle(color: OptikAdminTokens.onHighlight),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusMd),
       ),
     ),
-    listTileTheme: const ListTileThemeData(
+    listTileTheme: ListTileThemeData(
       iconColor: OptikAdminTokens.slate,
       textColor: OptikAdminTokens.navy,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      // bgMid di kanvas putih — snow membuat field “pucet” (hilang di kartu putih).
-      fillColor: OptikAdminTokens.bgMid,
+      fillColor: OptikAdminTokens.cardElevated,
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+        borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+        borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.navy, width: 1.5),
+        borderSide: BorderSide(color: OptikAdminTokens.navy, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
         borderSide: const BorderSide(color: OptikAdminTokens.danger),
       ),
-      labelStyle: const TextStyle(
+      labelStyle: TextStyle(
         color: OptikAdminTokens.slate,
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -228,7 +252,7 @@ ThemeData buildAdminTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: OptikAdminTokens.navy,
-        foregroundColor: OptikAdminTokens.snow,
+        foregroundColor: OptikAdminTokens.onHighlight,
         elevation: 0,
         shadowColor: OptikAdminTokens.navy.withOpacity(0.18),
         minimumSize: const Size(double.infinity, 52),
@@ -246,7 +270,7 @@ ThemeData buildAdminTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: OptikAdminTokens.navy,
-        side: const BorderSide(color: OptikAdminTokens.slate),
+        side: BorderSide(color: OptikAdminTokens.slate),
         minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
@@ -259,30 +283,30 @@ ThemeData buildAdminTheme() {
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
     ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: OptikAdminTokens.navy,
-      foregroundColor: OptikAdminTokens.snow,
+      foregroundColor: OptikAdminTokens.onHighlight,
       elevation: 2,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
+    progressIndicatorTheme: ProgressIndicatorThemeData(
       color: OptikAdminTokens.navy,
     ),
-    tabBarTheme: const TabBarThemeData(
+    tabBarTheme: TabBarThemeData(
       indicatorColor: OptikAdminTokens.navy,
       labelColor: OptikAdminTokens.navy,
       unselectedLabelColor: OptikAdminTokens.slate,
       indicatorSize: TabBarIndicatorSize.label,
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: OptikAdminTokens.snow,
+      backgroundColor: OptikAdminTokens.card,
       selectedColor: OptikAdminTokens.ice,
       disabledColor: OptikAdminTokens.cardElevated,
-      labelStyle: const TextStyle(
+      labelStyle: TextStyle(
         color: OptikAdminTokens.navy,
         fontSize: 12,
         fontWeight: FontWeight.w600,
       ),
-      secondaryLabelStyle: const TextStyle(
+      secondaryLabelStyle: TextStyle(
         color: OptikAdminTokens.navy,
         fontSize: 12,
         fontWeight: FontWeight.w600,
@@ -291,9 +315,9 @@ ThemeData buildAdminTheme() {
       labelPadding: const EdgeInsets.symmetric(horizontal: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        side: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
-      side: const BorderSide(color: OptikAdminTokens.lineStrong),
+      side: BorderSide(color: OptikAdminTokens.lineStrong),
     ),
   );
 }
@@ -1063,7 +1087,8 @@ ThemeData buildMemberTheme() {
       type: BottomNavigationBarType.fixed,
       elevation: 0,
       selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
-      unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+      unselectedLabelStyle:
+          TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: OptikMemberTokens.blue,

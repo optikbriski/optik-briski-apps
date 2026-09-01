@@ -9,22 +9,31 @@ import 'detail_pribadi_page.dart';
 import 'pengaturan_akun_karyawan.dart';
 import 'bantuan_page.dart';
 import 'pengaduan_page.dart';
+import 'pengajuan_lembur_page.dart';
 import 'pengingat_page.dart';
+import 'reimburse_page.dart';
+import 'toko_chat_page.dart';
 import 'contribution_rekap_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'software_update_page.dart';
 import 'absensi_page.dart';
 import 'admin_login_code_page.dart';
 import 'pengajuan_jadwal_page.dart';
+import 'pengumuman_list_page.dart';
+import 'karyawan_garansi_ambil_page.dart';
 import 'toko_antrian_page.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../shared/attendance/attendance_service.dart';
 import '../../shared/attendance/geofence_exit_monitor.dart';
+import '../../shared/connectivity/connectivity_reload.dart';
+import '../../shared/karyawan/karyawan_action_outbox.dart';
+import '../../shared/karyawan/karyawan_deep_link.dart';
 import '../../shared/karyawan/karyawan_home_service.dart';
 import '../../shared/karyawan/karyawan_i18n_display.dart';
 import '../../shared/karyawan/karyawan_jabatan.dart';
 import '../../shared/karyawan/kpi_fire_service.dart';
 import '../../shared/karyawan/karyawan_ops_watch.dart';
+import '../../shared/karyawan/karyawan_push_service.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/karyawan/shift_auto_assign.dart';
 import '../../shared/karyawan/sop_daily_service.dart';
@@ -33,7 +42,8 @@ import '../../shared/karyawan/sop_score_panel.dart';
 import '../../shared/karyawan/streak_fire_level.dart';
 import '../../shared/karyawan/toko_antrian_realtime.dart';
 import '../../shared/karyawan/toko_antrian_service.dart';
-import '../../shared/app_update_service.dart';
+import '../../shared/app_update/app_update_chrome.dart';
+import '../../shared/app_update/app_update_coordinator.dart';
 import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -64,6 +74,8 @@ String? _fotoProfileUrl;
 
 class KaryawanPageState extends State<KaryawanPage>
     with WidgetsBindingObserver {
+  static final Object _connectivityReloadOwner = Object();
+
   final _homeService = KaryawanHomeService();
   final _labService = LabJobService();
 
@@ -91,6 +103,9 @@ class KaryawanPageState extends State<KaryawanPage>
   List<TokoAntrianItem> _antrianItems = [];
   TokoAntrianRealtimeSubscription? _antrianRt;
   Timer? _antrianPoll;
+  Timer? _outboxPoll;
+  StreamSubscription<PengingatNavResult>? _deepLinkSub;
+  int _outboxPending = 0;
 
   // 2. JADWAL MINGGUAN (dari Supabase)
   List<Map<String, String>> _jadwalMingguIni = [];
@@ -123,8 +138,10 @@ class KaryawanPageState extends State<KaryawanPage>
     _namaKaryawan = 'memuat'.tr();
     _bindQrHost();
     _tarikDataProfil();
-    _cekUpdateApkSilent();
-    _cekHasilInstallSetelahResume();
+    ConnectivityReload.bind(_connectivityReloadOwner, _reloadFromConnectivityBanner);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_updateCoordinator.onAppResumed(context));
+    });
     unawaited(_bindForceSync());
   }
 
@@ -151,12 +168,31 @@ class KaryawanPageState extends State<KaryawanPage>
       cabangKaryawan: _cabangKaryawan,
       karyawanId: _karyawanId,
       karyawanNama: _namaKaryawan,
+      profile: {
+        'toko_id': _tokoId ?? _cabangKaryawan,
+        'role': 'karyawan',
+        'id': _karyawanId,
+        'nama': _namaKaryawan,
+        'nik': _nikKaryawan,
+      },
     );
+  }
+
+  Future<void> _reloadFromConnectivityBanner() async {
+    await _tarikDataProfil();
+    await Future.wait<void>([
+      _loadTokoAntrian(),
+      _loadLabQueue(),
+      _flushActionOutbox(),
+    ]);
   }
 
   @override
   void dispose() {
     _antrianPoll?.cancel();
+    _outboxPoll?.cancel();
+    ConnectivityReload.unbind(_connectivityReloadOwner);
+    unawaited(_deepLinkSub?.cancel() ?? Future<void>.value());
     unawaited(_antrianRt?.dispose() ?? Future<void>.value());
     WidgetsBinding.instance.removeObserver(this);
     UniversalQrHost.clear();
@@ -168,16 +204,60 @@ class KaryawanPageState extends State<KaryawanPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _cekHasilInstallSetelahResume();
+      _updateCoordinator.onAppResumed(context);
       _syncGeofenceMonitorIfOpenShift();
       // Tarik ulang poin/SOP agar Valid/Curang dari Admin langsung terlihat.
       unawaited(_tarikDataProfil());
       unawaited(_loadTokoAntrian());
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      // Auto-unduh di background saat app di-minimize (install tetap konfirmasi).
-      _mulaiAutoDownloadUpdate(silent: true);
+      unawaited(_flushActionOutbox());
+    } else if (state == AppLifecycleState.paused) {
+      // Hanya paused — inactive ikut dialog sistem dan sempat nge-bug unduh dobel.
+      unawaited(_updateCoordinator.onAppPaused());
     }
+  }
+
+  Future<void> _flushActionOutbox() async {
+    final n = await KaryawanActionOutbox.instance.flush();
+    await _refreshOutboxBadge();
+    if (n > 0 && mounted) {
+      _showPremiumSnackbar(
+        'outbox_flush_title'.tr(),
+        'outbox_flush_ok'.tr(namedArgs: {'n': '$n'}),
+        OptikKaryawanTokens.success,
+      );
+      unawaited(_loadTokoAntrian());
+      unawaited(_loadLabQueue());
+    }
+  }
+
+  Future<void> _refreshOutboxBadge() async {
+    final n = await KaryawanActionOutbox.instance.pendingCount();
+    if (!mounted) return;
+    if (n != _outboxPending) setState(() => _outboxPending = n);
+  }
+
+  void _bindDeepLinkRouting() {
+    _deepLinkSub?.cancel();
+    _deepLinkSub = KaryawanDeepLink.stream.listen((nav) {
+      if (!mounted) return;
+      unawaited(_applyPengingatNav(nav));
+    });
+    final pending = KaryawanDeepLink.consumePending();
+    if (pending != null) {
+      unawaited(_applyPengingatNav(pending));
+    }
+  }
+
+  void _ensureOutboxPoll() {
+    _outboxPoll?.cancel();
+    _outboxPoll = Timer.periodic(const Duration(seconds: 90), (_) async {
+      if (!mounted) return;
+      if (await karyawanLikelyOnline()) {
+        unawaited(_flushActionOutbox());
+      } else {
+        unawaited(_refreshOutboxBadge());
+      }
+    });
   }
 
   /// Resume / cold start: pantau geofence lagi jika shift OPEN masih ada.
@@ -201,201 +281,6 @@ class KaryawanPageState extends State<KaryawanPage>
     } catch (e) {
       debugPrint('sync geofence monitor: $e');
     }
-  }
-
-  /// Setelah user selesai/cancel installer, pastikan app lama tetap sehat
-  /// dan tampilkan sukses jika versi sudah naik.
-  Future<void> _cekHasilInstallSetelahResume() async {
-    try {
-      final outcome = await _updateService.checkPendingInstallResult(
-        appFlavor: 'karyawan',
-      );
-      if (!mounted) return;
-      if (outcome.updated) {
-        setState(() => _adaUpdateBaru = false);
-        _showPremiumSnackbar(
-          'Update berhasil',
-          'Aplikasi sekarang versi ${outcome.localVersion}. Siap dipakai.',
-          OptikKaryawanTokens.seasideMid,
-        );
-      }
-    } catch (e) {
-      debugPrint('cek hasil install: $e');
-    }
-  }
-
-  bool _autoDownloadRunning = false;
-  bool _installConfirmShown = false;
-  bool _storageDialogShown = false;
-
-  Future<void> _mulaiAutoDownloadUpdate({bool silent = false}) async {
-    if (kIsWeb || _autoDownloadRunning) return;
-    final autoOn =
-        await _updateService.isAutoUpdateEnabled(appFlavor: 'karyawan');
-    if (!autoOn) return;
-
-    _autoDownloadRunning = true;
-    try {
-      final result = await _updateService.downloadInBackground(
-        appFlavor: 'karyawan',
-      );
-      if (!mounted) return;
-
-      switch (result.status) {
-        case BackgroundDownloadStatus.readyToInstall:
-          setState(() => _adaUpdateBaru = true);
-          await _tampilkanKonfirmasiInstall(result);
-        case BackgroundDownloadStatus.insufficientStorage:
-          setState(() => _adaUpdateBaru = true);
-          await _tampilkanDialogStorageKurang(result);
-        case BackgroundDownloadStatus.downloading:
-          if (!silent) {
-            _showPremiumSnackbar(
-              'Mengunduh update',
-              'Update diunduh di belakang. App tetap bisa dipakai.',
-              OptikKaryawanTokens.gold,
-            );
-          }
-        case BackgroundDownloadStatus.failed:
-          if (!silent && (result.message ?? '').isNotEmpty) {
-            _showPremiumSnackbar(
-              'Unduh update gagal',
-              result.message!,
-              Colors.orange,
-            );
-          }
-        case BackgroundDownloadStatus.skipped:
-          break;
-      }
-    } catch (e) {
-      debugPrint('auto download update: $e');
-    } finally {
-      _autoDownloadRunning = false;
-    }
-  }
-
-  Future<void> _tampilkanDialogStorageKurang(
-      BackgroundDownloadResult result) async {
-    if (_storageDialogShown || !mounted) return;
-    _storageDialogShown = true;
-    final st = result.storage;
-    final butuh = st?.requiredLabel ?? 'beberapa puluh MB';
-    final sisa = st?.freeLabel ?? '-';
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: OptikKaryawanTokens.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: OptikKaryawanTokens.border),
-        ),
-        title: const Text(
-          'Penyimpanan kurang',
-          style: TextStyle(color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Storage internal HP tidak cukup untuk mengunduh update.\n\n'
-          'Dibutuhkan sekitar $butuh (tersedia $sisa).\n\n'
-          'Kosongkan foto, cache, atau file lain di penyimpanan internal, '
-          'lalu buka lagi aplikasi — unduhan akan dilanjutkan otomatis.',
-          style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('btn_mengerti'.tr(),
-                style: TextStyle(color: OptikKaryawanTokens.muted)),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _storageDialogShown = false;
-              _mulaiAutoDownloadUpdate();
-            },
-            child: Text('btn_coba_lagi'.tr()),
-          ),
-        ],
-      ),
-    );
-    _storageDialogShown = false;
-  }
-
-  Future<void> _tampilkanKonfirmasiInstall(
-      BackgroundDownloadResult result) async {
-    if (_installConfirmShown || !mounted) return;
-    final path = result.apkPath;
-    final info = result.info;
-    if (path == null || info == null) return;
-
-    _installConfirmShown = true;
-    final hardForce = info.forceUpdate;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: !hardForce,
-      builder: (ctx) => PopScope(
-        canPop: !hardForce,
-        child: AlertDialog(
-          backgroundColor: OptikKaryawanTokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: OptikKaryawanTokens.border),
-          ),
-          title: Text(
-            hardForce ? 'Update wajib siap dipasang' : 'Update siap dipasang',
-            style: const TextStyle(
-                color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Versi ${info.serverVersion} sudah diunduh.\n'
-            'Pasang sekarang? App lama tetap aman sampai instalasi selesai.\n\n'
-            '${info.notes ?? ''}',
-            style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
-          ),
-          actions: [
-            if (!hardForce)
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('btn_nanti'.tr(),
-                    style: TextStyle(color: OptikKaryawanTokens.muted)),
-              ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                try {
-                  await _updateService.confirmAndOpenInstaller(
-                    apkPath: path,
-                    expectedVersion: info.serverVersion,
-                    appFlavor: 'karyawan',
-                  );
-                  if (!mounted) return;
-                  _showPremiumSnackbar(
-                    'Installer dibuka',
-                    'Konfirmasi di layar sistem untuk memasang update.',
-                    OptikKaryawanTokens.seasideMid,
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  final pesan = e.toString().replaceAll('Exception: ', '');
-                  if (pesan.contains('REQUEST_INSTALL_PACKAGES')) {
-                    _showPremiumSnackbar(
-                      'Izin instalasi diperlukan',
-                      'Aktifkan “Instal aplikasi tidak dikenal” untuk ${BrandService.name} di Pengaturan.',
-                      Colors.orange,
-                    );
-                  } else {
-                    _showPremiumSnackbar('Gagal buka installer', pesan, Colors.red);
-                  }
-                }
-              },
-              child: Text('btn_pasang_sekarang'.tr()),
-            ),
-          ],
-        ),
-      ),
-    );
-    _installConfirmShown = false;
   }
 
   double _fabBottomPad(BuildContext context) =>
@@ -460,85 +345,14 @@ class KaryawanPageState extends State<KaryawanPage>
 
   // MESIN UPDATE APK (in-app, tanpa kirim link)
   bool _adaUpdateBaru = false;
-  final _updateService = AppUpdateService();
-  bool _updateDialogShown = false;
-
-  Future<void> _cekUpdateApkSilent() async {
-    try {
-      final info =
-          await _updateService.checkForUpdate(appFlavor: 'karyawan');
-      if (!info.hasUpdate || !mounted) return;
-
-      setState(() => _adaUpdateBaru = true);
-
-      // Prefer auto-unduh; install tetap minta konfirmasi karyawan.
-      final autoOn =
-          await _updateService.isAutoUpdateEnabled(appFlavor: 'karyawan');
-      if (autoOn && info.urlReachable) {
-        await _mulaiAutoDownloadUpdate();
-        return;
-      }
-
-      if (_updateDialogShown) return;
-      _updateDialogShown = true;
-
-      final hardForce = info.forceUpdate && info.urlReachable;
-
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: !hardForce,
-        builder: (ctx) => PopScope(
-          canPop: !hardForce,
-          child: AlertDialog(
-            backgroundColor: OptikKaryawanTokens.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: OptikKaryawanTokens.border),
-            ),
-            title: Text(
-              hardForce ? 'Update wajib' : 'Update tersedia',
-              style: const TextStyle(
-                  color: OptikKaryawanTokens.ink, fontWeight: FontWeight.bold),
-            ),
-            content: Text(
-              'Versi baru ${info.serverVersion} siap '
-              '(saat ini ${info.localVersion}).\n'
-              'Unduh bisa otomatis; pemasangan tetap butuh konfirmasi Anda.\n\n'
-              '${!info.urlReachable ? '⚠️ Link unduhan belum siap. Anda tetap bisa pakai app.\n\n' : ''}'
-              '${info.notes ?? ''}',
-              style: const TextStyle(color: OptikKaryawanTokens.muted, height: 1.4),
-            ),
-            actions: [
-              if (!hardForce)
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text('btn_nanti'.tr(),
-                      style: TextStyle(color: OptikKaryawanTokens.muted)),
-                ),
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SoftwareUpdatePage(
-                        autoStartDownload: info.urlReachable,
-                      ),
-                    ),
-                  );
-                },
-                child: Text(
-                    info.urlReachable ? 'Unduh update' : 'Cek update'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      // Jangan ganggu pemakaian app jika cek update gagal.
-      debugPrint("Gagal cek update: $e");
-    }
-  }
+  late final _updateCoordinator = AppUpdateCoordinator(
+    chrome: AppUpdateChrome.karyawan,
+    onHasUpdate: (v) {
+      if (!mounted) return;
+      if (_adaUpdateBaru == v) return;
+      setState(() => _adaUpdateBaru = v);
+    },
+  );
 
   // MESIN PENARIK DATA
   Future<void> _tarikDataProfil() async {
@@ -576,7 +390,6 @@ class KaryawanPageState extends State<KaryawanPage>
         _kpiYearHistory = snap.kpiYearHistory;
         _applyPoinBulan(snap.totalPoinBulan);
         isStreakBonusActive = snap.streakHari >= 3;
-        _sudahKlaimPoinHariIni = snap.sudahKlaimHariIni;
         _securityScore = snap.securityScore;
         _isLoading = false;
       });
@@ -603,6 +416,11 @@ class KaryawanPageState extends State<KaryawanPage>
           karyawanId: kidOps,
         ));
       }
+      unawaited(KaryawanPushService.instance.registerIfPossible());
+      unawaited(_flushActionOutbox());
+      _bindDeepLinkRouting();
+      _ensureOutboxPoll();
+      unawaited(_refreshOutboxBadge());
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
       debugPrint("Gagal menarik data profil: $e");
@@ -720,10 +538,15 @@ class KaryawanPageState extends State<KaryawanPage>
       unawaited(_loadTokoAntrian());
     } catch (e) {
       if (!mounted) return;
+      final queued = await KaryawanActionOutbox.instance.enqueueIfNetworkError(
+        error: e,
+        kind: 'lab_claim',
+        payload: {'jobId': id},
+      );
       _showPremiumSnackbar(
-        'lab_claim_gagal_judul'.tr(),
-        '$e',
-        OptikKaryawanTokens.danger,
+        queued ? 'outbox_queued_title'.tr() : 'lab_claim_gagal_judul'.tr(),
+        queued ? 'outbox_queued_msg'.tr() : '$e',
+        queued ? OptikKaryawanTokens.seasideMid : OptikKaryawanTokens.danger,
       );
       await _loadLabQueue();
     } finally {
@@ -761,9 +584,30 @@ class KaryawanPageState extends State<KaryawanPage>
     );
     if (confirmed != true || !mounted) return;
 
+    final XFile? foto = await pickImageSafe(
+      picker: picker,
+      context: context,
+      imageQuality: 70,
+    );
+    if (!mounted) return;
+    if (foto == null) {
+      _showPremiumSnackbar(
+        'lab_complete_gagal_judul'.tr(),
+        'lab_complete_foto_wajib'.tr(),
+        OptikKaryawanTokens.danger,
+      );
+      return;
+    }
+
     setState(() => _labBusy = true);
+    String? fotoUrl;
     try {
-      final res = await _labService.complete(jobId: id);
+      final bytes = await foto.readAsBytes();
+      fotoUrl = await _labService.uploadCompleteFoto(
+        jobId: id,
+        bytes: bytes,
+      );
+      final res = await _labService.complete(jobId: id, fotoUrl: fotoUrl);
       if (!mounted) return;
       final track = (res['tracking_status'] ?? '').toString().toUpperCase();
       final isDp = res['is_dp'] == true;
@@ -790,11 +634,20 @@ class KaryawanPageState extends State<KaryawanPage>
       unawaited(_loadTokoAntrian());
     } catch (e) {
       if (!mounted) return;
-      _showPremiumSnackbar(
-        'lab_complete_gagal_judul'.tr(),
-        '$e',
-        OptikKaryawanTokens.danger,
+      final queued = await KaryawanActionOutbox.instance.enqueueIfNetworkError(
+        error: e,
+        kind: 'lab_complete',
+        payload: {
+          'jobId': id,
+          if (fotoUrl != null && fotoUrl.isNotEmpty) 'fotoUrl': fotoUrl,
+        },
       );
+      _showPremiumSnackbar(
+        queued ? 'outbox_queued_title'.tr() : 'lab_complete_gagal_judul'.tr(),
+        queued ? 'outbox_queued_msg'.tr() : '$e',
+        queued ? OptikKaryawanTokens.seasideMid : OptikKaryawanTokens.danger,
+      );
+      await _refreshOutboxBadge();
       await _loadLabQueue();
     } finally {
       if (mounted) setState(() => _labBusy = false);
@@ -806,8 +659,6 @@ class KaryawanPageState extends State<KaryawanPage>
   KpiFireSnapshot _kpiFire = KpiFireSnapshot.empty();
   List<KpiMonthHistoryRecord> _kpiYearHistory = const [];
   bool isStreakBonusActive = false;
-
-  bool _sudahKlaimPoinHariIni = false;
 
   /// Satu pintu update poin bulan → level/progres api ikut sinkron.
   void _applyPoinBulan(int poin) {
@@ -2155,6 +2006,23 @@ class KaryawanPageState extends State<KaryawanPage>
             elevation: 0,
             centerTitle: true,
             actions: [
+              if (_outboxPending > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 2),
+                  child: IconButton(
+                    tooltip: 'outbox_pending_badge'
+                        .tr(namedArgs: {'n': '$_outboxPending'}),
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          OptikKaryawanTokens.warning.withOpacity(0.18),
+                    ),
+                    onPressed: () => unawaited(_flushActionOutbox()),
+                    icon: Badge(
+                      label: Text('$_outboxPending'),
+                      child: const Icon(Icons.cloud_upload_rounded, size: 20),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: IconButton(
@@ -2629,12 +2497,35 @@ class KaryawanPageState extends State<KaryawanPage>
     return _daftarSOPTugas.take(4).toList();
   }
 
-  Future<void> _bukaPengajuanJadwal() async {
+  Future<void> _bukaPengajuanJadwal({String? initialTipe}) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const PengajuanJadwalPage()),
+      MaterialPageRoute(
+        builder: (_) => PengajuanJadwalPage(initialTipe: initialTipe),
+      ),
     );
     if (mounted) unawaited(_tarikDataProfil());
+  }
+
+  Future<void> _bukaReimburse() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReimbursePage()),
+    );
+  }
+
+  Future<void> _bukaLembur() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PengajuanLemburPage()),
+    );
+  }
+
+  Future<void> _bukaChatToko() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TokoChatPage()),
+    );
   }
 
   Future<void> _bukaAbsensi() async {
@@ -2670,6 +2561,37 @@ class KaryawanPageState extends State<KaryawanPage>
     await _applyPengingatNav(result);
   }
 
+  Future<void> _bukaPengumuman() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PengumumanListPage(
+          items: List.of(_pengumuman),
+          tokoId: (_tokoId ?? _cabangKaryawan).trim(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _bukaGaransiAmbil() async {
+    final kid = (_karyawanId ?? '').trim();
+    if (kid.isEmpty) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KaryawanGaransiAmbilPage(
+          profile: {
+            'id': kid,
+            'nik': (_nikKaryawan ?? '').trim(),
+            'nama': _namaKaryawan,
+            'toko_id': (_tokoId ?? _cabangKaryawan).trim(),
+            'role': 'karyawan',
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _applyPengingatNav(PengingatNavResult result) async {
     setState(() => _currentIndex = 0);
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -2693,6 +2615,21 @@ class KaryawanPageState extends State<KaryawanPage>
           _tampilkanDetailJadwal(j);
         }
         break;
+      case PengingatDest.pengajuan:
+        await _bukaPengajuanJadwal();
+        break;
+      case PengingatDest.pengaduan:
+        await _bukaPengaduan();
+        break;
+      case PengingatDest.antrian:
+        await _loadTokoAntrian();
+        if (!mounted) return;
+        _scrollToKey(_antrianSectionKey);
+        _openTokoAntrianPage();
+        break;
+      case PengingatDest.pengingat:
+        await _bukaPengingat();
+        break;
       case PengingatDest.home:
         break;
     }
@@ -2706,13 +2643,6 @@ class KaryawanPageState extends State<KaryawanPage>
       duration: const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
       alignment: 0.08,
-    );
-  }
-
-  Future<void> _bukaDetailPribadi() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const DetailDataPribadiPage()),
     );
   }
 
@@ -3175,73 +3105,96 @@ class KaryawanPageState extends State<KaryawanPage>
 
   Widget _buildPengumumanBanner() {
     final p = _pengumuman.first;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: OptikKaryawanTokens.cyan.withOpacity(0.10),
-            border: Border.all(
-              color: OptikKaryawanTokens.cyan.withOpacity(0.22),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _bukaPengumuman,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: OptikKaryawanTokens.cyan.withOpacity(0.10),
+                border: Border.all(
+                  color: OptikKaryawanTokens.cyan.withOpacity(0.22),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: OptikKaryawanTokens.cyan.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.campaign_rounded,
+                        size: 17, color: OptikKaryawanTokens.ink),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'home_pengumuman'.tr(),
+                          style: TextStyle(
+                            color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.9,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          KaryawanI18nDisplay.pengumumanJudul(
+                            p['judul']?.toString(),
+                          ),
+                          style: const TextStyle(
+                            color: OptikKaryawanTokens.ink,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          KaryawanI18nDisplay.pengumumanIsi(
+                              p['isi']?.toString()),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: OptikKaryawanTokens.ink.withOpacity(0.72),
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'pengumuman_tap_lihat'.tr(
+                            namedArgs: {'n': '${_pengumuman.length}'},
+                          ),
+                          style: TextStyle(
+                            color: OptikKaryawanTokens.cyan.withOpacity(0.95),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: OptikKaryawanTokens.muted.withOpacity(0.7),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: OptikKaryawanTokens.cyan.withOpacity(0.18),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.campaign_rounded,
-                    size: 17, color: OptikKaryawanTokens.ink),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'home_pengumuman'.tr(),
-                      style: TextStyle(
-                        color: OptikKaryawanTokens.muted.withOpacity(0.95),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.9,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      KaryawanI18nDisplay.pengumumanJudul(
-                        p['judul']?.toString(),
-                      ),
-                      style: const TextStyle(
-                        color: OptikKaryawanTokens.ink,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      KaryawanI18nDisplay.pengumumanIsi(p['isi']?.toString()),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: OptikKaryawanTokens.ink.withOpacity(0.72),
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -3687,93 +3640,107 @@ class KaryawanPageState extends State<KaryawanPage>
   }
 
   Widget _buildQuickShortcuts() {
-    final items = [
-      (Icons.warning_amber_rounded, 'home_shortcut_pengaduan'.tr(),
-          _bukaPengaduan),
-      (Icons.support_agent_rounded, 'home_shortcut_hubungi'.tr(),
-          _hubungiPusat),
-      (Icons.notifications_active_rounded, 'home_shortcut_pengingat'.tr(),
-          _bukaPengingat),
-      (Icons.badge_outlined, 'home_shortcut_profil'.tr(), _bukaDetailPribadi),
+    final rows = [
+      [
+        (Icons.warning_amber_rounded, 'home_shortcut_pengaduan'.tr(),
+            _bukaPengaduan),
+        (Icons.receipt_long_outlined, 'home_shortcut_reimburse'.tr(),
+            _bukaReimburse),
+        (Icons.more_time_rounded, 'home_shortcut_lembur'.tr(), _bukaLembur),
+        (Icons.directions_bus_outlined, 'home_shortcut_dinas'.tr(),
+            () => _bukaPengajuanJadwal(initialTipe: 'DINAS')),
+      ],
+      [
+        (Icons.forum_outlined, 'home_shortcut_chat'.tr(), _bukaChatToko),
+        (Icons.support_agent_rounded, 'home_shortcut_hubungi'.tr(),
+            _hubungiPusat),
+        (Icons.notifications_active_rounded, 'home_shortcut_pengingat'.tr(),
+            _bukaPengingat),
+        (Icons.verified_user_outlined, 'home_shortcut_garansi'.tr(),
+            _bukaGaransiAmbil),
+      ],
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('home_shortcut_judul'.tr()),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) const SizedBox(width: 8),
-              Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(
-                        OptikKaryawanTokens.radiusLg),
-                    onTap: items[i].$3,
-                    child: ClipRRect(
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
+          Row(
+            children: [
+              for (var i = 0; i < rows[r].length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(
                           OptikKaryawanTokens.radiusLg),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: Ink(
-                          height: 78,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(
-                                OptikKaryawanTokens.radiusLg),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                OptikKaryawanTokens.snow.withOpacity(0.94),
-                                OptikKaryawanTokens.cyan.withOpacity(0.12),
+                      onTap: rows[r][i].$3,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(
+                            OptikKaryawanTokens.radiusLg),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: Ink(
+                            height: 78,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                  OptikKaryawanTokens.radiusLg),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  OptikKaryawanTokens.snow.withOpacity(0.94),
+                                  OptikKaryawanTokens.cyan.withOpacity(0.12),
+                                ],
+                              ),
+                              border: Border.all(
+                                color:
+                                    OptikKaryawanTokens.cyan.withOpacity(0.20),
+                              ),
+                              boxShadow: OptikKaryawanTokens.cardShadow,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: OptikKaryawanTokens.cyan
+                                        .withOpacity(0.16),
+                                    borderRadius: BorderRadius.circular(
+                                        OptikKaryawanTokens.radiusSm),
+                                  ),
+                                  child: Icon(rows[r][i].$1,
+                                      color: OptikKaryawanTokens.ink, size: 18),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  rows[r][i].$2,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: OptikKaryawanTokens.ink,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ],
                             ),
-                            border: Border.all(
-                              color:
-                                  OptikKaryawanTokens.cyan.withOpacity(0.20),
-                            ),
-                            boxShadow: OptikKaryawanTokens.cardShadow,
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: OptikKaryawanTokens.cyan
-                                      .withOpacity(0.16),
-                                  borderRadius: BorderRadius.circular(
-                                      OptikKaryawanTokens.radiusSm),
-                                ),
-                                child: Icon(items[i].$1,
-                                    color: OptikKaryawanTokens.ink, size: 18),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                items[i].$2,
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: OptikKaryawanTokens.ink,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }
@@ -5038,7 +5005,6 @@ class KaryawanPageState extends State<KaryawanPage>
       if (kid.isNotEmpty && sc != null) {
         await _sopDaily.syncMyPoin(karyawanId: kid, score: sc);
         if (mounted) {
-          setState(() => _sudahKlaimPoinHariIni = true);
           _showPremiumSnackbar(
             'sop_score_sync_ok_judul'.tr(),
             'sop_score_sync_ok_msg'.tr(namedArgs: {
@@ -5084,6 +5050,15 @@ class KaryawanPageState extends State<KaryawanPage>
             onAddStory: () => _runSopAction(() async {
               final kid = _karyawanId!;
               final toko = _tokoId!;
+              if (_sopBranch?.igLive == true) {
+                final branch = await _sopDaily.fetchBranchState(
+                  tokoId: toko,
+                  forceStoryRefresh: true,
+                );
+                final err = (branch.storyError ?? '').trim();
+                if (err.isNotEmpty) throw err;
+                return;
+              }
               await _sopDaily.addStoryPost(tokoId: toko, karyawanId: kid);
             }),
             onCompleteDisplay: (slot) => _runSopAction(() async {
@@ -5442,6 +5417,48 @@ class KaryawanPageState extends State<KaryawanPage>
                       ),
                     );
                   },
+                ),
+                _buildMenuProfil(
+                  Icons.receipt_long_outlined,
+                  'menu_reimburse'.tr(),
+                  'sub_reimburse'.tr(),
+                  true,
+                  onTap: _bukaReimburse,
+                ),
+                _buildMenuProfil(
+                  Icons.more_time_rounded,
+                  'menu_lembur'.tr(),
+                  'sub_lembur'.tr(),
+                  true,
+                  onTap: _bukaLembur,
+                ),
+                _buildMenuProfil(
+                  Icons.directions_bus_outlined,
+                  'menu_dinas'.tr(),
+                  'sub_dinas'.tr(),
+                  true,
+                  onTap: () => _bukaPengajuanJadwal(initialTipe: 'DINAS'),
+                ),
+                _buildMenuProfil(
+                  Icons.forum_outlined,
+                  'menu_chat_toko'.tr(),
+                  'sub_chat_toko'.tr(),
+                  true,
+                  onTap: _bukaChatToko,
+                ),
+                _buildMenuProfil(
+                  Icons.campaign_outlined,
+                  'menu_pengumuman'.tr(),
+                  'sub_pengumuman'.tr(),
+                  true,
+                  onTap: _bukaPengumuman,
+                ),
+                _buildMenuProfil(
+                  Icons.verified_user_outlined,
+                  'menu_garansi_ambil'.tr(),
+                  'sub_garansi_ambil'.tr(),
+                  true,
+                  onTap: _bukaGaransiAmbil,
                 ),
                 _buildMenuProfil(
                   Icons.notifications_active_rounded,

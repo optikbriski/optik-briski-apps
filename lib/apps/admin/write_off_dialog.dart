@@ -1,7 +1,10 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+
+import '../../shared/admin/admin_format.dart';
 
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/product_identity.dart';
@@ -23,10 +26,8 @@ Future<bool> showWriteOffDialog({
   final toko = AttendanceAdminScope.tokoOf(profile).toUpperCase();
   if (!WriteOffRules.bolehWriteOffToko(profile, toko)) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Hanya admin toko/cabang ini yang boleh catat stok rusak.',
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_gl_row_f99c7be5bc'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
     }
@@ -188,8 +189,8 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
         QrPayloadType.product,
         QrPayloadType.unknown,
       },
-      titleKey: 'Scan produk',
-      hintKey: 'Barcode toko atau QR OBRPROD',
+      titleKey: 'admin_scan_produk',
+      hintKey: 'admin_hint_barcode_obrprod',
     );
     if (!mounted) return;
     var code = (raw ?? '').trim();
@@ -213,7 +214,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
       _product == null ? 0 : WriteOffRules.nilaiModal(_qty, _product!);
 
   String _rp(int n) =>
-      NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
+      AdminFormat.currency(context)
           .format(n);
 
   int get _real => StockQty.realOf(_product);
@@ -257,7 +258,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
+        title: Text(
           'Konfirmasi stok rusak',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -272,8 +273,8 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
           'Nilai buku ${_rp(_nilaiBuku)} '
           '(qty × harga modal)\n\n'
           'Alasan: ${_alasanCtrl.text.trim()}\n\n'
-          'Ini mengurangi stok rak dan tercatat ledger WRITE_OFF.',
-          style: const TextStyle(
+          'admin_auto_writeoff_ledger_note'.tr(),
+          style: TextStyle(
             color: OptikAdminTokens.textSecondary,
             height: 1.4,
           ),
@@ -281,7 +282,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -289,7 +290,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
               foregroundColor: OptikAdminTokens.bg,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ya, catat'),
+            child: Text('admin_btn_ya_catat'.tr()),
           ),
         ],
       ),
@@ -324,7 +325,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal catat stok rusak: $e'),
+        content: Text('admin_auto_78ef2e6670'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -342,7 +343,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
     if (s.isEmpty) return '-';
     final dt = DateTime.tryParse(s)?.toLocal();
     if (dt == null) return s;
-    return DateFormat('dd MMM · HH:mm', 'id_ID').format(dt);
+    return AdminFormat.date(context, 'dd MMM · HH:mm').format(dt);
   }
 
   @override
@@ -372,7 +373,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Stok Rusak / Write-off',
                   style: TextStyle(
                     color: OptikAdminTokens.navy,
@@ -416,14 +417,14 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
                     controller: _skuCtrl,
                     focusNode: _skuFocus,
                     enabled: !_submitting,
-                    style: const TextStyle(color: OptikAdminTokens.navy),
+                    style: TextStyle(color: OptikAdminTokens.navy),
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _lookup(),
                     decoration: InputDecoration(
-                      labelText: 'SKU / barcode',
+                      labelText: 'admin_auto_c13bb60395'.tr(),
                       labelStyle:
-                          const TextStyle(color: OptikAdminTokens.textMuted),
-                      hintText: 'Scan atau ketik lalu cari',
+                          TextStyle(color: OptikAdminTokens.textMuted),
+                      hintText: 'admin_auto_c77d9030e3'.tr(),
                       filled: true,
                       fillColor: OptikAdminTokens.navy.withOpacity(0.03),
                       border: OutlineInputBorder(
@@ -439,7 +440,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
                               ),
                             )
                           : IconButton(
-                              tooltip: 'Cari',
+                              tooltip: 'admin_btn_cari'.tr(),
                               onPressed: _submitting ? null : () => _lookup(),
                               icon: const Icon(Icons.search_rounded),
                             ),
@@ -452,10 +453,10 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
                   child: OutlinedButton.icon(
                     onPressed: _submitting ? null : _scanProduct,
                     icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                    label: const Text('Scan'),
+                    label: Text('admin_btn_scan'.tr()),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: OptikAdminTokens.navy,
-                      side: const BorderSide(color: OptikAdminTokens.line),
+                      side: BorderSide(color: OptikAdminTokens.line),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -484,10 +485,10 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
               enabled: !_submitting && _product != null,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               decoration: InputDecoration(
-                labelText: 'Qty rusak',
-                labelStyle: const TextStyle(color: OptikAdminTokens.textMuted),
+                labelText: 'admin_auto_f35909318b'.tr(),
+                labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
                 helperText: _product == null
                     ? null
                     : 'Maks. $_available pcs tersedia',
@@ -544,12 +545,12 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
               controller: _alasanCtrl,
               enabled: !_submitting,
               maxLines: 2,
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                labelText: 'Alasan (wajib)',
-                labelStyle: const TextStyle(color: OptikAdminTokens.textMuted),
-                hintText: 'Jelaskan kondisi barang…',
+                labelText: 'admin_auto_a10a202ace'.tr(),
+                labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
+                hintText: 'admin_auto_cc5daf80b2'.tr(),
                 filled: true,
                 fillColor: OptikAdminTokens.navy.withOpacity(0.03),
                 border: OutlineInputBorder(
@@ -598,7 +599,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Batal'),
+          child: Text('appr_btn_batal'.tr()),
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -611,7 +612,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
           ),
           onPressed: _submitting ? null : _submit,
           child: _submitting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
@@ -672,7 +673,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
                   children: [
                     Text(
                       nama,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
@@ -706,7 +707,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _qtyChip('Real', '$_real', OptikAdminTokens.navy),
+              _qtyChip('admin_gl_row_7f80fcc452'.tr(), '$_real', OptikAdminTokens.navy),
               const SizedBox(width: 8),
               _qtyChip('Booking', '$_pending', OptikAdminTokens.ice),
               const SizedBox(width: 8),
@@ -796,7 +797,7 @@ class _WriteOffDialogBodyState extends State<_WriteOffDialogBody> {
                   nama.isNotEmpty ? nama : sku,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 12.5,

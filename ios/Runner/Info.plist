@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Rekasa</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,10 +26,36 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>$(APP_BUNDLE_ID)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>optikbriski</string>
+				<string>rekasa</string>
+			</array>
+		</dict>
+	</array>
 <key>NSFaceIDUsageDescription</key>
     <string>Aplikasi ini membutuhkan Face ID untuk mempermudah Anda masuk ke akun dengan aman.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Kamera dipakai untuk absensi wajah, liveness, dan scan bentuk wajah Member.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mikrofon dipakai bersama kamera untuk absensi dan pemindaian.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Galeri dipakai untuk unggah foto KTP, bukti, dan dokumen toko.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Aplikasi menyimpan foto bukti dan dokumen ke galeri jika Anda memilih simpan.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bluetooth dipakai untuk printer thermal dan perangkat kasir.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Bluetooth dipakai untuk printer thermal dan perangkat kasir.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lokasi dipakai untuk memastikan absensi hanya di area toko, dan untuk memantau area selama shift aktif.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

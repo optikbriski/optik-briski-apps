@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'invoice/invoice_document_builder.dart';
 import 'invoice/invoice_layout.dart';
+import 'print/pos_android_usb_stub.dart'
+    if (dart.library.io) 'print/pos_android_usb_io.dart' as android_usb;
 import 'print/pos_cups_print_stub.dart'
     if (dart.library.io) 'print/pos_cups_print_io.dart' as cups;
 import 'theme.dart';
@@ -18,10 +20,28 @@ import 'widgets/admin/admin_picker.dart';
 const _prefPrinterMac = 'pos_bt_printer_mac';
 const _prefPrinterName = 'pos_bt_printer_name';
 const _prefCupsQueue = 'pos_cups_queue';
+const _prefAndroidUsbVid = 'pos_android_usb_vid';
+const _prefAndroidUsbPid = 'pos_android_usb_pid';
+
+bool get _supportsUsbCups =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux);
+
+bool get _supportsAndroidUsbOtg =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+bool get _supportsBluetoothThermal =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux);
 
 class PosPrintService {
-  /// Picker: Print PDF / Share PDF / USB POS-80 / Bluetooth thermal.
-  /// Semua jalur memakai setting Adjust Invoice (kit yang sama).
+  /// Picker cetak — opsi menyesuaikan platform (web / Android APK / desktop).
+  /// Data nota sama (Adjust Invoice); jalur printer beda per device.
   static Future<void> showPrintOptions(
     BuildContext context, {
     required Map<String, dynamic> sale,
@@ -29,16 +49,31 @@ class PosPrintService {
     required String Function(num) formatRupiah,
   }) async {
     final options = <AdminPickerOption<String>>[
-      const AdminPickerOption(
-        value: 'thermal80',
-        label: 'Cetak thermal 80mm',
-        subtitle: 'Ukuran gulungan POS-80 — pilih printer POS-80 di dialog',
-        icon: Icons.receipt_long_rounded,
-      ),
+      if (_supportsAndroidUsbOtg)
+        const AdminPickerOption(
+          value: 'usb_otg',
+          label: 'USB OTG / hub (ESC/POS 80mm)',
+          subtitle: 'Poco/tablet + OTG/hub ke POS-80',
+          icon: Icons.usb_rounded,
+        ),
+      if (_supportsBluetoothThermal)
+        const AdminPickerOption(
+          value: 'bluetooth',
+          label: 'Bluetooth thermal (ESC/POS)',
+          subtitle: 'APK/HP + printer BT — layout thermal khusus',
+          icon: Icons.bluetooth_outlined,
+        ),
+      if (_supportsUsbCups)
+        const AdminPickerOption(
+          value: 'usb',
+          label: 'USB POS-80 desktop (ESC/POS)',
+          subtitle: 'macOS/Linux + kabel USB (CUPS)',
+          icon: Icons.cable_rounded,
+        ),
       const AdminPickerOption(
         value: 'pdf',
         label: 'Print PDF A5',
-        subtitle: 'Layout Adjust Invoice (kertas A5)',
+        subtitle: 'Nota digital PDF — printer biasa / Save as PDF',
         icon: Icons.print_outlined,
       ),
       const AdminPickerOption(
@@ -47,28 +82,18 @@ class PosPrintService {
         subtitle: 'Kirim file PDF layout Adjust Invoice',
         icon: Icons.share_outlined,
       ),
-      if (!kIsWeb) ...const [
-        AdminPickerOption(
-          value: 'usb',
-          label: 'USB POS-80 (ESC/POS raw)',
-          subtitle: 'Langsung ke printer USB lewat CUPS',
-          icon: Icons.usb_rounded,
-        ),
-        AdminPickerOption(
-          value: 'bluetooth',
-          label: 'Bluetooth thermal (ESC/POS)',
-          subtitle: 'Printer BT 58mm',
-          icon: Icons.bluetooth_outlined,
-        ),
-      ],
     ];
 
     final sel = await showAdminPicker<String>(
       context: context,
       title: 'Pilih cara cetak',
       subtitle: kIsWeb
-          ? 'Web: pilih thermal 80mm, lalu Destination = POS-80 (bukan Save as PDF)'
-          : 'Thermal 80mm, PDF A5, USB raw, atau Bluetooth',
+          ? 'Web: PDF/share. Struk thermal: APK Admin + USB OTG / Bluetooth.'
+          : _supportsAndroidUsbOtg
+              ? 'APK: USB OTG/hub atau Bluetooth ke printer 80mm.'
+              : _supportsUsbCups
+                  ? 'Desktop: USB CUPS atau Bluetooth. Jangan PDF ke POS-80.'
+                  : 'Pilih cara cetak yang tersedia di perangkat ini.',
       headerIcon: Icons.print_rounded,
       searchable: false,
       selected: null,
@@ -77,16 +102,17 @@ class PosPrintService {
     if (sel == null || sel.isClear || sel.value == null) return;
     if (!context.mounted) return;
     switch (sel.value) {
-      case 'thermal80':
-        await printThermal80(
-          sale: sale,
-          items: items,
-          formatRupiah: formatRupiah,
-        );
       case 'pdf':
         await printPdf(sale: sale, items: items, formatRupiah: formatRupiah);
       case 'share':
         await sharePdf(sale: sale, items: items, formatRupiah: formatRupiah);
+      case 'usb_otg':
+        await printAndroidUsbOtg(
+          context,
+          sale: sale,
+          items: items,
+          formatRupiah: formatRupiah,
+        );
       case 'usb':
         await printUsb(
           context,
@@ -173,39 +199,155 @@ class PosPrintService {
     await Printing.sharePdf(bytes: bytes, filename: name);
   }
 
-  /// Cetak ESC/POS ke POS-80 (USB) via antrian CUPS — macOS/Linux desktop.
+  /// Cetak ESC/POS lewat USB OTG / hub di Android (Poco, tablet, dll).
+  static Future<void> printAndroidUsbOtg(
+    BuildContext context, {
+    required Map<String, dynamic> sale,
+    required List<dynamic> items,
+    required String Function(num) formatRupiah,
+  }) async {
+    if (!_supportsAndroidUsbOtg) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('USB OTG hanya di APK Android.'),
+        backgroundColor: OptikAdminTokens.warning,
+      ));
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedVid = prefs.getInt(_prefAndroidUsbVid);
+      final savedPid = prefs.getInt(_prefAndroidUsbPid);
+
+      final devices = await android_usb.PosAndroidUsbPrint.listDevices();
+      int? vid = savedVid;
+      int? pid = savedPid;
+      if (devices.isNotEmpty) {
+        final matchSaved = devices.where(
+          (d) => d.vid == savedVid && d.pid == savedPid,
+        );
+        final chosen = matchSaved.isNotEmpty
+            ? matchSaved.first
+            : devices.firstWhere(
+                (d) =>
+                    d.label.toLowerCase().contains('pos') ||
+                    (d.vid == 1048 && d.pid == 20497) ||
+                    (d.vid == 1046 && d.pid == 20497),
+                orElse: () => devices.first,
+              );
+        if (!context.mounted) return;
+        if (devices.length > 1 && matchSaved.isEmpty) {
+          final sel = await showAdminPicker<String>(
+            context: context,
+            title: 'Pilih printer USB',
+            subtitle: 'Perangkat tersambung lewat OTG / hub',
+            headerIcon: Icons.usb_rounded,
+            searchable: false,
+            selected: null,
+            options: [
+              for (final d in devices)
+                AdminPickerOption(
+                  value: '${d.vid}:${d.pid}',
+                  label: d.label,
+                  subtitle: 'VID ${d.vid} · PID ${d.pid}',
+                  icon: Icons.print_outlined,
+                ),
+            ],
+          );
+          if (sel == null || sel.isClear || sel.value == null) return;
+          final parts = sel.value!.split(':');
+          vid = int.tryParse(parts[0]);
+          pid = int.tryParse(parts[1]);
+        } else {
+          vid = chosen.vid;
+          pid = chosen.pid;
+        }
+      }
+
+      final doc = await _doc(sale: sale, items: items);
+      final bytes = await buildEscPos(doc, paper: PaperSize.mm80);
+      await android_usb.PosAndroidUsbPrint.printRaw(
+        bytes: bytes,
+        vendorId: vid,
+        productId: pid,
+      );
+      if (vid != null && pid != null) {
+        await prefs.setInt(_prefAndroidUsbVid, vid);
+        await prefs.setInt(_prefAndroidUsbPid, pid);
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nota terkirim ke printer USB OTG (ESC/POS 80mm).'),
+          backgroundColor: OptikAdminTokens.success,
+        ));
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$e'),
+        backgroundColor: OptikAdminTokens.danger,
+        action: _supportsBluetoothThermal
+            ? SnackBarAction(
+                label: 'BT',
+                textColor: OptikAdminTokens.snow,
+                onPressed: () => printBluetooth(
+                  context,
+                  sale: sale,
+                  items: items,
+                  formatRupiah: formatRupiah,
+                ),
+              )
+            : null,
+      ));
+    }
+  }
+
+  /// Cetak ESC/POS ke POS-80 (USB) via antrian CUPS — macOS/Linux desktop saja.
   static Future<void> printUsb(
     BuildContext context, {
     required Map<String, dynamic> sale,
     required List<dynamic> items,
     required String Function(num) formatRupiah,
   }) async {
-    if (kIsWeb) {
-      await printThermal80(
-        sale: sale,
-        items: items,
-        formatRupiah: formatRupiah,
-      );
+    if (!_supportsUsbCups) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          kIsWeb
+              ? 'USB POS-80 tidak tersedia di web. Pakai APK Admin + Bluetooth.'
+              : 'USB POS-80 hanya di desktop macOS/Linux. Di APK pakai Bluetooth thermal.',
+        ),
+        backgroundColor: OptikAdminTokens.warning,
+        action: _supportsBluetoothThermal
+            ? SnackBarAction(
+                label: 'BT',
+                textColor: OptikAdminTokens.snow,
+                onPressed: () => printBluetooth(
+                  context,
+                  sale: sale,
+                  items: items,
+                  formatRupiah: formatRupiah,
+                ),
+              )
+            : null,
+      ));
       return;
     }
     try {
       final prefs = await SharedPreferences.getInstance();
-      final known = await cups.PosCupsPrint.listQueues();
-      var queue = prefs.getString(_prefCupsQueue);
-      if (queue == null ||
-          queue.isEmpty ||
-          !known.any((q) => q.toLowerCase() == queue!.toLowerCase())) {
-        queue = await cups.PosCupsPrint.ensureQueue(
-          queue: 'POS-80',
-          nameHint: 'POS-80',
-        );
-      }
+      // Selalu lewat ensureQueue agar antrian PostScript diganti ESC/POS.
+      final queue = await cups.PosCupsPrint.ensureQueue(
+        queue: 'POS-80',
+        nameHint: 'POS-80',
+        recreateIfPostScript: true,
+      );
       if (queue == null || queue.isEmpty) {
-        throw 'Printer POS-80 belum siap di Mac.\n'
-            'System Settings → Printers & Scanners → Add Printer → pilih POS-80 '
-            '(Generic/Raw), namakan POS-80, lalu coba lagi.';
+        throw 'Printer POS-80 belum terdeteksi USB.\n'
+            'Cabut-colok kabel, pastikan menyala, lalu coba lagi.\n'
+            'Jangan cetak PDF ke POS-80 — akan ngeprint kode tanpa berhenti.';
       }
       await prefs.setString(_prefCupsQueue, queue);
+      await cups.PosCupsPrint.cancelAll(queue);
 
       final doc = await _doc(sale: sale, items: items);
       final bytes = await buildEscPos(doc, paper: PaperSize.mm80);
@@ -353,7 +495,8 @@ class PosPrintService {
     return mac;
   }
 
-  /// ESC/POS thermal — [PaperSize.mm80] untuk POS-80 USB, [PaperSize.mm58] BT.
+  /// Layout thermal khusus (ESC/POS) — info lengkap dari nota,
+  /// **tanpa** mengubah layout nota digital UI/PDF.
   static Future<List<int>> buildEscPos(
     InvoiceDocumentModel doc, {
     PaperSize paper = PaperSize.mm80,
@@ -363,77 +506,135 @@ class PosPrintService {
     final bytes = <int>[];
     final s = doc.settings;
     final m = doc.meta;
+    String a(String? raw) => _escPosAscii(raw ?? '');
 
+    void hr() => bytes.addAll(g.hr(ch: '-'));
+    void center(String text, {bool bold = false, PosTextSize? height}) {
+      bytes.addAll(g.text(
+        a(text),
+        styles: PosStyles(
+          align: PosAlign.center,
+          bold: bold,
+          height: height ?? PosTextSize.size1,
+        ),
+      ));
+    }
+
+    void left(String text, {bool bold = false}) {
+      bytes.addAll(g.text(
+        a(text),
+        styles: PosStyles(align: PosAlign.left, bold: bold),
+      ));
+    }
+
+    void money(String label, String value, {bool bold = false}) {
+      bytes.addAll(g.row([
+        PosColumn(
+          text: a(label),
+          width: 7,
+          styles: PosStyles(align: PosAlign.left, bold: bold),
+        ),
+        PosColumn(
+          text: a(value),
+          width: 5,
+          styles: PosStyles(align: PosAlign.right, bold: bold),
+        ),
+      ]));
+    }
+
+    // ----- HEADER TOKO -----
     bytes.addAll(g.reset());
-    bytes.addAll(g.text(
-      s.shopName.toUpperCase(),
-      styles: const PosStyles(
-        align: PosAlign.center,
-        bold: true,
-        height: PosTextSize.size2,
-      ),
-    ));
-    if (s.address.trim().isNotEmpty) {
-      bytes.addAll(g.text(s.address,
-          styles: const PosStyles(align: PosAlign.center)));
-    }
-    bytes.addAll(g.text('Telp ${s.phone}',
-        styles: const PosStyles(align: PosAlign.center)));
-    bytes.addAll(g.hr());
+    center(s.shopName.toUpperCase(), bold: true, height: PosTextSize.size2);
+    if (s.address.trim().isNotEmpty) center(s.address);
+    if (s.phone.trim().isNotEmpty) center('Telp ${s.phone}');
+    hr();
 
-    bytes.addAll(g.text('Nota: ${m.noInvoice}',
-        styles: const PosStyles(align: PosAlign.center, bold: true)));
-    if ((m.createdAtLabel ?? '').isNotEmpty) {
-      bytes.addAll(g.text(m.createdAtLabel!,
-          styles: const PosStyles(align: PosAlign.center)));
-    }
-    bytes.addAll(g.text('Pelanggan: ${m.customerName}'));
-    if ((m.whatsapp ?? '').trim().isNotEmpty) {
-      bytes.addAll(g.text('WA: ${m.whatsapp}'));
-    }
-    if ((m.method ?? '').trim().isNotEmpty) {
-      bytes.addAll(g.text('Bayar: ${m.method}'));
-    }
+    // ----- PELANGGAN (semua field nota digital) -----
+    left('PELANGGAN', bold: true);
+    left(m.customerName);
+    if ((m.whatsapp ?? '').trim().isNotEmpty) left('WA: ${m.whatsapp}');
+    if ((m.email ?? '').trim().isNotEmpty) left('Email: ${m.email}');
+    if ((m.address ?? '').trim().isNotEmpty) left('Alamat: ${m.address}');
+    hr();
+
+    // ----- NOTA / META -----
+    left('NOTA', bold: true);
+    left(m.noInvoice, bold: true);
+    if ((m.createdAtLabel ?? '').isNotEmpty) left(m.createdAtLabel!);
+    if ((m.dateLabel ?? '').isNotEmpty) left(m.dateLabel!);
+    if ((m.cashier ?? '').trim().isNotEmpty) left('Kasir: ${m.cashier}');
+    if ((m.method ?? '').trim().isNotEmpty) left('Bayar: ${m.method}');
     final board = m.boardStatus == null
-        ? ''
-        : ' · ${InvoiceLayout.boardLabel(m.boardStatus!)}';
-    bytes.addAll(g.text('${m.status}$board'));
-    bytes.addAll(g.hr());
+        ? a(m.status)
+        : '${a(m.status)} | ${InvoiceLayout.boardLabel(m.boardStatus!)}';
+    left('Status: $board', bold: true);
+    hr();
 
+    // ----- RINCIAN ITEM -----
+    left('RINCIAN ITEM PESANAN', bold: true);
     String? lastGroup;
     for (final line in doc.lines) {
       final group = (line.group ?? '').trim();
       if (group.isNotEmpty && group != lastGroup) {
-        bytes.addAll(g.text(group.toUpperCase(),
-            styles: const PosStyles(bold: true)));
+        left(group.toUpperCase(), bold: true);
         lastGroup = group;
       }
-      bytes.addAll(g.text(line.label));
-      bytes.addAll(g.text(line.amount,
-          styles: const PosStyles(align: PosAlign.right)));
+      money(line.label, line.amount);
     }
 
     if (doc.hasLensa && doc.detailResep.trim().isNotEmpty) {
-      bytes.addAll(g.hr());
-      bytes.addAll(g.text('RESEP', styles: const PosStyles(bold: true)));
-      bytes.addAll(g.text(doc.detailResep.replaceAll(' | ', '\n')));
+      hr();
+      left('RESEP', bold: true);
+      for (final part in doc.detailResep.split(RegExp(r'\s*\|\s*'))) {
+        final line = part.trim();
+        if (line.isEmpty) continue;
+        left(line);
+      }
+    }
+    hr();
+
+    // ----- TOTAL -----
+    money('Total belanja', doc.totalFormatted, bold: true);
+    money(doc.paidLabel, doc.paidFormatted);
+    money('Sisa piutang', doc.remainingFormatted, bold: true);
+    hr();
+
+    // ----- QR -----
+    if (doc.showQr && doc.qrPayload.trim().isNotEmpty) {
+      center('Scan invoice');
+      bytes.addAll(g.qrcode(doc.qrPayload.trim(), size: QRSize.size4));
+      bytes.addAll(g.feed(1));
+      hr();
     }
 
-    bytes.addAll(g.hr());
-    bytes.addAll(g.text('TOTAL ${doc.totalFormatted}',
-        styles: const PosStyles(bold: true)));
-    bytes.addAll(g.text('${doc.paidLabel} ${doc.paidFormatted}'));
-    bytes.addAll(g.text('SISA ${doc.remainingFormatted}'));
-    bytes.addAll(g.hr());
-
-    for (final part in doc.footerTextPdf.split('\n')) {
-      final t = part.trim();
-      if (t.isEmpty) continue;
-      bytes.addAll(g.text(t,
-          styles: const PosStyles(align: PosAlign.center)));
+    // ----- FOOTER (sama sumber status footer nota) -----
+    final footer = (doc.footerTextPdf.trim().isNotEmpty
+            ? doc.footerTextPdf
+            : doc.footerText)
+        .trim();
+    for (final part in footer.split('\n')) {
+      final line = part.trim();
+      if (line.isEmpty) continue;
+      center(line);
     }
+
     bytes.addAll(g.feed(2));
     bytes.addAll(g.cut());
     return bytes;
+  }
+
+  /// ASCII aman untuk printer thermal (hindari · → π).
+  static String _escPosAscii(String input) {
+    return input
+        .replaceAll('·', '|')
+        .replaceAll('•', '-')
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll('×', 'x')
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll(RegExp(r'[^\x20-\x7E\n]'), '?');
   }
 }

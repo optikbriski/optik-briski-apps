@@ -78,7 +78,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
     } catch (e) {
       if (mounted) {
         setState(() => isLoading = false);
-        _showSnack('Gagal memuat antrian: $e', OptikAdminTokens.danger);
+        _showSnack('admin_auto_578280ee77'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
       }
     }
   }
@@ -90,15 +90,13 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
       tokoId: _tokoId,
       status: 'PENDING',
     )) {
-      _showSnack(
-        'Hanya kasir/admin toko ini yang boleh kirim RO ke Pusat.',
+      _showSnack('admin_gl_row_00af0b16c8'.tr(),
         OptikAdminTokens.warning,
       );
       return;
     }
     if (pendingRequestsList.isEmpty) {
-      _showSnack(
-        'Tidak ada antrian Request Order hari ini.',
+      _showSnack('admin_gl_row_125cd1f87c'.tr(),
         OptikAdminTokens.warning,
       );
       return;
@@ -109,7 +107,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Kirim ke Pusat?',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -119,8 +117,8 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         content: Text(
           '${pendingRequestsList.length} request akan dikirim ke Gudang Pusat '
           'untuk approval.\n\n'
-          'Setelah dikirim, lacak status di panel Tracking di atas.',
-          style: const TextStyle(
+          'admin_auto_ro_track_hint'.tr(),
+          style: TextStyle(
             color: OptikAdminTokens.textSecondary,
             height: 1.4,
           ),
@@ -128,11 +126,11 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Kirim'),
+            child: Text('admin_btn_kirim'.tr()),
           ),
         ],
       ),
@@ -190,7 +188,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
       await _loadTodayRequests();
     } catch (e) {
       if (mounted) setState(() => isLoading = false);
-      _showSnack('Gagal mengirim ke pusat: $e', OptikAdminTokens.danger);
+      _showSnack('admin_auto_bff05a3a59'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -213,10 +211,10 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
         trackingResults = List<Map<String, dynamic>>.from(res);
       });
       if (trackingResults.isEmpty) {
-        _showSnack('Tidak ada hasil untuk pencarian ini.', OptikAdminTokens.warning);
+        _showSnack('admin_gl_row_c1df336d05'.tr(), OptikAdminTokens.warning);
       }
     } catch (e) {
-      _showSnack('Gagal melacak: $e', OptikAdminTokens.danger);
+      _showSnack('admin_auto_698b1bd685'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
     }
   }
 
@@ -253,16 +251,16 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
   @override
   Widget build(BuildContext context) {
     if (_isPusat) {
-      return const PremiumScaffold(
+      return PremiumScaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (!RequestOrderRules.bolehBukaCabang(widget.profile)) {
-      return const PremiumScaffold(
-        appBar: PremiumAppBar(title: 'Request Order Cabang'),
+      return PremiumScaffold(
+        appBar: PremiumAppBar(title: 'admin_auto_6276c4fee7'.tr()),
         body: PremiumEmptyState(
-          message: 'Hanya kasir/admin toko ini yang boleh buka antrian RO.',
+          message: 'admin_auto_dac758617d'.tr(),
           icon: Icons.lock_outline_rounded,
         ),
       );
@@ -270,12 +268,12 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Request Order Cabang',
+        title: 'admin_auto_6276c4fee7'.tr(),
         actions: [
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: isLoading ? null : _loadTodayRequests,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
@@ -291,12 +289,12 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const PremiumSectionHeader(
-                    label: 'Lacak Request Order',
+                  PremiumSectionHeader(
+                    label: 'admin_auto_30400a0150'.tr(),
                     padding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Alur: Cabang kirim → Approval Pusat → Disiapkan → '
                     'Dalam perjalanan → Terima di Verifikasi Terima.',
                     style: TextStyle(
@@ -309,12 +307,12 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                   TextField(
                     controller: trackingSearchCtrl,
                     style:
-                        const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+                        TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                     decoration: InputDecoration(
-                      hintText: 'Invoice / pelanggan / resi / produk…',
-                      hintStyle: const TextStyle(
+                      hintText: 'admin_auto_2fd1b9786e'.tr(),
+                      hintStyle: TextStyle(
                           color: OptikAdminTokens.textMuted, fontSize: 12),
-                      prefixIcon: const Icon(Icons.track_changes,
+                      prefixIcon: Icon(Icons.track_changes,
                           color: OptikAdminTokens.navy, size: 18),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.search,
@@ -333,7 +331,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                   ),
                   if (trackingResults.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    const Divider(color: OptikAdminTokens.line),
+                    Divider(color: OptikAdminTokens.line),
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -350,7 +348,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                             '${track['nama_produk']} (${track['qty_request']} pcs)',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
@@ -362,7 +360,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                             '${resi.isNotEmpty ? ' · Resi $resi' : ''}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.textMuted,
                               fontSize: 11,
                             ),
@@ -415,7 +413,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                             );
                           },
                           icon: const Icon(Icons.fact_check_outlined, size: 16),
-                          label: const Text('Buka Verifikasi Terima'),
+                          label: Text('admin_auto_2e65b13b3f'.tr()),
                         ),
                       ),
                     ],
@@ -424,9 +422,9 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
               ),
             ),
             const SizedBox(height: 20),
-            const PremiumSectionHeader(label: 'Antrian Request Hari Ini'),
+            PremiumSectionHeader(label: 'admin_auto_16dd959ee4'.tr()),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Kirim manual ke Pusat kapan saja. '
               'Sisa yang lupa dikirim otomatis ke Pusat jam 23:59.',
               style: TextStyle(
@@ -449,7 +447,7 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                   ),
                 ),
                 icon: _sending
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
@@ -507,9 +505,10 @@ class _RequestOrderPageState extends State<RequestOrderPage> {
                                     .toUpperCase()
                                     .startsWith('ON-');
                             return PremiumListTile(
-                              title: req['nama_produk'] ?? 'Produk',
+                              title: req['nama_produk'] ?? 'admin_lbl_produk_fallback'.tr(),
                               subtitle:
-                                  'Kurang ${req['qty_request']} pcs · '
+                                  '${'admin_lbl_kurang_pcs'.tr(namedArgs: {'n': '${req['qty_request']}'})}'
+                                  ' · '
                                   '${isOnline ? 'Online Member · ' : ''}'
                                   '${isPre ? 'Pre-order' : (tipe.isEmpty ? 'Stok' : tipe)}'
                                   '${req['no_invoice'] != null ? ' · ${req['no_invoice']}' : ''}',

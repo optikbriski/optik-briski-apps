@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'dart:async';
+import 'package:easy_localization/easy_localization.dart';
 import 'dart:convert';
 import 'dart:math' as math show Point, max, min, cos, pi;
 
@@ -15,6 +16,7 @@ import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/geofence_geometry.dart';
 import '../../shared/config.dart';
 import '../../shared/maps/geofence_workspace_map.dart';
+import '../../shared/maps/google_maps_support.dart';
 import '../../shared/maps/osm_address_search.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -124,7 +126,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     super.dispose();
   }
 
-  bool get _useGoogleMap => hasGoogleMapsKey && !_googleMapFailed;
+  bool get _useGoogleMap =>
+      googleMapsPluginSupported && hasGoogleMapsKey && !_googleMapFailed;
 
   void _scheduleImageryMeta() {
     _imageryMetaDebounce?.cancel();
@@ -886,7 +889,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
     final id = _selectedTokoId;
     if (id == null) return;
     if (!AttendanceAdminScope.canEditTokoGeofence(widget.profile, id)) {
-      _toast('Hanya boleh atur geofence toko sendiri.', OptikAdminTokens.danger);
+      _toast('admin_gl_row_5231b2d347'.tr(), OptikAdminTokens.danger);
       return;
     }
     if ((_tenantId ?? '').isEmpty) {
@@ -899,7 +902,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
     if (_mode == _FenceDrawMode.circle) {
       if (_lat == null || _lng == null) {
-        _toast('Ketuk peta untuk menaruh titik pusat.', OptikAdminTokens.warning);
+        _toast('admin_gl_row_2bb698a77d'.tr(), OptikAdminTokens.warning);
         return;
       }
       _commitRadiusField();
@@ -972,7 +975,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
         backgroundColor: color,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w600,
           ),
@@ -1036,7 +1039,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
     final result = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih toko',
+      title: 'admin_auto_fcb2349397'.tr(),
       options: options,
       selected: _selectedTokoId,
       searchHint: 'Cari kode / nama toko…',
@@ -1251,19 +1254,19 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Geofence Toko',
+        title: 'admin_auto_923fc588a3'.tr(),
         subtitle:
             '${AttendanceAdminScope.geofenceBannerHint(widget.profile)} · GPS WGS84',
         actions: [
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _error != null
               ? Center(
                   child: Padding(
@@ -1278,7 +1281,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         ),
                         const SizedBox(height: 12),
                         PremiumPrimaryButton(
-                          label: 'Coba lagi',
+                          label: 'common_retry'.tr(),
                           onPressed: _load,
                           expand: false,
                         ),
@@ -1299,8 +1302,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const PremiumSectionHeader(
-                            label: 'Toko',
+                          PremiumSectionHeader(
+                            label: 'admin_auto_a5629553de'.tr(),
                             padding: EdgeInsets.only(bottom: 10, left: 2),
                           ),
                           PremiumPanel(
@@ -1312,8 +1315,8 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             child: _buildTokoSelector(),
                           ),
                           const SizedBox(height: 18),
-                          const PremiumSectionHeader(
-                            label: 'Mode geofence',
+                          PremiumSectionHeader(
+                            label: 'admin_auto_1e281fde32'.tr(),
                             padding: EdgeInsets.only(bottom: 10, left: 2),
                           ),
                           PremiumPanel(
@@ -1323,14 +1326,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                             child: _buildModePanel(),
                           ),
                           const SizedBox(height: 18),
-                          const PremiumSectionHeader(
-                            label: 'Cari lokasi',
+                          PremiumSectionHeader(
+                            label: 'admin_auto_b8379d3c1e'.tr(),
                             padding: EdgeInsets.only(bottom: 10, left: 2),
                           ),
                           _buildLocationToolsPanel(),
                           const SizedBox(height: 18),
-                          const PremiumSectionHeader(
-                            label: 'Peta workspace',
+                          PremiumSectionHeader(
+                            label: 'admin_auto_407b9c72a5'.tr(),
                             padding: EdgeInsets.only(bottom: 10, left: 2),
                           ),
                           SizedBox(
@@ -1408,7 +1411,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                       _satellite
                                                           ? 'Peta'
                                                           : 'Satelit',
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         color:
                                                             OptikAdminTokens.slate,
                                                         fontSize: 12,
@@ -1460,7 +1463,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                           MainAxisSize.min,
                                                       children: [
                                                         if (_imageryMetaLoading)
-                                                          const SizedBox(
+                                                          SizedBox(
                                                             width: 12,
                                                             height: 12,
                                                             child:
@@ -1472,7 +1475,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                             ),
                                                           )
                                                         else
-                                                          const Icon(
+                                                          Icon(
                                                             Icons
                                                                 .calendar_month_rounded,
                                                             size: 14,
@@ -1489,7 +1492,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                                                 : (_imageryMeta ??
                                                                     ''),
                                                             style:
-                                                                const TextStyle(
+                                                                TextStyle(
                                                               color:
                                                                   OptikAdminTokens.slate,
                                                               fontSize: 11,
@@ -1525,7 +1528,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                           ),
                           const SizedBox(height: 16),
                           PremiumPrimaryButton(
-                            label: 'Simpan geofence',
+                            label: 'admin_auto_a5c8e3330c'.tr(),
                             icon: Icons.save_rounded,
                             loading: _saving,
                             onPressed: _saving ? null : _save,
@@ -1556,7 +1559,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           ),
           child: Row(
             children: [
-              const PremiumIconBadge(
+              PremiumIconBadge(
                 icon: Icons.storefront_rounded,
                 color: OptikAdminTokens.navy,
                 size: 40,
@@ -1580,7 +1583,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       _selectedTokoLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
@@ -1626,7 +1629,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         AdminPickerField(
-          label: 'Mode gambar',
+          label: 'admin_auto_6435622c3d'.tr(),
           valueText: _mode == _FenceDrawMode.circle ? 'Lingkaran' : '4 sudut',
           icon: _mode == _FenceDrawMode.circle
               ? Icons.radio_button_checked
@@ -1634,21 +1637,21 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           onTap: () async {
             final sel = await showAdminPicker<_FenceDrawMode>(
               context: context,
-              title: 'Mode gambar geofence',
+              title: 'admin_auto_bd37fa08d2'.tr(),
               searchable: false,
               selected: _mode,
               headerIcon: Icons.map_outlined,
-              options: const [
+              options: [
                 AdminPickerOption(
                   value: _FenceDrawMode.circle,
-                  label: 'Lingkaran',
-                  subtitle: 'Ketuk peta / geser pin pusat · atur radius',
+                  label: 'admin_lbl_lingkaran'.tr(),
+                  subtitle: 'admin_auto_26c930c694'.tr(),
                   icon: Icons.radio_button_checked,
                 ),
                 AdminPickerOption(
                   value: _FenceDrawMode.corners4,
-                  label: '4 sudut',
-                  subtitle: 'Ketuk hingga 4 sudut · geser penanda',
+                  label: 'admin_lbl_empat_sudut'.tr(),
+                  subtitle: 'admin_auto_5852e2d074'.tr(),
                   icon: Icons.crop_free,
                 ),
               ],
@@ -1691,7 +1694,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
           const SizedBox(height: 14),
           Row(
             children: [
-              const Text(
+              Text(
                 'Radius',
                 style: TextStyle(
                   color: OptikAdminTokens.slate,
@@ -1727,7 +1730,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     value: _radiusMeters.toDouble(),
                     min: _minRadius.toDouble(),
                     max: _maxRadius.toDouble(),
-                    label: '$_radiusMeters m',
+                    label: 'admin_auto_c13cd1990e'.tr(namedArgs: {'radiusMeters': '$_radiusMeters'}),
                     activeColor: OptikAdminTokens.navy,
                     onChanged: (v) {
                       setState(
@@ -1758,7 +1761,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     LengthLimitingTextInputFormatter(3),
                   ],
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w900,
                     fontSize: 15,
@@ -1787,14 +1790,14 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius:
                           BorderRadius.circular(OptikAdminTokens.radiusSm),
-                      borderSide: const BorderSide(
+                      borderSide: BorderSide(
                         color: OptikAdminTokens.lineStrong,
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius:
                           BorderRadius.circular(OptikAdminTokens.radiusSm),
-                      borderSide: const BorderSide(
+                      borderSide: BorderSide(
                         color: OptikAdminTokens.navy,
                         width: 1.6,
                       ),
@@ -1843,7 +1846,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               TextButton.icon(
                 onPressed: _corners.isEmpty ? null : _undoCorner,
                 icon: const Icon(Icons.undo_rounded, size: 18),
-                label: const Text('Hapus terakhir'),
+                label: Text('admin_auto_30f3ac0123'.tr()),
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.slate,
                 ),
@@ -1852,7 +1855,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 TextButton.icon(
                   onPressed: () => _deleteCorner(_selectedCorner!),
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: Text('Hapus ${_selectedCorner! + 1}'),
+                  label: Text('admin_btn_hapus_sudut'.tr(namedArgs: {'n': '${_selectedCorner! + 1}'})),
                   style: TextButton.styleFrom(
                     foregroundColor: OptikAdminTokens.danger,
                   ),
@@ -1860,7 +1863,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               TextButton.icon(
                 onPressed: _corners.isEmpty ? null : _resetCorners,
                 icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Ulang'),
+                label: Text('admin_btn_ulang'.tr()),
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.slate,
                 ),
@@ -1882,7 +1885,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 collapsedIconColor: OptikAdminTokens.slate,
                 title: Text(
                   'Koordinat sudut (${_corners.length}/4)',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.slate,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -1927,7 +1930,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                           const Spacer(),
                           if (selected)
                             IconButton(
-                              tooltip: 'Hapus sudut ${i + 1}',
+                              tooltip: 'admin_btn_hapus_sudut_n'.tr(namedArgs: {'n': '${i + 1}'}),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
@@ -1983,7 +1986,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 backgroundColor: OptikAdminTokens.navy,
                 child: Text(
                   '${i + 1}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.snow,
                     fontWeight: FontWeight.w900,
                     fontSize: 11,
@@ -1994,7 +1997,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               Expanded(
                 child: Text(
                   'Sudut ${i + 1} dipilih · geser untuk pindah',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.slate,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
@@ -2004,7 +2007,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
               TextButton.icon(
                 onPressed: () => _deleteCorner(i),
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                label: const Text('Hapus'),
+                label: Text('btn_hapus'.tr()),
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.danger,
                 ),
@@ -2044,7 +2047,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                 TextField(
                   controller: _searchCtrl,
                   focusNode: _searchFocus,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 14,
                   ),
@@ -2052,13 +2055,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   onSubmitted: (_) => _searchAddress(),
                   onChanged: _onSearchTextChanged,
                   decoration: InputDecoration(
-                    hintText: 'Cari alamat (mis. Jl. Braga No. 1, Bandung)…',
+                    hintText: 'admin_auto_8e0eef7880'.tr(),
                     hintStyle: TextStyle(
                       color: OptikAdminTokens.slate.withOpacity(0.65),
                       fontSize: 13.5,
                     ),
                     prefixIcon: _searching
-                        ? const Padding(
+                        ? Padding(
                             padding: EdgeInsets.all(12),
                             child: SizedBox(
                               width: 18,
@@ -2069,7 +2072,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                               ),
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.search_rounded,
                             color: OptikAdminTokens.navy,
                           ),
@@ -2078,13 +2081,13 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                       children: [
                         if (_searchCtrl.text.isNotEmpty)
                           IconButton(
-                            tooltip: 'Hapus',
+                            tooltip: 'btn_hapus'.tr(),
                             onPressed: _clearSearch,
                             icon: const Icon(Icons.close_rounded, size: 18),
                             color: OptikAdminTokens.slate,
                           ),
                         IconButton(
-                          tooltip: 'Cari',
+                          tooltip: 'admin_btn_cari'.tr(),
                           onPressed: _searching ? null : _searchAddress,
                           icon: const Icon(Icons.arrow_forward_rounded),
                           color: OptikAdminTokens.navy,
@@ -2102,11 +2105,11 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     focusedBorder: InputBorder.none,
                   ),
                 ),
-                const Divider(height: 1, color: OptikAdminTokens.line),
+                Divider(height: 1, color: OptikAdminTokens.line),
                 TextField(
                   controller: _coordsCtrl,
                   focusNode: _coordsFocus,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 13.5,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -2119,18 +2122,18 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     }
                   },
                   decoration: InputDecoration(
-                    hintText: 'Tempel koordinat / link Maps…',
+                    hintText: 'admin_auto_f44f218779'.tr(),
                     hintStyle: TextStyle(
                       color: OptikAdminTokens.slate.withOpacity(0.65),
                       fontSize: 13,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.my_location_rounded,
                       color: OptikAdminTokens.navy,
                       size: 20,
                     ),
                     suffixIcon: IconButton(
-                      tooltip: 'Pakai koordinat',
+                      tooltip: 'admin_auto_fc70961f96'.tr(),
                       onPressed: _goToPastedCoords,
                       icon: const Icon(Icons.arrow_forward_rounded, size: 20),
                       color: OptikAdminTokens.navy,
@@ -2176,7 +2179,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Text(
                   _coordsFeedback ?? _searchFeedback!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.slate,
                     fontSize: 12,
                     height: 1.3,
@@ -2200,7 +2203,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (_reversing)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 2, right: 8),
                         child: SizedBox(
                           width: 14,
@@ -2212,7 +2215,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         ),
                       )
                     else
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 1, right: 8),
                         child: Icon(
                           Icons.place_rounded,
@@ -2229,7 +2232,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                                 ? 'Mencari alamat di titik ini…'
                                 : (_reverseLabel ??
                                     'Alamat tidak tersedia (tetap pakai koordinat).'),
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.slate,
                               fontSize: 12,
                               height: 1.3,
@@ -2269,7 +2272,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                   primary: false,
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: _searchHits.length,
-                  separatorBuilder: (_, __) => const Divider(
+                  separatorBuilder: (_, __) => Divider(
                     height: 1,
                     color: OptikAdminTokens.line,
                   ),
@@ -2290,7 +2293,7 @@ class _TokoGeofencePageState extends State<TokoGeofencePage> {
                         hit.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -2385,7 +2388,7 @@ class _CornerMarkerChip extends StatelessWidget {
         : OptikAdminTokens.ice.withOpacity(0.75);
 
     return Tooltip(
-      message: 'Sudut $index · ketuk untuk pilih · geser untuk pindah',
+      message: 'admin_auto_98b89bb213'.tr(namedArgs: {'index': '$index'}),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         width: size,
@@ -2468,7 +2471,7 @@ class _PreviewTargetMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'Target sementara · ketuk peta untuk set geofence di sini',
+      message: 'admin_auto_b9e348e019'.tr(),
       child: SizedBox(
         width: 36,
         height: 36,
@@ -2490,7 +2493,7 @@ class _PreviewTargetMarker extends StatelessWidget {
             Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: OptikAdminTokens.navy,
                 shape: BoxShape.circle,
               ),
@@ -2521,7 +2524,7 @@ class _CenterAnchorMarker extends StatelessWidget {
   Widget build(BuildContext context) {
     const size = 36.0;
     return Tooltip(
-      message: 'Pusat geofence · geser untuk pindah',
+      message: 'admin_auto_9a6800635c'.tr(),
       child: SizedBox(
         width: size,
         height: size,

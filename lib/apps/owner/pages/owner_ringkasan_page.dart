@@ -83,12 +83,12 @@ class _OwnerRingkasanPageState extends State<OwnerRingkasanPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
-              child: const Icon(Icons.tune_rounded, size: 18, color: OptikAdminTokens.navy),
+              child: Icon(Icons.tune_rounded, size: 18, color: OptikAdminTokens.navy),
             ),
           ),
       ],
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
           : _error != null
               ? OwnerEmptyState(_error!, icon: Icons.error_outline_rounded)
               : ListView(
@@ -215,7 +215,7 @@ class _OwnerRingkasanPageState extends State<OwnerRingkasanPage> {
                               color: OptikAdminTokens.accentSoft,
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.groups_rounded,
                               color: OptikAdminTokens.navy,
                             ),
@@ -338,7 +338,7 @@ class _ExpenseRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: OptikAdminTokens.line)),
+            : Border(bottom: BorderSide(color: OptikAdminTokens.line)),
       ),
       child: Row(
         children: [

@@ -41,7 +41,7 @@ class LogisticsStatusTimelineView extends StatelessWidget {
             Expanded(
               child: SelectableText(
                 resi,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.w800,
                   fontSize: 18,

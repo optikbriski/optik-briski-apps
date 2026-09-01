@@ -187,7 +187,7 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
                               Text(
                                 'universal_qr_camera_denied'.tr(),
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.slate,
                                   height: 1.4,
                                   fontSize: 13,
@@ -228,7 +228,7 @@ class _UniversalQrScanPageState extends State<UniversalQrScanPage> {
                     Text(
                       widget.hintKey.tr(),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         height: 1.4,
                       ),

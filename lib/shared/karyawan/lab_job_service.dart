@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../attendance/attendance_admin_scope.dart';
+import '../garansi/garansi_service.dart';
 import 'shift_auto_assign.dart';
 
 /// Antrian job lab Backliner (claim first-wins + selesai → READY + poin LAB).
@@ -118,6 +121,26 @@ class LabJobService {
       return m;
     }
     return {'ok': true, 'job_id': id};
+  }
+
+  /// Upload bukti foto selesai lab → URL publik (disimpan di sales.foto_hasil_url).
+  Future<String> uploadCompleteFoto({
+    required String jobId,
+    required Uint8List bytes,
+  }) async {
+    final id = jobId.trim();
+    if (id.isEmpty) throw 'Job lab kosong.';
+    if (bytes.isEmpty) throw 'Foto lab kosong.';
+    final path = 'lab/$id/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _db.storage.from(GaransiService.bucketFoto).uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: true,
+          ),
+        );
+    return _db.storage.from(GaransiService.bucketFoto).getPublicUrl(path);
   }
 
   /// Selesai: PENDING_RO→READY + QR siap ambil/pelunasan. Poin LAB via trigger DB.

@@ -54,8 +54,8 @@ class PremiumActionChip extends StatelessWidget {
       label: Text(label),
       onPressed: onPressed,
       backgroundColor: OptikAdminTokens.card,
-      side: const BorderSide(color: OptikAdminTokens.lineStrong),
-      labelStyle: const TextStyle(
+      side: BorderSide(color: OptikAdminTokens.lineStrong),
+      labelStyle: TextStyle(
         color: OptikAdminTokens.slate,
         fontSize: 12,
         fontWeight: FontWeight.w600,

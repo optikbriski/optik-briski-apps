@@ -7,6 +7,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../../shared/attendance/attendance_service.dart';
+import '../../shared/payroll/payroll_service.dart';
+import '../../shared/payroll/payroll_slip_pdf.dart';
 import '../../shared/whatsapp_launcher.dart';
 
 class DetailDataPribadiPage extends StatefulWidget {
@@ -26,6 +28,7 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
   bool _pinChecking = false;
   final _pinCtrl = TextEditingController();
   String? _pinError;
+  List<Map<String, dynamic>> _slips = const [];
 
   @override
   void initState() {
@@ -50,12 +53,20 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
           .eq('id', userId)
           .maybeSingle();
 
+      List<Map<String, dynamic>> slips = const [];
+      try {
+        slips = await PayrollService().mySlips();
+      } catch (e) {
+        debugPrint('Slip payroll: $e');
+      }
+
       if (mounted) {
         setState(() {
           if (data != null) {
             _userData = data;
             _fotoProfileUrl = data['foto_profile']?.toString();
           }
+          _slips = slips;
           _isLoadingData = false;
         });
       }
@@ -354,6 +365,67 @@ class _DetailDataPribadiPageState extends State<DetailDataPribadiPage> {
               _buildDataRow(
                   'profil_label_hubungan'.tr(), hubunganDarurat, true),
             ]),
+            const SizedBox(height: 12),
+            Text(
+              'Slip gaji (terkunci)',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: OptikKaryawanTokens.ink.withOpacity(0.75),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_slips.isEmpty)
+              _buildDataBox([
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Belum ada slip. Tampil setelah Admin Submit & kunci periode.',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                ),
+              ])
+            else
+              for (final slip in _slips)
+                Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ExpansionTile(
+                    title: Text(
+                      '${slip['periode_ym'] ?? '-'} · ${slip['status'] ?? '-'}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text('Nett ${slip['nett'] ?? 0}'),
+                    children: [
+                      for (final c in (slip['components'] as List? ?? const []))
+                        if (c is Map)
+                          ListTile(
+                            dense: true,
+                            title: Text('${c['label'] ?? c['key']}'),
+                            trailing: Text('${c['amount'] ?? 0}'),
+                          ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            try {
+                              await PayrollSlipPdf.shareSlip({
+                                ...slip,
+                                'nama': namaAsli,
+                                'jabatan': jabatanAsli,
+                              });
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Gagal unduh PDF: $e')),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                          label: const Text('Unduh PDF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             const SizedBox(height: 35),
 
             SizedBox(

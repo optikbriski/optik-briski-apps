@@ -23,7 +23,7 @@ class PremiumSectionHeader extends StatelessWidget {
             width: 3,
             height: 14,
             decoration: BoxDecoration(
-              color: OptikAdminTokens.navy,
+              color: OptikAdminTokens.chromeGarnish,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -31,7 +31,7 @@ class PremiumSectionHeader extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: TextStyle(
-              color: OptikAdminTokens.slate.withOpacity(0.95),
+              color: OptikAdminTokens.textMuted.withOpacity(0.95),
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
               letterSpacing: 2.0,
@@ -44,8 +44,8 @@ class PremiumSectionHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    OptikAdminTokens.ice.withOpacity(0.85),
-                    OptikAdminTokens.ice.withOpacity(0.0),
+                    OptikAdminTokens.line.withOpacity(0.9),
+                    OptikAdminTokens.line.withOpacity(0.0),
                   ],
                 ),
               ),

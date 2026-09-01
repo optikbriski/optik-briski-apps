@@ -42,3 +42,36 @@ bool saleDalamRentangLokal(
   if (created == null) return false;
   return !created.isBefore(start) && created.isBefore(endExclusive);
 }
+
+/// Rentang kalender Asia/Jakarta (UTC+7) sebagai instants UTC — sinkron jam toko.
+({DateTime startUtc, DateTime endExclusiveUtc}) omzetRangeJakartaUtc({
+  required bool bulanIni,
+  DateTime? now,
+}) {
+  final utc = (now ?? DateTime.now()).toUtc();
+  final jkt = utc.add(const Duration(hours: 7));
+  if (bulanIni) {
+    final start = DateTime.utc(jkt.year, jkt.month, 1)
+        .subtract(const Duration(hours: 7));
+    final nextMonth = jkt.month == 12
+        ? DateTime.utc(jkt.year + 1, 1, 1)
+        : DateTime.utc(jkt.year, jkt.month + 1, 1);
+    final end = nextMonth.subtract(const Duration(hours: 7));
+    return (startUtc: start, endExclusiveUtc: end);
+  }
+  final start = DateTime.utc(jkt.year, jkt.month, jkt.day)
+      .subtract(const Duration(hours: 7));
+  return (startUtc: start, endExclusiveUtc: start.add(const Duration(days: 1)));
+}
+
+bool saleDalamRentangUtc(
+  Map<String, dynamic> sale, {
+  required DateTime startUtc,
+  required DateTime endExclusiveUtc,
+}) {
+  final raw = sale['created_at']?.toString();
+  if (raw == null || raw.isEmpty) return false;
+  final created = DateTime.tryParse(raw)?.toUtc();
+  if (created == null) return false;
+  return !created.isBefore(startUtc) && created.isBefore(endExclusiveUtc);
+}

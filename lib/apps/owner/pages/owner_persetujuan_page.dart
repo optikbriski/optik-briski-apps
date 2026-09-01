@@ -135,7 +135,7 @@ class _OwnerPersetujuanPageState extends State<OwnerPersetujuanPage> {
       subtitle: total == 0 ? 'Antrean kosong' : '$total menunggu keputusan',
       onRefresh: _load,
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
           : _error != null
               ? OwnerEmptyState(_error!, icon: Icons.error_outline_rounded)
               : ListView(

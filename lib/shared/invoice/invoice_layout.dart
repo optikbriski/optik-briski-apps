@@ -62,9 +62,9 @@ class InvoiceDocLine {
 class InvoiceLayout {
   InvoiceLayout._();
 
-  static const Color _ink = OptikAdminTokens.navy;
-  static const Color _muted = OptikAdminTokens.slate;
-  static const Color _soft = OptikAdminTokens.textSecondary;
+  static Color get _ink => OptikAdminTokens.navy;
+  static Color get _muted => OptikAdminTokens.slate;
+  static Color get _soft => OptikAdminTokens.textSecondary;
   static const PdfColor _pdfInk = PdfColor.fromInt(0xFF000080);
   static const PdfColor _pdfMuted = PdfColor.fromInt(0xFF6D8196);
   static const PdfColor _pdfIce = PdfColor.fromInt(0xFFADD8E6);
@@ -160,7 +160,7 @@ class InvoiceLayout {
     return Text(
       text.toUpperCase(),
       textAlign: align,
-      style: const TextStyle(
+      style: TextStyle(
         color: _muted,
         fontSize: 9,
         fontWeight: FontWeight.w800,
@@ -204,27 +204,30 @@ class InvoiceLayout {
 
   static Widget header(
     InvoiceSettings s, {
-    Color titleColor = _ink,
-    Color mutedColor = _muted,
-    Color phoneColor = _ink,
+    Color? titleColor,
+    Color? mutedColor,
+    Color? phoneColor,
     double logoHeightCenter = 48,
     double logoHeightLeft = 48,
   }) {
+    final ink = titleColor ?? _ink;
+    final muted = mutedColor ?? _muted;
+    final phone = phoneColor ?? _ink;
     final nameStyle = TextStyle(
-      color: titleColor,
+      color: ink,
       fontWeight: FontWeight.w900,
       fontSize: (s.fontSizeHeader + 1).clamp(13, 30),
       letterSpacing: 1.5,
       height: 1.05,
     );
     final addrStyle = TextStyle(
-      color: mutedColor,
+      color: muted,
       fontSize: 9,
       height: 1.45,
       fontWeight: FontWeight.w500,
     );
     final phoneStyle = TextStyle(
-      color: phoneColor,
+      color: phone,
       fontSize: 9.5,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.25,
@@ -258,7 +261,7 @@ class InvoiceLayout {
                   filterQuality: FilterQuality.high,
                   errorBuilder: (_, __, ___) => Icon(
                     Icons.broken_image_outlined,
-                    color: mutedColor,
+                    color: muted,
                     size: logoH * 0.7,
                   ),
                 ),
@@ -298,24 +301,26 @@ class InvoiceLayout {
   }
 
   static Widget doubleRule({
-    Color thick = _ink,
-    Color thin = OptikAdminTokens.lineStrong,
+    Color? thick,
+    Color? thin,
   }) {
+    final thickColor = thick ?? _ink;
+    final thinColor = thin ?? OptikAdminTokens.lineStrong;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(height: 1.5, color: thick.withOpacity(0.85)),
+          Container(height: 1.5, color: thickColor.withOpacity(0.85)),
           const SizedBox(height: 2.5),
-          Container(height: 0.6, color: thin),
+          Container(height: 0.6, color: thinColor),
         ],
       ),
     );
   }
 
-  static Widget hairline({Color color = OptikAdminTokens.lineStrong}) {
-    return Container(height: 0.7, color: color);
+  static Widget hairline({Color? color}) {
+    return Container(height: 0.7, color: color ?? OptikAdminTokens.lineStrong);
   }
 
   static Widget _chip(String label, Color color) {
@@ -677,10 +682,10 @@ class InvoiceLayout {
                   ),
                 ),
                 child: qrChild ??
-                    const Icon(Icons.qr_code_2, color: _ink, size: 48),
+                    Icon(Icons.qr_code_2, color: _ink, size: 48),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Scan invoice',
                 style: TextStyle(
                   color: _muted,
@@ -801,7 +806,7 @@ class InvoiceLayout {
 
   static Widget footer(
     InvoiceSettings s, {
-    Color color = _muted,
+    Color? color,
     TextAlign align = TextAlign.left,
   }) {
     return footerTextWidget(
@@ -813,9 +818,10 @@ class InvoiceLayout {
 
   static Widget footerTextWidget(
     String text, {
-    Color color = _muted,
+    Color? color,
     TextAlign align = TextAlign.left,
   }) {
+    final ink = color ?? _muted;
     final t = text.trim();
     if (t.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -827,7 +833,7 @@ class InvoiceLayout {
           t,
           textAlign: align,
           style: TextStyle(
-            color: color,
+            color: ink,
             fontSize: 9.8,
             height: 1.5,
             fontWeight: FontWeight.w500,

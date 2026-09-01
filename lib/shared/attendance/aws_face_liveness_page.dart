@@ -246,11 +246,11 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(color: OptikAdminTokens.navy),
+                  CircularProgressIndicator(color: OptikAdminTokens.navy),
                   const SizedBox(height: 16),
                   Text(
                     'aws_liveness_preparing'.tr(),
-                    style: const TextStyle(color: OptikAdminTokens.slate),
+                    style: TextStyle(color: OptikAdminTokens.slate),
                   ),
                 ],
               ),
@@ -264,11 +264,11 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const CircularProgressIndicator(color: OptikAdminTokens.ice),
+                    CircularProgressIndicator(color: OptikAdminTokens.ice),
                     const SizedBox(height: 16),
                     Text(
                       'aws_liveness_verifying'.tr(),
-                      style: const TextStyle(color: OptikAdminTokens.snow),
+                      style: TextStyle(color: OptikAdminTokens.snow),
                     ),
                   ],
                 ),
@@ -288,7 +288,7 @@ class _AwsFaceLivenessPageState extends State<AwsFaceLivenessPage> {
                     Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.snow,
                         height: 1.4,
                       ),

@@ -341,7 +341,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: OptikAdminTokens.bgMid),
+                decoration: BoxDecoration(color: OptikAdminTokens.bgMid),
                 children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                     .map((t) => cell(t, header: true))
                     .toList(),
@@ -385,7 +385,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const PremiumScaffold(
+      return PremiumScaffold(
         body:
             Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy)),
       );
@@ -396,7 +396,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         appBar: PremiumAppBar(title: "pos_nota_title".tr()),
         body: Center(
             child: Text("pos_data_tidak_ditemukan".tr(),
-                style: const TextStyle(color: OptikAdminTokens.navy))),
+                style: TextStyle(color: OptikAdminTokens.navy))),
       );
     }
 
@@ -552,7 +552,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                           '${canPartial ? 'Item READY bisa diambil sekarang, atau tunggu RO selesai. ' : ''}'
                           '${hasRo && !canPartial ? 'RO otomatis pending sampai stok ready. ' : ''}'
                           'Aksi lifecycle: scan QR pelanggan (DP/LUNAS/CLAIM) di hub.',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.slate,
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -617,7 +617,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                     : currentTrackingStatus == 'PENDING_PO'
                                         ? 'RO · OTOMATIS'
                                         : currentTrackingStatus,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
@@ -671,10 +671,10 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 height: 45,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: OptikAdminTokens.lineStrong)),
+                      side: BorderSide(color: OptikAdminTokens.lineStrong)),
                   onPressed: () => Navigator.pop(context),
                   child: Text("nota_btn_baru".tr(),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
                 ),
               ),

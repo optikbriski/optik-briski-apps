@@ -53,7 +53,7 @@ class ZoomableNetworkImagePane extends StatelessWidget {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
                         onTap: () => showZoomableImageDialog(context, url),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 6,
@@ -189,7 +189,7 @@ class _ZoomableImageDialogState extends State<_ZoomableImageDialog> {
                     ),
                     child: Text(
                       '${(_scale * 100).round()}%',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.snow,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,

@@ -282,7 +282,7 @@ abstract final class InvoiceDocumentBuilder {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: OptikAdminTokens.bgMid),
+                decoration: BoxDecoration(color: OptikAdminTokens.bgMid),
                 children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                     .map((t) => cell(t, header: true))
                     .toList(),
@@ -311,7 +311,7 @@ abstract final class InvoiceDocumentBuilder {
         const SizedBox(height: 6),
         Text(
           'PD Pasien (R/L): ${parseResep(detailResep, 'OD', 'PD')}',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontSize: 10,
             fontWeight: FontWeight.w700,
@@ -434,11 +434,11 @@ abstract final class InvoiceDocumentBuilder {
                   version: QrVersions.auto,
                   gapless: true,
                   padding: EdgeInsets.zero,
-                  eyeStyle: const QrEyeStyle(
+                  eyeStyle: QrEyeStyle(
                     eyeShape: QrEyeShape.square,
                     color: OptikAdminTokens.navy,
                   ),
-                  dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleStyle: QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
                     color: OptikAdminTokens.navy,
                   ),
@@ -492,14 +492,14 @@ abstract final class InvoiceDocumentBuilder {
     return pdf.save();
   }
 
-  /// Lebar gulungan POS-80 (80 mm). Tinggi dinamis lewat MultiPage.
+  /// Lebar gulungan POS-80 (80 mm). Tinggi panjang agar MultiPage memuat nota.
   static final PdfPageFormat thermal80Format = PdfPageFormat(
     80 * PdfPageFormat.mm,
-    297 * PdfPageFormat.mm,
-    marginAll: 3 * PdfPageFormat.mm,
+    400 * PdfPageFormat.mm,
+    marginAll: 2.5 * PdfPageFormat.mm,
   );
 
-  /// PDF struk thermal 80mm — cocok dialog print → destination POS-80.
+  /// PDF struk 80mm terpisah (bukan mengubah nota digital A5/UI).
   static Future<Uint8List> buildThermalPdfBytes(
     InvoiceDocumentModel doc, {
     String? qrOverride,
@@ -508,8 +508,8 @@ abstract final class InvoiceDocumentBuilder {
     final qrData = (qrOverride ?? doc.qrPayload).trim();
     final showQr = doc.settings.showQrInvoice && qrData.isNotEmpty;
     final compact = doc.settings.copyWith(
-      fontSizeBody: 8,
-      fontSizeHeader: 11,
+      fontSizeBody: 9,
+      fontSizeHeader: 12,
     );
     pdf.addPage(
       pw.MultiPage(
@@ -530,8 +530,8 @@ abstract final class InvoiceDocumentBuilder {
             extras: doc.hasLensa ? lensTablePdf(doc.detailResep) : null,
             qrChild: showQr
                 ? pw.Container(
-                    height: 36,
-                    width: 36,
+                    height: 44,
+                    width: 44,
                     child: pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
                       data: qrData,
@@ -539,7 +539,7 @@ abstract final class InvoiceDocumentBuilder {
                     ),
                   )
                 : null,
-            itemsTitle: 'ITEM',
+            itemsTitle: 'RINCIAN ITEM PESANAN',
           ),
         ],
       ),

@@ -121,7 +121,7 @@ class _TenantContractSignPageState extends State<TenantContractSignPage> {
                 if (_error == null) ...[
                   Text(
                     '${_doc['title'] ?? 'Perjanjian langganan'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 20,
                       color: OptikAdminTokens.navy,
@@ -132,7 +132,7 @@ class _TenantContractSignPageState extends State<TenantContractSignPage> {
                   Text(
                     '${_doc['contract_no'] ?? ''} · ${_doc['provider'] ?? 'REKASA KARYA INDONESIA'}\n'
                     '${_doc['display_name'] ?? ''} · kode ${_doc['slug'] ?? ''}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.slate,
                       height: 1.35,
                     ),

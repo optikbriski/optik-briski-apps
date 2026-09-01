@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme.dart';
@@ -27,8 +29,18 @@ class _OwnerTimPageState extends State<OwnerTimPage> {
   }
 
   List<Map<String, dynamic>> _maps(dynamic res) {
-    if (res is! List) return const [];
-    return res
+    var cur = res;
+    if (cur is String) {
+      final t = cur.trim();
+      if (t.isEmpty) return const [];
+      try {
+        cur = jsonDecode(t);
+      } catch (_) {
+        return const [];
+      }
+    }
+    if (cur is! List) return const [];
+    return cur
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
@@ -94,7 +106,7 @@ class _OwnerTimPageState extends State<OwnerTimPage> {
       subtitle: '${_tim.length} orang · $_aktifCount aktif',
       onRefresh: _load,
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
           : _error != null
               ? OwnerEmptyState(_error!, icon: Icons.error_outline_rounded)
               : ListView(
@@ -107,7 +119,7 @@ class _OwnerTimPageState extends State<OwnerTimPage> {
                         Expanded(
                           child: _MiniKpi(
                             label: 'Payroll',
-                            value: OwnerService.formatRp(nett is num ? nett : 0),
+                            value: OwnerService.formatRp(nett),
                             hint: '$periode · $status',
                           ),
                         ),
@@ -156,7 +168,7 @@ class _OwnerTimPageState extends State<OwnerTimPage> {
                             for (var i = 0; i < _payrollLines.length; i++) ...[
                               _DensePayRow(line: _payrollLines[i]),
                               if (i < _payrollLines.length - 1)
-                                const Divider(height: 1, color: OptikAdminTokens.line),
+                                Divider(height: 1, color: OptikAdminTokens.line),
                             ],
                           ],
                         ),
@@ -179,7 +191,7 @@ class _OwnerTimPageState extends State<OwnerTimPage> {
                             for (var i = 0; i < filtered.length; i++) ...[
                               _DenseStaffRow(row: filtered[i]),
                               if (i < filtered.length - 1)
-                                const Divider(height: 1, color: OptikAdminTokens.line),
+                                Divider(height: 1, color: OptikAdminTokens.line),
                             ],
                           ],
                         ),
@@ -391,20 +403,36 @@ class _DensePayRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final meta = line['meta'];
+    final bonus = meta is Map ? meta['bonus_rp'] : null;
+    final poin = meta is Map ? meta['poin'] : null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              (line['nama'] ?? '-').toString(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: OwnerUi.body(
-                color: OptikAdminTokens.navy,
-                weight: FontWeight.w700,
-                size: 13,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (line['nama'] ?? '-').toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OwnerUi.body(
+                    color: OptikAdminTokens.navy,
+                    weight: FontWeight.w700,
+                    size: 13,
+                  ),
+                ),
+                if (bonus != null || poin != null)
+                  Text(
+                    'bonus $bonus · poin $poin · tunj ${line['tunjangan'] ?? 0}',
+                    style: OwnerUi.body(
+                      color: OptikAdminTokens.slate,
+                      size: 11,
+                    ),
+                  ),
+              ],
             ),
           ),
           Text(

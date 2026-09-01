@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/theme.dart';
 import 'owner_ui.dart';
 import 'pages/owner_akun_page.dart';
@@ -31,6 +35,28 @@ class _OwnerShellState extends State<OwnerShell> {
     _TabSpec('Alert', Icons.notifications_none_rounded, Icons.notifications_rounded),
     _TabSpec('Akun', Icons.person_outline_rounded, Icons.person_rounded),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(ClientForceSync.bindFromTenantService(
+      onRemote: (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('client_force_sync_remote_ok'.tr()),
+            backgroundColor: OptikAdminTokens.navy,
+          ),
+        );
+      },
+    ));
+  }
+
+  @override
+  void dispose() {
+    unawaited(ClientForceSync.unbind());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

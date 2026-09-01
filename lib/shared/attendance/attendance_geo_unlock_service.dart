@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../training/training_mode.dart';
 import '../training/training_sandbox_store.dart';
 import 'attendance_config.dart';
+import 'attendance_dinas.dart';
 import 'attendance_service.dart';
 import 'geofence_service.dart';
 
@@ -80,7 +81,14 @@ class AttendanceGeoUnlockService {
   }) async {
     final ttl = ttlSeconds ?? AttendanceConfig.geoUnlockTtlSeconds;
 
-    if (!geo.inside || geo.latitude == null || geo.longitude == null) {
+    if (geo.latitude == null || geo.longitude == null) {
+      throw 'GPS wajib sebelum scan QR absensi.';
+    }
+    final dinas = await AttendanceDinas.isApprovedToday(
+      karyawanId,
+      client: _client,
+    );
+    if (!dinas && !geo.inside) {
       throw 'GPS harus di dalam geofence toko sebelum scan QR absensi.';
     }
     if (qrTokenId == null || qrTokenId.trim().isEmpty) {
@@ -90,7 +98,7 @@ class AttendanceGeoUnlockService {
     // Masuk: wajib jadwal + jam geofence shift. Pulang: boleh tanpa jadwal hari ini
     // (tutup shift OPEN kemarin) — deteksi dari source.
     final isPulang = source.toLowerCase().contains('pulang');
-    if (!isPulang) {
+    if (!isPulang && !dinas) {
       await AttendanceService(client: _client).assertCanAbsenMasukNow(karyawanId);
     }
 

@@ -6,10 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../shared/attendance/pos_duty_gate.dart';
+import '../../shared/invoice/invoice_link.dart';
+import '../../shared/karyawan/karyawan_action_outbox.dart';
+import '../../shared/karyawan/karyawan_push_service.dart';
 import '../../shared/karyawan/toko_antrian_realtime.dart';
 import '../../shared/karyawan/toko_antrian_service.dart';
+import '../../shared/qr/obr_codes.dart';
+import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/qr/universal_qr_scan_page.dart';
 import '../../shared/theme.dart';
+import 'karyawan_claim_page.dart';
+import 'karyawan_garansi_ambil_page.dart';
 
 /// Daftar antrian lantai toko + aksi ringan (booking / klaim / online / scan pickup).
 class TokoAntrianPage extends StatefulWidget {
@@ -57,6 +65,20 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
     _poll = Timer.periodic(const Duration(seconds: 25), (_) {
       if (mounted && !_loading && _busyId == null) unawaited(_reload());
     });
+    unawaited(_flushOutbox());
+  }
+
+  Future<void> _flushOutbox() async {
+    final n = await KaryawanActionOutbox.instance.flush();
+    if (n > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('outbox_flush_ok'.tr(namedArgs: {'n': '$n'})),
+          backgroundColor: OptikKaryawanTokens.success,
+        ),
+      );
+      await _reload();
+    }
   }
 
   @override
@@ -201,16 +223,45 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
           await _scanPickup();
           break;
         case TokoAntrianKind.pickupOnline:
-          await _svc.advanceOnlinePickup(
-            orderId: item.id,
-            currentStatus: item.status ?? '',
+          await KaryawanActionOutbox.instance.runOrEnqueue(
+            kind: 'online_advance',
+            payload: {
+              'orderId': item.id,
+              'currentStatus': item.status ?? '',
+            },
+            action: () => _svc.advanceOnlinePickup(
+              orderId: item.id,
+              currentStatus: item.status ?? '',
+            ),
+          );
+          unawaited(
+            KaryawanPushService.instance.notifyToko(
+              tokoId: widget.tokoId,
+              judul: 'Pickup online',
+              isi: '${item.title} · ${item.status ?? ''}',
+              tipe: 'ANTRIAN',
+            ),
           );
           break;
         case TokoAntrianKind.booking:
           break;
         case TokoAntrianKind.klaim:
-          await _svc.markKlaimDiproses(requestId: item.id);
-          break;
+          await KaryawanActionOutbox.instance.runOrEnqueue(
+            kind: 'klaim_proses',
+            payload: {'requestId': item.id},
+            action: () => _svc.markKlaimDiproses(requestId: item.id),
+          );
+          unawaited(
+            KaryawanPushService.instance.notifyToko(
+              tokoId: widget.tokoId,
+              judul: 'Klaim diproses',
+              isi: item.title,
+              tipe: 'ANTRIAN',
+            ),
+          );
+          if (mounted) await _reload();
+          if (mounted) await _offerClaimScan(item);
+          return;
       }
       if (mounted) await _reload();
     } catch (e) {
@@ -224,6 +275,65 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
+  }
+
+  /// Setelah mark diproses: tawarkan scan QR CLAIM → KaryawanClaimPage.
+  Future<void> _offerClaimScan(TokoAntrianItem item) async {
+    final inv = (item.noInvoice ?? '').trim();
+    if (inv.isEmpty || !mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('antrian_klaim_scan_claim'.tr()),
+        content: Text(
+          'antrian_invoice_claim_hint'.tr(namedArgs: {'invoice': inv}),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('antrian_aksi_batal'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('antrian_aksi_scan'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    final raw = await UniversalQrScanPage.scanRaw(
+      context,
+      allowedTypes: {
+        QrPayloadType.invoice,
+        QrPayloadType.unknown,
+      },
+      titleKey: 'antrian_klaim_scan_claim',
+      hintKey: 'antrian_klaim_scan_claim',
+    );
+    if (!mounted || raw == null || raw.trim().isEmpty) return;
+    final obr = ObrInvoice.parse(raw);
+    final no = (obr?.noInvoice ?? InvoiceLink.parse(raw) ?? inv).trim();
+    if (obr != null && obr.phase != null && obr.phase != 'CLAIM') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'antrian_invoice_claim_hint'.tr(namedArgs: {'invoice': no}),
+          ),
+          backgroundColor: Colors.orange.shade800,
+        ),
+      );
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KaryawanClaimPage(
+          noInvoice: no.isEmpty ? inv : no,
+          rawScan: raw,
+          profile: _staffProfile,
+        ),
+      ),
+    );
   }
 
   Future<void> _openBookingSheet(TokoAntrianItem item) async {
@@ -315,7 +425,20 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
     if (!await _ensureDuty()) return;
     setState(() => _busyId = item.id);
     try {
-      await _svc.updateBookingStatus(bookingId: item.id, status: action);
+      await KaryawanActionOutbox.instance.runOrEnqueue(
+        kind: 'booking_status',
+        payload: {'bookingId': item.id, 'status': action},
+        action: () =>
+            _svc.updateBookingStatus(bookingId: item.id, status: action),
+      );
+      unawaited(
+        KaryawanPushService.instance.notifyToko(
+          tokoId: widget.tokoId,
+          judul: 'Booking update',
+          isi: '${item.title} · $action',
+          tipe: 'ANTRIAN',
+        ),
+      );
       if (mounted) await _reload();
     } catch (e) {
       if (!mounted) return;
@@ -387,12 +510,37 @@ class _TokoAntrianPageState extends State<TokoAntrianPage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'garansi_ambil_fab'.tr(),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => KaryawanGaransiAmbilPage(
+                    profile: {
+                      'id': widget.karyawanId,
+                      'nik': widget.karyawanNik,
+                      'nama': widget.karyawanNama,
+                      'toko_id': widget.tokoId,
+                      'role': 'karyawan',
+                    },
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.verified_user_outlined),
+          ),
+          IconButton(
             tooltip: 'scan_qr_universal'.tr(),
             onPressed: _scanPickup,
             icon: const Icon(Icons.qr_code_scanner_rounded),
           ),
           IconButton(
-            onPressed: _loading ? null : _reload,
+            onPressed: _loading
+                ? null
+                : () async {
+                    await _flushOutbox();
+                    if (mounted) await _reload();
+                  },
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],

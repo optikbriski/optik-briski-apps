@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../bootstrap.dart';
+import '../local_form_draft.dart';
 import '../tenant/tenant_billing.dart';
 import '../theme.dart';
 import 'tenant_contract_sign_page.dart';
@@ -35,7 +36,7 @@ class TenantSuspendedPage extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               access.lockTitle,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -46,7 +47,7 @@ class TenantSuspendedPage extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 access.displayName!,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.slate,
                   fontWeight: FontWeight.w600,
                 ),
@@ -63,7 +64,7 @@ class TenantSuspendedPage extends StatelessWidget {
             ),
             if (access.invoices.isNotEmpty) ...[
               const SizedBox(height: 22),
-              const Text(
+              Text(
                 'Tagihan terbuka',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
@@ -93,7 +94,7 @@ class TenantSuspendedPage extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           '${TenantBilling.formatRp(i['amount_idr'])} · ${i['status']}',
-                          style: const TextStyle(color: OptikAdminTokens.slate),
+                          style: TextStyle(color: OptikAdminTokens.slate),
                         ),
                       ],
                     ),
@@ -140,6 +141,31 @@ class TenantSuspendedPage extends StatelessWidget {
 }
 
 Future<void> signOutQuiet() async {
+  try {
+    final uid = supabase.auth.currentUser?.id.trim();
+    if (uid != null && uid.isNotEmpty) {
+      String? tokoId;
+      try {
+        final row = await supabase
+            .from('profiles')
+            .select('toko_id')
+            .eq('id', uid)
+            .maybeSingle();
+        tokoId = row?['toko_id']?.toString();
+      } catch (_) {}
+      if (tokoId == null || tokoId.isEmpty) {
+        try {
+          final row = await supabase
+              .from('karyawan')
+              .select('toko_id')
+              .eq('id', uid)
+              .maybeSingle();
+          tokoId = row?['toko_id']?.toString();
+        } catch (_) {}
+      }
+      await LocalFormDraft.clearSessionDrafts(userId: uid, tokoId: tokoId);
+    }
+  } catch (_) {}
   try {
     await supabase.auth.signOut();
   } catch (_) {}

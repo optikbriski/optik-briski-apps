@@ -2,38 +2,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'sales_page.dart';
-import 'inventory.dart';
-import 'product_master.dart';
-import 'buku_besar.dart';
+import '../../shared/admin_appearance.dart';
+import '../../shared/admin/admin_nav_badge_service.dart';
+import '../../shared/connectivity/connectivity_reload.dart';
+import '../../shared/admin/admin_force_sync.dart';
+import '../../shared/admin/admin_language.dart';
 import '../../shared/brand/brand_service.dart';
-import '../../shared/config.dart';
-import '../../shared/finance/omzet_masuk.dart';
 import '../../shared/tenant/tenant_modules.dart';
-import '../../shared/admin_approval_page.dart';
 import '../../shared/training/training_banner.dart';
-import '../../shared/training/training_curriculum.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/app_brand_mark.dart';
-import 'riwayat_transaksi_page.dart';
-import 'invoice_config_page.dart';
-import 'member_home_content_page.dart';
-import 'online_orders_page.dart';
-import 'absensi_toko_page.dart';
-import 'attendance_monitor_page.dart';
-import 'jadwal_kerja_page.dart';
-import 'monthly_export_page.dart';
-import 'garansi_page.dart';
-import 'toko_geofence_page.dart';
-import 'tinjauan_mencurigakan_page.dart';
-import 'pengaduan_inbox_page.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/qr/universal_qr_host.dart';
 import '../../shared/qr/universal_qr_nav.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
-import 'tenant_admin_page.dart';
-import 'rekasa_store_orders_page.dart';
+import '../../shared/widgets/tenant_suspended_page.dart';
+import 'admin_dash_nav.dart';
+import 'admin_nav_sidebar.dart';
 
 class DashboardPage extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -43,29 +29,63 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-enum _OmzetPeriode { hariIni, bulanIni }
+class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserver {
+  static final Object _connectivityReloadOwner = Object();
 
-class _DashboardPageState extends State<DashboardPage> {
-  int _omzetHariIni = 0;
-  int _omzetBulanIni = 0;
-  _OmzetPeriode _omzetPeriode = _OmzetPeriode.hariIni;
-  bool isStatsLoading = true;
-  String? _fotoProfileUrl;
   bool _trainingBusy = false;
+  bool _forceSyncBusy = false;
+  bool _sidebarOpen = true;
+  bool _groupPicked = false;
+  String? _openGroupId;
+  String? _activeItemId = 'rangkuman_kerja';
+  String? _fotoProfileUrl;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _paneNavKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AdminLanguage.ensureSupported(context);
+    });
     UniversalQrHost.bind(
       callerRole: UniversalQrCallerRole.admin,
       profile: widget.profile,
     );
     _fetchTodayStats();
     _fetchFotoProfil();
+    AdminNavBadgeService.instance.bindProfile(widget.profile);
+    AdminNavBadgeService.instance.start();
+    ConnectivityReload.bind(_connectivityReloadOwner, _reloadFromConnectivityBanner);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(AdminNavBadgeService.instance.refresh());
+    }
+  }
+
+  void _markNavItemUnread(String itemId) {
+    unawaited(AdminNavBadgeService.instance.markScopeUnread(itemId));
+  }
+
+  Future<void> _reloadFromConnectivityBanner() async {
+    await Future.wait<void>([
+      _fetchTodayStats(),
+      _fetchFotoProfil(),
+      AdminNavBadgeService.instance.refresh(),
+    ]);
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    AdminNavBadgeService.instance.stop();
+    ConnectivityReload.unbind(_connectivityReloadOwner);
     UniversalQrHost.clear();
     super.dispose();
   }
@@ -97,21 +117,64 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // 2. FORMATTER MATA UANG RUPIAH LOKAL
-  String _formatRupiah(dynamic angka) {
-    if (angka == null) return "rp_0".tr();
-    try {
-      int val = int.tryParse(angka.toString().split('.')[0]) ?? 0;
-      return "Rp ${val.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}";
-    } catch (e) {
-      return "rp_0".tr();
-    }
-  }
-
-  void _snack(String msg, Color color) {
+  void _snack(String msg, Color color, {Duration? duration}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        duration: duration ?? const Duration(seconds: 4),
+      ),
     );
+  }
+
+  /// Paksa sinkron data cabang ini ke semua web/APK — bukan cek kebocoran.
+  Future<void> _forceSync() async {
+    if (_forceSyncBusy) return;
+    setState(() => _forceSyncBusy = true);
+    final toko = AdminForceSync.tokoFromProfile(widget.profile);
+    final isPusat = AttendanceAdminScope.isPusatTokoId(toko);
+    _snack(
+      isPusat
+          ? 'admin_force_sync_busy_pusat'.tr()
+          : 'admin_force_sync_busy'.tr(namedArgs: {'toko': toko}),
+      OptikAdminTokens.navy,
+      duration: const Duration(seconds: 8),
+    );
+    try {
+      // Pusat: reloadWeb false (di dalam AdminForceSync). Cabang: boleh reload.
+      final result = await AdminForceSync.run(
+        tokoId: toko,
+        reloadWeb: !isPusat,
+      );
+      if (!mounted) return;
+      // Web cabang mungkin sudah reload; Pusat tetap di halaman.
+      if (result.reloadedWeb) return;
+      // Matikan busy SEBELUM snack sukses — setState di finally menelan SnackBar.
+      setState(() => _forceSyncBusy = false);
+      _snack(
+        result.pusatAllBranches
+            ? 'admin_force_sync_ok_pusat'.tr(namedArgs: {
+                'count': '${result.branchCount}',
+              })
+            : 'admin_force_sync_ok'.tr(namedArgs: {'toko': toko}),
+        OptikAdminTokens.success,
+        duration: const Duration(seconds: 6),
+      );
+      unawaited(_fetchTodayStats());
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _forceSyncBusy = false);
+      _snack(
+        'admin_force_sync_fail'.tr(namedArgs: {'error': '$e'}),
+        OptikAdminTokens.danger,
+        duration: const Duration(seconds: 8),
+      );
+    } finally {
+      if (mounted && _forceSyncBusy) {
+        setState(() => _forceSyncBusy = false);
+      }
+    }
   }
 
   /// Enter/exit Training Mode — same full Admin menus; sandbox wipe on exit.
@@ -124,10 +187,11 @@ class _DashboardPageState extends State<DashboardPage> {
       try {
         await TrainingMode.instance.exit();
         if (!mounted) return;
-        _snack('training_msg_exited'.tr(), OptikAdminTokens.slate);
+        _snack('admin_auto_8f01aad442'.tr(), OptikAdminTokens.slate);
         setState(() {});
       } catch (e) {
-        _snack('training_msg_error'.tr().replaceAll('{}', '$e'), OptikAdminTokens.danger);
+        _snack('admin_auto_3fdfb8b635'.tr().replaceAll('{}', '$e'),
+            OptikAdminTokens.danger);
       } finally {
         if (mounted) setState(() => _trainingBusy = false);
       }
@@ -152,713 +216,436 @@ class _DashboardPageState extends State<DashboardPage> {
         () => TrainingMode.instance.enter(profile),
       );
       if (!mounted) return;
-      _snack('training_msg_entered'.tr(), OptikAdminTokens.training);
+      _snack('admin_auto_73a6c032e3'.tr(), OptikAdminTokens.training);
       setState(() {});
     } catch (e) {
-      _snack('training_msg_error'.tr().replaceAll('{}', '$e'), OptikAdminTokens.danger);
+      _snack('admin_auto_3fdfb8b635'.tr().replaceAll('{}', '$e'),
+          OptikAdminTokens.danger);
     } finally {
       if (mounted) setState(() => _trainingBusy = false);
     }
   }
 
-  // 3. Omzet real: uang yang sudah masuk (bukan sisa DP / nota batal).
+  Future<void> _pickLook() async {
+    final sel = await showAdminPicker<AdminAppearanceMode>(
+      context: context,
+      title: 'dash_look_title'.tr(),
+      subtitle: 'dash_look_subtitle'.tr(),
+      searchable: false,
+      headerIcon: Icons.palette_outlined,
+      selected: AdminAppearance.instance.mode,
+      options: [
+        AdminPickerOption(
+          value: AdminAppearanceMode.frozenLake,
+          label: 'dash_look_frozen'.tr(),
+          subtitle: 'dash_look_frozen_sub'.tr(),
+          icon: Icons.ac_unit_rounded,
+        ),
+        AdminPickerOption(
+          value: AdminAppearanceMode.komboLight,
+          label: 'dash_look_light'.tr(),
+          subtitle: 'dash_look_light_sub'.tr(),
+          icon: Icons.light_mode_rounded,
+        ),
+        AdminPickerOption(
+          value: AdminAppearanceMode.komboDark,
+          label: 'dash_look_dark'.tr(),
+          subtitle: 'dash_look_dark_sub'.tr(),
+          icon: Icons.dark_mode_rounded,
+        ),
+      ],
+    );
+    if (sel == null || sel.isClear || sel.value == null) return;
+    await AdminAppearance.instance.setMode(sel.value!);
+  }
+
   Future<void> _fetchTodayStats() async {
-    if (!mounted) return;
-    setState(() => isStatsLoading = true);
     try {
       await TenantModules.instance.load();
-      final now = DateTime.now();
-      final bulan = omzetRangeLokal(bulanIni: true, now: now);
-      final hari = omzetRangeLokal(bulanIni: false, now: now);
-      final rows = await _fetchSalesOmzet(
-        start: bulan.start,
-        endExclusive: bulan.endExclusive,
-      );
-
-      var hariIni = 0;
-      var bulanIni = 0;
-      for (final item in rows) {
-        final masuk = uangMasukDariSale(item);
-        if (masuk <= 0) continue;
-        bulanIni += masuk;
-        if (saleDalamRentangLokal(
-          item,
-          start: hari.start,
-          endExclusive: hari.endExclusive,
-        )) {
-          hariIni += masuk;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _omzetHariIni = hariIni;
-          _omzetBulanIni = bulanIni;
-          isStatsLoading = false;
-        });
-      }
     } catch (e) {
       debugPrint("${'gagal_tarik_omzet'.tr()} $e");
-      if (mounted) {
-        setState(() => isStatsLoading = false);
-      }
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchSalesOmzet({
-    required DateTime start,
-    required DateTime endExclusive,
-  }) async {
-    const pageSize = 1000;
-    final tokoId = widget.profile['toko_id'] ?? 'KOSONG';
-    final startIso = start.toUtc().toIso8601String();
-    final endIso = endExclusive.toUtc().toIso8601String();
-    final out = <Map<String, dynamic>>[];
-    var from = 0;
-    while (true) {
-      final page = await Supabase.instance.client
-          .from('sales')
-          .select('total_harga, sisa_tagihan, status_pembayaran, created_at')
-          .eq('toko_id', tokoId)
-          .gte('created_at', startIso)
-          .lt('created_at', endIso)
-          .order('created_at')
-          .range(from, from + pageSize - 1);
-      final rows = List<Map<String, dynamic>>.from(page as List);
-      out.addAll(rows);
-      if (rows.length < pageSize) break;
-      from += pageSize;
+  String? _resolvedGroupId(List<AdminDashNavGroup> groups) {
+    final folders = groups.where((g) => !g.directItem).toList();
+    if (folders.isEmpty) return null;
+    if (_openGroupId != null && folders.any((g) => g.id == _openGroupId)) {
+      return _openGroupId;
     }
-    return out;
+    if (!_groupPicked) return folders.first.id;
+    return null;
+  }
+
+  AdminDashNavItem? _itemById(List<AdminDashNavGroup> groups, String? id) {
+    if (id == null) return null;
+    for (final g in groups) {
+      for (final item in g.items) {
+        if (item.id == id) return item;
+      }
+    }
+    return null;
+  }
+
+  void _selectGroup(String id, {required String? currentlyOpen}) {
+    setState(() {
+      if (!_sidebarOpen) _sidebarOpen = true;
+      _groupPicked = true;
+      _openGroupId = currentlyOpen == id ? null : id;
+    });
+  }
+
+  void _goHome() {
+    setState(() => _activeItemId = 'rangkuman_kerja');
+  }
+
+  void _openNavItem(
+    AdminDashNavItem item, {
+    required List<AdminDashNavGroup> groups,
+    required bool closeDrawer,
+  }) {
+    if (closeDrawer && _scaffoldKey.currentState?.isDrawerOpen == true) {
+      Navigator.of(context).pop();
+    }
+    if (item.onOpen != null && item.buildPage == null) {
+      item.onOpen!();
+      return;
+    }
+    if (item.buildPage == null) return;
+
+    String? groupId;
+    for (final g in groups) {
+      if (g.items.any((i) => i.id == item.id)) {
+        groupId = g.id;
+        break;
+      }
+    }
+    setState(() {
+      _groupPicked = true;
+      if (groupId != null) _openGroupId = groupId;
+      _activeItemId = item.id;
+      if (!_sidebarOpen) _sidebarOpen = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return PremiumScaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const AppBrandMark(height: 34),
-        actions: [
-          ListenableBuilder(
-            listenable: TrainingMode.instance,
-            builder: (context, _) {
-              final active = TrainingMode.instance.isActive;
-              return Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: _HeaderIconButton(
-                  tooltip: active
-                      ? 'training_menu_exit'.tr()
-                      : 'training_menu_enter'.tr(),
-                  onPressed: _trainingBusy ? null : _toggleTrainingMode,
-                  icon: Icons.school_rounded,
-                  emphasized: active,
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: _HeaderIconButton(
-              tooltip: 'Logout',
-              onPressed: () async {
-                await Supabase.instance.client.auth.signOut();
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        TrainingMode.instance,
+        TenantModules.instance,
+        AdminAppearance.instance,
+        AdminNavBadgeService.instance,
+      ]),
+      builder: (context, _) {
+        final groups = buildAdminDashNavGroups(
+          context: context,
+          profile: widget.profile,
+          onToggleTraining: _toggleTrainingMode,
+        );
+        final openId = _resolvedGroupId(groups);
+        final active = _itemById(groups, _activeItemId);
+        final badges = AdminNavBadgeService.instance.counts;
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 900;
+            return PopScope(
+              canPop: _activeItemId == null ||
+                  _activeItemId == 'rangkuman_kerja',
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop) _goHome();
               },
-              icon: Icons.logout_rounded,
-            ),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _fetchTodayStats,
-        color: OptikAdminTokens.navy,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 56),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              PremiumPanel(
-                padding: const EdgeInsets.fromLTRB(16, 16, 18, 16),
-                borderRadius: 20,
-                showAccentBar: true,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: OptikAdminTokens.ice.withOpacity(0.35),
-                        border: Border.all(color: OptikAdminTokens.ice),
-                        image: _fotoProfileUrl != null
-                            ? DecorationImage(
-                                image: NetworkImage(_fotoProfileUrl!),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
+              child: PremiumScaffold(
+                scaffoldKey: _scaffoldKey,
+                drawer: narrow
+                    ? Drawer(
+                        backgroundColor: OptikAdminTokens.bgMid,
+                        child: SafeArea(
+                          child: AdminNavSidebar(
+                            groups: groups,
+                            openGroupId: openId,
+                            selectedItemId: _activeItemId,
+                            expanded: true,
+                            badgeCounts: badges,
+                            onClose: () => Navigator.of(context).pop(),
+                            onSelectGroup: (id) => _selectGroup(
+                              id,
+                              currentlyOpen: openId,
+                            ),
+                            onOpenItem: (item) => _openNavItem(
+                              item,
+                              groups: groups,
+                              closeDrawer: true,
+                            ),
+                            onMarkItemUnread: _markNavItemUnread,
+                          ),
+                        ),
+                      )
+                    : null,
+                appBar: AppBar(
+                  elevation: 0,
+                  scrolledUnderElevation: 0,
+                  backgroundColor: OptikAdminTokens.bg,
+                  surfaceTintColor: Colors.transparent,
+                  automaticallyImplyLeading: false,
+                  toolbarHeight: 64,
+                  leadingWidth: 64,
+                  flexibleSpace: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color:
+                          OptikAdminTokens.isKombo ? OptikAdminTokens.bg : null,
+                      gradient: OptikAdminTokens.isKombo
+                          ? null
+                          : LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Color.lerp(
+                                  OptikAdminTokens.bgMid,
+                                  OptikAdminTokens.ice,
+                                  0.22,
+                                )!,
+                                OptikAdminTokens.bgMid,
+                              ],
+                            ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: OptikAdminTokens.chromeEdge,
+                          width: OptikAdminTokens.isKombo ? 1 : 1.2,
+                        ),
                       ),
-                      child: _fotoProfileUrl == null
-                          ? const Icon(Icons.person_rounded,
-                              color: OptikAdminTokens.navy, size: 24)
-                          : null,
                     ),
-                    const SizedBox(width: 14),
+                  ),
+                  leading: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+                    child: _HeaderIconButton(
+                      tooltip: 'dash_nav_toggle'.tr(),
+                      icon: Icons.menu_rounded,
+                      emphasized: true,
+                      onPressed: () {
+                        if (narrow) {
+                          _scaffoldKey.currentState?.openDrawer();
+                        } else {
+                          setState(() => _sidebarOpen = !_sidebarOpen);
+                        }
+                      },
+                    ),
+                  ),
+                  centerTitle: false,
+                  titleSpacing: 8,
+                  title: Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: _goHome,
+                      behavior: HitTestBehavior.opaque,
+                      child: AppBrandMark(
+                        height: 34,
+                        onDark: OptikAdminTokens.isDark,
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 4, 12),
+                      child: _HeaderIconButton(
+                        tooltip: 'admin_menu_language'.tr(),
+                        icon: Icons.translate_rounded,
+                        onPressed: () => AdminLanguage.showPicker(context),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 4, 12),
+                      child: _HeaderIconButton(
+                        tooltip: 'dash_look_title'.tr(),
+                        icon: Icons.palette_outlined,
+                        onPressed: _pickLook,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 4, 12),
+                      child: _HeaderIconButton(
+                        tooltip: 'admin_force_sync_tooltip'.tr(),
+                        onPressed: _forceSyncBusy ? null : _forceSync,
+                        icon: _forceSyncBusy
+                            ? Icons.hourglass_top_rounded
+                            : Icons.sync_rounded,
+                      ),
+                    ),
+                    ListenableBuilder(
+                      listenable: TrainingMode.instance,
+                      builder: (context, _) {
+                        final active = TrainingMode.instance.isActive;
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 12, 4, 12),
+                          child: _HeaderIconButton(
+                            tooltip: active
+                                ? 'training_menu_exit'.tr()
+                                : 'training_menu_enter'.tr(),
+                            onPressed:
+                                _trainingBusy ? null : _toggleTrainingMode,
+                            icon: Icons.school_rounded,
+                            emphasized: active,
+                          ),
+                        );
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+                      child: _HeaderIconButton(
+                        tooltip: 'admin_logout'.tr(),
+                        onPressed: () async {
+                          await signOutQuiet();
+                        },
+                        icon: Icons.logout_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+                body: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!narrow)
+                      AdminNavSidebar(
+                        groups: groups,
+                        openGroupId: openId,
+                        selectedItemId: _activeItemId,
+                        expanded: _sidebarOpen,
+                        showHeader: _sidebarOpen,
+                        badgeCounts: badges,
+                        onSelectGroup: (id) => _selectGroup(
+                          id,
+                          currentlyOpen: openId,
+                        ),
+                        onOpenItem: (item) => _openNavItem(
+                          item,
+                          groups: groups,
+                          closeDrawer: false,
+                        ),
+                        onMarkItemUnread: _markNavItemUnread,
+                      ),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "dash_selamat_bekerja".tr().toUpperCase(),
-                            style: TextStyle(
-                              color: OptikAdminTokens.slate.withOpacity(0.9),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.9,
-                            ),
+                      child: Navigator(
+                        key: _paneNavKey,
+                        onDidRemovePage: (page) {
+                          if (page.name != _activeItemId) return;
+                          setState(() => _activeItemId = null);
+                        },
+                        pages: [
+                          MaterialPage<void>(
+                            key: const ValueKey('admin-dash-home'),
+                            name: 'home',
+                            child: _buildHomePane(),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            () {
-                              final role = (widget.profile['role'] ??
-                                      'default_admin'.tr())
-                                  .toString()
-                                  .toUpperCase();
-                              final toko = widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT'
-                                  ? 'nama_toko_pusat'.brandTr()
-                                  : widget.profile['toko_id'];
-                              final via = (widget.profile[
-                                          'login_via_karyawan_nama'] ??
-                                      '')
-                                  .toString()
-                                  .trim();
-                              if (via.isEmpty) return '$role · $toko';
-                              return '$role · $toko · via $via';
-                            }(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 17.5,
-                              height: 1.2,
-                              letterSpacing: -0.3,
-                              color: OptikAdminTokens.navy,
+                          if (active?.buildPage != null)
+                            MaterialPage<void>(
+                              key: ValueKey(active!.id),
+                              name: active.id,
+                              child: Builder(builder: active.buildPage!),
                             ),
-                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+            );
+          },
+        );
+      },
+    );
+  }
 
-              _buildOmzetCard(),
-              const SizedBox(height: 28),
-
-              PremiumSectionHeader(label: "dash_navigasi_menu".tr()),
-
-              ListenableBuilder(
-                listenable: Listenable.merge([
-                  TrainingMode.instance,
-                  TenantModules.instance,
-                ]),
-                builder: (context, _) {
-                  final training = TrainingCurriculum.isActive;
-                  final mod = TenantModules.instance;
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      final cols = w < 420 ? 2 : (w < 900 ? 3 : 4);
-                      final ratio = w < 420 ? 2.55 : (w < 900 ? 2.75 : 2.95);
-                      return GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: cols,
-                        crossAxisSpacing: 11,
-                        mainAxisSpacing: 11,
-                        childAspectRatio: ratio,
-                        children: [
-                          // Manajemen Karyawan: pusat semua toko; admin_toko toko sendiri.
-                          if (!training &&
-                              AttendanceAdminScope.canOpenKaryawanManagement(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: "dash_menu_management".tr(),
-                              icon: Icons.verified_user_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (c) => AdminApprovalPage(
-                                    roleAdmin: widget.profile['role']
-                                            ?.toString() ??
-                                        '',
-                                    cabangAdmin: widget.profile['toko_id']
-                                            ?.toString() ??
-                                        '',
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training)
-                            PremiumMenuTile(
-                              title: 'pengaduan_admin_title'.tr(),
-                              icon: Icons.report_gmailerrorred_rounded,
-                              color: OptikAdminTokens.slate,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PengaduanInboxPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training &&
-                              isRekasaControlPlane &&
-                              (widget.profile['is_platform'] == true ||
-                                  widget.profile['is_platform'] == 'true' ||
-                                  widget.profile['role'] == 'platform'))
-                            PremiumMenuTile(
-                              title: 'Pesanan etalase',
-                              icon: Icons.shopping_bag_rounded,
-                              color: OptikAdminTokens.navy,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const RekasaStoreOrdersPage(),
-                                ),
-                              ),
-                            ),
-
-                          if (!training &&
-                              isRekasaControlPlane &&
-                              (widget.profile['is_platform'] == true ||
-                                  widget.profile['is_platform'] == 'true' ||
-                                  widget.profile['role'] == 'platform'))
-                            PremiumMenuTile(
-                              title: 'UMKM, tagihan & kontrak',
-                              icon: Icons.apartment_rounded,
-                              color: OptikAdminTokens.navy,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TenantAdminPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Monitor Absensi (tile sendiri): admin_pusat cabang + owner semua.
-                          if (!training &&
-                              mod.allows('attendance') &&
-                              AttendanceAdminScope.canOpenStoreMonitor(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: 'dash_menu_monitor_absensi'.tr(),
-                              icon: Icons.fact_check_rounded,
-                              color: OptikAdminTokens.slate,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AttendanceMonitorPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Absensi kiosk (QR→geo→face):
-                          // - admin_toko cabang → Absensi (toko sendiri)
-                          // - owner / admin_pusat → Absensi Pusat (perangkat Pusat)
-                          if (!training &&
-                              mod.allows('attendance') &&
-                              AttendanceAdminScope.canOpenStoreKiosk(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: AttendanceAdminScope.isPusatKioskLabel(
-                                      widget.profile)
-                                  ? 'dash_menu_absensi_pusat_kiosk'.tr()
-                                  : 'dash_menu_absensi_kiosk'.tr(),
-                              icon: Icons.face_retouching_natural_rounded,
-                              color: OptikAdminTokens.slate,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AbsensiTokoPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Antrean tinjauan lanjut — hanya role yang boleh monitor.
-                          if (!training &&
-                              mod.allows('attendance') &&
-                              AttendanceAdminScope.canOpenStoreMonitor(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: 'dash_menu_tinjauan_mencurigakan'.tr(),
-                              icon: Icons.warning_amber_rounded,
-                              color: OptikAdminTokens.warning,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TinjauanMencurigakanPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Geofence: pusat semua toko; admin_toko toko sendiri.
-                          if (!training &&
-                              mod.allows('attendance') &&
-                              AttendanceAdminScope.canManageGeofence(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: 'Geofence Toko',
-                              icon: Icons.radar_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TokoGeofencePage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training &&
-                              mod.allows('attendance') &&
-                              AttendanceAdminScope.canManageJadwal(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: 'Jadwal Kerja',
-                              icon: Icons.calendar_month_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => JadwalKerjaPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (TrainingCurriculum.allows('pos') &&
-                              mod.allows('pos') &&
-                              AttendanceAdminScope.canOpenPos(widget.profile))
-                            PremiumMenuTile(
-                              title: "POS Cashier",
-                              icon: Icons.point_of_sale_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (c) =>
-                                      SalesPage(profile: widget.profile),
-                                ),
-                              ),
-                            ),
-
-                          // Request Order: only via Logistics hub (not a dashboard tile).
-
-                          if (TrainingCurriculum.allows('history_dp') &&
-                              mod.allows('history_dp') &&
-                              AttendanceAdminScope.canOpenPos(widget.profile))
-                            PremiumMenuTile(
-                              title: "DP · PENDING · READY · CLEAR",
-                              icon: Icons.history_edu,
-                              color: OptikAdminTokens.slate,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (c) => RiwayatTransaksiPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (TrainingCurriculum.allows('logistics') &&
-                              mod.allows('logistics') &&
-                              AttendanceAdminScope.canOpenLogistics(
-                                  widget.profile))
-                            PremiumMenuTile(
-                              title: "dash_menu_logistik".tr(),
-                              icon: Icons.local_shipping_rounded,
-                              color: OptikAdminTokens.slate,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (c) => InventoryOverview(
-                                      profile: widget.profile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          if (TrainingCurriculum.allows('master_data') &&
-                              mod.allows('master_data') &&
-                              (training ||
-                                  AttendanceAdminScope.canEditProductCatalog(
-                                      widget.profile)))
-                            PremiumMenuTile(
-                              title: "dash_menu_master".tr(),
-                              icon: Icons.dataset_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (c) => ProductMasterPage(
-                                      profile: widget.profile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          if (TrainingCurriculum.allows('finance') &&
-                              mod.allows('finance'))
-                            PremiumMenuTile(
-                              title: "dash_menu_keuangan".tr(),
-                              icon: Icons.account_balance_wallet_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (c) => BukuBesarPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (!training &&
-                              (widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat'))
-                            PremiumMenuTile(
-                              title: "Adjust Invoice",
-                              icon: Icons.note_alt_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (c) => InvoiceConfigPage(
-                                      profile: widget.profile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          if (!training &&
-                              mod.allows('member_app') &&
-                              (widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat' ||
-                                  widget.profile['role'] == 'super_admin'))
-                            PremiumMenuTile(
-                              title: 'Konten Home Member',
-                              icon: Icons.phone_android_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (c) => MemberHomeContentPage(
-                                      profile: widget.profile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          if (!training && mod.allows('online_orders'))
-                            PremiumMenuTile(
-                              title: 'Pesanan Online',
-                              icon: Icons.shopping_bag_outlined,
-                              color: OptikAdminTokens.ice,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (c) => OnlineOrdersPage(
-                                      profile: widget.profile,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          // PDF export: pusat / owner only (bukan cabang).
-                          if (!training &&
-                              (widget.profile['toko_id'] == 'PUSAT' ||
-                                  widget.profile['toko_id'] ==
-                                      'CABANG-PUSAT' ||
-                                  widget.profile['role'] == 'owner' ||
-                                  widget.profile['role'] == 'admin_pusat'))
-                            PremiumMenuTile(
-                              title: 'dash_menu_export'.tr(),
-                              icon: Icons.picture_as_pdf_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => MonthlyExportPage(
-                                    profile: widget.profile,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          if (TrainingCurriculum.allows('warranty') &&
-                              mod.allows('warranty'))
-                            PremiumMenuTile(
-                              title: 'dash_menu_garansi'.tr(),
-                              icon: Icons.verified_rounded,
-                              color: OptikAdminTokens.ice,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      GaransiPage(profile: widget.profile),
-                                ),
-                              ),
-                            ),
-
-                          if (!training)
-                            PremiumMenuTile(
-                              title: 'scan_qr'.tr(),
-                              icon: Icons.qr_code_scanner_rounded,
-                              color: OptikAdminTokens.slate,
-                              onTap: () => UniversalQrNav.open(
-                                context,
-                                profile: widget.profile,
-                                callerRole: UniversalQrCallerRole.admin,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-
-              PremiumSectionHeader(label: 'training_sec_title'.tr()),
-              ListenableBuilder(
-                listenable: TrainingMode.instance,
-                builder: (context, _) {
-                  final active = TrainingMode.instance.isActive;
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: _trainingBusy ? null : _toggleTrainingMode,
-                      borderRadius: BorderRadius.circular(22),
-                      child: PremiumPanel(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-                        borderRadius: 20,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                color: active
-                                    ? OptikAdminTokens.navy
-                                    : OptikAdminTokens.ice,
-                              ),
-                              child: Icon(
-                                Icons.school_rounded,
-                                color: active
-                                    ? OptikAdminTokens.snow
-                                    : OptikAdminTokens.navy,
-                                size: 26,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'training_enter_eyebrow'.tr(),
-                                    style: const TextStyle(
-                                      color: OptikAdminTokens.slate,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.3,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    active
-                                        ? 'training_menu_exit'.tr()
-                                        : 'training_menu_enter'.tr(),
-                                    style: const TextStyle(
-                                      color: OptikAdminTokens.navy,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 15,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    active
-                                        ? 'training_menu_exit_desc'.tr()
-                                        : 'training_menu_enter_desc'.tr(),
-                                    style: const TextStyle(
-                                      color: OptikAdminTokens.slate,
-                                      fontSize: 12,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (_trainingBusy)
-                              const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: OptikAdminTokens.navy,
-                                ),
-                              )
-                            else
-                              Icon(
-                                active
-                                    ? Icons.logout_rounded
-                                    : Icons.chevron_right_rounded,
-                                color: OptikAdminTokens.textMuted,
-                                size: 22,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-              _buildRekasaWatermark(),
-            ],
-          ),
+  Widget _buildHomePane() {
+    return RefreshIndicator(
+      onRefresh: _fetchTodayStats,
+      color: OptikAdminTokens.navy,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 56),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildGreetingCard(),
+            const SizedBox(height: 28),
+            _buildRekasaWatermark(),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildGreetingCard() {
+    return PremiumPanel(
+      padding: const EdgeInsets.fromLTRB(16, 16, 18, 16),
+      borderRadius: 20,
+      showAccentBar: true,
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: OptikAdminTokens.ice.withOpacity(0.55),
+              border: Border.all(color: OptikAdminTokens.ice),
+              image: _fotoProfileUrl != null
+                  ? DecorationImage(
+                      image: NetworkImage(_fotoProfileUrl!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: _fotoProfileUrl == null
+                ? Icon(Icons.person_rounded,
+                    color: OptikAdminTokens.navy, size: 24)
+                : null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "dash_selamat_bekerja".tr().toUpperCase(),
+                  style: TextStyle(
+                    color: OptikAdminTokens.slate.withOpacity(0.9),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.9,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  () {
+                    final role =
+                        (widget.profile['role'] ?? 'default_admin'.tr())
+                            .toString()
+                            .toUpperCase();
+                    final toko = widget.profile['toko_id'] == 'CABANG-PUSAT'
+                        ? 'nama_toko_pusat'.brandTr()
+                        : widget.profile['toko_id'];
+                    final via =
+                        (widget.profile['login_via_karyawan_nama'] ?? '')
+                            .toString()
+                            .trim();
+                    if (via.isEmpty) return '$role · $toko';
+                    return '$role · $toko · via $via';
+                  }(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17.5,
+                    height: 1.2,
+                    letterSpacing: -0.3,
+                    color: OptikAdminTokens.navy,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -873,155 +660,6 @@ class _DashboardPageState extends State<DashboardPage> {
           fontWeight: FontWeight.w500,
           color: OptikAdminTokens.slate.withOpacity(0.45),
           letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOmzetCard() {
-    final bulan = _omzetPeriode == _OmzetPeriode.bulanIni;
-    final label = bulan
-        ? 'dash_penjualan_bulan_ini'.tr()
-        : 'dash_penjualan_hari_ini'.tr();
-    final value = _formatRupiah(bulan ? _omzetBulanIni : _omzetHariIni);
-    return PremiumPanel(
-      padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
-      borderRadius: 20,
-      showAccentBar: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: OptikAdminTokens.ice.withOpacity(0.35),
-              border: Border.all(color: OptikAdminTokens.ice),
-            ),
-            child: const Icon(
-              Icons.trending_up_rounded,
-              color: OptikAdminTokens.navy,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label.toUpperCase(),
-                        style: TextStyle(
-                          color: OptikAdminTokens.slate.withOpacity(0.9),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.6,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildOmzetPeriodeToggle(),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                isStatsLoading
-                    ? const SizedBox(
-                        height: 28,
-                        width: 28,
-                        child: CircularProgressIndicator(
-                          color: OptikAdminTokens.navy,
-                          strokeWidth: 2.2,
-                        ),
-                      )
-                    : Text(
-                        value,
-                        style: const TextStyle(
-                          color: OptikAdminTokens.navy,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.8,
-                          height: 1.0,
-                        ),
-                      ),
-                const SizedBox(height: 6),
-                Text(
-                  'dash_omzet_uang_masuk'.tr(),
-                  style: const TextStyle(
-                    color: OptikAdminTokens.slate,
-                    fontSize: 11.5,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOmzetPeriodeToggle() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _omzetPeriodeChip(
-          label: 'dash_omzet_periode_hari'.tr(),
-          selected: _omzetPeriode == _OmzetPeriode.hariIni,
-          onTap: () {
-            if (_omzetPeriode == _OmzetPeriode.hariIni) return;
-            setState(() => _omzetPeriode = _OmzetPeriode.hariIni);
-          },
-        ),
-        const SizedBox(width: 6),
-        _omzetPeriodeChip(
-          label: 'dash_omzet_periode_bulan'.tr(),
-          selected: _omzetPeriode == _OmzetPeriode.bulanIni,
-          onTap: () {
-            if (_omzetPeriode == _OmzetPeriode.bulanIni) return;
-            setState(() => _omzetPeriode = _OmzetPeriode.bulanIni);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _omzetPeriodeChip({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: selected
-                ? OptikAdminTokens.navy
-                : OptikAdminTokens.ice.withOpacity(0.28),
-            border: Border.all(
-              color: selected
-                  ? OptikAdminTokens.navy
-                  : OptikAdminTokens.ice,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.1,
-              color: selected ? OptikAdminTokens.snow : OptikAdminTokens.navy,
-            ),
-          ),
         ),
       ),
     );
@@ -1054,12 +692,14 @@ class _HeaderIconButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             color: emphasized
-                ? OptikAdminTokens.ice.withOpacity(0.35)
-                : OptikAdminTokens.card,
+                ? (OptikAdminTokens.isKombo
+                    ? OptikAdminTokens.navy
+                    : OptikAdminTokens.ice.withOpacity(0.45))
+                : OptikAdminTokens.card.withOpacity(0.85),
             border: Border.all(
               color: emphasized
                   ? OptikAdminTokens.navy
-                  : OptikAdminTokens.ice.withOpacity(0.4),
+                  : OptikAdminTokens.chromeEdge,
             ),
             boxShadow: OptikAdminTokens.cardShadow,
           ),
@@ -1067,7 +707,9 @@ class _HeaderIconButton extends StatelessWidget {
             icon,
             size: 19,
             color: emphasized
-                ? OptikAdminTokens.navy
+                ? (OptikAdminTokens.isKombo
+                    ? OptikAdminTokens.onHighlight
+                    : OptikAdminTokens.navy)
                 : OptikAdminTokens.slate,
           ),
         ),

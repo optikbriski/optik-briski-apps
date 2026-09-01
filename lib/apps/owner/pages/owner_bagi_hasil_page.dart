@@ -125,7 +125,7 @@ class _OwnerBagiHasilPageState extends State<OwnerBagiHasilPage> {
                     fillColor: OptikAdminTokens.bgMid,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: OptikAdminTokens.line),
+                      borderSide: BorderSide(color: OptikAdminTokens.line),
                     ),
                   ),
                   items: [
@@ -161,7 +161,7 @@ class _OwnerBagiHasilPageState extends State<OwnerBagiHasilPage> {
                           ),
                         ),
                         child: _computing
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
@@ -179,7 +179,7 @@ class _OwnerBagiHasilPageState extends State<OwnerBagiHasilPage> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: OptikAdminTokens.navy,
                           minimumSize: const Size.fromHeight(48),
-                          side: const BorderSide(color: OptikAdminTokens.navy),
+                          side: BorderSide(color: OptikAdminTokens.navy),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
@@ -195,7 +195,7 @@ class _OwnerBagiHasilPageState extends State<OwnerBagiHasilPage> {
           const SizedBox(height: 18),
           const OwnerSectionLabel('Riwayat periode'),
           if (_loading)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy)),
             )

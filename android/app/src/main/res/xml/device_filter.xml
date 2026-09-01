@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- POS-80 yang terdeteksi di Mac (0x0418 / 0x5011) -->
+    <usb-device vendor-id="1048" product-id="20497" />
+    <!-- Varian umum POS 80/58 mm -->
+    <usb-device vendor-id="1046" product-id="20497" />
+    <usb-device vendor-id="1046" product-id="43707" />
+    <usb-device vendor-id="1155" product-id="22336" />
+    <usb-device vendor-id="1155" product-id="22337" />
+    <usb-device vendor-id="1171" product-id="34656" />
+    <usb-device vendor-id="1317" product-id="42752" />
+    <usb-device vendor-id="1317" product-id="42754" />
+    <usb-device vendor-id="5721" product-id="35173" />
+    <usb-device vendor-id="7344" product-id="3" />
+    <usb-device vendor-id="7358" product-id="3" />
+    <usb-device vendor-id="19267" product-id="14384" />
+</resources>

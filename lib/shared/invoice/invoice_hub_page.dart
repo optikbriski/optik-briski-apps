@@ -409,7 +409,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           builder: (ctx, setLocal) {
             return AlertDialog(
               backgroundColor: OptikAdminTokens.bg,
-              title: const Text(
+              title: Text(
                 'Payment Gateway · Pelunasan',
                 style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
               ),
@@ -494,7 +494,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.bg,
-        title: const Text('QR toko · lihat detail',
+        title: Text('QR toko · lihat detail',
             style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -560,7 +560,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.bg,
         title: Text(title,
-            style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 16)),
+            style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16)),
         content: SizedBox(
           width: 320,
           child: SingleChildScrollView(
@@ -932,7 +932,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.bg,
-        title: const Text(
+        title: Text(
           'Kirim pesanan online',
           style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
         ),
@@ -953,16 +953,16 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             const SizedBox(height: 12),
             TextField(
               controller: tracking,
-              style: const TextStyle(color: OptikAdminTokens.navy),
-              decoration: const InputDecoration(
+              style: TextStyle(color: OptikAdminTokens.navy),
+              decoration: InputDecoration(
                 labelText: 'No. resi / tracking kurir',
                 labelStyle: TextStyle(color: OptikAdminTokens.slate),
               ),
             ),
             TextField(
               controller: note,
-              style: const TextStyle(color: OptikAdminTokens.navy),
-              decoration: const InputDecoration(
+              style: TextStyle(color: OptikAdminTokens.navy),
+              decoration: InputDecoration(
                 labelText: 'Catatan toko',
                 labelStyle: TextStyle(color: OptikAdminTokens.slate),
               ),
@@ -1088,7 +1088,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Pesanan online · siap kirim',
               style: TextStyle(
                 color: OptikAdminTokens.navy,
@@ -1235,12 +1235,12 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice),
             )
           : _error != null
@@ -1252,7 +1252,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                       children: [
                         Text(_error!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: OptikAdminTokens.slate)),
+                            style: TextStyle(color: OptikAdminTokens.slate)),
                         const SizedBox(height: 16),
                         FilledButton(
                           style: FilledButton.styleFrom(
@@ -1275,7 +1275,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       padding: const EdgeInsets.only(bottom: 10, top: 4),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.slate,
           fontWeight: FontWeight.w800,
           fontSize: 11,
@@ -1378,7 +1378,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.slate,
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -1434,7 +1434,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                   children: [
                     Text(
                       inv,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
@@ -1444,7 +1444,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     const SizedBox(height: 4),
                     Text(
                       '$name · $toko · $metode',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1461,13 +1461,13 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     SnackBar(
                       content: Text(
                         'invoice_hub_copied'.tr(),
-                        style: const TextStyle(color: OptikAdminTokens.snow),
+                        style: TextStyle(color: OptikAdminTokens.snow),
                       ),
                       backgroundColor: OptikAdminTokens.navy,
                     ),
                   );
                 },
-                icon: const Icon(Icons.copy_rounded,
+                icon: Icon(Icons.copy_rounded,
                     color: OptikAdminTokens.navy, size: 20),
               ),
             ],
@@ -1625,7 +1625,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
               child: Column(
                 children: [
                   ..._itemTiles(h),
-                  const Divider(height: 20, color: OptikAdminTokens.lineStrong),
+                  Divider(height: 20, color: OptikAdminTokens.lineStrong),
                   _moneyRow(
                     'Total',
                     _fmt(InvoiceLifecycleRules.moneyOf(h['total_harga'])),
@@ -1663,7 +1663,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                   collapsedIconColor: OptikAdminTokens.slate,
                   title: Text(
                     h['nama_pelanggan']?.toString() ?? 'Pelanggan',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
@@ -1686,7 +1686,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     const SizedBox(height: 6),
                     Text(
                       'Kasir: ${h['nama_kasir'] ?? '-'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         fontSize: 12.5,
                       ),
@@ -1705,7 +1705,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 collapsedIconColor: OptikAdminTokens.slate,
                 title: Text(
                   'invoice_hub_garansi'.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
@@ -1742,17 +1742,17 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       ),
       Text(
         'Toko: ${h['toko_id'] ?? '-'}',
-        style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+        style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
       ),
       if (wa != null && wa.isNotEmpty)
         Text('WhatsApp: $wa',
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
       if (email != null && email.isNotEmpty)
         Text('Email: $email',
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
       if (alamat != null && alamat.isNotEmpty)
         Text('Alamat: $alamat',
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
     ];
     if (dense) return rows;
     return rows
@@ -1838,7 +1838,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w900,
                       fontSize: 15,
@@ -1850,7 +1850,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             const SizedBox(height: 8),
             Text(
               body,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.slate,
                 height: 1.4,
                 fontSize: 13,
@@ -1895,7 +1895,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 'Setelah ready, pelanggan scan QR DP untuk lunasi → READY.'
             : 'Lunas pending — Barang Ready hanya di web admin. '
                 'Setelah admin konfirmasi, customer menerima QR LUNAS ready.',
-        style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+        style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
       ),
     );
   }
@@ -1928,7 +1928,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Belum ada tindakan lifecycle',
             style: TextStyle(
               color: OptikAdminTokens.navy,
@@ -1942,7 +1942,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             'Aksi pelunasan / serah terima / klaim hanya setelah '
             'scan QR pelanggan fase $needed (email / WA / Member / print). '
             'Tidak bisa dibuka dari token di database.',
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.slate,
               fontSize: 13,
               height: 1.4,
@@ -2017,7 +2017,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                       'yang baru dikirim.'
                   : 'QR LUNAS ready belum aktif.\n'
                       'Admin harus konfirmasi barang ready dulu.',
-              style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+              style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
             ),
           ),
         ];
@@ -2042,7 +2042,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: OptikAdminTokens.danger.withOpacity(0.4)),
             ),
-            child: const Text(
+            child: Text(
               'CLEAR · Garansi mati\n'
               'Masa garansi habis, sudah diklaim, atau QR CLAIM sudah dipakai. '
               'Tidak ada tindak lanjut.',
@@ -2069,7 +2069,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
           children: [
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.w900,
                 fontSize: 16,
@@ -2078,7 +2078,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
             const SizedBox(height: 8),
             Text(
               question,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.slate,
                 fontSize: 13,
                 height: 1.4,
@@ -2092,7 +2092,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     onPressed: _busy ? null : () => Navigator.maybePop(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: OptikAdminTokens.slate,
-                      side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                      side: BorderSide(color: OptikAdminTokens.lineStrong),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -2115,7 +2115,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                       ),
                     ),
                     child: _busy
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
@@ -2140,14 +2140,14 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     final items = h['items'];
     if (items is! List || items.isEmpty) {
       return [
-        const Text('Tidak ada item',
+        Text('Tidak ada item',
             style: TextStyle(color: OptikAdminTokens.slate)),
       ];
     }
     final list = items.toList();
     return [
       for (var i = 0; i < list.length; i++) ...[
-        if (i > 0) const Divider(height: 1, color: OptikAdminTokens.line),
+        if (i > 0) Divider(height: 1, color: OptikAdminTokens.line),
         Builder(builder: (_) {
           final it = Map<String, dynamic>.from(list[i] as Map);
           final st =
@@ -2173,7 +2173,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     children: [
                       Text(
                         (it['nama_produk'] ?? '-').toString(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
@@ -2183,7 +2183,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                       Text(
                         '${it['tipe_produk'] ?? '-'} × ${it['qty'] ?? 1}'
                         '${_staff && it['subtotal'] != null ? ' · Rp ${it['subtotal']}' : ''}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12.5,
                         ),
@@ -2207,7 +2207,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       return [
         Text(
           'invoice_hub_garansi_empty'.tr(),
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
       ];
     }
@@ -2229,7 +2229,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 children: [
                   Text(
                     '${g['nama_produk'] ?? '-'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 13.5,
@@ -2240,7 +2240,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                     '${g['jenis_garansi'] ?? '-'} · '
                     '${g['tanggal_mulai'] ?? '—'} → ${g['tanggal_akhir'] ?? '—'}'
                     '${g['klaim_digunakan'] == true ? ' · klaim dipakai' : ''}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.slate,
                       fontSize: 12.5,
                       height: 1.35,
@@ -2283,7 +2283,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
       const SizedBox(height: 8),
       Text(
         'invoice_hub_assign_pembuat'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
@@ -2402,7 +2402,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     return [
       Text(
         'invoice_hub_customer_actions'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
@@ -2461,7 +2461,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
         const SizedBox(height: 16),
         Text(
           'invoice_hub_foto_hasil'.tr(),
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w700,
           ),
@@ -2497,7 +2497,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
     return [
       Text(
         'invoice_hub_rating_title'.tr(),
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.navy,
           fontWeight: FontWeight.w700,
         ),
@@ -2545,7 +2545,7 @@ class _InvoiceHubPageState extends State<InvoiceHubPage> {
                 onPressed: onTap,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: OptikAdminTokens.navy,
-                  side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                  side: BorderSide(color: OptikAdminTokens.lineStrong),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

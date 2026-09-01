@@ -24,12 +24,12 @@ class PremiumPrimaryButton extends StatelessWidget {
     final enabled = onPressed != null && !loading;
 
     final child = loading
-        ? const SizedBox(
+        ? SizedBox(
             height: 22,
             width: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2.2,
-              color: OptikAdminTokens.snow,
+              color: OptikAdminTokens.onHighlight,
             ),
           )
         : Row(
@@ -37,13 +37,13 @@ class PremiumPrimaryButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 18, color: OptikAdminTokens.snow),
+                Icon(icon, size: 18, color: OptikAdminTokens.onHighlight),
                 const SizedBox(width: 8),
               ],
               Text(
                 label,
-                style: const TextStyle(
-                  color: OptikAdminTokens.snow,
+                style: TextStyle(
+                  color: OptikAdminTokens.onHighlight,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.3,
                   fontSize: 14,

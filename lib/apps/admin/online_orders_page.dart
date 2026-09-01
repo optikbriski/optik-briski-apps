@@ -1,13 +1,20 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../shared/admin/admin_format.dart';
+import '../../shared/admin/admin_nav_badge_service.dart';
 
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/member/member_online_order_labels.dart';
 import '../../shared/member/member_online_order_rules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_nav_badge.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Antrian pesanan online Member untuk cabang / pusat.
@@ -24,11 +31,7 @@ class OnlineOrdersPage extends StatefulWidget {
 class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     with SingleTickerProviderStateMixin {
   final _db = Supabase.instance.client;
-  final _money = NumberFormat.currency(
-    locale: 'id_ID',
-    symbol: 'Rp ',
-    decimalDigits: 0,
-  );
+  NumberFormat get _money => AdminFormat.currency(context);
   late final TabController _tabs;
   bool _loading = true;
   String? _error;
@@ -195,19 +198,21 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(status == 'cancelled' ? 'Batalkan pesanan?' : 'Update → $label'),
+        title: Text(status == 'cancelled'
+            ? 'admin_title_batalkan_pesanan'.tr()
+            : 'admin_title_update_pesanan'.tr(namedArgs: {'label': label})),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (status != 'cancelled' && status != 'fulfilled') ...[
               TextField(
                 controller: tracking,
-                decoration: const InputDecoration(
-                    labelText: 'No. resi / tracking kurir'),
+                decoration: InputDecoration(
+                    labelText: 'admin_auto_af2f02c7c6'.tr()),
               ),
               TextField(
                 controller: note,
-                decoration: const InputDecoration(labelText: 'Catatan toko'),
+                decoration: InputDecoration(labelText: 'admin_auto_32d5cf4b10'.tr()),
               ),
             ] else
               Text(
@@ -220,10 +225,12 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+              child: Text('appr_btn_batal'.tr())),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(status == 'cancelled' ? 'Batalkan' : 'Simpan')),
+              child: Text(status == 'cancelled'
+                  ? 'admin_btn_batalkan'.tr()
+                  : 'btn_simpan'.tr())),
         ],
       ),
     );
@@ -238,7 +245,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     if (res is Map && res['ok'] != true) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${res['error'] ?? 'Gagal'}'),
+          content: Text('${res['error'] ?? 'admin_err_generic'.tr()}'),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -267,10 +274,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Status order belum bisa dipanggil kurir ($stNow). '
-            'Lunasi & proses dulu. Bisa isi resi manual setelah ready.',
-          ),
+          content: Text('admin_auto_8f0d264354'.tr(namedArgs: {'stNow': stNow})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -281,7 +285,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Panggil kurir Biteship?'),
+        title: Text('admin_auto_9f13e5a5c3'.tr()),
         content: Text(
           'Kurir: ${order['courier_company'] ?? order['courier'] ?? '-'} '
           '· ${(order['courier_service_name'] ?? order['courier_service_code'] ?? '-').toString()}\n\n'
@@ -291,11 +295,11 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Panggil kurir'),
+            child: Text('admin_auto_3e2a1f2d30'.tr()),
           ),
         ],
       ),
@@ -303,7 +307,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     if (confirm != true || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Memanggil Biteship…')),
+      SnackBar(content: Text('admin_auto_5ce6aa0997'.tr())),
     );
     try {
       final res = await _db.functions.invoke(
@@ -319,7 +323,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
           SnackBar(
             content: Text(
               '${data['error'] ?? 'Gagal panggil Biteship'}\n'
-              'Bisa isi resi manual lewat tombol Resi manual.',
+              'admin_auto_manual_resi_hint'.tr(),
             ),
             backgroundColor: OptikAdminTokens.danger,
             duration: const Duration(seconds: 5),
@@ -344,7 +348,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal: $e'),
+          content: Text('pengingat_err_umum'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -360,26 +364,36 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     await _load();
   }
 
+  int _unreadIn(List<Map<String, dynamic>> rows) {
+    final ids = [
+      for (final o in rows) o['id']?.toString() ?? '',
+    ].where((s) => s.isNotEmpty);
+    return AdminNavBadgeService.instance.countUnreadIn('online', ids);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final unpaid = _unpaidRows;
-    final pre = _preorderRows;
-    final ready = _readyRows;
-    final hist = _historyRows;
-    final activeQueue = unpaid.length + pre.length + ready.length;
+    return ListenableBuilder(
+      listenable: AdminNavBadgeService.instance,
+      builder: (context, _) {
+        final unpaid = _unpaidRows;
+        final pre = _preorderRows;
+        final ready = _readyRows;
+        final hist = _historyRows;
+        final activeQueue = unpaid.length + pre.length + ready.length;
 
-    return PremiumScaffold(
+        return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'PESANAN ONLINE',
+        title: 'admin_auto_d4ec40d711'.tr(),
         subtitle: _scopeLabel,
         actions: [
           IconButton(
-            tooltip: 'Ongkir & jual online',
+            tooltip: 'admin_auto_eded669e8d'.tr(),
             onPressed: _openSettings,
             icon: const Icon(Icons.tune_rounded),
           ),
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -391,23 +405,26 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
             pre: pre.length,
             ready: ready.length,
             hist: hist.length,
+            unreadUnpaid: _unreadIn(unpaid),
+            unreadPre: _unreadIn(pre),
+            unreadReady: _unreadIn(ready),
           ),
         ),
       ),
       body: _loading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.navy),
             )
           : _error != null
               ? PremiumEmptyState(
                   icon: Icons.cloud_off_outlined,
                   accent: OptikAdminTokens.danger,
-                  title: 'Gagal memuat antrian',
+                  title: 'admin_auto_1755d722e4'.tr(),
                   message: _error!,
                   action: FilledButton.icon(
                     onPressed: _load,
                     icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Coba lagi'),
+                    label: Text('common_retry'.tr()),
                   ),
                 )
               : Column(
@@ -468,6 +485,8 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                   ],
                 ),
     );
+      },
+    );
   }
 
   Widget _premiumTabBar({
@@ -475,12 +494,15 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     required int pre,
     required int ready,
     required int hist,
+    required int unreadUnpaid,
+    required int unreadPre,
+    required int unreadReady,
   }) {
-    final items = <(IconData, String, int)>[
-      (Icons.schedule_rounded, 'Belum bayar', unpaid),
-      (Icons.hourglass_top_rounded, 'Pre-order', pre),
-      (Icons.bolt_rounded, 'Proses', ready),
-      (Icons.history_rounded, 'Riwayat', hist),
+    final items = <(IconData, String, int, int)>[
+      (Icons.schedule_rounded, 'Belum bayar', unpaid, unreadUnpaid),
+      (Icons.hourglass_top_rounded, 'Pre-order', pre, unreadPre),
+      (Icons.bolt_rounded, 'Proses', ready, unreadReady),
+      (Icons.history_rounded, 'Riwayat', hist, 0),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
@@ -543,7 +565,10 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                         const SizedBox(width: 5),
                         Text(t.$2),
                         const SizedBox(width: 5),
-                        _countBadge(t.$3),
+                        if (t.$4 > 0)
+                          AdminNavBadge(count: t.$4, compact: true)
+                        else
+                          _countBadge(t.$3),
                       ],
                     ),
                   ),
@@ -597,7 +622,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
@@ -626,7 +651,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                   color: OptikAdminTokens.ice.withOpacity(0.45),
                 ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.shopping_bag_outlined,
                 color: OptikAdminTokens.snow,
                 size: 22,
@@ -639,7 +664,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                 children: [
                   Text(
                     active == 0 ? 'Antrian tenang' : '$active order aktif',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.snow,
                       fontWeight: FontWeight.w800,
                       fontSize: 15.5,
@@ -671,7 +696,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                     color: OptikAdminTokens.ice.withOpacity(0.4),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   'PUSAT',
                   style: TextStyle(
                     color: OptikAdminTokens.snow,
@@ -692,20 +717,20 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     required String emptyLabel,
     required String emptyTitle,
     required IconData emptyIcon,
-    Color emptyAccent = OptikAdminTokens.ice,
+    Color? emptyAccent,
     required bool showPreorderBadge,
     bool allowCancel = false,
   }) {
     if (rows.isEmpty) {
       return PremiumEmptyState(
         icon: emptyIcon,
-        accent: emptyAccent,
+        accent: emptyAccent ?? OptikAdminTokens.ice,
         title: emptyTitle,
         message: emptyLabel,
         action: OutlinedButton.icon(
           onPressed: _load,
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Muat ulang'),
+          label: Text('admin_btn_refresh'.tr()),
         ),
       );
     }
@@ -729,7 +754,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     if (d.inMinutes < 60) return '${d.inMinutes} mnt lalu';
     if (d.inHours < 24) return '${d.inHours} jam lalu';
     if (d.inDays < 7) return '${d.inDays} hari lalu';
-    return DateFormat('d MMM · HH:mm', 'id_ID').format(dt);
+    return AdminFormat.date(context, 'd MMM · HH:mm').format(dt);
   }
 
   Widget _orderCard(
@@ -750,17 +775,33 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
     final when = _relativeTime(o['created_at'] ?? o['paid_at']);
     final isDelivery = fulfill == 'delivery';
     final total = MemberOnlineOrderRules.moneyOf(o['total']);
+    final oid = o['id']?.toString() ?? '';
+    final unread = oid.isNotEmpty &&
+        AdminNavBadgeService.instance.isEntityUnread('online', oid);
 
-    return PremiumPanel(
+    return GestureDetector(
+      onLongPress: oid.isNotEmpty
+          ? () => unawaited(
+              AdminNavBadgeService.instance.markEntityUnread('online', oid))
+          : null,
+      child: PremiumPanel(
       showAccentBar: true,
       padding: const EdgeInsets.fromLTRB(14, 16, 16, 16),
+      onTap: () {
+        if (oid.isNotEmpty) {
+          unawaited(
+              AdminNavBadgeService.instance.markEntitySeen('online', oid));
+        }
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
+              AdminNavBadgeOverlay(
+                count: unread ? 1 : 0,
+                child: Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
@@ -785,6 +826,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                   size: 22,
                 ),
               ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -792,7 +834,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                   children: [
                     Text(
                       name.isEmpty ? '-' : name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15.5,
                         color: OptikAdminTokens.navy,
@@ -807,7 +849,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                         '${o['toko_id'] ?? '-'}',
                         if (when.isNotEmpty) when,
                       ].join(' · '),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -821,7 +863,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                 children: [
                   Text(
                     _money.format(total),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: OptikAdminTokens.navy,
                       fontSize: 16,
@@ -868,7 +910,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
                 Expanded(
                   child: Text(
                     o['address_text'].toString(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       color: OptikAdminTokens.textSecondary,
                       height: 1.35,
@@ -905,7 +947,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
             const SizedBox(height: 8),
             Text(
               'Resi · ${o['courier_tracking']}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: OptikAdminTokens.navy,
@@ -914,7 +956,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
           ],
           if (o['is_obr'] == true) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'OBR Delivery · diantar anak toko',
               style: TextStyle(
                 fontSize: 11.5,
@@ -927,7 +969,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
             Text(
               'Biteship · ${o['courier_company']}'
               '${(o['courier_service_code'] ?? '').toString().isNotEmpty ? ' / ${o['courier_service_code']}' : ''}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 color: OptikAdminTokens.textMuted,
                 fontWeight: FontWeight.w600,
@@ -1000,6 +1042,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -1018,7 +1061,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
               color: OptikAdminTokens.slate,
@@ -1043,7 +1086,7 @@ class _OnlineOrdersPageState extends State<OnlineOrdersPage>
           if (sub > 0) 'Subtotal ${_money.format(sub)}',
           if (ship > 0) 'Ongkir ${_money.format(ship)}',
         ].join(' · '),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
           color: OptikAdminTokens.textMuted,
         ),
@@ -1298,8 +1341,8 @@ class _OnlineDeliverySettingsPageState
 
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih cabang',
-      subtitle: 'Pengaturan jual online per cabang',
+      title: 'ops_chat_pilih_toko'.tr(),
+      subtitle: 'admin_auto_a7c9548b6f'.tr(),
       headerIcon: Icons.storefront_rounded,
       searchHint: 'Cari kode cabang…',
       selected: _tokoId,
@@ -1308,7 +1351,7 @@ class _OnlineDeliverySettingsPageState
           AdminPickerOption(
             value: id,
             label: id,
-            subtitle: MemberOnlineOrderRules.isPusatToko(id) ? 'Pusat' : 'Cabang',
+            subtitle: MemberOnlineOrderRules.isPusatToko(id) ? 'admin_lbl_pusat'.tr() : 'admin_lbl_cabang'.tr(),
             icon: MemberOnlineOrderRules.isPusatToko(id)
                 ? Icons.apartment_rounded
                 : Icons.storefront_rounded,
@@ -1345,8 +1388,8 @@ class _OnlineDeliverySettingsPageState
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pengaturan tersimpan'),
+        SnackBar(
+          content: Text('admin_auto_19c32eb875'.tr()),
           backgroundColor: OptikAdminTokens.success,
         ),
       );
@@ -1362,8 +1405,7 @@ class _OnlineDeliverySettingsPageState
         SnackBar(
           content: Text(
             needMig
-                ? 'Gagal simpan: jalankan migrasi '
-                    '20260805000003_obr_category_toggles.sql dulu. ($e)'
+                ? '${'admin_auto_save_run_migration'.tr()}20260805000003_obr_category_toggles.sql dulu. ($e)'
                 : 'Gagal: $e',
           ),
           backgroundColor: OptikAdminTokens.danger,
@@ -1388,7 +1430,7 @@ class _OnlineDeliverySettingsPageState
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
@@ -1412,7 +1454,7 @@ class _OnlineDeliverySettingsPageState
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.45)),
                 ),
-                child: const Icon(Icons.storefront_rounded,
+                child: Icon(Icons.storefront_rounded,
                     color: OptikAdminTokens.snow, size: 22),
               ),
               const SizedBox(width: 12),
@@ -1430,7 +1472,7 @@ class _OnlineDeliverySettingsPageState
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
+                    Text(
                       'Jual Online',
                       style: TextStyle(
                         color: OptikAdminTokens.snow,
@@ -1504,7 +1546,7 @@ class _OnlineDeliverySettingsPageState
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: OptikAdminTokens.navy,
                       fontSize: 14.5,
@@ -1513,7 +1555,7 @@ class _OnlineDeliverySettingsPageState
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.textMuted,
                       fontSize: 12,
                       height: 1.3,
@@ -1539,7 +1581,7 @@ class _OnlineDeliverySettingsPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Tarif pengiriman',
             style: TextStyle(
               fontWeight: FontWeight.w800,
@@ -1548,7 +1590,7 @@ class _OnlineDeliverySettingsPageState
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Tidak diisi manual — mengikuti pihak ke-3 saat Member checkout.',
             style: TextStyle(
               color: OptikAdminTokens.textMuted,
@@ -1559,15 +1601,15 @@ class _OnlineDeliverySettingsPageState
           const SizedBox(height: 14),
           _rateRow(
             icon: Icons.hub_outlined,
-            title: 'Biteship (Grab, Gojek, ekspedisi, …)',
-            subtitle: 'Harga real-time per alamat & kategori',
+            title: 'admin_auto_18501e05ca'.tr(),
+            subtitle: 'admin_auto_eee356eeff'.tr(),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: OptikAdminTokens.ice.withOpacity(0.35),
                 borderRadius: BorderRadius.circular(99),
               ),
-              child: const Text(
+              child: Text(
                 'LIVE',
                 style: TextStyle(
                   color: OptikAdminTokens.navy,
@@ -1581,8 +1623,8 @@ class _OnlineDeliverySettingsPageState
           const SizedBox(height: 10),
           _rateRow(
             icon: Icons.directions_walk_rounded,
-            title: 'OBR Delivery (anak toko)',
-            subtitle: 'Toggle per kategori di bawah · −${_rp(_obrDiscount)}',
+            title: 'admin_auto_619491c3fd'.tr(),
+            subtitle: 'admin_lbl_toggle_kategori'.tr(namedArgs: {'discount': _rp(_obrDiscount)}),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -1603,7 +1645,7 @@ class _OnlineDeliverySettingsPageState
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
+          Text(
             'OBR per kategori (sinkron ke Member)',
             style: TextStyle(
               fontWeight: FontWeight.w800,
@@ -1614,22 +1656,22 @@ class _OnlineDeliverySettingsPageState
           const SizedBox(height: 8),
           _toggleCard(
             icon: Icons.bolt_rounded,
-            title: 'OBR Instant',
-            subtitle: 'Anak toko antar segera',
+            title: 'admin_auto_72ed4da73a'.tr(),
+            subtitle: 'admin_auto_2d768c95ce'.tr(),
             value: _obrInstant,
             onChanged: (v) => setState(() => _obrInstant = v),
           ),
           _toggleCard(
             icon: Icons.wb_sunny_outlined,
-            title: 'OBR Same Day',
-            subtitle: 'Anak toko antar hari ini',
+            title: 'admin_auto_4ea064f3b8'.tr(),
+            subtitle: 'admin_auto_b8c08cb012'.tr(),
             value: _obrSameday,
             onChanged: (v) => setState(() => _obrSameday = v),
           ),
           _toggleCard(
             icon: Icons.nights_stay_outlined,
-            title: 'OBR Next Day',
-            subtitle: 'Anak toko antar besok',
+            title: 'admin_auto_f2440dfd9a'.tr(),
+            subtitle: 'admin_auto_18ddcf1c5e'.tr(),
             value: _obrNextday,
             onChanged: (v) => setState(() => _obrNextday = v),
           ),
@@ -1641,7 +1683,7 @@ class _OnlineDeliverySettingsPageState
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: OptikAdminTokens.line),
             ),
-            child: const Text(
+            child: Text(
               'OBR hanya muncul di Member bila jarak ≤ 10 km '
               '(≤15 km bila belanja > Rp 1.000.000) dan toggle kategori ON. '
               'Di luar itu / toggle OFF → hanya Biteship. '
@@ -1681,7 +1723,7 @@ class _OnlineDeliverySettingsPageState
             const SizedBox(height: 8),
             Text(
               'Grab ${_rp(_feeGrab)} · Gojek ${_rp(_feeGojek)} · Lainnya ${_rp(_feeOther)}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.textMuted,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -1716,7 +1758,7 @@ class _OnlineDeliverySettingsPageState
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: OptikAdminTokens.navy,
                     fontSize: 13.5,
@@ -1725,7 +1767,7 @@ class _OnlineDeliverySettingsPageState
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.textMuted,
                     fontSize: 12,
                     height: 1.3,
@@ -1743,7 +1785,7 @@ class _OnlineDeliverySettingsPageState
   @override
   Widget build(BuildContext context) {
     return PremiumScaffold(
-      appBar: AppBar(title: const Text('Pengaturan jual online')),
+      appBar: AppBar(title: Text('admin_auto_c3caef2b0c'.tr())),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -1757,7 +1799,7 @@ class _OnlineDeliverySettingsPageState
                     children: [
                       if (_isPusat && _tokoOptions.isNotEmpty) ...[
                         AdminPickerField(
-                          label: 'Cabang',
+                          label: 'work_sum_toko'.tr(),
                           valueText: _tokoId ?? _tokoOptions.first,
                           icon: Icons.apartment_rounded,
                           onTap: _pickCabang,
@@ -1766,14 +1808,14 @@ class _OnlineDeliverySettingsPageState
                       ] else ...[
                         Text(
                           'Cabang · $_tokoId',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             color: OptikAdminTokens.navy,
                           ),
                         ),
                         const SizedBox(height: 14),
                       ],
-                      const Text(
+                      Text(
                         'Layanan cabang',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
@@ -1784,15 +1826,15 @@ class _OnlineDeliverySettingsPageState
                       const SizedBox(height: 10),
                       _toggleCard(
                         icon: Icons.storefront_rounded,
-                        title: 'Aktif jual online',
-                        subtitle: 'Cabang muncul di Belanja Online Member',
+                        title: 'admin_auto_c79944272e'.tr(),
+                        subtitle: 'admin_auto_8f6e38f32c'.tr(),
                         value: _online,
                         onChanged: (v) => setState(() => _online = v),
                       ),
                       _toggleCard(
                         icon: Icons.shopping_bag_outlined,
-                        title: 'Terima ambil di toko',
-                        subtitle: 'Member bisa pickup tanpa ongkir',
+                        title: 'admin_auto_cbd3657aeb'.tr(),
+                        subtitle: 'admin_auto_eab2b36e32'.tr(),
                         value: _pickup,
                         onChanged: (v) => setState(() => _pickup = v),
                         enabled: _online,
@@ -1841,7 +1883,7 @@ class _OnlineDeliverySettingsPageState
                                     _online
                                         ? 'Selalu aktif selama toko jual online'
                                         : 'Aktifkan jual online dulu',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textMuted,
                                       fontSize: 12,
                                       height: 1.3,
@@ -1891,7 +1933,9 @@ class _OnlineDeliverySettingsPageState
                             ),
                           )
                         : const Icon(Icons.save_rounded),
-                    label: Text(_saving ? 'Menyimpan…' : 'Simpan pengaturan'),
+                    label: Text(_saving
+                        ? 'admin_btn_menyimpan'.tr()
+                        : 'admin_btn_simpan_pengaturan'.tr()),
                   ),
                 ),
               ],

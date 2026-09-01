@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/brand/rekasa_tokens.dart';
@@ -97,8 +98,8 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
     final phone = _phone.text.trim();
     if (displayName.isEmpty || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Isi nama usaha dan WA/HP.'),
+        SnackBar(
+          content: Text('admin_auto_d6a4d012ce'.tr()),
           backgroundColor: RekasaTokens.danger,
         ),
       );
@@ -223,7 +224,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: RekasaTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: RekasaTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _buying = false);
@@ -260,7 +261,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
                   child: SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('APK & web merek sendiri'),
+                    title: Text('admin_auto_b2dc316843'.tr()),
                     subtitle: Text(
                       plan.whiteLabel
                           ? 'Termasuk paket tertinggi.'
@@ -310,7 +311,7 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                                 Icons.play_circle_outline_rounded,
                                 size: 18,
                               ),
-                              label: const Text('Detail (video + penjelasan)'),
+                              label: Text('admin_auto_97725e2301'.tr()),
                             ),
                           ),
                         ],
@@ -341,17 +342,17 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                       TextField(
                         controller: _name,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama usaha / merek',
+                        decoration: InputDecoration(
+                          labelText: 'admin_auto_96df236686'.tr(),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _slug,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Kode usaha',
-                          hintText: 'optik-maju',
+                        decoration: InputDecoration(
+                          labelText: 'admin_auto_da9098e9e2'.tr(),
+                          hintText: 'admin_auto_2813842c50'.tr(),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -359,23 +360,23 @@ class _RekasaStorePlanPageState extends State<RekasaStorePlanPage> {
                         controller: _phone,
                         keyboardType: TextInputType.phone,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'WA / HP'),
+                        decoration: InputDecoration(labelText: 'admin_auto_26a1ebd958'.tr()),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Email (opsional)',
+                        decoration: InputDecoration(
+                          labelText: 'admin_auto_72ac107b82'.tr(),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _signer,
                         textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama penandatangan kontrak',
+                        decoration: InputDecoration(
+                          labelText: 'admin_auto_eaf6e9d8fc'.tr(),
                         ),
                       ),
                       const SizedBox(height: 14),

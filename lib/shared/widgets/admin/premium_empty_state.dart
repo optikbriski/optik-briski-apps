@@ -8,7 +8,7 @@ class PremiumEmptyState extends StatelessWidget {
     this.title,
     this.icon = Icons.inbox_rounded,
     this.action,
-    this.accent = OptikAdminTokens.ice,
+    this.accent,
   });
 
   final String message;
@@ -18,13 +18,15 @@ class PremiumEmptyState extends StatelessWidget {
   final Widget? action;
 
   /// Aksen lingkaran ikon. Ice → ikon navy; semantik (warning/…) → warna itu.
-  final Color accent;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
+    final accent = this.accent ?? OptikAdminTokens.ice;
     final isIce = accent == OptikAdminTokens.ice ||
         accent == OptikAdminTokens.accentSoft ||
-        accent == OptikAdminTokens.accentDeep;
+        accent == OptikAdminTokens.accentDeep ||
+        accent == OptikAdminTokens.navy;
     return Center(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(32, 28, 32, 40),
@@ -64,7 +66,7 @@ class PremiumEmptyState extends StatelessWidget {
               Text(
                 title!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,

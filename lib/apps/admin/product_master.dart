@@ -76,7 +76,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
   String _cabangLabel(String raw) {
     final t = raw.trim().toUpperCase();
-    if (t == 'SEMUA') return 'Semua cabang';
+    if (t == 'SEMUA') return 'admin_lbl_semua_cabang'.tr();
     if (t == 'PUSAT') return 'Pusat';
     if (t.startsWith('CABANG-')) return t.replaceFirst('CABANG-', '');
     return t;
@@ -111,11 +111,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
     final result = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih cabang',
+      title: 'ops_chat_pilih_toko'.tr(),
       options: options,
       selected: filterUnit == 'SEMUA' ? null : filterUnit,
-      clearLabel: 'Semua cabang',
-      clearSubtitle: 'Tampilkan semua cabang',
+      clearLabel: 'admin_lbl_semua_cabang'.tr(),
+      clearSubtitle: 'admin_auto_651a03fb3c'.tr(),
       clearIcon: Icons.hub_outlined,
       searchHint: 'Cari nama cabang...',
       filterOption: (o, q) =>
@@ -211,10 +211,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
   Future<void> _pickStokAwalCabang() async {
     final options = <AdminPickerOption<String>>[
-      const AdminPickerOption(
+      AdminPickerOption(
         value: 'BROADCAST_ALL',
-        label: 'Stok awal: PUSAT',
-        subtitle: 'Produk terdaftar di semua toko (stok 0)',
+        label: 'admin_auto_stok_awal_pusat'.tr(),
+        subtitle: 'admin_auto_adfc5e7486'.tr(),
         icon: Icons.hub_outlined,
       ),
       AdminPickerOption(
@@ -225,7 +225,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       ...listCabang.map(
         (cabang) => AdminPickerOption(
           value: cabang.toString(),
-          label: 'Stok awal: ${cabang.toString().toUpperCase()}',
+          label: 'admin_lbl_stok_awal_cabang'.tr(namedArgs: {'cabang': cabang.toString().toUpperCase()}),
           icon: Icons.storefront_outlined,
         ),
       ),
@@ -233,8 +233,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
 
     final result = await showAdminPicker<String>(
       context: context,
-      title: 'Stok awal ke',
-      subtitle: 'Katalog otomatis semua toko',
+      title: 'admin_auto_ae6f09992e'.tr(),
+      subtitle: 'admin_auto_dc1c709b02'.tr(),
       options: options,
       selected: selectedCabang,
       searchable: listCabang.length > 6,
@@ -275,7 +275,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      selected ? 'Cabang terpilih' : 'Semua cabang',
+                      selected ? 'admin_lbl_cabang_terpilih'.tr() : 'admin_lbl_semua_cabang'.tr(),
                       style: TextStyle(
                         color: OptikAdminTokens.navy.withOpacity(0.45),
                         fontSize: 10,
@@ -299,12 +299,12 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               ),
               if (selected)
                 IconButton(
-                  tooltip: 'Reset ke semua cabang',
+                  tooltip: 'admin_auto_1229ca03e2'.tr(),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   onPressed: () => setState(() => filterUnit = 'SEMUA'),
-                  icon: const Icon(Icons.close, color: OptikAdminTokens.textMuted, size: 18),
+                  icon: Icon(Icons.close, color: OptikAdminTokens.textMuted, size: 18),
                 ),
               const Icon(Icons.search, color: OptikAdminTokens.warning, size: 18),
             ],
@@ -541,8 +541,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
             ok
-                ? 'Katalog 100% sama: PUSAT & semua cabang ($pusat SKU). Stok tidak diubah.'
-                : 'Katalog disinkron ($pusat SKU). Sisa gap: ${gaps ?? "?"}. Stok tidak diubah.',
+                ? 'admin_auto_catalog_sync_ok'.tr(namedArgs: {'pusat': '$pusat'})
+                : 'admin_auto_catalog_sync_gap'.tr(namedArgs: {
+                    'pusat': '$pusat',
+                    'gaps': '${gaps ?? "?"}',
+                  }),
           ),
           backgroundColor: ok ? OptikAdminTokens.success : OptikAdminTokens.warning,
         ));
@@ -571,7 +574,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal sinkron: $e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_force_sync_fail'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -777,8 +780,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   Future<void> _save() async {
     // 1. Validasi Input Dasar Nama Produk
     if (nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Nama Produk Wajib Diisi!"),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('admin_auto_5b98271464'.tr()),
           backgroundColor: OptikAdminTokens.warning));
       return;
     }
@@ -786,8 +789,8 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     // 2. Validasi Jika Kasir Memilih Barcode Bawaan Tapi Kolom Masih Kosong
     if (barcodeMode == 'MANUAL_PRODUCT' &&
         barcodeController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Barcode Bawaan Produk Wajib Diisi / Di-scan!"),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('admin_auto_1be09aa0e3'.tr()),
           backgroundColor: OptikAdminTokens.warning));
       return;
     }
@@ -1004,7 +1007,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gagal: $e"), backgroundColor: OptikAdminTokens.danger));
+          SnackBar(content: Text('pengingat_err_umum'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -1021,7 +1024,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
+        title: Text(
           'Alasan revisi stok',
           style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
         ),
@@ -1033,18 +1036,18 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               'Toko ${_cabangLabel(toko)}: Real $before → $after pcs'
               '${pending > 0 ? '\nBooking $pending (Real baru ≥ booking).' : ''}\n'
               'Wajib isi alasan (tercatat di ledger ADJUST).',
-              style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
+              style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
               autofocus: true,
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Alasan',
+              decoration: InputDecoration(
+                labelText: 'admin_lbl_alasan'.tr(),
                 labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
-                hintText: 'Contoh: stock opname / selisih fisik',
+                hintText: 'admin_auto_e5aff2f884'.tr(),
                 hintStyle: TextStyle(color: OptikAdminTokens.lineStrong),
               ),
             ),
@@ -1053,11 +1056,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lanjut'),
+            child: Text('admin_btn_lanjut'.tr()),
           ),
         ],
       ),
@@ -1089,7 +1092,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
+        title: Text(
           'Revisi Stok Real',
           style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
         ),
@@ -1102,16 +1105,16 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               'Toko: ${_cabangLabel(tokoId)}\n'
               'Real $currentReal · Booking $currentPending · '
               'Tersedia ${StockQty.available(currentReal, currentPending)}',
-              style: const TextStyle(color: OptikAdminTokens.textSecondary, height: 1.4),
+              style: TextStyle(color: OptikAdminTokens.textSecondary, height: 1.4),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: stockCtrl,
               keyboardType: TextInputType.number,
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               decoration: InputDecoration(
-                labelText: 'Stok Real baru',
-                labelStyle: const TextStyle(color: OptikAdminTokens.textMuted),
+                labelText: 'admin_auto_e9382b4dab'.tr(),
+                labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
                 helperText: currentPending > 0
                     ? 'Minimal $currentPending (tidak boleh di bawah booking)'
                     : null,
@@ -1119,10 +1122,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             ),
             TextField(
               controller: alasanCtrl,
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Alasan (wajib)',
+              decoration: InputDecoration(
+                labelText: 'admin_auto_a10a202ace'.tr(),
                 labelStyle: TextStyle(color: OptikAdminTokens.textMuted),
               ),
             ),
@@ -1131,11 +1134,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Simpan'),
+            child: Text('btn_simpan'.tr()),
           ),
         ],
       ),
@@ -1148,31 +1151,29 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     alasanCtrl.dispose();
     if (ok != true || !mounted) return;
     if (newStock == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Stok baru tidak valid.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_574ef50a50'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       return;
     }
     if (alasan.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Alasan revisi wajib.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_e1ed6db949'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       return;
     }
     if (newStock == currentReal) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Tidak ada perubahan stok.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_ddab01ac47'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       return;
     }
     if (newStock < currentPending) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          'Real baru ($newStock) di bawah booking ($currentPending).',
-        ),
+        content: Text('admin_auto_51e458cdde'.tr(namedArgs: {'newStock': '$newStock', 'currentPending': '$currentPending'})),
         backgroundColor: OptikAdminTokens.warning,
       ));
       return;
@@ -1198,7 +1199,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal revisi: $e'),
+        content: Text('admin_auto_475155ef59'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -1275,7 +1276,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     return Column(
       children: [
         panel(
-          title: 'BARCODE 1D · PRODUK',
+          title: 'admin_auto_646f60eb43'.tr(),
           child: SizedBox(
             width: 260,
             height: 72,
@@ -1284,7 +1285,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               data: code,
               drawText: true,
               color: OptikAdminTokens.bg,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.bg,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -1294,7 +1295,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         ),
         const SizedBox(height: 10),
         panel(
-          title: 'QR 2D · PRODUK',
+          title: 'admin_auto_66179381fb'.tr(),
           child: SizedBox(
             width: 140,
             height: 140,
@@ -1323,14 +1324,14 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               context,
               data: code,
               title: title,
-              subtitle: 'SKU $code',
+              subtitle: 'admin_auto_b1b50637c1'.tr(namedArgs: {'code': code}),
               initialSymbol: AdminLabelSymbol.barcode1d,
             ),
             icon: const Icon(Icons.print_rounded, size: 18),
             label: Text('label_print_btn'.tr()),
             style: OutlinedButton.styleFrom(
               foregroundColor: OptikAdminTokens.navy,
-              side: const BorderSide(color: OptikAdminTokens.navy),
+              side: BorderSide(color: OptikAdminTokens.navy),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -1479,7 +1480,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       Text(
                         _toTitleCase(item['nama'] ?? '-'),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w900,
                           fontSize: 20,
@@ -1534,7 +1535,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                           children: [
                             Expanded(
                               child: _detailMetricCard(
-                                label: 'Booking',
+                                label: 'antrian_filter_booking'.tr(),
                                 value: '$displayPending Pcs',
                                 color: OptikAdminTokens.warning,
                               ),
@@ -1542,7 +1543,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: _detailMetricCard(
-                                label: 'Tersedia',
+                                label: 'admin_auto_18ce140319'.tr(),
                                 value: '$displayAvailable Pcs',
                                 color: OptikAdminTokens.success,
                               ),
@@ -1582,7 +1583,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   color: OptikAdminTokens.accentSoft.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.storefront_rounded,
+                                child: Icon(Icons.storefront_rounded,
                                     color: OptikAdminTokens.navy, size: 16),
                               ),
                               const SizedBox(width: 10),
@@ -1592,7 +1593,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   children: [
                                     Text(
                                       "pm_distribusi_stok".tr().toUpperCase(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontWeight: FontWeight.w800,
                                         fontSize: 11,
@@ -1611,7 +1612,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                               ),
                               _detailActionChip(
                                 icon: Icons.history_rounded,
-                                label: 'Riwayat',
+                                label: 'member_rating_tab_history'.tr(),
                                 color: OptikAdminTokens.navy,
                                 onTap: () {
                                   final nama = (item['nama'] ?? '').toString();
@@ -1712,7 +1713,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                       children: [
                                         Text(
                                           label,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: OptikAdminTokens.navy,
                                             fontWeight: FontWeight.w700,
                                             fontSize: 12.5,
@@ -1746,7 +1747,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                           cabang, userToko)) ...[
                                     const SizedBox(width: 6),
                                     IconButton(
-                                      tooltip: 'Revisi stok Real',
+                                      tooltip: 'admin_auto_4756cf8aa3'.tr(),
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(
                                           minWidth: 32, minHeight: 32),
@@ -1920,9 +1921,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         padding: const EdgeInsets.only(bottom: 8),
         child:
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(l, style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11)),
+          Text(l, style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11)),
           Text(v,
-              style: const TextStyle(
+              style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.bold,
                   fontSize: 12))
@@ -1932,7 +1933,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
   Widget _buildLensStepper(String label, TextEditingController ctrl) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10)),
+        Text(label, style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10)),
         const SizedBox(height: 5),
         Container(
           decoration: BoxDecoration(
@@ -1950,7 +1951,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   width: 50,
                   child: Text(ctrl.text,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.bold,
                           fontSize: 12))),
@@ -2012,17 +2013,17 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Alokasi: ${item['nama']}",
-                        style: const TextStyle(
+                    Text('admin_lbl_alokasi_nama'.tr(namedArgs: {'name': "${item['nama']}"}),
+                        style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontSize: 18,
                             fontWeight: FontWeight.bold)),
                     const SizedBox(height: 15),
 
                     TextField(
-                      style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+                      style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: "Cari cabang...",
+                        hintText: 'member_help_pick_store_search_hint'.tr(),
                         filled: true,
                         fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                         border: OutlineInputBorder(
@@ -2035,7 +2036,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     const SizedBox(height: 10),
 
                     CheckboxListTile(
-                      title: const Text("Pilih Semua",
+                      title: Text('admin_auto_7e4e21773c'.tr(),
                           style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13)),
                       value: isSelectAll,
                       onChanged: (val) => setStateDialog(() {
@@ -2043,7 +2044,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         selectedCabangMap.updateAll((key, _) => val);
                       }),
                     ),
-                    const Divider(color: OptikAdminTokens.line),
+                    Divider(color: OptikAdminTokens.line),
 
                     // 🎯 KUNCI LIST: Menggunakan Expanded agar list tidak overflow
                     Expanded(
@@ -2054,7 +2055,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                           return CheckboxListTile(
                             value: selectedCabangMap[toko],
                             title: Text(toko,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: OptikAdminTokens.navy, fontSize: 13)),
                             onChanged: (val) => setStateDialog(
                                 () => selectedCabangMap[toko] = val!),
@@ -2063,7 +2064,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       ),
                     ),
 
-                    const Divider(color: OptikAdminTokens.line),
+                    Divider(color: OptikAdminTokens.line),
 
 // 🎯 FIX FOOTER COUNTER (Line 650+)
                     if (hasSelection) ...[
@@ -2126,11 +2127,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         child: AlertDialog(
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: OptikAdminTokens.warning),
             SizedBox(width: 10),
-            Text('Konfirmasi daftar cabang',
+            Text('admin_auto_78195916f9'.tr(),
                 style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 16,
@@ -2141,16 +2142,14 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           'Daftarkan produk ke cabang (stok Real 0).\n\n'
           'Produk: ${item['nama']}\n'
           'Cabang:\n${cabangs.where((c) => c.toUpperCase() != 'PUSAT').map(_cabangLabel).join(', ')}\n\n'
-          'Stok Real diubah lewat Master Produk (revisi + scan QR) '
-          'atau mutasi RO/DO/Retur/POS. '
-          'Daftar cabang tidak menambah qty stok.',
+          'admin_auto_stock_real_master_hint'.tr(),
           style:
-              const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13, height: 1.5),
+              TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal',
+              child: Text('appr_btn_batal'.tr(),
                   style: TextStyle(color: OptikAdminTokens.textMuted))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -2161,7 +2160,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               Navigator.pop(ctx);
               onConfirm();
             },
-            child: const Text('Ya, daftarkan',
+            child: Text('admin_auto_61a7ab4a8a'.tr(),
                 style: TextStyle(fontWeight: FontWeight.bold)),
           )
         ],
@@ -2286,7 +2285,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal revisi: $e'), backgroundColor: OptikAdminTokens.danger));
+          content: Text('admin_auto_475155ef59'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -2325,14 +2324,14 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Row(
               children: [
-                const Icon(Icons.history_rounded, color: OptikAdminTokens.navy),
+                Icon(Icons.history_rounded, color: OptikAdminTokens.navy),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     productNama == null || productNama.isEmpty
                         ? 'Riwayat Add Branch'
                         : 'Riwayat: $productNama',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -2345,7 +2344,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               width: double.maxFinite,
               height: 420,
               child: rows.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Belum ada riwayat revisi.',
                         style: TextStyle(color: OptikAdminTokens.textMuted),
@@ -2354,7 +2353,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                   : ListView.separated(
                       itemCount: rows.length,
                       separatorBuilder: (_, __) =>
-                          const Divider(color: OptikAdminTokens.line, height: 18),
+                          Divider(color: OptikAdminTokens.line, height: 18),
                       itemBuilder: (context, i) {
                         final r = rows[i];
                         final when = _formatRevisionWhen(r['created_at']);
@@ -2381,7 +2380,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                           children: [
                             Text(
                               (r['product_nama'] ?? '-').toString(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 13.5,
@@ -2390,7 +2389,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             if (sku.isNotEmpty)
                               Text(
                                 'SKU: $sku',
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: OptikAdminTokens.textMuted, fontSize: 11),
                               ),
                             const SizedBox(height: 4),
@@ -2405,7 +2404,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             const SizedBox(height: 4),
                             Text(
                               'Oleh: $siapa',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: OptikAdminTokens.textSecondary, fontSize: 12),
                             ),
                             const SizedBox(height: 4),
@@ -2413,13 +2412,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                               qty > 0
                                   ? 'Qty revisi: +$qty Pcs / toko'
                                   : 'Daftar produk saja (qty 0)',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: OptikAdminTokens.textMuted, fontSize: 12),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               'Toko (${tokos.length}): ${tokos.join(', ')}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.textSecondary,
                                 fontSize: 11.5,
                                 height: 1.35,
@@ -2432,7 +2431,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                                   padding: const EdgeInsets.only(bottom: 2),
                                   child: Text(
                                     line,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textMuted,
                                       fontSize: 11,
                                       height: 1.3,
@@ -2449,7 +2448,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Tutup'),
+                child: Text('admin_btn_close'.tr()),
               ),
             ],
           ),
@@ -2458,7 +2457,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal muat riwayat: $e'),
+        content: Text('admin_auto_167e77bb4a'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -2518,11 +2517,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           autoCaps ? TextCapitalization.words : TextCapitalization.none,
       inputFormatters:
           isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
-      style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
+      style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
       decoration: InputDecoration(
         labelText: hint,
         labelStyle:
-            const TextStyle(fontSize: 12, color: OptikAdminTokens.textMuted),
+            TextStyle(fontSize: 12, color: OptikAdminTokens.textMuted),
         prefixIcon: Icon(icon, color: OptikAdminTokens.navy, size: 18),
         filled: true,
         fillColor: OptikAdminTokens.bgMid,
@@ -2530,11 +2529,11 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: OptikAdminTokens.line),
+          borderSide: BorderSide(color: OptikAdminTokens.line),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: OptikAdminTokens.line),
+          borderSide: BorderSide(color: OptikAdminTokens.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -2571,7 +2570,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           ? MasterDataRules.stokOf(item['total_available'])
           : StockQty.available(displayReal, displayPending);
       labelStok = 'Total Real ';
-      lokasiLabel = 'Semua cabang';
+      lokasiLabel = 'admin_lbl_semua_cabang'.tr();
     }
     final stockBadge =
         '$labelStok$displayReal · Booking $displayPending · Tersedia $displayAvailable';
@@ -2594,10 +2593,10 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     ProductIdentity.catalogImageOf(item),
                     fit: BoxFit.cover,
                   ))
-              : const Icon(Icons.image, color: OptikAdminTokens.line),
+              : Icon(Icons.image, color: OptikAdminTokens.line),
         ),
         title: Text(namaRapi,
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 13)),
@@ -2606,7 +2605,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
           children: [
             const SizedBox(height: 4),
             Text("${item['kategori']} | ${item['sub_kategori'] ?? '-'}",
-                style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11)),
+                style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11)),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -2645,13 +2644,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
         ),
         trailing: R.isCompact(context)
             ? IconButton(
-                icon: const Icon(Icons.more_vert,
+                icon: Icon(Icons.more_vert,
                     color: OptikAdminTokens.textMuted, size: 20),
-                tooltip: 'Detail stok',
+                tooltip: 'admin_auto_9fac9b83e3'.tr(),
                 onPressed: () async {
                   final sel = await showAdminPicker<String>(
                     context: context,
-                    title: 'Aksi produk',
+                    title: 'admin_auto_76d55e760b'.tr(),
                     searchable: false,
                     options: [
                       AdminPickerOption(
@@ -2659,9 +2658,9 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                         label: stockBadge,
                         icon: Icons.view_week_rounded,
                       ),
-                      const AdminPickerOption(
+                      AdminPickerOption(
                         value: 'print_label',
-                        label: 'Cetak label barcode / QR',
+                        label: 'label_print_btn'.tr(),
                         icon: Icons.print_rounded,
                       ),
                     ],
@@ -2676,7 +2675,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       context,
                       data: sku,
                       title: (item['nama'] ?? sku).toString(),
-                      subtitle: 'SKU $sku',
+                      subtitle: 'admin_auto_66fe3af4fa'.tr(namedArgs: {'sku': sku}),
                     );
                   }
                 },
@@ -2705,7 +2704,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       constraints:
                           const BoxConstraints(minWidth: 36, minHeight: 36),
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.view_week_rounded,
+                      icon: Icon(Icons.view_week_rounded,
                           color: OptikAdminTokens.navy, size: 20),
                       onPressed: () => showProductDetail(item)),
                 ],
@@ -2730,7 +2729,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       _editPendingBefore = _pendingAtToko(map, scopeToko);
                       nameController.text = map['nama'] ?? '';
                       hargaController.text = _formatRupiahLocal(_hargaJualOf(map))
-                          .replaceAll('Rp', '')
+                          .replaceAll('admin_gl_row_79e01c1296'.tr(), '')
                           .replaceAll('.', '')
                           .trim();
                       hargaModalController.text =
@@ -2826,13 +2825,13 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             IconButton(
               tooltip:
                   'Samakan katalog 100%: PUSAT = semua cabang (stok tidak diubah)',
-              icon: const Icon(Icons.sync_alt_rounded,
+              icon: Icon(Icons.sync_alt_rounded,
                   color: OptikAdminTokens.navy),
               onPressed: isLoading ? null : _syncPusatCatalogToAllToko,
             ),
           IconButton(
-            tooltip: 'Riwayat Add Branch',
-            icon: const Icon(Icons.history_rounded, color: OptikAdminTokens.navy),
+            tooltip: 'admin_auto_7232998fb9'.tr(),
+            icon: Icon(Icons.history_rounded, color: OptikAdminTokens.navy),
             onPressed: () => _showBranchRevisionHistory(),
           ),
           if (editId != null)
@@ -2882,7 +2881,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                             const SizedBox(height: 8),
                             Text(
                               'pm_barcode_sistem'.tr(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.textMuted,
                                 fontSize: 10.5,
                               ),
@@ -2918,7 +2917,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     ]),
                     const SizedBox(height: 12),
                     AdminPickerField(
-                      label: 'Mode barcode',
+                      label: 'admin_auto_6c2101fce8'.tr(),
                       valueText: barcodeMode == 'MANUAL_PRODUCT'
                           ? 'Barcode bawaan'
                           : 'Generate otomatis',
@@ -2926,22 +2925,22 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                       onTap: () async {
                         final sel = await showAdminPicker<String>(
                           context: context,
-                          title: 'Mode barcode',
-                          subtitle: 'Cara isi barcode produk baru',
+                          title: 'admin_auto_6c2101fce8'.tr(),
+                          subtitle: 'admin_auto_8f0c54c778'.tr(),
                           headerIcon: Icons.qr_code_2_rounded,
                           searchable: false,
                           selected: barcodeMode,
-                          options: const [
+                          options: [
                             AdminPickerOption(
                               value: 'AUTOMATIC',
-                              label: 'Generate otomatis',
-                              subtitle: 'Sistem membuat barcode unik',
+                              label: 'admin_lbl_generate_otomatis'.tr(),
+                              subtitle: 'admin_auto_15fae32927'.tr(),
                               icon: Icons.auto_awesome_rounded,
                             ),
                             AdminPickerOption(
                               value: 'MANUAL_PRODUCT',
-                              label: 'Barcode bawaan',
-                              subtitle: 'Scan / ketik barcode produk',
+                              label: 'admin_lbl_barcode_bawaan'.tr(),
+                              subtitle: 'admin_auto_85ae317e4b'.tr(),
                               icon: Icons.qr_code_scanner_rounded,
                             ),
                           ],
@@ -3057,7 +3056,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                     if (editId == null) ...[
                       const SizedBox(height: 12),
                       AdminPickerField(
-                        label: 'Lokasi stok awal',
+                        label: 'admin_auto_da090985ae'.tr(),
                         valueText: _stokAwalCabangLabel(selectedCabang),
                         hint: 'Pilih lokasi stok awal…',
                         icon: Icons.store_rounded,
@@ -3149,22 +3148,22 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               padding: const EdgeInsets.only(bottom: OptikAdminTokens.spaceMd),
               items: [
                 PremiumStatItem(
-                  label: 'Total SKU',
+                  label: 'admin_auto_94a4ab1e8d'.tr(),
                   value: '$totalItems',
                   color: OptikAdminTokens.warning,
                 ),
                 PremiumStatItem(
-                  label: 'Total Stok',
+                  label: 'admin_auto_c61c928773'.tr(),
                   value: '$totalStock PCS',
                   color: OptikAdminTokens.navy,
                 ),
                 PremiumStatItem(
-                  label: 'Frame',
+                  label: 'admin_auto_3bb3e8c8a2'.tr(),
                   value: '$frameCount',
                   color: OptikAdminTokens.navy,
                 ),
                 PremiumStatItem(
-                  label: 'Lensa',
+                  label: 'admin_auto_c396e864bc'.tr(),
                   value: '$lensaCount',
                   color: OptikAdminTokens.slate,
                 ),
@@ -3174,16 +3173,16 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             TextField(
               controller: searchController,
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+              style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
               decoration: InputDecoration(
-                  hintText: 'Cari nama, sub kategori, warna, SKU…',
-                  hintStyle: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 13),
+                  hintText: 'admin_auto_4ffec86551'.tr(),
+                  hintStyle: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 13),
                   prefixIcon: const Icon(Icons.search,
                       color: OptikAdminTokens.warning, size: 18),
                   suffixIcon: searchController.text.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(Icons.close,
+                          icon: Icon(Icons.close,
                               color: OptikAdminTokens.textMuted, size: 18),
                           onPressed: () {
                             searchController.clear();
@@ -3230,7 +3229,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
             if (filtersOpen) ...[
               if (isCanEdit) ...[
                 const SizedBox(height: OptikAdminTokens.spaceSm),
-                Text('Filter cabang',
+                Text('admin_auto_3c54f1bbc6'.tr(),
                     style: TextStyle(
                         color: OptikAdminTokens.navy.withOpacity(0.55),
                         fontSize: 11,
@@ -3240,7 +3239,7 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 const SizedBox(height: OptikAdminTokens.spaceMd),
               ],
               AdminPickerField(
-                label: 'Grup tampilan',
+                label: 'admin_auto_149a581664'.tr(),
                 valueText: switch (groupMode) {
                   'none' => 'Tanpa grup',
                   'harga' => 'Grup harga',
@@ -3251,23 +3250,23 @@ class ProductMasterPageState extends State<ProductMasterPage> {
                 onTap: () async {
                   final sel = await showAdminPicker<String>(
                     context: context,
-                    title: 'Grup tampilan',
+                    title: 'admin_auto_149a581664'.tr(),
                     searchable: false,
                     selected: groupMode,
-                    options: const [
+                    options: [
                       AdminPickerOption(
                         value: 'none',
-                        label: 'Tanpa grup',
+                        label: 'admin_auto_ec28da7b60'.tr(),
                         icon: Icons.list_rounded,
                       ),
                       AdminPickerOption(
                         value: 'harga',
-                        label: 'Grup harga',
+                        label: 'admin_auto_54de5804f0'.tr(),
                         icon: Icons.payments_outlined,
                       ),
                       AdminPickerOption(
                         value: 'sub',
-                        label: 'Grup sub kategori',
+                        label: 'admin_auto_76b3dbb19a'.tr(),
                         icon: Icons.category_outlined,
                       ),
                     ],
@@ -3281,32 +3280,32 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               ),
               const SizedBox(height: OptikAdminTokens.spaceMd),
               AdminPickerField(
-                label: 'Filter kategori',
+                label: 'admin_auto_fc7edd9fac'.tr(),
                 valueText:
-                    filterKat == 'SEMUA' ? 'Semua' : filterKat,
+                    filterKat == 'SEMUA' ? 'admin_lbl_semua'.tr() : filterKat,
                 icon: Icons.filter_alt_outlined,
                 onTap: () async {
                   final sel = await showAdminPicker<String>(
                     context: context,
-                    title: 'Filter kategori',
+                    title: 'admin_auto_fc7edd9fac'.tr(),
                     searchable: false,
                     selected: filterKat == 'SEMUA' ? null : filterKat,
-                    clearLabel: 'Semua',
+                    clearLabel: 'admin_lbl_semua'.tr(),
                     clearIcon: Icons.apps_rounded,
-                    options: const [
+                    options: [
                       AdminPickerOption(
                         value: 'Frame',
-                        label: 'Frame',
+                        label: 'admin_auto_3bb3e8c8a2'.tr(),
                         icon: Icons.visibility_outlined,
                       ),
                       AdminPickerOption(
                         value: 'Lensa',
-                        label: 'Lensa',
+                        label: 'admin_auto_c396e864bc'.tr(),
                         icon: Icons.lens_outlined,
                       ),
                       AdminPickerOption(
                         value: 'Lainnya',
-                        label: 'Lainnya',
+                        label: 'pengaduan_kat_lainnya'.tr(),
                         icon: Icons.more_horiz_rounded,
                       ),
                     ],
@@ -3319,20 +3318,20 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               if (_hargaOptions.isNotEmpty) ...[
                 const SizedBox(height: OptikAdminTokens.spaceMd),
                 AdminPickerField(
-                  label: 'Filter harga',
+                  label: 'admin_auto_0dca12d72e'.tr(),
                   valueText: filterHarga == 'SEMUA'
-                      ? 'Semua'
+                      ? 'admin_lbl_semua'.tr()
                       : _formatRupiahLocal(
                           int.tryParse(filterHarga) ?? filterHarga),
                   icon: Icons.attach_money_rounded,
                   onTap: () async {
                     final sel = await showAdminPicker<String>(
                       context: context,
-                      title: 'Filter harga',
+                      title: 'admin_auto_0dca12d72e'.tr(),
                       searchable: _hargaOptions.length > 8,
                       selected:
                           filterHarga == 'SEMUA' ? null : filterHarga,
-                      clearLabel: 'Semua',
+                      clearLabel: 'admin_lbl_semua'.tr(),
                       clearIcon: Icons.apps_rounded,
                       options: [
                         for (final h in _hargaOptions)
@@ -3352,17 +3351,17 @@ class ProductMasterPageState extends State<ProductMasterPage> {
               if (_subKatOptions.isNotEmpty) ...[
                 const SizedBox(height: OptikAdminTokens.spaceMd),
                 AdminPickerField(
-                  label: 'Filter sub kategori',
+                  label: 'admin_auto_0094f21195'.tr(),
                   valueText:
-                      filterSubKat == 'SEMUA' ? 'Semua' : filterSubKat,
+                      filterSubKat == 'SEMUA' ? 'admin_lbl_semua'.tr() : filterSubKat,
                   icon: Icons.subdirectory_arrow_right_rounded,
                   onTap: () async {
                     final sel = await showAdminPicker<String>(
                       context: context,
-                      title: 'Filter sub kategori',
+                      title: 'admin_auto_0094f21195'.tr(),
                       searchable: _subKatOptions.length > 8,
                       selected: filterSubKat == 'SEMUA' ? null : filterSubKat,
-                      clearLabel: 'Semua',
+                      clearLabel: 'admin_lbl_semua'.tr(),
                       clearIcon: Icons.apps_rounded,
                       options: [
                         for (final s in _subKatOptions)

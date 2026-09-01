@@ -354,7 +354,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
                 Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 14),
+                  style: TextStyle(color: OptikAdminTokens.slate, fontSize: 14),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -371,7 +371,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
     }
 
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return const PremiumScaffold(
+      return PremiumScaffold(
         body:
             Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy)),
       );
@@ -397,7 +397,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
         appBar: PremiumAppBar(
           title: 'liveness_title'.tr(),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+            icon: Icon(Icons.arrow_back_ios_new_rounded,
                 color: OptikAdminTokens.navy),
             onPressed: () {
               // Menangani klik tombol back manual di sudut kiri atas layar aplikasi
@@ -480,7 +480,7 @@ class _LivenessCameraPageState extends State<LivenessCameraPage> {
                 child: Text(
                   "liveness_instruksi".tr(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.slate,
                     fontSize: 13,
                     height: 1.5,

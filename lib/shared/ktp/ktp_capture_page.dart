@@ -283,7 +283,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                     children: [
                       Text(_error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: OptikAdminTokens.snow)),
+                          style: TextStyle(color: OptikAdminTokens.snow)),
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed: () => Navigator.pop(context),
@@ -294,7 +294,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                 ),
               )
             : cam == null || !cam.value.isInitialized
-                ? const AppLoadingOverlay(
+                ? AppLoadingOverlay(
                     visible: true,
                     message: 'Menyiapkan kamera…',
                     subtitle: 'Izinkan akses kamera jika diminta',
@@ -374,7 +374,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               'KTP fisik saja. Auto jepret hanya jika NIK, nama, '
                               'alamat lengkap, TTL, gender, gol. darah, agama, '
                               'dan status kawin terbaca jelas.',
@@ -403,7 +403,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                                           : OptikAdminTokens.lineStrong,
                                     ),
                                     child: _capturing
-                                        ? const Padding(
+                                        ? Padding(
                                             padding: EdgeInsets.all(20),
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
@@ -417,7 +417,7 @@ class _KtpCapturePageState extends State<KtpCapturePage> {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            const Text(
+                            Text(
                               'Atau tekan untuk ambil manual',
                               style: TextStyle(
                                   color: OptikAdminTokens.slate, fontSize: 11),

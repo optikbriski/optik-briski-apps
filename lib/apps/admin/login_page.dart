@@ -9,6 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/config.dart';
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/admin/admin_language.dart';
 import '../../shared/tenant/tenant_modules.dart';
 import '../../shared/tenant/tenant_service.dart';
 import '../../shared/widgets/login_brand_header.dart';
@@ -45,6 +46,9 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AdminLanguage.ensureSupported(context);
+    });
     final banner = widget.bannerError;
     if (banner != null && banner.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,7 +74,7 @@ class _LoginPageState extends State<LoginPage> {
         behavior: SnackBarBehavior.floating,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w700,
           ),
@@ -185,7 +189,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
     if (actor != null && actor.isPresent) {
-      _snack('Login via kode APK: ${actor.label}', OptikAdminTokens.success);
+      _snack('admin_auto_500b985cdc'.tr(), OptikAdminTokens.success);
     }
     widget.onLoggedIn?.call(merged);
   }
@@ -248,8 +252,7 @@ class _LoginPageState extends State<LoginPage> {
     final email = _emailController.text.trim();
     final code = _codeController.text.replaceAll(RegExp(r'\D'), '');
     if (email.isEmpty || code.length != 6) {
-      _snack(
-        'Isi email admin dan kode 6 angka dari APK.',
+      _snack('admin_gl_row_06a9a13cb0'.tr(),
         OptikAdminTokens.warning,
       );
       return;
@@ -291,7 +294,7 @@ class _LoginPageState extends State<LoginPage> {
       counterText: counterText,
       prefixIcon: Icon(icon, color: OptikAdminTokens.slate, size: 20),
       suffixIcon: suffixIcon,
-      labelStyle: const TextStyle(
+      labelStyle: TextStyle(
         color: OptikAdminTokens.slate,
         fontSize: 12.5,
         fontWeight: FontWeight.w600,
@@ -306,15 +309,15 @@ class _LoginPageState extends State<LoginPage> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+        borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.lineStrong),
+        borderSide: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusSm),
-        borderSide: const BorderSide(color: OptikAdminTokens.navy, width: 1.4),
+        borderSide: BorderSide(color: OptikAdminTokens.navy, width: 1.4),
       ),
     );
   }
@@ -377,7 +380,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const LoginBrandHeader(
+                    LoginBrandHeader(
                       logoHeight: 58,
                       nameColor: OptikAdminTokens.navy,
                     ),
@@ -425,7 +428,7 @@ class _LoginPageState extends State<LoginPage> {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const PremiumIconBadge(
+                                    PremiumIconBadge(
                                       icon: Icons.lock_person_rounded,
                                       color: OptikAdminTokens.ice,
                                       size: 48,
@@ -447,7 +450,7 @@ class _LoginPageState extends State<LoginPage> {
                                             ),
                                           ),
                                           const SizedBox(height: 4),
-                                          const Text(
+                                          Text(
                                             'Login Admin',
                                             style: TextStyle(
                                               color: OptikAdminTokens.navy,
@@ -481,7 +484,7 @@ class _LoginPageState extends State<LoginPage> {
                                 if (_showKodeUsaha) ...[
                                   TextField(
                                     controller: _slugController,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -490,7 +493,7 @@ class _LoginPageState extends State<LoginPage> {
                                         TextCapitalization.none,
                                     autocorrect: false,
                                     decoration: _fieldDecoration(
-                                      label: 'Kode usaha',
+                                      label: 'admin_auto_da9098e9e2'.tr(),
                                       icon: Icons.storefront_outlined,
                                     ),
                                   ),
@@ -498,7 +501,7 @@ class _LoginPageState extends State<LoginPage> {
                                 ],
                                 TextField(
                                   controller: _emailController,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -514,7 +517,7 @@ class _LoginPageState extends State<LoginPage> {
                                   TextField(
                                     controller: _passwordController,
                                     obscureText: !_isPasswordVisible,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -539,7 +542,7 @@ class _LoginPageState extends State<LoginPage> {
                                 else
                                   TextField(
                                     controller: _codeController,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontSize: 22,
                                       fontWeight: FontWeight.w800,
@@ -555,7 +558,7 @@ class _LoginPageState extends State<LoginPage> {
                                     onChanged: _onCodeChanged,
                                     onSubmitted: (_) => handleLogin(),
                                     decoration: _fieldDecoration(
-                                      label: 'Kode 6 angka (APK)',
+                                      label: 'admin_login_code_label'.tr(),
                                       icon: Icons.pin_rounded,
                                       hint: '••••••',
                                       counterText: '',
@@ -617,9 +620,28 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 18),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => AdminLanguage.showPicker(context),
+                      icon: Icon(
+                        Icons.translate_rounded,
+                        size: 18,
+                        color: OptikAdminTokens.slate,
+                      ),
+                      label: Text(
+                        'admin_menu_language'.tr(),
+                        style: TextStyle(
+                          color: OptikAdminTokens.navy,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       isBrandedStoreApk
-                          ? '© ${DateTime.now().year} Akses Web Aman'
+                          ? 'admin_login_footer_branded'.tr(namedArgs: {
+                              'year': '${DateTime.now().year}',
+                            })
                           : "admin_login_footer".brandTr(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -652,14 +674,14 @@ class _LoginPageState extends State<LoginPage> {
           Expanded(
             child: _modeChip(
               selected: _mode == _LoginMode.code,
-              label: 'Kode APK',
+              label: 'admin_auto_02b70ff4c4'.tr(),
               onTap: () => setState(() => _mode = _LoginMode.code),
             ),
           ),
           Expanded(
             child: _modeChip(
               selected: _mode == _LoginMode.password,
-              label: 'Password',
+              label: 'admin_auto_dc647eb65e'.tr(),
               onTap: () => setState(() => _mode = _LoginMode.password),
             ),
           ),

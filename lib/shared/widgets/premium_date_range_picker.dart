@@ -66,11 +66,11 @@ class _PremiumDateRangeSheet extends StatefulWidget {
 }
 
 class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
-  static const _bg = OptikAdminTokens.card;
-  static const _panel = OptikAdminTokens.bgMid;
-  static const _line = OptikAdminTokens.lineStrong;
-  static const _accent = OptikAdminTokens.navy;
-  static const _accentSoft = OptikAdminTokens.ice;
+  static Color get _bg => OptikAdminTokens.card;
+  static Color get _panel => OptikAdminTokens.bgMid;
+  static Color get _line => OptikAdminTokens.lineStrong;
+  static Color get _accent => OptikAdminTokens.navy;
+  static Color get _accentSoft => OptikAdminTokens.ice;
 
   final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
   final _monthFmt = DateFormat('MMMM yyyy', 'id_ID');
@@ -207,7 +207,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-        side: const BorderSide(color: OptikAdminTokens.lineStrong),
+        side: BorderSide(color: OptikAdminTokens.lineStrong),
       ),
       child: SizedBox(
         width: width,
@@ -237,14 +237,14 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
                   : ListView(
                       children: [
                         _presetSidebar(horizontal: true),
-                        const Divider(height: 1, color: _line),
+                        Divider(height: 1, color: _line),
                         _calendarsPane(wide: false),
                       ],
                     ),
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: _line)),
                 color: _panel,
               ),
@@ -253,7 +253,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
                 children: [
                   Text(
                     _rangeLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
@@ -262,7 +262,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
                   const SizedBox(height: 2),
                   Text(
                     widget.timezoneNote,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.slate,
                       fontSize: 11,
                     ),
@@ -393,13 +393,13 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
             children: [
               IconButton(
                 onPressed: () => _shiftMonths(-1),
-                icon: const Icon(Icons.chevron_left_rounded,
+                icon: Icon(Icons.chevron_left_rounded,
                     color: OptikAdminTokens.navy),
               ),
               const Spacer(),
               IconButton(
                 onPressed: () => _shiftMonths(1),
-                icon: const Icon(Icons.chevron_right_rounded,
+                icon: Icon(Icons.chevron_right_rounded,
                     color: OptikAdminTokens.navy),
               ),
             ],
@@ -423,7 +423,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
             _pickingEnd
                 ? 'Pilih tanggal akhir rentang'
                 : 'Klik tanggal mulai, lalu tanggal akhir (atau pilih preset)',
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
         ],
       ),
@@ -453,7 +453,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
       children: [
         Text(
           _monthFmt.format(month),
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
             fontSize: 14,
@@ -467,7 +467,7 @@ class _PremiumDateRangeSheetState extends State<_PremiumDateRangeSheet> {
                 child: Text(
                   w,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.slate,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -573,7 +573,7 @@ class PremiumDateRangeTrigger extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.calendar_month_rounded,
+              Icon(Icons.calendar_month_rounded,
                   size: 18, color: OptikAdminTokens.navy),
               const SizedBox(width: 10),
               Expanded(
@@ -581,14 +581,14 @@ class PremiumDateRangeTrigger extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
               ),
-              const Icon(Icons.expand_more_rounded,
+              Icon(Icons.expand_more_rounded,
                   color: OptikAdminTokens.slate, size: 20),
             ],
           ),

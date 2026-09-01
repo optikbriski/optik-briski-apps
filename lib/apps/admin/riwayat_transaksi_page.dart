@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
+import 'package:easy_localization/easy_localization.dart';
+
+import '../../shared/admin/admin_format.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/invoice/invoice_delivery_result.dart';
 import '../../shared/invoice/invoice_delivery_service.dart';
@@ -69,9 +72,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   }
 
   String formatRupiah(int nominal) {
-    return NumberFormat.currency(
-            locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
-        .format(nominal);
+    return AdminFormat.rupiah(context, nominal);
   }
 
   bool get _canSeeAllStores =>
@@ -104,19 +105,67 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     }
   }
 
+  String _normTokoId(String? raw) {
+    final t = (raw ?? '').trim().toUpperCase();
+    if (t.isEmpty || AttendanceAdminScope.isPusatTokoId(t)) return 'PUSAT';
+    return t;
+  }
+
+  Future<List<String>> _fetchMasterTokoIds() async {
+    final set = <String>{};
+    try {
+      var q = supabase.from('toko_id').select('id');
+      final tenant = AttendanceAdminScope.tenantIdOf(widget.profile) ??
+          AttendanceAdminScope.boundTenantIdOrNull();
+      if (tenant != null && tenant.isNotEmpty) {
+        q = q.eq('tenant_id', tenant);
+      }
+      final rows = await q;
+      for (final r in List<Map<String, dynamic>>.from(rows as List)) {
+        final id = _normTokoId(r['id']?.toString());
+        if (id.isNotEmpty && _canActOnToko(id)) set.add(id);
+      }
+    } catch (_) {}
+    return set.toList()..sort();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchSalesPages({
+    List<String>? tokoIds,
+  }) async {
+    const pageSize = 1000;
+    const maxPages = 50;
+    final out = <Map<String, dynamic>>[];
+    final tid = AttendanceAdminScope.boundTenantIdOrNull();
+    var from = 0;
+    for (var page = 0; page < maxPages; page++) {
+      var query = supabase.from('sales').select();
+      if (tid != null) query = query.eq('tenant_id', tid);
+      if (tokoIds != null && tokoIds.isNotEmpty) {
+        query = tokoIds.length == 1
+            ? query.eq('toko_id', tokoIds.first)
+            : query.inFilter('toko_id', tokoIds);
+      }
+      final res = await query
+          .order('created_at', ascending: false)
+          .range(from, from + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(res as List);
+      out.addAll(rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return _visibleSales(out);
+  }
+
   Future<void> _fetchSeluruhDataTransaksiOwner() async {
     if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      var query = supabase.from('sales').select();
-      final tid = AttendanceAdminScope.boundTenantIdOrNull();
-      if (tid != null) query = query.eq('tenant_id', tid);
-      final res = await query.order('created_at', ascending: false);
-      final data = _visibleSales(List<Map<String, dynamic>>.from(res));
-      final cabang = data
-          .map((e) => e['toko_id']?.toString().toUpperCase() ?? 'PUSAT')
-          .toSet()
-          .toList()
+      final master = await _fetchMasterTokoIds();
+      final data = await _fetchSalesPages();
+      final cabang = <String>{
+        ...master,
+        ...data.map((e) => _normTokoId(e['toko_id']?.toString())),
+      }.where((id) => id.isNotEmpty && _canActOnToko(id)).toList()
         ..sort();
       setState(() {
         allSalesRaw = data;
@@ -140,11 +189,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         _fail('Bukan kasir toko ini.');
         return false;
       }
-      var query = supabase.from('sales').select().eq('toko_id', tokoId);
-      final tid = AttendanceAdminScope.boundTenantIdOrNull();
-      if (tid != null) query = query.eq('tenant_id', tid);
-      final res = await query.order('created_at', ascending: false);
-      final data = _visibleSales(List<Map<String, dynamic>>.from(res));
+      final data = await _fetchSalesPages(
+        tokoIds: AttendanceAdminScope.storeIdAliases(tokoId),
+      );
       final garansiMap = await _loadGaransiAktifMap(data);
       if (!mounted) return false;
       setState(() {
@@ -256,8 +303,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
   List<Map<String, dynamic>> _salesForToko(String tokoId) {
     return allSalesRaw
-        .where((e) =>
-            (e['toko_id']?.toString().toUpperCase() ?? 'PUSAT') == tokoId)
+        .where((e) => _normTokoId(e['toko_id']?.toString()) == tokoId)
         .toList();
   }
 
@@ -360,7 +406,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           builder: (ctx, setLocal) {
             return AlertDialog(
               backgroundColor: OptikAdminTokens.card,
-              title: const Text(
+              title: Text(
                 'Pelunasan DP',
                 style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
               ),
@@ -384,35 +430,35 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   ),
                   const SizedBox(height: 14),
                   AdminPickerField(
-                    label: 'Metode bayar',
+                    label: 'admin_auto_915c8784d7'.tr(),
                     valueText: metode,
                     icon: Icons.payments_outlined,
                     onTap: () async {
-                      const options = [
+                      final options = [
                         AdminPickerOption(
                           value: 'Tunai',
-                          label: 'Tunai',
+                          label: 'admin_auto_692901d186'.tr(),
                           icon: Icons.payments_outlined,
                         ),
                         AdminPickerOption(
                           value: 'Debit',
-                          label: 'Debit',
+                          label: 'admin_auto_009534719f'.tr(),
                           icon: Icons.credit_card_outlined,
                         ),
                         AdminPickerOption(
                           value: 'Transfer',
-                          label: 'Transfer',
+                          label: 'admin_auto_6950810f0d'.tr(),
                           icon: Icons.account_balance_outlined,
                         ),
                         AdminPickerOption(
                           value: 'QRIS',
-                          label: 'QRIS',
+                          label: 'admin_auto_4efba2f908'.tr(),
                           icon: Icons.qr_code_rounded,
                         ),
                       ];
                       final sel = await showAdminPicker<String>(
                         context: ctx,
-                        title: 'Metode bayar',
+                        title: 'admin_auto_915c8784d7'.tr(),
                         selected: metode,
                         searchable: false,
                         options: options,
@@ -426,7 +472,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Batal', style: TextStyle(color: OptikAdminTokens.textMuted)),
+                  child: Text('appr_btn_batal'.tr(), style: TextStyle(color: OptikAdminTokens.textMuted)),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, metode),
@@ -434,7 +480,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                     backgroundColor: OptikAdminTokens.trainingSoft,
                     foregroundColor: OptikAdminTokens.bgMid,
                   ),
-                  child: const Text('Lunasi'),
+                  child: Text('admin_btn_lunasi'.tr()),
                 ),
               ],
             );
@@ -502,7 +548,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${toReady ? 'Pelunasan OK · READY' : 'Pelunasan OK · PENDING'}. '
+            '${toReady ? 'Pelunasan OK · READY' : 'admin_auto_settlement_pending'.tr()}. '
             '${delivered?.summary ?? 'Email/WA gagal — status DB sudah di-update.'}'
             '$refreshNote',
           ),
@@ -517,7 +563,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -548,13 +594,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           resendReady
               ? 'Kirim ulang QR pengambilan'
               : 'Pesanan sudah siap diambil',
-          style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
+          style: TextStyle(color: OptikAdminTokens.navy, fontSize: 16),
         ),
         content: Text(
           resendReady
               ? 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
                   'Kirim ulang QR pengambilan (READY) ke email, WA, Member?\n'
-                  'Email/WA boleh gagal — QR tetap valid di sistem.'
+                  'admin_auto_qr_still_valid'.tr()
               : dpRow
                   ? 'Nota ${trx['no_invoice']} · ${trx['nama_pelanggan'] ?? '-'}\n\n'
                       'Kirim pesan pelunasan + pengambilan + nota + QR pelunasan '
@@ -570,7 +616,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal',
+            child: Text('appr_btn_batal'.tr(),
                 style: TextStyle(color: OptikAdminTokens.textMuted)),
           ),
           FilledButton(
@@ -579,7 +625,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               backgroundColor: OptikAdminTokens.trainingSoft,
               foregroundColor: OptikAdminTokens.bgMid,
             ),
-            child: Text(resendReady ? 'Ya, kirim ulang' : 'Ya, barang ready — kirim'),
+            child: Text(resendReady ? 'admin_btn_ya_kirim_ulang'.tr() : 'admin_btn_ya_barang_ready'.tr()),
           ),
         ],
       ),
@@ -625,7 +671,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                     '${delivered?.summary ?? 'Email/WA gagal — QR tetap valid.'}'
                     '$refreshNote'
                 : 'Hanya nota $invNo yang di-update'
-                    '${dpRow ? ' → siap pelunasan (DP)' : ' → READY'}.\n'
+                    '${dpRow ? ' → siap pelunasan (DP)' : 'admin_auto_status_ready'.tr()}.\n'
                     '${delivered?.summary ?? 'Email/WA gagal — status DB sudah di-update.'}'
                     '$othersHint'
                     '$refreshNote',
@@ -641,7 +687,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -663,9 +709,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
 
   Widget _buildStage1LayarCabang() {
     if (listCabangUnik.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'Belum ada transaksi di cabang mana pun.',
+          'Belum ada cabang di master toko.',
           style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
         ),
       );
@@ -745,9 +791,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               TextField(
                 controller: _searchCtrl,
                 style:
-                    const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+                    TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Cari invoice / nama / WA…',
+                  hintText: 'admin_auto_a36710610f'.tr(),
                   hintStyle: TextStyle(
                       color: OptikAdminTokens.navy.withOpacity(0.35)),
                   prefixIcon: Icon(Icons.search,
@@ -756,7 +802,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   suffixIcon: _search.isEmpty
                       ? null
                       : IconButton(
-                          tooltip: 'Hapus',
+                          tooltip: 'btn_hapus'.tr(),
                           onPressed: _clearSearch,
                           icon: Icon(Icons.close_rounded,
                               size: 18,
@@ -780,7 +826,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               ? Center(
                   child: Text(
                     _bucketEmpty(bucket),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.textMuted,
                       fontSize: 13,
                     ),
@@ -873,7 +919,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               Expanded(
                 child: Text(
                   trx['no_invoice']?.toString() ?? '-',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w800,
                     fontSize: 13.5,
@@ -891,7 +937,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                       color: OptikAdminTokens.navy.withOpacity(0.25),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'ONLINE',
                     style: TextStyle(
                       color: OptikAdminTokens.navy,
@@ -913,7 +959,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           const SizedBox(height: 6),
           Text(
             trx['nama_pelanggan']?.toString() ?? 'Tanpa nama',
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.textSecondary, fontSize: 12.5),
           ),
           const SizedBox(height: 4),
@@ -942,7 +988,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
               OutlinedButton.icon(
                 onPressed: _busy ? null : () => _openDetail(trx),
                 icon: const Icon(Icons.receipt_long, size: 16),
-                label: const Text('Nota'),
+                label: Text('admin_auto_c9228e19ff'.tr()),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: OptikAdminTokens.navy,
                   side: BorderSide(
@@ -971,7 +1017,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   onPressed:
                       _busy ? null : () => _konfirmasiBarangReady(trx),
                   icon: const Icon(Icons.qr_code_2_rounded, size: 16),
-                  label: const Text('Kirim ulang QR pengambilan'),
+                  label: Text('admin_auto_5fb8265573'.tr()),
                   style: FilledButton.styleFrom(
                     backgroundColor: OptikAdminTokens.navy,
                     foregroundColor: OptikAdminTokens.snow,
@@ -981,7 +1027,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 FilledButton.icon(
                   onPressed: _busy ? null : () => _lunasiDp(trx),
                   icon: const Icon(Icons.paid_outlined, size: 16),
-                  label: const Text('Lunasi'),
+                  label: Text('admin_btn_lunasi'.tr()),
                   style: FilledButton.styleFrom(
                     backgroundColor:
                         OptikAdminTokens.accentSoft.withOpacity(0.85),
@@ -1083,9 +1129,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           elevation: 0,
           scrolledUnderElevation: 0,
           centerTitle: true,
-          iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
+          iconTheme: IconThemeData(color: OptikAdminTokens.textPrimary),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back,
+            icon: Icon(Icons.arrow_back,
                 color: OptikAdminTokens.navy, size: 20),
             onPressed: () {
               if (!_handleBack()) Navigator.pop(context);
@@ -1093,7 +1139,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           ),
           title: Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontSize: 13,
               fontWeight: FontWeight.bold,
@@ -1103,7 +1149,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           actions: [
             if (selectedTokoId != null)
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: 'admin_btn_refresh'.tr(),
                 onPressed: isLoading || _busy
                     ? null
                     : () => _fetchDataTransaksiPerCabang(
@@ -1115,11 +1161,11 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
           ],
         ),
         body: isLoading
-            ? const Center(
+            ? Center(
                 child: CircularProgressIndicator(color: OptikAdminTokens.ice),
               )
             : !_canOpenBoard
-                ? const Center(
+                ? Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(

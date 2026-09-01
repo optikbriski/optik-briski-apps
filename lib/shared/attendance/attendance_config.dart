@@ -46,4 +46,22 @@ class AttendanceConfig {
 
   /// Interval rotasi QR di layar Admin (sama dengan TTL).
   static const int qrRotateSeconds = 5;
+
+  /// Ambil token berikutnya sedikit sebelum expiry agar QR berganti tepat waktu
+  /// (RPC ~1–2 detik; tanpa ini QR lama stuck di 1 detik lalu reset di ~3).
+  static const Duration qrRotatePrefetchLead = Duration(milliseconds: 1500);
+
+  /// Detik tampilan countdown (ceil) dari [expiresAt].
+  static int qrSecondsUntilExpiry(DateTime expiresAt) {
+    final ms = expiresAt.difference(DateTime.now()).inMilliseconds;
+    if (ms <= 0) return 0;
+    return (ms + 999) ~/ 1000;
+  }
+
+  /// Delay sampai prefetch rotasi berikutnya.
+  static Duration qrDelayUntilPrefetch(DateTime expiresAt) {
+    final target = expiresAt.subtract(qrRotatePrefetchLead);
+    final delay = target.difference(DateTime.now());
+    return delay.isNegative ? Duration.zero : delay;
+  }
 }

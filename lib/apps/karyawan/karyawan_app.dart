@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/attendance/geofence_exit_monitor.dart';
+import '../../shared/connectivity/connectivity_app_shell.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
 import '../../shared/theme.dart';
 import 'login_karyawan_page.dart';
@@ -28,7 +29,7 @@ class KaryawanApp extends StatelessWidget {
       theme: buildKaryawanTheme(),
       builder: (context, child) => GlobalHardwareBarcodeShell(
         navigatorKey: navigatorKey,
-        child: child,
+        child: connectivityAppShell(child: child),
       ),
       home: const LoginKaryawanPage(),
     );

@@ -6,27 +6,32 @@ import 'owner_service.dart';
 
 /// Shared Owner chrome — Frozen Lake + mobile polish (not generic Material cards).
 abstract final class OwnerUi {
-  static TextStyle display(double size, {Color color = OptikAdminTokens.navy}) =>
+  static TextStyle display(double size, {Color? color}) =>
       GoogleFonts.fraunces(
         fontSize: size,
         fontWeight: FontWeight.w700,
-        color: color,
+        color: color ?? OptikAdminTokens.navy,
         height: 1.15,
       );
 
-  static TextStyle label({Color color = OptikAdminTokens.slate}) => TextStyle(
-        color: color,
+  static TextStyle label({Color? color}) => TextStyle(
+        color: color ?? OptikAdminTokens.slate,
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.2,
       );
 
   static TextStyle body({
-    Color color = OptikAdminTokens.textSecondary,
+    Color? color,
     double size = 14,
     FontWeight weight = FontWeight.w500,
   }) =>
-      TextStyle(color: color, fontSize: size, fontWeight: weight, height: 1.35);
+      TextStyle(
+        color: color ?? OptikAdminTokens.textSecondary,
+        fontSize: size,
+        fontWeight: weight,
+        height: 1.35,
+      );
 
   static Color moneyColor(num? v) {
     final n = (v ?? 0).toDouble();

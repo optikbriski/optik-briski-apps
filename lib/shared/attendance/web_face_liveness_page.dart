@@ -68,7 +68,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
   _MoveVerdict? _lastVerdict;
   String? _feedback;
 
-  static const _flashColors = <Color>[
+  static final _flashColors = <Color>[
     OptikAdminTokens.danger,
     OptikAdminTokens.success,
     OptikAdminTokens.navy,
@@ -670,7 +670,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             : OptikAdminTokens.warning,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w600,
           ),
@@ -706,14 +706,14 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
           appBar: PremiumAppBar(
             title: 'web_liveness_title'.tr(),
             leading: IconButton(
-              icon: const Icon(Icons.close_rounded, color: OptikAdminTokens.navy),
+              icon: Icon(Icons.close_rounded, color: OptikAdminTokens.navy),
               onPressed: () => Navigator.pop(context),
             ),
           ),
           body: _error != null
               ? _errorBody()
               : _booting || _camera == null || !_camera!.value.isInitialized
-                  ? const Center(
+                  ? Center(
                       child:
                           CircularProgressIndicator(color: OptikAdminTokens.navy),
                     )
@@ -736,7 +736,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+              style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -801,7 +801,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
             Text(
               _actionTitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.snow,
                 fontWeight: FontWeight.w900,
                 fontSize: 28,
@@ -1022,7 +1022,7 @@ class _WebFaceLivenessPageState extends State<WebFaceLivenessPage> {
                         ? null
                         : _onContinue,
                     child: _busy
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(strokeWidth: 2, color: OptikAdminTokens.snow),

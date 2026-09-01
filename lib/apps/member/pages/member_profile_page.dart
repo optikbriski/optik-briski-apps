@@ -207,8 +207,8 @@ class _MemberProfilePageState extends State<MemberProfilePage> {
       ),
       _MenuItem(
         icon: Icons.system_update_rounded,
-        title: 'Update aplikasi',
-        subtitle: 'Cek & pasang versi terbaru Member',
+        title: 'menu_update'.tr(),
+        subtitle: 'sub_update'.tr(),
         onTap: () => _open(const MemberSoftwareUpdatePage()),
       ),
       if (showBentuk)

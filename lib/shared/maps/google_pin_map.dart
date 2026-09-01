@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:latlong2/latlong.dart';
 
@@ -8,8 +9,10 @@ import '../config.dart';
 import '../theme.dart';
 import 'geofence_workspace_map.dart';
 import 'google_maps_js.dart';
+import 'google_maps_support.dart';
 
 /// Kanvas Google satu pin — tracking, alamat member, checkout.
+/// macOS / Windows / Linux memakai OSM (plugin Google belum support desktop).
 class GooglePinMap extends StatefulWidget {
   const GooglePinMap({
     super.key,
@@ -41,12 +44,26 @@ class GooglePinMap extends StatefulWidget {
 class _GooglePinMapState extends State<GooglePinMap> {
   late Future<void> _ready;
   gmaps.GoogleMapController? _c;
+  MapController? _osm;
   Object? _error;
+
+  bool get _useGoogle => googleMapsPluginSupported && hasGoogleMapsKey;
 
   @override
   void initState() {
     super.initState();
-    _ready = _load();
+    if (_useGoogle) {
+      _ready = _load();
+    } else {
+      _osm = MapController();
+      _ready = Future.value();
+    }
+  }
+
+  @override
+  void dispose() {
+    _osm?.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -71,16 +88,20 @@ class _GooglePinMapState extends State<GooglePinMap> {
   @override
   void didUpdateWidget(covariant GooglePinMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.point.latitude != widget.point.latitude ||
-        oldWidget.point.longitude != widget.point.longitude ||
-        oldWidget.zoom != widget.zoom) {
-      _c?.animateCamera(
-        gmaps.CameraUpdate.newLatLngZoom(
-          toGoogleLatLng(widget.point),
-          widget.zoom.clamp(3.0, 21.0),
-        ),
-      );
+    if (oldWidget.point.latitude == widget.point.latitude &&
+        oldWidget.point.longitude == widget.point.longitude &&
+        oldWidget.zoom == widget.zoom) {
+      return;
     }
+    _c?.animateCamera(
+      gmaps.CameraUpdate.newLatLngZoom(
+        toGoogleLatLng(widget.point),
+        widget.zoom.clamp(3.0, 21.0),
+      ),
+    );
+    try {
+      _osm?.move(widget.point, widget.zoom);
+    } catch (_) {}
   }
 
   @override
@@ -92,14 +113,8 @@ class _GooglePinMapState extends State<GooglePinMap> {
   }
 
   Widget _body() {
-    if (!hasGoogleMapsKey) {
-      return const Center(
-        child: Text(
-          'Peta Google belum siap (kunci kosong).',
-          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
-          textAlign: TextAlign.center,
-        ),
-      );
+    if (!_useGoogle) {
+      return _osmBody();
     }
     if (_error != null) {
       return Center(
@@ -121,7 +136,7 @@ class _GooglePinMapState extends State<GooglePinMap> {
           );
         }
         if (snap.connectionState != ConnectionState.done) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: OptikAdminTokens.ice),
           );
         }
@@ -178,6 +193,58 @@ class _GooglePinMapState extends State<GooglePinMap> {
                 },
         );
       },
+    );
+  }
+
+  Widget _osmBody() {
+    final ctrl = _osm ??= MapController();
+    return FlutterMap(
+      mapController: ctrl,
+      options: MapOptions(
+        initialCenter: widget.point,
+        initialZoom: widget.zoom.clamp(3.0, 20.0),
+        minZoom: 3,
+        maxZoom: 20,
+        onTap: widget.onTap == null
+            ? null
+            : (tap, p) => widget.onTap!(p),
+        onMapEvent: (event) {
+          if (widget.onCameraIdle == null) return;
+          if (event is MapEventMoveEnd || event is MapEventFlingAnimationEnd) {
+            widget.onCameraIdle!(event.camera.center);
+          }
+        },
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.pinchZoom |
+              InteractiveFlag.drag |
+              InteractiveFlag.doubleTapZoom |
+              InteractiveFlag.scrollWheelZoom,
+        ),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate:
+              'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.optikbriski.admin',
+          maxZoom: 20,
+          maxNativeZoom: 20,
+        ),
+        if (!widget.centerPin)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: widget.point,
+                width: 40,
+                height: 40,
+                child: Icon(
+                  Icons.location_on_rounded,
+                  color: OptikAdminTokens.navy,
+                  size: 36,
+                ),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }

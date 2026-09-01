@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:easy_localization/easy_localization.dart';
 
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
@@ -22,9 +23,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
   int _stokKritis = 0;
 
   String _formatRupiah(int nominal) {
-    return NumberFormat.currency(
-            locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
-        .format(nominal);
+    return AdminFormat.rupiah(context, nominal);
   }
 
   @override
@@ -71,7 +70,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
     return PremiumScaffold(
       appBar: PremiumAppBar(title: "analytics_title".tr()),
       body: _isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),

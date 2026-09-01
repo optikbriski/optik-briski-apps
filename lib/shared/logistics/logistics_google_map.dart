@@ -23,7 +23,7 @@ class LogisticsLiveGoogleMap extends StatelessWidget {
     if (!hasGoogleMapsKey || !dest.hasCoords) {
       return SizedBox(
         height: height,
-        child: const Center(
+        child: Center(
           child: Text(
             'Peta Google belum siap (kunci atau koordinat toko).',
             style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),

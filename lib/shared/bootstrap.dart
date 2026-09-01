@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'brand/brand_chrome.dart';
 import 'brand/brand_service.dart';
 import 'config.dart';
+import 'admin_appearance.dart';
 import 'tenant/tenant_modules.dart';
 import 'tenant/tenant_service.dart';
 import 'training/training_http_client.dart';
@@ -61,15 +62,13 @@ Future<void> bootstrapApp({
     await TenantModules.instance.load();
   }
   BrandChrome.attach();
+  await AdminAppearance.instance.load();
 
   runApp(
     EasyLocalization(
       supportedLocales: const [
         Locale('id'),
         Locale('en'),
-        Locale('ms'),
-        Locale('zh'),
-        Locale('ja'),
       ],
       path: 'assets/translations',
       fallbackLocale: const Locale('id'),

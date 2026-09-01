@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'kpi_fire_service.dart';
+import 'karyawan_notif_prefs.dart';
 import 'streak_fire_level.dart';
 
 class KaryawanHomeSnapshot {
@@ -352,7 +353,7 @@ class KaryawanHomeService {
           .or('tampil_sampai.is.null,tampil_sampai.gte.$nowIso')
           .or(tokoFilter)
           .order('created_at', ascending: false)
-          .limit(3);
+          .limit(40);
       pengumuman = List<Map<String, dynamic>>.from(rows);
     } catch (e) {
       // Tabel belum dimigrasi → diam, kartu disembunyikan.
@@ -675,7 +676,11 @@ class KaryawanHomeService {
     }
 
     final unfinished = sopTasks.where((t) => t['selesai'] != true).length;
-    if (unfinished > 0) {
+    final onDuty = await KaryawanNotifPrefs.isOnDuty(karyawanId, client: _client);
+    final allowSop = await KaryawanNotifPrefs.wantSop(onDuty: onDuty);
+    final allowShift = await KaryawanNotifPrefs.wantShift(onDuty: onDuty);
+
+    if (unfinished > 0 && allowSop) {
       const key = 'SOP|SOP belum selesai';
       if (!titles.contains(key)) {
         await _client.from('notifikasi').insert({
@@ -688,7 +693,7 @@ class KaryawanHomeService {
       }
     }
 
-    if (todayCard != null) {
+    if (todayCard != null && allowShift) {
       final shift = todayCard['shift'] ?? '-';
       const key = 'SHIFT|Jadwal hari ini';
       if (!titles.contains(key)) {

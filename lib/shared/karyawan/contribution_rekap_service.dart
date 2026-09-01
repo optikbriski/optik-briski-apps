@@ -19,9 +19,20 @@ class ContributionRekapService {
     required String tokoId,
     required String? jabatan,
     DateTime? now,
+  }) {
+    return loadMonthForLayer(
+      tokoId: tokoId,
+      layer: officeLayerOf(jabatan),
+      now: now,
+    );
+  }
+
+  Future<ContributionRekap> loadMonthForLayer({
+    required String tokoId,
+    required OfficeLayer layer,
+    DateTime? now,
   }) async {
     final n = now ?? DateTime.now();
-    final layer = officeLayerOf(jabatan);
     final start = DateTime(n.year, n.month, 1);
     final end = DateTime(n.year, n.month + 1, 0);
     final startKey = _dateKey.format(start);

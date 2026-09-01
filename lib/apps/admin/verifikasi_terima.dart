@@ -1,10 +1,13 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/admin/admin_nav_badge_service.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/logistics/do_cart_lines.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
@@ -14,6 +17,7 @@ import '../../shared/logistics/receive_verification_rules.dart';
 import '../../shared/logistics/request_order_service.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_nav_badge.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 
 /// Antrian terima paket di cabang: DO · RO · Retur (status TRANSIT / PENDING).
@@ -147,6 +151,10 @@ class _IncomingVerificationState extends State<IncomingVerification> {
 
   Future<void> _confirmThenReceive(Map<String, dynamic> task) async {
     if (_receiving || _loading) return;
+    final tid = task['id']?.toString() ?? '';
+    if (tid.isNotEmpty) {
+      unawaited(AdminNavBadgeService.instance.markEntitySeen('logistik', tid));
+    }
     final kind = _moveKind(task);
     final resi = (task['product_name'] ?? '-').toString();
     final qty = ReceiveVerificationRules.volumeOf(task);
@@ -159,7 +167,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Terima paket ${_kindLabel(kind)}?',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
             fontSize: 15,
@@ -168,9 +176,9 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         content: Text(
           '$resi\n'
           'Dari $dari · $qty pcs\n\n'
-          'Ambil foto bukti fisik paket. Stok cabang akan bertambah'
-          '${kind == 'ro' ? ' dan Request Order ditandai selesai.' : '.'}',
-          style: const TextStyle(
+          '${'admin_auto_receive_photo_stock'.tr()}'
+          '${kind == 'ro' ? 'admin_auto_ro_complete_suffix'.tr() : '.'}',
+          style: TextStyle(
             color: OptikAdminTokens.textSecondary,
             fontSize: 13,
             height: 1.35,
@@ -179,11 +187,11 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Foto & terima'),
+            child: Text('smr_btn_foto_terima'.tr()),
           ),
         ],
       ),
@@ -202,8 +210,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         .maybeSingle();
     if (fresh == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Surat jalan tidak ditemukan.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_a59ed2aec5'.tr()),
         backgroundColor: OptikAdminTokens.danger,
       ));
       return;
@@ -217,7 +225,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         !AttendanceAdminScope.canReceiveStockToko(widget.profile, ke)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Paket ditujukan ke $ke, bukan $_myToko.'),
+        content: Text('admin_auto_0a081723e8'.tr(namedArgs: {'dest': ke, 'toko': _myToko})),
         backgroundColor: OptikAdminTokens.danger,
       ));
       return;
@@ -226,8 +234,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     final st = (row['status'] ?? '').toString().toUpperCase();
     if (st == 'SUCCESS') {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Paket sudah diterima sebelumnya.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_bb975cbe2f'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       _load();
@@ -308,9 +316,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(
-                'Paket diterima, tapi sync Request Order gagal: $e',
-              ),
+              content: Text('admin_auto_19b615cc3f'.tr(namedArgs: {'error': '$e'})),
               backgroundColor: OptikAdminTokens.warning,
             ));
           }
@@ -338,7 +344,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal terima paket: $e'),
+        content: Text('admin_auto_81f1f4d587'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
@@ -347,6 +353,10 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   }
 
   void _showDetail(Map<String, dynamic> task) {
+    final tid = task['id']?.toString() ?? '';
+    if (tid.isNotEmpty) {
+      unawaited(AdminNavBadgeService.instance.markEntitySeen('logistik', tid));
+    }
     final kind = _moveKind(task);
     final status = (task['status'] ?? '').toString();
     final resi = (task['product_name'] ?? '-').toString();
@@ -362,7 +372,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           resi,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
             fontSize: 15,
@@ -384,46 +394,46 @@ class _IncomingVerificationState extends State<IncomingVerification> {
               ],
             ),
             const SizedBox(height: 12),
-            Text('Rute: $dari → $ke',
-                style: const TextStyle(
+            Text('admin_auto_c6177e9164'.tr(namedArgs: {'dari': dari, 'dest': ke}),
+                style: TextStyle(
                     color: OptikAdminTokens.textSecondary, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('Jumlah: ${ReceiveVerificationRules.volumeOf(task)} pcs',
-                style: const TextStyle(
+            Text('admin_lbl_jumlah_pcs'.tr(namedArgs: {'n': '${ReceiveVerificationRules.volumeOf(task)}'}),
+                style: TextStyle(
                     color: OptikAdminTokens.textSecondary, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('Dikirim: ${_formatWhen(task['created_at'])}',
-                style: const TextStyle(
+            Text('admin_lbl_dikirim_when'.tr(namedArgs: {'when': _formatWhen(task['created_at'])}),
+                style: TextStyle(
                     color: OptikAdminTokens.textMuted, fontSize: 12)),
             if (kurir.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text('Kurir: $kurir',
-                  style: const TextStyle(
+              Text('admin_auto_1a580f45d3'.tr(namedArgs: {'kurir': kurir}),
+                  style: TextStyle(
                       color: OptikAdminTokens.textMuted, fontSize: 12)),
             ],
             const SizedBox(height: 10),
-            const Text('Isi paket',
+            Text('smr_isi_paket'.tr(),
                 style: TextStyle(
                     color: OptikAdminTokens.textMuted,
                     fontSize: 11,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text(items,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy, fontSize: 12.5, height: 1.35)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tutup'),
+            child: Text('admin_btn_close'.tr()),
           ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
               _confirmThenReceive(task);
             },
-            child: const Text('Foto & terima'),
+            child: Text('smr_btn_foto_terima'.tr()),
           ),
         ],
       ),
@@ -452,6 +462,9 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   Widget _kindChip(String kind, String label) {
     final active = _kindFilter == kind;
     final count = _countKind(kind);
+    final unreadAll = kind == 'all'
+        ? AdminNavBadgeService.instance.displayCount('logistik')
+        : 0;
     final color = kind == 'all'
         ? OptikAdminTokens.textSecondary
         : _kindColor(kind);
@@ -476,14 +489,17 @@ class _IncomingVerificationState extends State<IncomingVerification> {
               ),
               child: Column(
                 children: [
-                  Text(
-                    '$count',
-                    style: TextStyle(
-                      color: active ? color : OptikAdminTokens.textSecondary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
+                  if (kind == 'all' && unreadAll > 0)
+                    AdminNavBadge(count: unreadAll, compact: true)
+                  else
+                    Text(
+                      '$count',
+                      style: TextStyle(
+                        color: active ? color : OptikAdminTokens.textSecondary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
                   Text(
                     label,
                     style: TextStyle(
@@ -502,6 +518,9 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   }
 
   Widget _taskCard(Map<String, dynamic> task) {
+    final tid = task['id']?.toString() ?? '';
+    final unread = tid.isNotEmpty &&
+        AdminNavBadgeService.instance.isEntityUnread('logistik', tid);
     final kind = _moveKind(task);
     final kindColor = _kindColor(kind);
     final resi = (task['product_name'] ?? '-').toString();
@@ -514,7 +533,12 @@ class _IncomingVerificationState extends State<IncomingVerification> {
       task['status']?.toString(),
     );
 
-    return Container(
+    return GestureDetector(
+      onLongPress: tid.isNotEmpty
+          ? () => unawaited(
+              AdminNavBadgeService.instance.markEntityUnread('logistik', tid))
+          : null,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: OptikAdminTokens.card,
@@ -529,10 +553,16 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           children: [
             Row(
               children: [
+                AdminNavBadgeOverlay(
+                  count: unread ? 1 : 0,
+                  child: Icon(Icons.inventory_2_outlined,
+                      color: OptikAdminTokens.navy, size: 20),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     resi,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
@@ -558,7 +588,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
             const SizedBox(height: 3),
             Text(
               kurir.isEmpty ? when : '$when · Kurir $kurir',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.textMuted,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
@@ -569,7 +599,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
               preview,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.textMuted,
                 fontSize: 11,
                 height: 1.3,
@@ -586,7 +616,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                   ),
                   icon: const Icon(Icons.info_outline_rounded, size: 16),
-                  label: const Text('Detail',
+                  label: Text('admin_btn_detail'.tr(),
                       style:
                           TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
@@ -609,7 +639,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
                     ),
                   ),
                   icon: _receiving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
@@ -631,6 +661,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -638,15 +669,18 @@ class _IncomingVerificationState extends State<IncomingVerification> {
   Widget build(BuildContext context) {
     final list = _filtered;
 
-    return PremiumScaffold(
+    return ListenableBuilder(
+      listenable: AdminNavBadgeService.instance,
+      builder: (context, _) {
+        return PremiumScaffold(
       appBar: PremiumAppBar(
         title: "inc_title".tr(),
-        subtitle: 'Antrian DO · RO · Retur ke $_myToko',
+        subtitle: 'admin_auto_385a673363'.tr(namedArgs: {'toko': _myToko}),
         actions: [
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _loading || _receiving ? null : _load,
-            icon: const Icon(Icons.refresh_rounded,
+            icon: Icon(Icons.refresh_rounded,
                 color: OptikAdminTokens.textSecondary, size: 18),
           ),
           const SizedBox(width: 4),
@@ -675,7 +709,7 @@ class _IncomingVerificationState extends State<IncomingVerification> {
               alignment: Alignment.centerLeft,
               child: Text(
                 '${list.length} paket menunggu konfirmasi',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.textMuted,
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
@@ -685,17 +719,17 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           ),
           Expanded(
             child: _loading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
                         color: OptikAdminTokens.ice))
                 : _error != null
                     ? PremiumEmptyState(
-                        message: 'Gagal memuat antrian.\n$_error',
+                        message: 'admin_err_load_antrian'.tr(namedArgs: {'error': '$_error'}),
                         icon: Icons.error_outline_rounded,
                         accent: OptikAdminTokens.danger,
                         action: FilledButton(
                           onPressed: _load,
-                          child: const Text('Coba lagi'),
+                          child: Text('common_retry'.tr()),
                         ),
                       )
                     : list.isEmpty
@@ -721,6 +755,8 @@ class _IncomingVerificationState extends State<IncomingVerification> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

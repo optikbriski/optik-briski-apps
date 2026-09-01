@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../shared/admin/admin_nav_badge_service.dart';
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/attendance_verification_config.dart';
 import '../../shared/attendance/attendance_verification_service.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
+import '../../shared/widgets/admin/admin_nav_badge.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/zoomable_network_image.dart';
 import 'tinjauan_mencurigakan_page.dart';
@@ -26,9 +31,9 @@ enum _MonitorLevel { tokoList, karyawanList, detail }
 
 class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   final _svc = AttendanceVerificationService();
-  final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
-  final _timeFmt = DateFormat('HH:mm', 'id_ID');
-  final _dateTimeFmt = DateFormat('d MMM yyyy HH:mm', 'id_ID');
+  DateFormat get _dayFmt => AdminFormat.date(context, 'd MMM yyyy');
+  DateFormat get _timeFmt => AdminFormat.date(context, 'HH:mm');
+  DateFormat get _dateTimeFmt => AdminFormat.date(context, 'd MMM yyyy HH:mm');
 
   _MonitorLevel _level = _MonitorLevel.tokoList;
   bool _loading = true;
@@ -230,11 +235,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         row['toko_id']?.toString(),
         rowTenantId: row['tenant_id']?.toString(),
       )) {
-      _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_d7705cfa27'.tr(), OptikAdminTokens.danger);
       return;
     }
     final ok = await _confirm(
-      title: 'Tandai Valid?',
+      title: 'admin_auto_be4b2cf189'.tr(),
       body:
           'Wajah disetujui. Poin baru dihitung sekarang:\n'
           '• Ontime → +${AttendanceVerificationConfig.validDayPoints}\n'
@@ -254,8 +259,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         notes: 'Valid — cocok dengan foto terdaftar',
       );
       if (!mounted) return;
-      _snack(
-        'Ditandai aman. Poin absensi sudah diproses (ontime atau telat).',
+      _snack('admin_gl_row_0762cc36bd'.tr(),
         OptikAdminTokens.success,
       );
       await _loadKaryawanForToko(_selectedToko!);
@@ -276,11 +280,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         row['toko_id']?.toString(),
         rowTenantId: row['tenant_id']?.toString(),
       )) {
-      _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_d7705cfa27'.tr(), OptikAdminTokens.danger);
       return;
     }
     final ok = await _confirm(
-      title: 'Tandai Mencurigakan?',
+      title: 'admin_auto_1e27415c59'.tr(),
       body:
           'Masuk ke antrean Tinjauan Mencurigakan untuk keputusan lanjut.\n'
           'Belum ada potongan poin / SP pada langkah ini.',
@@ -297,7 +301,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;
-      _snack('Masuk antrean tinjauan mencurigakan.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_37ea28bca7'.tr(), OptikAdminTokens.warning);
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -326,15 +330,15 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Text(title,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
             )),
         content: Text(body,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.slate,
               height: 1.4,
             )),
@@ -342,7 +346,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -366,7 +370,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         backgroundColor: color,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w600,
           ),
@@ -427,18 +431,28 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumScaffold(
+    return ListenableBuilder(
+      listenable: AdminNavBadgeService.instance,
+      builder: (context, _) {
+        final pendingBadge =
+            AdminNavBadgeService.instance.displayCount('monitor_absensi');
+        return PremiumScaffold(
       appBar: PremiumAppBar(
         title: _title,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: OptikAdminTokens.navy),
+          icon: Icon(Icons.arrow_back_rounded, color: OptikAdminTokens.navy),
           onPressed: _back,
         ),
         actions: [
+          if (pendingBadge > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(child: AdminNavBadge(count: pendingBadge)),
+            ),
           IconButton(
-            tooltip: 'Pilih tanggal',
+            tooltip: 'admin_auto_d92dae51cc'.tr(),
             onPressed: _pickDay,
-            icon: const Icon(Icons.calendar_today_rounded,
+            icon: Icon(Icons.calendar_today_rounded,
                 color: OptikAdminTokens.navy),
           ),
           IconButton(
@@ -460,7 +474,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                 color: OptikAdminTokens.warning),
           ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: () {
               if (_level == _MonitorLevel.karyawanList &&
                   _selectedToko != null) {
@@ -472,7 +486,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                 _loadTokoCounts();
               }
             },
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
@@ -487,7 +501,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               child: Text(
                 'Hari ${_dayFmt.format(_day)} · '
                     '${AttendanceAdminScope.monitorBannerHint(widget.profile)}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 13,
                   height: 1.35,
@@ -503,7 +517,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+                ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
                 : switch (_level) {
                     _MonitorLevel.tokoList => _buildTokoList(),
                     _MonitorLevel.karyawanList => _buildKaryawanList(),
@@ -513,12 +527,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         ],
       ),
     );
+      },
+    );
   }
 
   Widget _buildTokoList() {
     if (_tokoOptions.isEmpty) {
-      return const PremiumEmptyState(
-        message: 'Tidak ada toko untuk dipantau.',
+      return PremiumEmptyState(
+        message: 'admin_auto_f1a8de75b0'.tr(),
         icon: Icons.store_outlined,
       );
     }
@@ -550,7 +566,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     children: [
                       Text(
                         toko,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
@@ -559,7 +575,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                         count == 0
                             ? 'Belum ada absen masuk hari ini'
                             : '$count karyawan sudah absen masuk',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
@@ -577,7 +593,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     ),
                     child: Text(
                       '$count',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
@@ -585,7 +601,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     ),
                   ),
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
+                Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
               ],
             ),
           );
@@ -612,19 +628,39 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           final r = _karyawanRows[i];
           final at = DateTime.tryParse(r['created_at']?.toString() ?? '');
           final status = r['status']?.toString();
-          return PremiumPanel(
+          final vid = r['id']?.toString() ?? '';
+          final isPending = status == AttendanceVerificationStatus.pendingReview;
+          final unread = isPending &&
+              vid.isNotEmpty &&
+              AdminNavBadgeService.instance
+                  .isEntityUnread('monitor_absensi', vid);
+          return GestureDetector(
+            onLongPress: isPending && vid.isNotEmpty
+                ? () => unawaited(AdminNavBadgeService.instance
+                    .markEntityUnread('monitor_absensi', vid))
+                : null,
+            child: PremiumPanel(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             borderRadius: 14,
-            onTap: () => setState(() {
-              _selectedRow = r;
-              _level = _MonitorLevel.detail;
-            }),
+            onTap: () {
+              if (vid.isNotEmpty && isPending) {
+                unawaited(AdminNavBadgeService.instance
+                    .markEntitySeen('monitor_absensi', vid));
+              }
+              setState(() {
+                _selectedRow = r;
+                _level = _MonitorLevel.detail;
+              });
+            },
             child: Row(
               children: [
-                ClipRRect(
+                AdminNavBadgeOverlay(
+                  count: unread ? 1 : 0,
+                  child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: _thumb(r['capture_photo_url']?.toString(), 48),
+                ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -633,7 +669,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                     children: [
                       Text(
                         _svc.namaOf(r),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
@@ -642,14 +678,14 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                         _svc.jabatanOf(r).isNotEmpty
                             ? _svc.jabatanOf(r)
                             : 'Karyawan',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
                       ),
                       Text(
                         'Masuk ${at != null ? _timeFmt.format(at.toLocal()) : '-'}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 11,
                         ),
@@ -674,10 +710,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
+                Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
               ],
             ),
-          );
+          ),
+        );
         },
       ),
     );
@@ -686,8 +723,8 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
   Widget _buildDetail() {
     final r = _selectedRow;
     if (r == null) {
-      return const PremiumEmptyState(
-        message: 'Pilih karyawan untuk melihat detail.',
+      return PremiumEmptyState(
+        message: 'admin_auto_28f77852a6'.tr(),
         icon: Icons.compare_rounded,
       );
     }
@@ -704,7 +741,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       children: [
         Text(
           _svc.namaOf(r),
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontSize: 20,
             fontWeight: FontWeight.w800,
@@ -714,33 +751,33 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         Text(
           '${r['toko_id'] ?? '-'}'
           '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}',
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
         const SizedBox(height: 4),
         Text(
           'Jam detect/masuk: ${at != null ? _dateTimeFmt.format(at.toLocal()) : '-'}',
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         const SizedBox(height: 4),
         Text(
           'Status: ${_statusLabel(status)}'
           ' · Skor match: ${score ?? '-'}'
           ' · Liveness: ${r['liveness_ok'] == true ? 'OK' : '-'}',
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, c) {
             final stacked = c.maxWidth < 560;
             final left = _photoPane(
-              label: 'Capture absen (hari ini)',
-              subtitle: 'Foto liveness saat masuk (tinjauan Admin)',
+              label: 'admin_auto_7187985eb2'.tr(),
+              subtitle: 'admin_auto_2818855eeb'.tr(),
               url: capture,
               accent: OptikAdminTokens.navy,
             );
             final right = _photoPane(
-              label: 'Foto terdaftar',
-              subtitle: 'face_photo_url / enroll karyawan',
+              label: 'admin_auto_e8847690d4'.tr(),
+              subtitle: 'admin_auto_92b69be5ad'.tr(),
               url: enrolled,
               accent: OptikAdminTokens.success,
             );
@@ -764,7 +801,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
             children: [
               Expanded(
                 child: PremiumPrimaryButton(
-                  label: 'Valid',
+                  label: 'admin_auto_3ac705f2ac'.tr(),
                   icon: Icons.verified_rounded,
                   loading: _acting,
                   onPressed: _acting ? null : _markValid,
@@ -776,7 +813,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: PremiumPrimaryButton(
-                  label: 'Mencurigakan',
+                  label: 'admin_auto_a62e01bd59'.tr(),
                   icon: Icons.warning_amber_rounded,
                   loading: _acting,
                   onPressed: _acting ? null : _markMencurigakan,
@@ -789,7 +826,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           )
         else if (mencurigakan)
           PremiumPrimaryButton(
-            label: 'Buka Tinjauan Mencurigakan',
+            label: 'admin_auto_d452642f69'.tr(),
             icon: Icons.warning_amber_rounded,
             onPressed: () => Navigator.push(
               context,
@@ -847,7 +884,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
           const SizedBox(height: 10),
           ZoomableNetworkImagePane(url: url),
@@ -862,7 +899,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
+        child: Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
       );
     }
     return Image.network(
@@ -874,7 +911,7 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.broken_image, color: OptikAdminTokens.slate, size: 18),
+        child: Icon(Icons.broken_image, color: OptikAdminTokens.slate, size: 18),
       ),
     );
   }

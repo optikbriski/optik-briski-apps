@@ -32,6 +32,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
   AttendanceQrIssue? _issue;
   String? _tokoId;
   int _secondsLeft = 0;
+  bool _rotateInFlight = false;
 
   @override
   void initState() {
@@ -87,7 +88,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
       }
 
       await _rotate();
-      _startTimers();
+      _startTickTimer();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -97,40 +98,58 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
     }
   }
 
-  void _startTimers() {
-    _rotateTimer?.cancel();
+  void _startTickTimer() {
     _tickTimer?.cancel();
-    _rotateTimer = Timer.periodic(
-      Duration(seconds: AttendanceConfig.qrRotateSeconds),
-      (_) => _rotate(),
-    );
     _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final exp = _issue?.expiresAt;
-      if (exp == null) return;
-      final left = exp.difference(DateTime.now()).inSeconds;
-      if (!mounted) return;
-      setState(() => _secondsLeft = left < 0 ? 0 : left);
+      _syncCountdown();
     });
   }
 
+  void _syncCountdown() {
+    final exp = _issue?.expiresAt;
+    if (exp == null) return;
+    final left = AttendanceConfig.qrSecondsUntilExpiry(exp);
+    if (!mounted) return;
+    setState(() => _secondsLeft = left);
+  }
+
+  void _scheduleNextRotate() {
+    _rotateTimer?.cancel();
+    final exp = _issue?.expiresAt;
+    if (exp == null) return;
+    _rotateTimer = Timer(
+      AttendanceConfig.qrDelayUntilPrefetch(exp),
+      () => unawaited(_rotate()),
+    );
+  }
+
   Future<void> _rotate() async {
+    if (_rotateInFlight) return;
     final toko = _tokoId;
     if (toko == null || toko.isEmpty) return;
+    _rotateInFlight = true;
     try {
       final issue = await _svc.issueToken(tokoId: toko);
       if (!mounted) return;
       setState(() {
         _issue = issue;
-        _secondsLeft = issue.expiresAt.difference(DateTime.now()).inSeconds;
+        _secondsLeft = AttendanceConfig.qrSecondsUntilExpiry(issue.expiresAt);
         _loading = false;
         _error = null;
       });
+      _scheduleNextRotate();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = '$e';
       });
+      _rotateTimer?.cancel();
+      _rotateTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) unawaited(_rotate());
+      });
+    } finally {
+      _rotateInFlight = false;
     }
   }
 
@@ -143,12 +162,12 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
           IconButton(
             tooltip: 'attendance_qr_refresh'.tr(),
             onPressed: _loading ? null : _rotate,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
       body: _loading && _issue == null
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice),
             )
           : Padding(
@@ -171,7 +190,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                           Text(
                             'dash_absen_flow_hint'.tr(),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.slate,
                               height: 1.45,
                               fontSize: 13,
@@ -184,7 +203,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                               'detik': '${AttendanceConfig.qrTtlSeconds}',
                             }),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.slate,
                               height: 1.4,
                               fontSize: 12,
@@ -218,7 +237,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                               child: _issue == null
                                   ? Text(
                                       'attendance_qr_waiting'.tr(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.slate),
                                     )
                                   : Column(
@@ -226,7 +245,7 @@ class _AttendanceQrPageState extends State<AttendanceQrPage> {
                                       children: [
                                         Text(
                                           _tokoId ?? '-',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             color: OptikAdminTokens.navy,
                                             fontSize: 22,
                                             fontWeight: FontWeight.bold,

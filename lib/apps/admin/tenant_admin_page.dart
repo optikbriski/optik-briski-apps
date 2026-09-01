@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import '../../shared/bootstrap.dart';
 import '../../shared/tenant/industry_catalog.dart';
 import '../../shared/tenant/module_catalog.dart';
@@ -19,20 +20,20 @@ class TenantAdminPage extends StatefulWidget {
 }
 
 class _TenantAdminPageState extends State<TenantAdminPage> {
-  static const _fallbackPlans = [
+  static List<Map<String, dynamic>> get _fallbackPlans => [
     {
       'plan_key': 'paket_c',
-      'label': 'Paket C — Starter · kulit Rekasa (sekat di login)',
+      'label': 'admin_plan_paket_c'.tr(),
       'white_label': false,
     },
     {
       'plan_key': 'paket_b',
-      'label': 'Paket B — Bisnis · kulit Rekasa + modul lebih lengkap',
+      'label': 'admin_plan_paket_b'.tr(),
       'white_label': false,
     },
     {
       'plan_key': 'paket_a',
-      'label': 'Paket A — Pro · APK & web merek sendiri (nama + ikon)',
+      'label': 'admin_plan_paket_a'.tr(),
       'white_label': true,
     },
   ];
@@ -126,8 +127,8 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
     final name = _name.text.trim();
     if (slug.length < 3 || name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kode usaha (≥3) dan nama merek wajib.'),
+        SnackBar(
+          content: Text('admin_auto_e48f20b96d'.tr()),
           backgroundColor: OptikAdminTokens.warning,
         ),
       );
@@ -163,7 +164,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
           content: Text(
             'UMKM siap · ${map['plan_key'] ?? _planKey}. '
             'Kode ${map['slug']} · pusat ${map['pusat_toko_id']}. '
-            'Bukan cabang Optik.',
+            'admin_auto_not_optik_branch'.tr(),
           ),
           backgroundColor: OptikAdminTokens.success,
         ),
@@ -173,7 +174,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$e'),
+          content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -198,8 +199,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
         SnackBar(
           content: Text(
             'Paket ${row['display_name'] ?? row['slug']} → $planKey. '
-            'Modul ikut paket. Kulit APK: paket A = merek sendiri, '
-            'B/C = Rekasa + kode usaha. Data lama tetap.',
+            'admin_auto_tenant_module_skin'.tr(),
           ),
           backgroundColor: OptikAdminTokens.success,
         ),
@@ -208,7 +208,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -257,7 +257,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                       const SizedBox(height: 8),
                       SwitchListTile(
                         dense: true,
-                        title: const Text('APK & web merek sendiri'),
+                        title: Text('admin_auto_b2dc316843'.tr()),
                         subtitle: const Text(
                           'Nama + ikon toko. Paket A default nyala. '
                           'B/C pakai kulit Rekasa + kode usaha.',
@@ -281,11 +281,11 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Batal'),
+                  child: Text('appr_btn_batal'.tr()),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Simpan'),
+                  child: Text('btn_simpan'.tr()),
                 ),
               ],
             );
@@ -317,7 +317,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
         SnackBar(
           content: Text(
             'Modul disimpan (${map['plan_key'] ?? 'custom'}). '
-            '${whiteLabel ? 'APK/web merek sendiri.' : 'Kulit Rekasa + kode usaha.'} '
+            '${whiteLabel ? 'APK/web merek sendiri.' : 'admin_auto_rekasa_skin_code'.tr()} '
             'Menu berubah setelah login ulang.',
           ),
           backgroundColor: OptikAdminTokens.success,
@@ -327,7 +327,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -337,7 +337,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: const Text('UMKM / Tenant'),
+        title: Text('admin_auto_d6b7a2e5fb'.tr()),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
       ),
@@ -363,10 +363,10 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                   Text(_error!, style: const TextStyle(color: OptikAdminTokens.danger)),
                 ],
                 const SizedBox(height: 20),
-                const PremiumSectionHeader(label: 'Usaha terdaftar'),
+                PremiumSectionHeader(label: 'admin_auto_bae1eaeb80'.tr()),
                 const SizedBox(height: 8),
                 if (_rows.isEmpty)
-                  const Text('Belum ada tenant (jalankan migrasi tenants + plans).'),
+                  Text('admin_auto_ae5792b4a1'.tr()),
                 for (final r in _rows)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -389,7 +389,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    tooltip: 'Tagihan & kontrak',
+                                    tooltip: 'admin_auto_9a0a223935'.tr(),
                                     onPressed: () {
                                       Navigator.push(
                                         context,
@@ -404,12 +404,12 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                                     icon: const Icon(Icons.receipt_long_rounded),
                                   ),
                                   IconButton(
-                                    tooltip: 'Pilih modul',
+                                    tooltip: 'admin_auto_622844abf0'.tr(),
                                     onPressed: () => _editModules(r),
                                     icon: const Icon(Icons.extension_rounded),
                                   ),
                                   PopupMenuButton<String>(
-                                    tooltip: 'Ganti paket',
+                                    tooltip: 'admin_auto_44b4c191e0'.tr(),
                                     onSelected: (k) => _setPlan(r, k),
                                     itemBuilder: (_) => [
                                       for (final p in _plans)
@@ -429,31 +429,31 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                     ),
                   ),
                 const SizedBox(height: 20),
-                const PremiumSectionHeader(label: 'Buat UMKM baru'),
+                PremiumSectionHeader(label: 'admin_auto_ee8e92e08b'.tr()),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _slug,
-                  decoration: const InputDecoration(
-                    labelText: 'Kode usaha (slug)',
-                    hintText: 'optik-maju',
+                  decoration: InputDecoration(
+                    labelText: 'admin_auto_194858d252'.tr(),
+                    hintText: 'admin_auto_2813842c50'.tr(),
                   ),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _name,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama merek di app / struk',
-                    hintText: 'Optik Maju',
+                  decoration: InputDecoration(
+                    labelText: 'admin_auto_0648a27548'.tr(),
+                    hintText: 'admin_auto_f1f21558f2'.tr(),
                   ),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _short,
-                  decoration: const InputDecoration(
-                    labelText: 'Singkatan (opsional)',
-                    hintText: 'OM',
+                  decoration: InputDecoration(
+                    labelText: 'admin_auto_177246bb03'.tr(),
+                    hintText: 'admin_auto_bfbebc0782'.tr(),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -462,7 +462,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                   value: industryCatalog.any((i) => i.key == _industry)
                       ? _industry
                       : industryCatalog.first.key,
-                  decoration: const InputDecoration(labelText: 'Bidang usaha'),
+                  decoration: InputDecoration(labelText: 'admin_auto_ac2a3289ff'.tr()),
                   items: [
                     for (final i in industryCatalog)
                       DropdownMenuItem(
@@ -480,7 +480,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                   value: _plans.any((p) => p['plan_key'] == _planKey)
                       ? _planKey
                       : '${_plans.first['plan_key']}',
-                  decoration: const InputDecoration(labelText: 'Paket'),
+                  decoration: InputDecoration(labelText: 'admin_auto_2b0a1a8d27'.tr()),
                   items: [
                     for (final p in _plans)
                       DropdownMenuItem(
@@ -505,7 +505,7 @@ class _TenantAdminPageState extends State<TenantAdminPage> {
                 ),
                 const SizedBox(height: 16),
                 PremiumPrimaryButton(
-                  label: _saving ? 'Menyimpan…' : 'Buat tenant',
+                  label: _saving ? 'admin_btn_menyimpan'.tr() : 'admin_btn_buat_tenant'.tr(),
                   onPressed: _saving || !_isPlatform ? null : _create,
                 ),
                 if (!_isPlatform) ...[

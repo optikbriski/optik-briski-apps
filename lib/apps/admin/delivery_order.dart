@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart'; // ✅ AMAN: Untuk menangkap foto bukti surat jalan pengiriman
 import 'package:easy_localization/easy_localization.dart';
+import '../../shared/connectivity/connectivity_reload.dart';
+import '../../shared/local_form_draft.dart';
 import '../../shared/responsive.dart';
 import '../../shared/logistics/do_cart_lines.dart';
 import '../../shared/logistics/do_lifecycle_service.dart';
@@ -30,6 +32,8 @@ class OutgoingOperation extends StatefulWidget {
 }
 
 class _OutgoingOperationState extends State<OutgoingOperation> {
+  static final Object _connectivityReloadOwner = Object();
+
   String? selectedToko;
   final searchController = TextEditingController();
 
@@ -54,8 +58,15 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   bool isLoadingHints = false;
   int preparingCount = 0;
   int draftCount = 0;
+  final _composeAutosave = DebouncedFormSave();
 
-  static const _panelSoft = OptikAdminTokens.bgMid;
+  String get _doComposeDraftKey {
+    final from =
+        (widget.profile['toko_id'] ?? 'PUSAT').toString().trim().toUpperCase();
+    return 'do_compose_draft_$from';
+  }
+
+  static Color get _panelSoft => OptikAdminTokens.bgMid;
 
   Widget _buildCategoryChip(String category, Color badgeColor) {
     final isActive = selectedCategories.contains(category);
@@ -76,6 +87,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                 }
               });
               filterProduk();
+              _scheduleDoComposeAutosave();
             },
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 7),
@@ -106,16 +118,115 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   @override
   void initState() {
     super.initState();
+    searchController.addListener(_scheduleDoComposeAutosave);
+    ConnectivityReload.bind(_connectivityReloadOwner, _reloadFromConnectivityBanner);
     loadData();
+  }
+
+  Future<void> _reloadFromConnectivityBanner() async {
+    await Future.wait([
+      _fetchProduk(),
+      _loadQueueCounts(),
+    ]);
+    if (selectedToko != null && selectedToko!.isNotEmpty) {
+      await _loadRestockHints();
+    }
+    if (mounted) {
+      filterProduk();
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    ConnectivityReload.unbind(_connectivityReloadOwner);
+    _composeAutosave.cancel();
+    if (_hasDoComposeDraftContent()) {
+      unawaited(_saveDoComposeDraftLocal(silent: true));
+    }
     searchController.dispose();
     for (var ctrl in qtyControllers.values) {
       ctrl.dispose();
     }
     super.dispose();
+  }
+
+  bool _hasDoComposeDraftContent() =>
+      selectedToko != null && selectedItems.isNotEmpty;
+
+  void _scheduleDoComposeAutosave() {
+    if (!_hasDoComposeDraftContent()) return;
+    _composeAutosave.schedule(() => _saveDoComposeDraftLocal(silent: true));
+  }
+
+  Future<void> _saveDoComposeDraftLocal({bool silent = true}) async {
+    if (!_hasDoComposeDraftContent()) return;
+    try {
+      await LocalFormDraft.save(_doComposeDraftKey, {
+        'selected_toko': selectedToko,
+        'selected_items': selectedItems,
+        'only_need_restock': onlyNeedRestock,
+        'search': searchController.text,
+        'selected_categories': selectedCategories.toList(),
+      });
+    } catch (e) {
+      debugPrint('DO compose autosave: $e');
+    }
+  }
+
+  Future<void> _clearDoComposeDraftLocal() async {
+    await LocalFormDraft.clear(_doComposeDraftKey);
+  }
+
+  Future<void> _restoreDoComposeDraftIfNeeded() async {
+    if (selectedItems.isNotEmpty) return;
+    try {
+      final map = await LocalFormDraft.read(_doComposeDraftKey);
+      if (map == null) return;
+      final toko = (map['selected_toko'] ?? '').toString();
+      final itemsRaw = map['selected_items'];
+      if (itemsRaw is! Map || itemsRaw.isEmpty) return;
+
+      final restored = <String, int>{};
+      for (final e in itemsRaw.entries) {
+        final qty = int.tryParse('${e.value}') ?? 0;
+        if (qty > 0) restored[e.key.toString()] = qty;
+      }
+      if (restored.isEmpty) return;
+
+      if (!mounted) return;
+      setState(() {
+        if (toko.isNotEmpty) {
+          selectedToko = toko;
+          if (!listToko.contains(toko)) {
+            listToko = [...listToko, toko];
+          }
+        }
+        selectedItems
+          ..clear()
+          ..addAll(restored);
+        for (final e in restored.entries) {
+          qtyControllers[e.key] ??= TextEditingController(text: '${e.value}');
+          qtyControllers[e.key]!.text = '${e.value}';
+        }
+        onlyNeedRestock = map['only_need_restock'] != false;
+        searchController.text = (map['search'] ?? '').toString();
+        final cats = map['selected_categories'];
+        if (cats is List) {
+          selectedCategories = cats.map((c) => c.toString()).toSet();
+        }
+      });
+      await _loadRestockHints();
+      filterProduk();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('do_compose_draft_restored'.tr()),
+          backgroundColor: OptikAdminTokens.success,
+        ));
+      }
+    } catch (e) {
+      debugPrint('DO compose draft restore: $e');
+    }
   }
 
   // 1. MEMUAT DAFTAR CABANG TUJUAN dari master toko_id (bukan profiles).
@@ -145,6 +256,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       }
 
       await Future.wait([_fetchProduk(), _loadQueueCounts()]);
+      await _restoreDoComposeDraftIfNeeded();
     } catch (e) {
       debugPrint("Load Jaringan Cabang Error: $e");
     } finally {
@@ -214,8 +326,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
 
     final result = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih cabang tujuan',
-      subtitle: 'Restock akan dikirim ke cabang ini',
+      title: 'admin_auto_8dbf9dcb46'.tr(),
+      subtitle: 'admin_auto_fd8e8ac8c8'.tr(),
       options: options,
       selected: selectedToko,
       searchHint: 'Cari nama cabang…',
@@ -233,6 +345,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     }
     setState(() => selectedToko = result.value);
     await _loadRestockHints();
+    _scheduleDoComposeAutosave();
   }
 
   // 2. MENARIK ITEM INVENTORI GUDANG PUSAT SAJA
@@ -262,7 +375,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       if (mounted) {
         setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Gagal ambil data database PUSAT: $e"),
+            content: Text('admin_auto_a981cfe327'.tr(namedArgs: {'error': '$e'})),
             backgroundColor: OptikAdminTokens.danger));
       }
     }
@@ -336,8 +449,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
   void _applySuggestedQty(String id, int maxStok) {
     final saran = restockHints[id]?.suggestedQty ?? 0;
     if (saran <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Tidak ada saran restock untuk produk ini'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('admin_auto_66b9cbbdd6'.tr()),
           backgroundColor: OptikAdminTokens.warning));
       return;
     }
@@ -347,6 +460,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
       qtyControllers[id] ??= TextEditingController();
       qtyControllers[id]!.text = qty.toString();
     });
+    _scheduleDoComposeAutosave();
   }
 
   // 2. FUNGSI MEMILIH / MEMBATALKAN PILIHAN ITEM KE DALAM KERANJANG DO
@@ -376,6 +490,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         qtyControllers[id]!.text = initial.toString();
       }
     });
+    _scheduleDoComposeAutosave();
   }
 
   // 3. FUNGSI UPDATE JUMLAH ITEM MENGGUNAKAN TOMBOL PLUS / MINUS STEPPER
@@ -398,6 +513,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         qtyControllers[id]?.text = next.toString();
       }
     });
+    _scheduleDoComposeAutosave();
   }
 
   // 4. FUNGSI VALIDASI AMAN UNTUK MEMASUKKAN ANGKA QUANTITY SECARA MANUAL
@@ -430,6 +546,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         selectedItems[id] = parsed;
       });
     }
+    _scheduleDoComposeAutosave();
   }
 
   List<Map<String, dynamic>> _cartLines() {
@@ -469,6 +586,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           selectedItems.clear();
           qtyControllers.clear();
         });
+        await _clearDoComposeDraftLocal();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("do_sukses_draf".tr()),
             backgroundColor: OptikAdminTokens.success));
@@ -476,7 +595,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Gagal menyimpan draft: $e'),
+            content: Text('admin_auto_2cd2b0d608'.tr(namedArgs: {'error': '$e'})),
             backgroundColor: OptikAdminTokens.danger));
       }
     } finally {
@@ -507,12 +626,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           backgroundColor: OptikAdminTokens.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Wrap(
+          title: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 10,
             children: [
               Icon(Icons.inventory_2_outlined, color: OptikAdminTokens.navy),
-              Text('Buat surat jalan',
+              Text('do_kirim_langsung'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.bold,
@@ -520,12 +639,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
             ],
           ),
           content: Text(confirmMsg,
-              style: const TextStyle(
+              style: TextStyle(
                   color: OptikAdminTokens.textSecondary, fontSize: 13)),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('BATAL',
+                child: Text('appr_btn_batal'.tr(),
                     style: TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontWeight: FontWeight.bold))),
@@ -536,7 +655,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                 Navigator.pop(ctx);
                 _createPreparingDo();
               },
-              child: const Text('YA, BUAT',
+              child: Text('do_btn_jepret'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.bg, fontWeight: FontWeight.bold)),
             )
@@ -572,13 +691,16 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
         selectedItems.clear();
         qtyControllers.clear();
       });
+      await _clearDoComposeDraftLocal();
+      if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-            'Surat jalan dibuat. Siapkan barang, foto packing, lalu tampilkan QR.'),
+            'admin_auto_do_created_qr'.tr()),
         backgroundColor: OptikAdminTokens.success,
       ));
 
+      if (!mounted) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -591,7 +713,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal buat surat jalan: $e'),
+          content: Text('admin_auto_5a281cceb6'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
     } finally {
       if (mounted) {
@@ -613,7 +735,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
     return PremiumScaffold(
       appBar: PremiumAppBar(
         title: "do_title".tr(),
-        subtitle: 'Kirim restock Pusat → cabang',
+        subtitle: 'admin_auto_48ff329637'.tr(),
       ),
       body: Column(
         children: [
@@ -629,11 +751,11 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         PremiumSectionHeader(
-                          label: 'Antrian',
+                          label: 'admin_auto_ac0e237115'.tr(),
                           padding: const EdgeInsets.only(bottom: 8, top: 2),
                           trailing: Text(
                             '${preparingCount + draftCount}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.textMuted,
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -644,8 +766,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                           children: [
                             Expanded(
                               child: _DoQueueHubCard(
-                                title: 'Disiapkan',
-                                subtitle: 'Ceklis · foto · QR',
+                                title: 'admin_auto_f96b78a3e4'.tr(),
+                                subtitle: 'admin_auto_c10c130ae0'.tr(),
                                 icon: Icons.fact_check_rounded,
                                 accent: OptikAdminTokens.navy,
                                 count: preparingCount,
@@ -655,8 +777,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: _DoQueueHubCard(
-                                title: 'Draf',
-                                subtitle: 'Belum surat jalan',
+                                title: 'admin_auto_113ce106d2'.tr(),
+                                subtitle: 'admin_auto_195dd2f441'.tr(),
                                 icon: Icons.inventory_2_rounded,
                                 accent: OptikAdminTokens.warning,
                                 count: draftCount,
@@ -672,7 +794,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Buat pengiriman',
                                 style: TextStyle(
                                   color: OptikAdminTokens.textPrimary,
@@ -698,15 +820,15 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                               TextField(
                                 controller: searchController,
                                 onChanged: (v) => filterProduk(),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: OptikAdminTokens.textPrimary,
                                     fontSize: 13),
                                 decoration: InputDecoration(
-                                  hintText: 'Cari produk…',
-                                  hintStyle: const TextStyle(
+                                  hintText: 'admin_auto_440b421025'.tr(),
+                                  hintStyle: TextStyle(
                                       color: OptikAdminTokens.textMuted,
                                       fontSize: 12.5),
-                                  prefixIcon: const Icon(
+                                  prefixIcon: Icon(
                                       Icons.search_rounded,
                                       color: OptikAdminTokens.textMuted,
                                       size: 20),
@@ -718,12 +840,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                       const EdgeInsets.symmetric(vertical: 11),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
+                                    borderSide: BorderSide(
                                         color: OptikAdminTokens.lineStrong),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
+                                    borderSide: BorderSide(
                                         color: OptikAdminTokens.navy,
                                         width: 1.3),
                                   ),
@@ -754,7 +876,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                     onlyNeedRestock
                                         ? 'Restock · butuh dilengkapi'
                                         : 'Semua stok Pusat',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textSecondary,
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
@@ -766,6 +888,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                       setState(() =>
                                           onlyNeedRestock = !onlyNeedRestock);
                                       filterProduk();
+                                      _scheduleDoComposeAutosave();
                                     },
                                     style: TextButton.styleFrom(
                                       visualDensity: VisualDensity.compact,
@@ -807,7 +930,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                             cartCount > 0
                                 ? '${displayList.length} produk · keranjang $cartCount item ($cartQty pcs)'
                                 : '${displayList.length} produk',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.textMuted,
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
@@ -821,7 +944,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
 
                 // Katalog stok Pusat
                 if (isLoading)
-                  const SliverFillRemaining(
+                  SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
                       child: CircularProgressIndicator(
@@ -845,6 +968,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                               onPressed: () {
                                 setState(() => onlyNeedRestock = false);
                                 filterProduk();
+                                _scheduleDoComposeAutosave();
                               },
                               child: const Text(
                                 'Lihat semua stok Pusat',
@@ -985,12 +1109,12 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                                 itemMap),
                                             fit: BoxFit.cover,
                                             errorBuilder: (c, e, s) =>
-                                                const Icon(
+                                                Icon(
                                                     Icons.image_not_supported,
                                                     color:
                                                         OptikAdminTokens.line,
                                                     size: 18))
-                                        : const Icon(Icons.image_not_supported,
+                                        : Icon(Icons.image_not_supported,
                                             color: OptikAdminTokens.line,
                                             size: 18),
                                   ),
@@ -1003,7 +1127,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                     children: [
                                       Text(
                                         item['nama'] ?? '-',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w800,
                                           fontSize: 12.5,
@@ -1080,7 +1204,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                                               keyboardType:
                                                   TextInputType.number,
                                               textAlign: TextAlign.center,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                   color: OptikAdminTokens.navy,
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 13),
@@ -1144,7 +1268,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
           // --- BOTTOM DOCK: aksi simpan / buat DO ---
           Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OptikAdminTokens.bg,
               border: Border(
                 top: BorderSide(color: OptikAdminTokens.lineStrong),
@@ -1162,7 +1286,7 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           '$cartCount item · $cartQty pcs siap diproses',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.textMuted,
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
@@ -1174,8 +1298,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                     children: [
                       Expanded(
                         child: _DoActionButton(
-                          label: 'Simpan draf',
-                          subtitle: 'Booking sementara',
+                          label: 'admin_auto_d3445f90c1'.tr(),
+                          subtitle: 'admin_auto_4ea4efbd07'.tr(),
                           icon: Icons.save_as_rounded,
                           enabled: !isProcessing && selectedItems.isNotEmpty,
                           loading: isProcessing,
@@ -1187,8 +1311,8 @@ class _OutgoingOperationState extends State<OutgoingOperation> {
                       Expanded(
                         flex: 1,
                         child: _DoActionButton(
-                          label: 'Buat surat jalan',
-                          subtitle: 'Lanjut siapkan',
+                          label: 'do_kirim_langsung'.tr(),
+                          subtitle: 'admin_auto_414de1e26f'.tr(),
                           icon: Icons.playlist_add_check_rounded,
                           enabled: !isProcessing && selectedItems.isNotEmpty,
                           loading: isProcessing,
@@ -1266,7 +1390,7 @@ class _DoQueueHubCard extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.textPrimary,
                               fontWeight: FontWeight.w800,
                               fontSize: 12.5,
@@ -1298,7 +1422,7 @@ class _DoQueueHubCard extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -1506,8 +1630,8 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Draf pengiriman',
-        subtitle: 'Belum jadi surat jalan',
+        title: 'admin_auto_7e8f722fe1'.tr(),
+        subtitle: 'admin_auto_5672a2e663'.tr(),
       ),
       body: Column(
         children: [
@@ -1516,13 +1640,13 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
             child: TextField(
               controller: searchController,
               onChanged: (v) => _filterDrafts(),
-              style: const TextStyle(
+              style: TextStyle(
                   color: OptikAdminTokens.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: "draf_cari".tr(),
-                hintStyle: const TextStyle(
+                hintStyle: TextStyle(
                     color: OptikAdminTokens.textMuted, fontSize: 12.5),
-                prefixIcon: const Icon(Icons.search_rounded,
+                prefixIcon: Icon(Icons.search_rounded,
                     color: OptikAdminTokens.textMuted, size: 20),
                 filled: true,
                 fillColor: OptikAdminTokens.bg.withOpacity(0.55),
@@ -1531,11 +1655,11 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      const BorderSide(color: OptikAdminTokens.lineStrong),
+                      BorderSide(color: OptikAdminTokens.lineStrong),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
+                  borderSide: BorderSide(
                       color: OptikAdminTokens.navy, width: 1.3),
                 ),
                 border: OutlineInputBorder(
@@ -1546,7 +1670,7 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
           ),
           Expanded(
             child: isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
                         color: OptikAdminTokens.ice))
                 : filteredDrafts.isEmpty
@@ -1589,7 +1713,7 @@ class _DraftManagerPageState extends State<DraftManagerPage> {
                             title: tujuan,
                             subtitle:
                                 '$idDraft · $tanggal · $itemCount item · $totalQty pcs',
-                            trailing: const Icon(
+                            trailing: Icon(
                               Icons.chevron_right_rounded,
                               color: OptikAdminTokens.textMuted,
                             ),
@@ -1684,18 +1808,18 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("draf_hapus_title".tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.bold,
                 fontSize: 14)),
         content: Text(
             "draf_hapus_desc".tr().replaceFirst(
                 '{}', localItems[index]['nama']?.toString() ?? '-'),
-            style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13)),
+            style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text("BATAL",
+              child: Text('appr_btn_batal'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.textMuted, fontWeight: FontWeight.bold))),
           TextButton(
@@ -1732,16 +1856,16 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           children: [
             Text(
               "draf_batal_desc".tr(),
-              style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
+              style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 15),
             TextField(
               controller: alasanController,
-              style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
+              style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13),
               maxLines: 2,
               decoration: InputDecoration(
                 hintText: "draf_batal_hint".tr(),
-                hintStyle: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
+                hintStyle: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                 filled: true,
                 fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                 border: OutlineInputBorder(
@@ -1755,7 +1879,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text("draf_btn_tutup".tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: OptikAdminTokens.textMuted, fontWeight: FontWeight.bold))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: OptikAdminTokens.danger),
@@ -1770,7 +1894,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
               _cancelDraft(alasanController.text.trim());
             },
             child: Text("draf_bun_proses_batal".tr(),
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
           )
         ],
@@ -1805,7 +1929,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Gagal membatalkan draf: $e"),
+          content: Text('admin_auto_5220903129'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
     } finally {
       if (mounted) setState(() => isProcessing = false);
@@ -1887,7 +2011,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal jadikan surat jalan: $e'),
+          content: Text('admin_auto_5a7ea33eca'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
       setState(() => isProcessing = false);
     }
@@ -1897,8 +2021,8 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Detail draf',
-        subtitle: 'Edit barang lalu jadikan surat jalan',
+        title: 'admin_auto_120c81f9c1'.tr(),
+        subtitle: 'admin_auto_24a5aa82ff'.tr(),
       ),
       body: Column(
         children: [
@@ -1913,7 +2037,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Tujuan',
                           style: TextStyle(
                             color: OptikAdminTokens.textMuted,
@@ -1924,7 +2048,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                         const SizedBox(height: 2),
                         Text(
                           widget.draft['tujuan'] ?? '-',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -1984,7 +2108,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                                 children: [
                                   Text(
                                     itm['nama'] ?? '-',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 12.5,
@@ -1993,7 +2117,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                                   const SizedBox(height: 2),
                                   Text(
                                     'Kode ${itm['barcode'] ?? '-'}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textMuted,
                                       fontSize: 11,
                                     ),
@@ -2009,7 +2133,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                             ),
                             Text(
                               '$qty',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 13,
@@ -2035,7 +2159,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OptikAdminTokens.bg,
               border: Border(
                 top: BorderSide(color: OptikAdminTokens.lineStrong),
@@ -2072,7 +2196,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       child: isProcessing
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(

@@ -174,6 +174,7 @@ class KtpOcrResult {
 }
 
 /// OCR lokal KTP Indonesia — field lengkap + alamat RT/RW/kel/kec.
+/// KTP/IKD tidak dikirim ke Cloud Vision (PII).
 class KtpOcrService {
   final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
 

@@ -114,8 +114,21 @@ class SopScorePanel extends StatelessWidget {
             'n': '$story',
             'target': '${SopScore.storyTarget}',
           }),
+          subtitle: s?.igConfigured == true
+              ? ((s?.storyError ?? '').trim().isNotEmpty
+                  ? s!.storyError
+                  : 'sop_ig_hint'.tr(namedArgs: {
+                      'user': (s?.igUsername ?? '').trim().isEmpty
+                          ? 'IG'
+                          : '@${s!.igUsername}',
+                    }))
+              : null,
           done: story >= SopScore.storyTarget,
-          actionLabel: layer == OfficeLayer.front ? 'sop_btn_story'.tr() : null,
+          actionLabel: layer == OfficeLayer.front
+              ? (s?.igLive == true
+                  ? 'sop_btn_story_ig'.tr()
+                  : 'sop_btn_story'.tr())
+              : null,
           onAction: layer == OfficeLayer.front && !busy ? onAddStory : null,
         ),
         if (layer == OfficeLayer.front) ...[
@@ -176,6 +189,7 @@ class SopScorePanel extends StatelessWidget {
   Widget _row({
     required String title,
     required bool done,
+    String? subtitle,
     String? actionLabel,
     VoidCallback? onAction,
     Widget? child,
@@ -205,13 +219,29 @@ class SopScorePanel extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: OptikKaryawanTokens.ink,
-                    fontSize: 13,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: OptikKaryawanTokens.ink,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if ((subtitle ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!.trim(),
+                        style: TextStyle(
+                          color: OptikKaryawanTokens.muted.withOpacity(0.95),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               if (actionLabel != null && onAction != null)

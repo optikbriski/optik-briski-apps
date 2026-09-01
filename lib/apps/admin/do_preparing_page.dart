@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -118,7 +119,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
+        title: Text(
           'Batalkan surat jalan?',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -126,20 +127,19 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
             fontSize: 16,
           ),
         ),
-        content: const Text(
-          'Booking sementara di Pusat akan dilepas. '
-          'Surat jalan dibatalkan. Stok Real tidak berubah.',
+        content: Text(
+          'admin_auto_562c229503'.tr(),
           style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('TIDAK'),
+            child: Text('admin_btn_tidak'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: OptikAdminTokens.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('YA, BATALKAN'),
+            child: Text('admin_btn_ya_batalkan'.tr()),
           ),
         ],
       ),
@@ -152,15 +152,15 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
         moveId: widget.moveId,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Surat jalan dibatalkan. Booking dilepas.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_74b3d8d37e'.tr()),
         backgroundColor: OptikAdminTokens.success,
       ));
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal batalkan: $e'),
+        content: Text('admin_auto_83de3370d3'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
@@ -173,7 +173,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       context,
       service: LogisticsTrackingService(),
       pusatOnly: true,
-      title: 'Pilih kurir DO',
+      title: 'admin_auto_a3dbf7b13f'.tr(),
     );
     if (kurirPickCancelled(pick) || _move == null) return;
     setState(() => _busy = true);
@@ -191,7 +191,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal set kurir: $e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_bdb2c18aad'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -202,10 +202,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
     if (_move == null || !_canReadyToSend) return;
 
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Daftar barang kosong / tidak terbaca. Batalkan surat jalan atau perbaiki data.',
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_gl_row_520b61487e'.tr()),
         backgroundColor: OptikAdminTokens.danger,
       ));
       return;
@@ -229,8 +227,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       // Foto packing wajib sebelum QR perjalanan.
       if (needPhoto) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Wajib foto packing sebelum tampilkan QR kurir.'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('admin_auto_58fbc8aa84'.tr()),
           backgroundColor: OptikAdminTokens.slate,
         ));
         final photo = await pickImageSafe(
@@ -242,8 +240,8 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
         if (photo == null) {
           if (!mounted) return;
           setState(() => _busy = false);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Dibatalkan. Foto packing wajib untuk QR perjalanan.'),
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('admin_auto_0e84bb3686'.tr()),
             backgroundColor: OptikAdminTokens.danger,
           ));
           return;
@@ -279,7 +277,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal tampilkan QR: $e'),
+          content: Text('admin_auto_807e33cca6'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -315,7 +313,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'QR PERJALANAN',
                     style: TextStyle(
                       color: OptikAdminTokens.navy,
@@ -325,7 +323,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Status tetap Disiapkan sampai kurir scan → Dalam perjalanan',
                     style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                     textAlign: TextAlign.center,
@@ -333,7 +331,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                   const SizedBox(height: 8),
                   Text(
                     resi,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.navy,
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
@@ -341,7 +339,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                   ),
                   Text(
                     'Tujuan: $tujuan',
-                    style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
+                    style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12),
                   ),
                   if (fotoUrl.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -387,21 +385,21 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                       await Clipboard.setData(ClipboardData(text: qr));
                       if (!ctx.mounted) return;
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(
-                          content: Text('Kode QR disalin'),
+                        SnackBar(
+                          content: Text('admin_auto_bacbe60bb9'.tr()),
                           backgroundColor: OptikAdminTokens.success,
                         ),
                       );
                     },
                     icon: const Icon(Icons.copy_rounded, size: 16),
-                    label: const Text('Salin kode QR'),
+                    label: Text('admin_auto_e416d18bff'.tr()),
                   ),
                   const SizedBox(height: 6),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Tutup'),
+                      child: Text('admin_btn_close'.tr()),
                     ),
                   ),
                 ],
@@ -423,20 +421,20 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Disiapkan',
-        subtitle: 'Ceklis barang → foto packing → QR kurir',
+        title: 'admin_auto_f96b78a3e4'.tr(),
+        subtitle: 'admin_auto_a3767a4c4a'.tr(),
         actions: [
           if (_canReadyToSend)
             IconButton(
-              tooltip: 'Batalkan surat jalan',
+              tooltip: 'admin_auto_9f65e74c69'.tr(),
               onPressed: _loading || _busy ? null : _cancelDo,
               icon: const Icon(Icons.cancel_outlined,
                   color: OptikAdminTokens.danger),
             ),
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _loading || _busy ? null : _load,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.textSecondary),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.textSecondary),
           ),
         ],
       ),
@@ -467,7 +465,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                     Expanded(
                                       child: Text(
                                         resi,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w900,
                                           fontSize: 15,
@@ -484,7 +482,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       ),
                                       child: Text(
                                         _statusLabel,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w800,
                                           fontSize: 11,
@@ -496,7 +494,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                 const SizedBox(height: 6),
                                 Text(
                                   'Ke $tujuan · $_totalQty pcs · ${_items.length} item',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.textSecondary,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 12.5,
@@ -531,7 +529,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                       ),
                                       child: Text(
                                         kurir.isEmpty ? 'Pilih' : 'Ganti',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.w800,
                                         ),
@@ -544,11 +542,11 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                           ),
                           const SizedBox(height: 14),
                           PremiumSectionHeader(
-                            label: 'Siapkan barang',
+                            label: 'admin_auto_cfdda70ed6'.tr(),
                             padding: const EdgeInsets.only(bottom: 8),
                             trailing: Text(
                               '${_checked.length}/${_items.length}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: OptikAdminTokens.textMuted,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -556,7 +554,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                             ),
                           ),
                           if (_items.isEmpty)
-                            const PremiumEmptyState(
+                            PremiumEmptyState(
                               message:
                                   'Detail item tidak terbaca. Batalkan surat jalan atau perbaiki data.',
                               icon: Icons.warning_amber_rounded,
@@ -614,7 +612,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                   ),
                                   subtitle: Text(
                                     'Kode $sku · $warna',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.textMuted,
                                       fontSize: 11,
                                     ),
@@ -784,7 +782,7 @@ class _DoPreparingPageState extends State<DoPreparingPage> {
                                   ),
                                 ),
                                 icon: _busy
-                                    ? const SizedBox(
+                                    ? SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(
@@ -865,7 +863,7 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal muat: $e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_fbebdbafe8'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -886,12 +884,12 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
   Widget build(BuildContext context) {
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Antrian disiapkan',
-        subtitle: 'Menunggu packing / QR kurir',
+        title: 'admin_auto_c21454eacb'.tr(),
+        subtitle: 'admin_auto_ae436ffde6'.tr(),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded,
+            icon: Icon(Icons.refresh_rounded,
                 color: OptikAdminTokens.textSecondary),
           ),
         ],
@@ -899,8 +897,8 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _rows.isEmpty
-              ? const PremiumEmptyState(
-                  message: 'Tidak ada surat jalan yang sedang disiapkan.',
+              ? PremiumEmptyState(
+                  message: 'admin_auto_029a3211c2'.tr(),
                   icon: Icons.fact_check_rounded,
                 )
               : ListView.builder(
@@ -917,8 +915,8 @@ class _DoPreparingListPageState extends State<DoPreparingListPage> {
                       icon: Icons.inventory_2_outlined,
                       iconColor: OptikAdminTokens.navy,
                       title: resi,
-                      subtitle: 'Ke $tujuan · $qty pcs · $status',
-                      trailing: const Icon(Icons.chevron_right_rounded,
+                      subtitle: 'admin_auto_f0ae80b468'.tr(namedArgs: {'tujuan': tujuan, 'qty': qty, 'status': status}),
+                      trailing: Icon(Icons.chevron_right_rounded,
                           color: OptikAdminTokens.textMuted),
                       onTap: () async {
                         await Navigator.push(

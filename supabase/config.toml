@@ -57,3 +57,21 @@ entrypoint = "./functions/pos-midtrans-create/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/rekasa-midtrans-create/index.ts"
+
+# Nota / form / tulisan tangan. JWT Admin/Karyawan.
+[functions.google-vision-ocr]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/google-vision-ocr/index.ts"
+
+# SOP story cabang ← Instagram Business Graph. JWT Admin/Karyawan.
+[functions.ig-story-count]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ig-story-count/index.ts"
+
+# Resep dokter Member: anon + sesi HP (bukan Auth JWT).
+[functions.member-vision-ocr]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/member-vision-ocr/index.ts"

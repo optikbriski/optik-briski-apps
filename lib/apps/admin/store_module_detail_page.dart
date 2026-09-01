@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -72,7 +73,7 @@ class _StoreModuleDetailPageState extends State<StoreModuleDetailPage> {
             OutlinedButton.icon(
               onPressed: _openExternal,
               icon: const Icon(Icons.play_circle_outline_rounded),
-              label: const Text('Putar video penjelasan'),
+              label: Text('admin_auto_02e7e2b916'.tr()),
             )
           else
             Container(

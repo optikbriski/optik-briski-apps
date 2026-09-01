@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build APK Admin. Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
-# Admin production utama tetap web (Vercel); APK ini khusus perangkat toko.
+# Build APK Admin (fitur penuh sama web Admin; sinkron Supabase dengan APK lain).
+# Default merek = Rekasa. Kulit Optik: BRAND=optik-briski.
+# Web Vercel tetap jalan; APK untuk kasir toko (Bluetooth thermal, kamera, dll).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,6 +10,9 @@ cd "$ROOT"
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
 # shellcheck source=scripts/brand_env.sh
 source "$ROOT/scripts/brand_env.sh"
+
+python3 "$ROOT/scripts/generate_flavor_launcher_icons.py"
+
 OUT_DIR="build/app/outputs/flutter-apk"
 if [[ "$STORE_SLUG" == "optik-briski" ]]; then
   DEST_ARM64="build/optik-admin-${VERSION}.apk"
@@ -72,6 +76,29 @@ if [[ -z "$ARM64_SRC" ]]; then
   exit 1
 fi
 cp -f "$ARM64_SRC" "$DEST_ARM64"
+
+# Lolos WA / Supabase Free 50 MB. Shrink hanya jika perlu — repack+resign
+# kadang bikin sideload gagal di beberapa HP/tablet meski apksigner OK.
+LIMIT=$((50 * 1000 * 1000))
+PRE_BYTES=$(stat -f%z "$DEST_ARM64" 2>/dev/null || stat -c%s "$DEST_ARM64")
+if [[ "$PRE_BYTES" -lt "$LIMIT" && "${FORCE_SHRINK:-0}" != "1" ]]; then
+  echo "==> Skip shrink (${PRE_BYTES} byte < ${LIMIT}) — pakai APK build langsung (lebih aman sideload)"
+else
+  echo "==> Shrink APK (>= limit atau FORCE_SHRINK=1)…"
+  DROP_MEMBER_ASSETS=1 EXTRA_ASSET_RECOMPRESS=1 \
+    bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
+fi
+
+BYTES=$(stat -f%z "$DEST_ARM64" 2>/dev/null || stat -c%s "$DEST_ARM64")
+python3 - <<PY
+b=$BYTES
+limit=$LIMIT
+print(f"==> Ukuran akhir: {b/1e6:.3f} MB (WA) / {b/1024/1024:.3f} MiB  (limit {limit} byte)")
+if b >= limit:
+    raise SystemExit(f"ERROR: APK {b/1e6:.3f} MB masih >= 50 MB — jangan kirim/upload.")
+print("==> OK di bawah 50 MB — aman kirim WA / upload Supabase Free")
+PY
+
 for candidate in \
   "$OUT_DIR/app-armeabi-v7a-admin-release.apk" \
   "$OUT_DIR/app-admin-armeabi-v7a-release.apk" \
@@ -90,6 +117,8 @@ if [[ -f "$DEST_ARM32" ]]; then
   ls -lh "$DEST_ARM32"
 fi
 echo ""
-echo "Pasang di tablet/HP Admin toko → login Admin → menu Absensi Toko."
+echo "Pasang di tablet/HP Admin toko → login Admin → menu Toko → Update APK."
+echo "Publish update in-app: BRAND=${BRAND:-rekasa} bash scripts/publish_admin_apk.sh"
+echo "  (upload ke app-releases → versi_app flavor=admin terisi otomatis)."
 echo "Face match memakai kamera perangkat ini + geofence toko."
 echo "Admin web (Vercel) tetap untuk POS/monitor; face match tidak jalan di browser."

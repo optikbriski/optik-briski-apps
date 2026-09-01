@@ -10,6 +10,9 @@ cd "$ROOT"
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
 # shellcheck source=scripts/brand_env.sh
 source "$ROOT/scripts/brand_env.sh"
+
+python3 "$ROOT/scripts/generate_flavor_launcher_icons.py"
+
 # Flutter flavor output: build/app/outputs/flutter-apk/app-member-*.apk
 OUT_DIR="build/app/outputs/flutter-apk"
 if [[ "$STORE_SLUG" == "optik-briski" ]]; then

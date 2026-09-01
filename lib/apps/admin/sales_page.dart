@@ -37,6 +37,8 @@ import '../../shared/qr/obr_codes.dart';
 import '../../shared/qr/product_code.dart';
 import '../../shared/qr/qr_route.dart';
 import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/admin/admin_format.dart';
+import '../../shared/connectivity/connectivity_reload.dart';
 import '../../shared/widgets/leave_page_guard.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
@@ -64,9 +66,8 @@ import '../../shared/pos/pos_midtrans.dart';
 
 final supabase = Supabase.instance.client;
 
-String formatRupiah(int nominal) {
-  return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0)
-      .format(nominal);
+String formatRupiah(BuildContext context, int nominal) {
+  return AdminFormat.rupiah(context, nominal);
 }
 
 // ============================================================================
@@ -115,7 +116,7 @@ class ResepInput extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.9))),
             child:
-                const Icon(Icons.remove, color: OptikAdminTokens.navy, size: 18),
+                Icon(Icons.remove, color: OptikAdminTokens.navy, size: 18),
           ),
         ),
         const SizedBox(width: 8),
@@ -126,20 +127,20 @@ class ResepInput extends StatelessWidget {
             keyboardType: const TextInputType.numberWithOptions(
                 decimal: true, signed: true),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy, fontWeight: FontWeight.bold, fontSize: 13),
             decoration: InputDecoration(
               labelText: label,
-              labelStyle: const TextStyle(fontSize: 10, color: OptikAdminTokens.slate),
+              labelStyle: TextStyle(fontSize: 10, color: OptikAdminTokens.slate),
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
               filled: true,
               fillColor: OptikAdminTokens.card,
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: OptikAdminTokens.lineStrong)),
+                  borderSide: BorderSide(color: OptikAdminTokens.lineStrong)),
               enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: OptikAdminTokens.lineStrong)),
+                  borderSide: BorderSide(color: OptikAdminTokens.lineStrong)),
             ),
             onChanged: (v) => onChanged(
                 double.tryParse(v.replaceAll(',', '.').replaceAll('+', '')) ??
@@ -155,7 +156,7 @@ class ResepInput extends StatelessWidget {
                 color: OptikAdminTokens.ice.withOpacity(0.35),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: OptikAdminTokens.ice.withOpacity(0.9))),
-            child: const Icon(Icons.add, color: OptikAdminTokens.navy, size: 18),
+            child: Icon(Icons.add, color: OptikAdminTokens.navy, size: 18),
           ),
         ),
       ],
@@ -195,7 +196,7 @@ class _LiveClockState extends State<LiveClock> {
   Widget build(BuildContext context) {
     return Text(
       "${_currentTime.day.toString().padLeft(2, '0')}-${_currentTime.month.toString().padLeft(2, '0')}-${_currentTime.year} | ${_currentTime.hour.toString().padLeft(2, '0')}:${_currentTime.minute.toString().padLeft(2, '0')}:${_currentTime.second.toString().padLeft(2, '0')}",
-      style: const TextStyle(
+      style: TextStyle(
         color: OptikAdminTokens.navy,
         fontWeight: FontWeight.bold,
         letterSpacing: 1.5,
@@ -213,6 +214,8 @@ class SalesPage extends StatefulWidget {
 }
 
 class _SalesPageState extends State<SalesPage> {
+  static final Object _connectivityReloadOwner = Object();
+
   // Letakkan di bawah variabel isLoading lo
   CameraController? _silentCameraController;
   bool isScanningLocal = true;
@@ -270,6 +273,8 @@ class _SalesPageState extends State<SalesPage> {
   String lensBahan = 'Supersin';
   String lensJenisLama = 'Standar';
   List<Map<String, dynamic>> pendingLensRequests = [];
+  /// RO dari POS yang belum terkirim ke server (offline / gagal insert).
+  List<Map<String, dynamic>> _pendingRoLocal = [];
 
   // SEKSI FRAME
   Map<String, dynamic>? selectedFrame;
@@ -333,6 +338,9 @@ class _SalesPageState extends State<SalesPage> {
   VoidCallback? _posHoldExpireUi;
   StockRealtimeSubscription? _stockRt;
   Timer? _stockRtDebounce;
+  Timer? _posDraftAutosaveTimer;
+  bool _posDraftAutosaveListenersBound = false;
+  static const Duration _posDraftAutosaveDelay = Duration(milliseconds: 700);
 
   String get _tokoId => widget.profile['toko_id']?.toString() ?? 'PUSAT';
 
@@ -349,10 +357,11 @@ class _SalesPageState extends State<SalesPage> {
   void initState() {
     super.initState();
     _fetchMerkLensa();
-    _generateInvoice();
     _cekStatusOpenStore();
-    _restorePosDraftIfNeeded();
+    _bindPosDraftAutosaveListeners();
     _startStockRealtime();
+    ConnectivityReload.bind(_connectivityReloadOwner, _reloadFromConnectivityBanner);
+    unawaited(_bootstrapPosSession());
     unawaited(() async {
       try {
         await supabase.rpc('expire_all_stale_stock_holds');
@@ -391,12 +400,32 @@ class _SalesPageState extends State<SalesPage> {
     });
   }
 
+  Future<void> _bootstrapPosSession() async {
+    await _restorePosDraftIfNeeded();
+    if (!mounted) return;
+    if (noInvoice.trim().isEmpty) {
+      _generateInvoice();
+    }
+    await _syncPendingRoLocal();
+  }
+
+  Future<void> _reloadFromConnectivityBanner() async {
+    await _refreshCartStockFromServer();
+    await _syncPendingRoLocal();
+    if (mounted) setState(() {});
+  }
+
   void _startStockRealtime() {
     unawaited(_stockRt?.dispose() ?? Future.value());
     _stockRt = StockRealtime.subscribeToko(
       tokoId: _tokoId,
       onEvent: (ev) {
         if (!mounted || ev.sku.isEmpty) return;
+        // Sinyal paksa sinkron cabang — refresh stok semua baris keranjang.
+        if (ev.sku == '*FORCE_SYNC*') {
+          unawaited(_refreshCartStockFromServer());
+          return;
+        }
         // Patch available di keranjang bila SKU sama (tanpa full reload).
         var touched = false;
         for (final item in cartItems) {
@@ -423,8 +452,39 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
+  /// Tarik stok terkini per SKU di keranjang (setelah paksa sinkron cabang).
+  Future<void> _refreshCartStockFromServer() async {
+    if (cartItems.isEmpty || !mounted) return;
+    var touched = false;
+    for (final item in cartItems) {
+      final sku = ProductIdentity.normalizeSku(item['sku']) ??
+          ProductIdentity.normalizeBarcode(item['barcode']);
+      if (sku == null) continue;
+      try {
+        final row = await ProductIdentity.findAtToko(
+          tokoId: _tokoId,
+          sku: sku,
+          barcode: sku,
+        );
+        if (row == null) continue;
+        final stock = int.tryParse('${row['stock'] ?? 0}') ?? 0;
+        final reserved = int.tryParse('${row['reserved_qty'] ?? 0}') ?? 0;
+        item['stock'] = stock;
+        item['reserved_qty'] = reserved;
+        item['available_qty'] = StockQty.available(stock, reserved);
+        touched = true;
+      } catch (_) {}
+    }
+    if (touched && mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    ConnectivityReload.unbind(_connectivityReloadOwner);
+    _posDraftAutosaveTimer?.cancel();
+    if (_hasPosDraftContent()) {
+      unawaited(_savePosDraft(silent: true));
+    }
     _posHoldTick?.cancel();
     _stockRtDebounce?.cancel();
     unawaited(_stockRt?.dispose() ?? Future.value());
@@ -570,9 +630,7 @@ class _SalesPageState extends State<SalesPage> {
     _posHoldExpiring = false;
     if (mounted) {
       setState(() {});
-      _showSnack(
-        'Waktu bayar 15 menit habis — stok hold dilepas. '
-        'Buka preview lagi untuk hold ulang.',
+      _showSnack('admin_auto_91ef8ff9cf'.tr(),
         OptikAdminTokens.warning,
       );
     }
@@ -631,7 +689,7 @@ class _SalesPageState extends State<SalesPage> {
       if (res['ok'] != true) {
         _showSnack(
           (res['error'] ??
-                  'Stok tidak cukup — sudah di-hold saluran lain / POS lain')
+                  'admin_auto_stock_hold_conflict'.tr())
               .toString(),
           OptikAdminTokens.danger,
         );
@@ -646,7 +704,7 @@ class _SalesPageState extends State<SalesPage> {
       if (mounted) setState(() {});
       return true;
     } catch (e) {
-      _showSnack('Gagal hold stok: $e', OptikAdminTokens.danger);
+      _showSnack('admin_auto_899a3625a4'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
       return false;
     } finally {
       _posHoldBusy = false;
@@ -726,11 +784,11 @@ class _SalesPageState extends State<SalesPage> {
   Future<void> _applyMemberVoucher() async {
     final code = voucherCtrl.text.trim();
     if (code.isEmpty) {
-      _showSnack('Masukkan kode voucher', OptikAdminTokens.warning);
+      _showSnack('admin_gl_row_0381714cf4'.tr(), OptikAdminTokens.warning);
       return;
     }
     if (_subtotalBelanja <= 0) {
-      _showSnack('Isi keranjang dulu sebelum pakai voucher', OptikAdminTokens.warning);
+      _showSnack('admin_gl_row_87882bf29c'.tr(), OptikAdminTokens.warning);
       return;
     }
     setState(() => _lookingUpVoucher = true);
@@ -740,7 +798,7 @@ class _SalesPageState extends State<SalesPage> {
       if (!mounted) return;
       if (res['ok'] != true) {
         _showSnack(
-          (res['error'] ?? 'Voucher tidak valid').toString(),
+          (res['error'] ?? 'admin_auto_voucher_invalid'.tr()).toString(),
           OptikAdminTokens.danger,
         );
         return;
@@ -751,8 +809,7 @@ class _SalesPageState extends State<SalesPage> {
       int nominal = 0;
       if (type == 'info') {
         _showSnack(
-          'Voucher info saja — tidak ada potongan otomatis. '
-          '${res['title'] ?? ''}',
+          '${'admin_auto_voucher_info_only'.tr()}${res['title'] ?? ''}',
           OptikAdminTokens.warning,
         );
         return;
@@ -762,7 +819,7 @@ class _SalesPageState extends State<SalesPage> {
         nominal = value;
       }
       if (nominal <= 0) {
-        _showSnack('Nilai diskon voucher 0', OptikAdminTokens.warning);
+        _showSnack('admin_gl_row_09486a6a82'.tr(), OptikAdminTokens.warning);
         return;
       }
       if (nominal > _subtotalBelanja) nominal = _subtotalBelanja;
@@ -770,8 +827,7 @@ class _SalesPageState extends State<SalesPage> {
       if (pointsCost > 0) {
         final phone = phoneCtrl.text.trim();
         if (phone.isEmpty) {
-          _showSnack(
-            'Voucher butuh $pointsCost poin — isi No. WA member dulu',
+          _showSnack('admin_auto_b2ac1cc01c'.tr(namedArgs: {'pointsCost': '$pointsCost'}),
             OptikAdminTokens.warning,
           );
           return;
@@ -843,6 +899,7 @@ class _SalesPageState extends State<SalesPage> {
     );
     if (sel == null || sel.isClear || !mounted) return;
     setState(() => lensJenis = sel.value!);
+    _schedulePosDraftAutosave();
   }
 
   Future<void> _pickLensBahan() async {
@@ -857,6 +914,7 @@ class _SalesPageState extends State<SalesPage> {
     );
     if (sel == null || sel.isClear || !mounted) return;
     setState(() => lensBahan = sel.value!);
+    _schedulePosDraftAutosave();
   }
 
   Future<void> _pickLensJenisLama() async {
@@ -873,6 +931,7 @@ class _SalesPageState extends State<SalesPage> {
     );
     if (sel == null || sel.isClear || !mounted) return;
     setState(() => lensJenisLama = sel.value!);
+    _schedulePosDraftAutosave();
   }
 
   Future<void> _pickPaymentMethod() async {
@@ -997,25 +1056,25 @@ class _SalesPageState extends State<SalesPage> {
           backgroundColor: OptikAdminTokens.card,
           shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
           title: Text(
             "pos_tutup_shift_title".tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy, fontWeight: FontWeight.bold, fontSize: 13),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("${"pos_modal_awal_sesi".tr()}${formatRupiah(modalAwal)}",
-                  style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
+              Text("${"pos_modal_awal_sesi".tr()}${formatRupiah(context,modalAwal)}",
+                  style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
               Text(
-                  "${"pos_omzet_tunai_masuk".tr()}${formatRupiah(totalTunaiHariIni)}",
-                  style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
-              const Divider(color: OptikAdminTokens.lineStrong, height: 20),
+                  "${"pos_omzet_tunai_masuk".tr()}${formatRupiah(context,totalTunaiHariIni)}",
+                  style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12)),
+              Divider(color: OptikAdminTokens.lineStrong, height: 20),
               Text(
-                "${"pos_kas_seharusnya".tr()}${formatRupiah(uangSeharusnyaDiLaci)}",
+                "${"pos_kas_seharusnya".tr()}${formatRupiah(context,uangSeharusnyaDiLaci)}",
                 style: const TextStyle(
                     color: OptikAdminTokens.success,
                     fontWeight: FontWeight.bold,
@@ -1025,12 +1084,12 @@ class _SalesPageState extends State<SalesPage> {
               TextField(
                 controller: uangFisikCloseCtrl,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
                 decoration: InputDecoration(
                   labelText: "pos_hint_uang_fisik".tr(),
                   prefixText: "Rp ",
-                  labelStyle: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
+                  labelStyle: TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
                 ),
               ),
             ],
@@ -1042,7 +1101,7 @@ class _SalesPageState extends State<SalesPage> {
                 Navigator.pop(ctx);
               },
               child: Text("sop_batal".tr(),
-                  style: const TextStyle(color: OptikAdminTokens.slate)),
+                  style: TextStyle(color: OptikAdminTokens.slate)),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -1115,7 +1174,7 @@ class _SalesPageState extends State<SalesPage> {
                     selisih == 0
                         ? "pos_tutup_balanced".tr()
                         : "${"pos_tutup_selisih".tr()}$selisih",
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OptikAdminTokens.snow,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1179,9 +1238,9 @@ class _SalesPageState extends State<SalesPage> {
       MaterialPageRoute(
         builder: (context) => PremiumScaffold(
           appBar: PremiumAppBar(
-            title: 'Posisikan Barcode ID Karyawan',
+            title: 'admin_auto_78a7ee4c54'.tr(),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded,
+              icon: Icon(Icons.arrow_back_rounded,
                   color: OptikAdminTokens.navy),
               onPressed: () {
                 if (!hasPopped) {
@@ -1222,7 +1281,7 @@ class _SalesPageState extends State<SalesPage> {
       try {
         await _openStoreTrainingFastPath();
       } catch (e) {
-        _showSnack("❌ Error Open Store: $e", OptikAdminTokens.danger);
+        _showSnack('admin_auto_9387121974'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
       } finally {
         if (mounted) setState(() => isLoading = false);
       }
@@ -1243,8 +1302,7 @@ class _SalesPageState extends State<SalesPage> {
     // unlock screen (HID / manual NIK) can still open the session.
     if (image == null && !kIsWeb) {
       if (mounted) setState(() => isLoading = false);
-      _showSnack(
-          "❌ Gagal menjepret foto otomatis. Pastikan izin kamera browser aktif!",
+      _showSnack('admin_auto_ff7b7f0356'.tr(),
           OptikAdminTokens.danger);
       return;
     }
@@ -1297,8 +1355,7 @@ class _SalesPageState extends State<SalesPage> {
             karyawanTerlibat = [];
           });
         }
-        _showSnack(
-          "Toko dibuka — ketik/scan NIK kasir untuk unlock.",
+        _showSnack('admin_auto_0d180555b4'.tr(),
           OptikAdminTokens.success,
         );
         return;
@@ -1309,7 +1366,7 @@ class _SalesPageState extends State<SalesPage> {
           await _scanBarcode(facing: CameraFacing.front);
 
       if (nikKaryawan == null || nikKaryawan.isEmpty) {
-        _showSnack("Sesi dibatalkan", OptikAdminTokens.danger);
+        _showSnack('admin_auto_a6a6fd025b'.tr(), OptikAdminTokens.danger);
         return;
       }
 
@@ -1355,10 +1412,10 @@ class _SalesPageState extends State<SalesPage> {
         // Terlibat final diisi ulang saat scan unlock POS (fleksibel).
         karyawanTerlibat = [];
       });
-      _showSnack("✅ Toko Opened by: ${res['nama']}", OptikAdminTokens.success);
+      _showSnack('admin_auto_998c0c4c61'.tr(), OptikAdminTokens.success);
     } catch (e) {
       // 🎯 FIX: Ini pasangan catch utamanya yang tadi hilang kemakan
-      _showSnack("❌ Error Open Store: $e", OptikAdminTokens.danger);
+      _showSnack('admin_auto_9387121974'.tr(namedArgs: {'error': '$e'}), OptikAdminTokens.danger);
     } finally {
       // 🎯 FIX: Ini status loading diturunkan biar aplikasi ga nge-hang
       if (mounted) setState(() => isLoading = false);
@@ -1404,7 +1461,7 @@ class _SalesPageState extends State<SalesPage> {
       requireOnDuty: false,
     );
     if (res == null) {
-      _showSnack('pos_err_barcode'.tr(), OptikAdminTokens.danger);
+      _showSnack('admin_auto_d5708561e7'.tr(), OptikAdminTokens.danger);
       return;
     }
 
@@ -1437,7 +1494,7 @@ class _SalesPageState extends State<SalesPage> {
       karyawanTerlibat = [];
       _addKaryawanTerlibatSilent(res);
     });
-    _showSnack("✅ Toko Opened by: $namaKasir", OptikAdminTokens.success);
+    _showSnack('admin_auto_2ac1d4515d'.tr(namedArgs: {'namaKasir': namaKasir}), OptikAdminTokens.success);
   }
 
   /// Tambah karyawan ke daftar terlibat (dedupe). Return true jika baru ditambah.
@@ -1449,6 +1506,7 @@ class _SalesPageState extends State<SalesPage> {
       ...karyawanTerlibat,
       Map<String, dynamic>.from(karyawan),
     ];
+    _schedulePosDraftAutosave();
     return true;
   }
 
@@ -1606,7 +1664,7 @@ class _SalesPageState extends State<SalesPage> {
     final cashierId = activeCashier?['id']?.toString();
     // Kasir yang unlock POS wajib tetap di daftar.
     if (cashierId != null && cashierId == karyawanId) {
-      _showSnack('pos_terlibat_keep_kasir'.tr(), OptikAdminTokens.warning);
+      _showSnack('admin_auto_aa4004de4f'.tr(), OptikAdminTokens.warning);
       return;
     }
     setState(() {
@@ -1614,6 +1672,7 @@ class _SalesPageState extends State<SalesPage> {
           .where((k) => k['id']?.toString() != karyawanId)
           .toList();
     });
+    _schedulePosDraftAutosave();
   }
 
   Future<void> _pickTambahKaryawanTerlibat() async {
@@ -1636,12 +1695,12 @@ class _SalesPageState extends State<SalesPage> {
             .toList();
       }
     } catch (e) {
-      _showSnack('${'pos_terlibat_load_err'.tr()}$e', OptikAdminTokens.danger);
+      _showSnack('${'admin_auto_167a27b26b'.tr()}$e', OptikAdminTokens.danger);
       return;
     }
     if (!mounted) return;
     if (list.isEmpty) {
-      _showSnack('pos_duty_picker_empty'.tr(), OptikAdminTokens.warning);
+      _showSnack('admin_auto_8d16506c8a'.tr(), OptikAdminTokens.warning);
       return;
     }
     final existing = karyawanTerlibat
@@ -1660,7 +1719,7 @@ class _SalesPageState extends State<SalesPage> {
         )
         .toList();
     if (options.isEmpty) {
-      _showSnack('pos_terlibat_all_added'.tr(), OptikAdminTokens.ice);
+      _showSnack('admin_auto_b5c0a74795'.tr(), OptikAdminTokens.ice);
       return;
     }
     final sel = await showAdminPicker<String>(
@@ -1791,13 +1850,13 @@ class _SalesPageState extends State<SalesPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.groups_rounded,
+                Icon(Icons.groups_rounded,
                     size: 18, color: OptikAdminTokens.navy),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'pos_terlibat_title'.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: OptikAdminTokens.navy,
@@ -1866,7 +1925,7 @@ class _SalesPageState extends State<SalesPage> {
         emailCtrl.text = routed.customerEmail!;
       }
     });
-    _showSnack('Data pelanggan terisi dari QR OBRCUS.', OptikAdminTokens.success);
+    _showSnack('admin_gl_row_e00217f90c'.tr(), OptikAdminTokens.success);
   }
 
   void _showCustomerQrDialog() {
@@ -1876,7 +1935,7 @@ class _SalesPageState extends State<SalesPage> {
       email: emailCtrl.text,
     );
     if (payload.isEmpty) {
-      _showSnack('Isi nama pelanggan dulu sebelum buat QR.', OptikAdminTokens.warning);
+      _showSnack('admin_gl_row_a9c3fcf9b5'.tr(), OptikAdminTokens.warning);
       return;
     }
     showDialog(
@@ -1885,9 +1944,9 @@ class _SalesPageState extends State<SalesPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
-        title: const Text('QR Pelanggan (OBRCUS)',
+        title: Text('admin_pos_qr_customer'.tr(),
             style: TextStyle(color: OptikAdminTokens.navy, fontSize: 14)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1919,7 +1978,7 @@ class _SalesPageState extends State<SalesPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tutup'),
+            child: Text('admin_btn_close'.tr()),
           ),
         ],
       ),
@@ -2040,7 +2099,65 @@ class _SalesPageState extends State<SalesPage> {
     }
   }
 
-  Future<void> _savePosDraft() async {
+  bool _hasPosDraftContent() {
+    if (cartItems.isNotEmpty) return true;
+    if (pendingLensRequests.isNotEmpty) return true;
+    if (_pendingRoLocal.isNotEmpty) return true;
+    if (nameCtrl.text.trim().isNotEmpty) return true;
+    if (phoneCtrl.text.trim().isNotEmpty) return true;
+    if (addressCtrl.text.trim().isNotEmpty) return true;
+    if (emailCtrl.text.trim().isNotEmpty) return true;
+    if (karyawanTerlibat.isNotEmpty) return true;
+    if (_parseDiskonRpText(discountCtrl.text) > 0) return true;
+    if ((_appliedVoucherCode ?? '').trim().isNotEmpty) return true;
+    if (lensBrandCtrl.text.trim().isNotEmpty) return true;
+    return false;
+  }
+
+  void _schedulePosDraftAutosave() {
+    if (TrainingMode.instance.isActive) return;
+    _posDraftAutosaveTimer?.cancel();
+    _posDraftAutosaveTimer = Timer(_posDraftAutosaveDelay, () {
+      if (!_hasPosDraftContent()) return;
+      unawaited(_savePosDraft(silent: true));
+    });
+  }
+
+  void _bindPosDraftAutosaveListeners() {
+    if (_posDraftAutosaveListenersBound) return;
+    _posDraftAutosaveListenersBound = true;
+    void onField() => _schedulePosDraftAutosave();
+    for (final c in [
+      nameCtrl,
+      phoneCtrl,
+      addressCtrl,
+      emailCtrl,
+      discountCtrl,
+      voucherCtrl,
+      paidCtrl,
+      sphRCtrl,
+      sphLCtrl,
+      cylRCtrl,
+      cylLCtrl,
+      addRCtrl,
+      addLCtrl,
+      axisRCtrl,
+      axisLCtrl,
+      pdRCtrl,
+      pdLCtrl,
+      lensBrandCtrl,
+      sphOldRCtrl,
+      cylOldRCtrl,
+      axisOldRCtrl,
+      sphOldLCtrl,
+      cylOldLCtrl,
+      axisOldLCtrl,
+    ]) {
+      c.addListener(onField);
+    }
+  }
+
+  Future<void> _savePosDraft({bool silent = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final payload = <String, dynamic>{
@@ -2060,6 +2177,9 @@ class _SalesPageState extends State<SalesPage> {
         'payment_method': paymentMethod,
         'payment_status': paymentStatus,
         'paid': paidCtrl.text,
+        'karyawan_terlibat': karyawanTerlibat
+            .map((k) => Map<String, dynamic>.from(k))
+            .toList(),
         'lens': {
           'sph_r': sphRCtrl.text,
           'sph_l': sphLCtrl.text,
@@ -2071,6 +2191,10 @@ class _SalesPageState extends State<SalesPage> {
           'axis_l': axisLCtrl.text,
           'pd_r': pdRCtrl.text,
           'pd_l': pdLCtrl.text,
+          'brand': lensBrandCtrl.text,
+          'jenis': lensJenis,
+          'bahan': lensBahan,
+          'jenis_lama': lensJenisLama,
           'old_active': isInputKacamataLamaActive,
           'sph_old_r': sphOldRCtrl.text,
           'cyl_old_r': cylOldRCtrl.text,
@@ -2079,14 +2203,16 @@ class _SalesPageState extends State<SalesPage> {
           'cyl_old_l': cylOldLCtrl.text,
           'axis_old_l': axisOldLCtrl.text,
         },
+        'pending_lens_requests': pendingLensRequests,
+        'pending_ro_local': _pendingRoLocal,
       };
       await prefs.setString(_posDraftPrefsKey, jsonEncode(payload));
-      if (mounted) {
-        _showSnack('pos_draft_saved'.tr(), OptikAdminTokens.success);
+      if (mounted && !silent) {
+        _showSnack('admin_auto_f6d9d9d593'.tr(), OptikAdminTokens.success);
       }
     } catch (e) {
       if (mounted) {
-        _showSnack('${'pos_draft_save_err'.tr()}$e', OptikAdminTokens.danger);
+        _showSnack('${'admin_auto_250fb3d5a1'.tr()}$e', OptikAdminTokens.danger);
       }
     }
   }
@@ -2167,6 +2293,13 @@ class _SalesPageState extends State<SalesPage> {
         axisLCtrl.text = (lens['axis_l'] ?? axisLCtrl.text).toString();
         pdRCtrl.text = (lens['pd_r'] ?? pdRCtrl.text).toString();
         pdLCtrl.text = (lens['pd_l'] ?? pdLCtrl.text).toString();
+        lensBrandCtrl.text = (lens['brand'] ?? lensBrandCtrl.text).toString();
+        final jenis = (lens['jenis'] ?? '').toString();
+        if (jenis.isNotEmpty) lensJenis = jenis;
+        final bahan = (lens['bahan'] ?? '').toString();
+        if (bahan.isNotEmpty) lensBahan = bahan;
+        final jenisLama = (lens['jenis_lama'] ?? '').toString();
+        if (jenisLama.isNotEmpty) lensJenisLama = jenisLama;
         isInputKacamataLamaActive = lens['old_active'] == true;
         sphOldRCtrl.text = (lens['sph_old_r'] ?? sphOldRCtrl.text).toString();
         cylOldRCtrl.text = (lens['cyl_old_r'] ?? cylOldRCtrl.text).toString();
@@ -2176,10 +2309,35 @@ class _SalesPageState extends State<SalesPage> {
         axisOldLCtrl.text = (lens['axis_old_l'] ?? axisOldLCtrl.text).toString();
       });
 
+      final terlibatRaw = map['karyawan_terlibat'];
+      if (terlibatRaw is List) {
+        karyawanTerlibat = [
+          for (final item in terlibatRaw)
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      }
+
+      final lensReqRaw = map['pending_lens_requests'];
+      if (lensReqRaw is List) {
+        pendingLensRequests = [
+          for (final item in lensReqRaw)
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      }
+      final roLocalRaw = map['pending_ro_local'];
+      if (roLocalRaw is List) {
+        _pendingRoLocal = [
+          for (final item in roLocalRaw)
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      }
+
       if (restoredCart.isNotEmpty ||
           nameCtrl.text.trim().isNotEmpty ||
-          phoneCtrl.text.trim().isNotEmpty) {
-        _showSnack('pos_draft_restored'.tr(), OptikAdminTokens.success);
+          phoneCtrl.text.trim().isNotEmpty ||
+          pendingLensRequests.isNotEmpty ||
+          _pendingRoLocal.isNotEmpty) {
+        _showSnack('admin_auto_647b5b06b1'.tr(), OptikAdminTokens.success);
       }
     } catch (e) {
       debugPrint('POS draft restore failed: $e');
@@ -2195,7 +2353,7 @@ class _SalesPageState extends State<SalesPage> {
       final productId = parsed?.productId;
 
       if (sku.isEmpty && (productId == null || productId.isEmpty)) {
-        _showSnack("pos_err_sku_tidak_terdaftar".tr(), OptikAdminTokens.warning);
+        _showSnack('admin_auto_790be844cd'.tr(), OptikAdminTokens.warning);
         return;
       }
 
@@ -2260,8 +2418,7 @@ class _SalesPageState extends State<SalesPage> {
         if (stokAktif <= 0) {
           // Stok 0: jangan blokir — lanjut RO / jual pending (bukan lensa scan R/L).
           if (res['kategori'] == 'Lensa') {
-            _showSnack(
-              'Stok lensa kosong — isi spek manual atau laporkan RO ke Pusat.',
+            _showSnack('admin_gl_row_c06595dfe4'.tr(),
               OptikAdminTokens.warning,
             );
             return;
@@ -2277,7 +2434,7 @@ class _SalesPageState extends State<SalesPage> {
               selectedLens = res;
               lensScanSide = 'L'; // Pindah minta scan lensa kiri
             });
-            _showSnack("pos_lensa_r_sukses".tr(), OptikAdminTokens.success);
+            _showSnack('admin_auto_9fb9d5241e'.tr(), OptikAdminTokens.success);
           } else {
             // Jika Lensa Kiri di-scan
             setState(() {
@@ -2285,17 +2442,17 @@ class _SalesPageState extends State<SalesPage> {
               lensScanSide = 'R'; // Reset kembali ke kanan
               selectedLens = null;
             });
-            _showSnack("pos_lensa_l_sukses".tr(), OptikAdminTokens.success);
+            _showSnack('admin_auto_92c82287dc'.tr(), OptikAdminTokens.success);
           }
         } else {
           // Logika untuk Frame & Aksesoris
           _tambahItemKeKeranjang(res, stokAktif);
         }
       } else {
-        _showSnack("pos_err_sku_tidak_terdaftar".tr(), OptikAdminTokens.warning);
+        _showSnack('admin_auto_790be844cd'.tr(), OptikAdminTokens.warning);
       }
     } catch (e) {
-      _showSnack("${"pos_err_search".tr()}$e", OptikAdminTokens.danger);
+      _showSnack('${'admin_auto_38af4d3c2e'.tr()}$e', OptikAdminTokens.danger);
     } finally {
       if (mounted) setState(() => isProcessing = false);
     }
@@ -2322,7 +2479,7 @@ class _SalesPageState extends State<SalesPage> {
         // Jika beneran item yang SAMA PERSIS di-add lagi, baru naikkan Qty
         int stokDiKeranjang = cartItems[existingIndex]['qty'];
         if (stokDiKeranjang + 1 > stokGudang) {
-          _showSnack("Stok di keranjang melebihi batas gudang: $stokGudang",
+          _showSnack('admin_auto_1042d4616b'.tr(namedArgs: {'stokGudang': '$stokGudang'}),
               OptikAdminTokens.warning);
         } else {
           cartItems[existingIndex]['qty']++;
@@ -2330,7 +2487,7 @@ class _SalesPageState extends State<SalesPage> {
           int hargaItemTerbaca = cartItems[existingIndex]['harga'] ?? harga;
           cartItems[existingIndex]['subtotal'] =
               cartItems[existingIndex]['qty'] * hargaItemTerbaca;
-          _showSnack("$nama berhasil ditambahkan", OptikAdminTokens.success);
+          _showSnack('admin_auto_d2df968932'.tr(namedArgs: {'name': nama}), OptikAdminTokens.success);
         }
       } else {
         // Jika barang berbeda (walau sama-sama tanpa SKU), buat baris BARU di Order List
@@ -2346,9 +2503,10 @@ class _SalesPageState extends State<SalesPage> {
           'kategori': produk['kategori'],
           'is_lensa_custom': false,
         });
-        _showSnack("$nama berhasil ditambahkan", OptikAdminTokens.success);
+        _showSnack('admin_auto_d2df968932'.tr(namedArgs: {'name': nama}), OptikAdminTokens.success);
       }
     });
+    _schedulePosDraftAutosave();
   }
 
 // 🎯 REVISI FINAL: SPLIT LENSA KANAN & KIRI JADI 2 ITEM MANDIRI (AKURAT POTONG STOK & HARGA)
@@ -2433,6 +2591,7 @@ class _SalesPageState extends State<SalesPage> {
         });
       }
     });
+    _schedulePosDraftAutosave();
   }
 
   void _hapusDariKeranjang(int index) {
@@ -2440,6 +2599,7 @@ class _SalesPageState extends State<SalesPage> {
       cartItems.removeAt(index);
     });
     unawaited(_syncPosHoldAfterCartChange());
+    _schedulePosDraftAutosave();
   }
 
   void _showSnack(String msg, Color color) {
@@ -2447,7 +2607,7 @@ class _SalesPageState extends State<SalesPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
         msg,
-        style: const TextStyle(
+        style: TextStyle(
           color: OptikAdminTokens.snow,
           fontWeight: FontWeight.w700,
         ),
@@ -2513,6 +2673,162 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   // ==========================================================================
+  // RO POS — draft lokal + sync ulang ke pending_requests
+  // ==========================================================================
+
+  String _roLocalKey(Map<String, dynamic> row) {
+    final explicit = (row['local_key'] ?? '').toString().trim();
+    if (explicit.isNotEmpty) return explicit;
+    return '${row['no_invoice']}|${row['sku']}|${row['nama_produk']}|${row['qty_request']}';
+  }
+
+  void _queuePendingRoLocal(Map<String, dynamic> row) {
+    final key = _roLocalKey(row);
+    final copy = Map<String, dynamic>.from(row)..['local_key'] = key;
+    _pendingRoLocal.removeWhere((e) => _roLocalKey(e) == key);
+    _pendingRoLocal.add(copy);
+  }
+
+  void _removePendingRoLocal(String key) {
+    _pendingRoLocal.removeWhere((e) => _roLocalKey(e) == key);
+  }
+
+  Map<String, dynamic> _pendingRoInsertPayload(Map<String, dynamic> row) {
+    final payload = Map<String, dynamic>.from(row);
+    payload.remove('local_key');
+    return payload;
+  }
+
+  Future<bool> _pendingRoExistsOnServer(Map<String, dynamic> row) async {
+    final inv = (row['no_invoice'] ?? '').toString().trim();
+    if (inv.isEmpty) return false;
+    var q = supabase.from('pending_requests').select('id').eq('no_invoice', inv);
+    final sku = (row['sku'] ?? '').toString().trim();
+    if (sku.isNotEmpty) {
+      q = q.eq('sku', sku);
+    } else {
+      final nama = (row['nama_produk'] ?? '').toString().trim();
+      if (nama.isNotEmpty) q = q.eq('nama_produk', nama);
+    }
+    final qty = int.tryParse('${row['qty_request']}') ?? 0;
+    if (qty > 0) q = q.eq('qty_request', qty);
+    final res = await q.limit(1);
+    return res.isNotEmpty;
+  }
+
+  Future<Map<String, dynamic>?> _pushPendingRoToServer(
+      Map<String, dynamic> row) async {
+    if (await _pendingRoExistsOnServer(row)) return null;
+    final inserted = await supabase
+        .from('pending_requests')
+        .insert(_pendingRoInsertPayload(row))
+        .select('id')
+        .single();
+    return Map<String, dynamic>.from(inserted as Map);
+  }
+
+  Future<void> _syncPendingRoLocal() async {
+    if (_pendingRoLocal.isEmpty || TrainingMode.instance.isActive) return;
+    final remain = <Map<String, dynamic>>[];
+    for (final row in List<Map<String, dynamic>>.from(_pendingRoLocal)) {
+      try {
+        await _pushPendingRoToServer(row);
+      } catch (e) {
+        debugPrint('RO local sync: $e');
+        remain.add(row);
+      }
+    }
+    if (!mounted) return;
+    if (remain.length != _pendingRoLocal.length) {
+      setState(() => _pendingRoLocal = remain);
+      _schedulePosDraftAutosave();
+      if (remain.isEmpty) {
+        _showSnack('admin_auto_b81b4692b7'.tr(), OptikAdminTokens.success);
+      }
+    }
+  }
+
+  void _applyStockRoToCart(Map<String, dynamic> item, int qtyNeeded) {
+    setState(() {
+      final nama = (item['nama_produk'] ?? item['nama'] ?? '').toString();
+      final sku = (item['sku'] ?? '').toString();
+      final idProduk = item['id'];
+      final idx = cartItems.indexWhere((c) {
+        if (idProduk != null && c['id'] == idProduk) return true;
+        return c['sku'] == sku &&
+            (c['nama_produk'] == nama || c['nama'] == nama);
+      });
+      if (idx >= 0) {
+        cartItems[idx]['needs_fulfillment'] = true;
+        cartItems[idx]['qty'] = (cartItems[idx]['qty'] as int? ?? 1) + qtyNeeded;
+        final harga = cartItems[idx]['harga'] as int? ?? 0;
+        cartItems[idx]['subtotal'] = (cartItems[idx]['qty'] as int) * harga;
+      } else {
+        final harga = ProductIdentity.sellPriceOf(item);
+        cartItems.add({
+          'id': idProduk,
+          'nama_produk': nama,
+          'nama': nama,
+          'sku': sku.isEmpty ? 'No SKU' : sku,
+          'harga': harga,
+          'harga_jual': harga,
+          'qty': qtyNeeded,
+          'subtotal': harga * qtyNeeded,
+          'kategori': item['kategori'],
+          'is_lensa_custom': false,
+          'needs_fulfillment': true,
+        });
+      }
+    });
+    _schedulePosDraftAutosave();
+  }
+
+  Future<void> _finalizePendingRoFromPos({
+    required Map<String, dynamic> roRow,
+    required bool isRoEmpty,
+    required int qtyNeeded,
+    required bool popDialog,
+  }) async {
+    final key = _roLocalKey(roRow);
+    _queuePendingRoLocal(roRow);
+    _schedulePosDraftAutosave();
+    if (popDialog && mounted) Navigator.pop(context);
+
+    try {
+      final inserted = await _pushPendingRoToServer(roRow);
+      _removePendingRoLocal(key);
+      _schedulePosDraftAutosave();
+      if (!mounted) return;
+      if (TrainingMode.instance.isActive && inserted != null) {
+        final outcome =
+            await TrainingApprovalSimulator.simulatePendingRequestIfTraining(
+          context,
+          id: inserted['id'],
+          body: 'training_approval_sim_body_request_order'.tr(),
+          trackingFor: RequestOrderService.trackingFor,
+        );
+        _showSnack(
+          'training_ro_outcome_${outcome?.name ?? 'pending'}'.tr(),
+          OptikAdminTokens.training,
+        );
+      } else {
+        _showSnack(
+          isRoEmpty
+              ? 'RO $qtyNeeded pcs + masuk keranjang (stok pending). '
+                  'Bisa DP atau bayar lunas.'
+              : 'Pre-Order $qtyNeeded pcs + masuk keranjang (stok pending). '
+                  'Bisa DP atau bayar lunas.',
+          OptikAdminTokens.success,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('admin_auto_a06482f808'.tr(), OptikAdminTokens.warning);
+      debugPrint('RO POS server insert: $e');
+    }
+  }
+
+  // ==========================================================================
   // WIDGET DIALOG: INPUT JUMLAH PENDING REQUEST / PRE-ORDER (LINT FIXED)
   // ==========================================================================
   void _showPendingRequestDialog(
@@ -2530,7 +2846,7 @@ class _SalesPageState extends State<SalesPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Row(
           children: [
@@ -2546,7 +2862,7 @@ class _SalesPageState extends State<SalesPage> {
                 isRoEmpty
                     ? 'Lanjut RO — isi qty'
                     : 'Stok terbatas (sisa: $sisaStokGudang)',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
@@ -2559,14 +2875,16 @@ class _SalesPageState extends State<SalesPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Produk: ${item['nama_produk'] ?? item['nama']}",
-                style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
+            Text('admin_pos_product_label'.tr(namedArgs: {
+              'name': '${item['nama_produk'] ?? item['nama']}',
+            }),
+                style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13)),
             const SizedBox(height: 8),
             Text(
               isRoEmpty
                   ? 'Pelanggan setuju RO. Masukkan qty → keranjang sebagai stok pending + RO ke Pusat.'
                   : 'Masukkan jumlah kekurangan (pre-order / RO):',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.slate,
                 fontSize: 12,
                 height: 1.35,
@@ -2575,16 +2893,16 @@ class _SalesPageState extends State<SalesPage> {
             const SizedBox(height: 12),
             Text(
               isRoEmpty ? 'Jumlah RO / qty jual:' : 'Jumlah kekurangan:',
-              style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+              style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: qtyPoCtrl, // ✅ Menggunakan nama variabel baru
               keyboardType: TextInputType.number,
-              style: const TextStyle(color: OptikAdminTokens.navy),
+              style: TextStyle(color: OptikAdminTokens.navy),
               decoration: InputDecoration(
-                hintText: "Contoh: 2",
-                hintStyle: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+                hintText: 'admin_auto_eaa48c5287'.tr(),
+                hintStyle: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
                 filled: true,
                 fillColor: OptikAdminTokens.bgMid,
                 // ✅ FIX 2: Bersihkan kata 'const' tidak perlu agar compiler adem
@@ -2599,7 +2917,7 @@ class _SalesPageState extends State<SalesPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Batal", style: TextStyle(color: OptikAdminTokens.slate)),
+            child: Text('appr_btn_batal'.tr(), style: TextStyle(color: OptikAdminTokens.slate)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -2607,98 +2925,38 @@ class _SalesPageState extends State<SalesPage> {
               foregroundColor: OptikAdminTokens.snow,
             ),
             onPressed: () async {
-              int qtyNeeded = int.tryParse(qtyPoCtrl.text) ??
-                  0; // ✅ Menggunakan nama variabel baru
+              int qtyNeeded = int.tryParse(qtyPoCtrl.text) ?? 0;
               qtyNeeded = InventoryStockRules.clampRequestQty(qtyNeeded);
               if (qtyNeeded <= 0) {
-                _showSnack("Jumlah harus lebih dari 0", OptikAdminTokens.danger);
+                _showSnack('admin_auto_80503a090e'.tr(), OptikAdminTokens.danger);
                 return;
               }
 
-              try {
-                final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+              final tokoId = widget.profile['toko_id'] ?? 'PUSAT';
+              final skuRaw = item['sku']?.toString();
+              final roRow = <String, dynamic>{
+                'local_key':
+                    '$noInvoice|${skuRaw ?? 'nosku'}|$qtyNeeded|${DateTime.now().millisecondsSinceEpoch}',
+                'toko_id': tokoId,
+                'no_invoice': noInvoice,
+                'nama_pelanggan': nameCtrl.text,
+                'sku': skuRaw == 'No SKU' ? null : skuRaw,
+                'nama_produk': item['nama_produk'] ?? item['nama'],
+                'kategori': item['kategori'],
+                'qty_request': qtyNeeded,
+                'tipe_request':
+                    sisaStokGudang <= 0 ? 'RESTOCK_LIMIT' : 'PRE_ORDER',
+                'status': 'PENDING',
+                'tracking_status': 'DIPROSES_DI_CABANG',
+              };
 
-                final inserted =
-                    await supabase.from('pending_requests').insert({
-                  'toko_id': tokoId,
-                  'no_invoice':
-                      noInvoice, // 👈 HUBUNGKAN KE INVOICE AKTIF UNTUK TRACKING
-                  'nama_pelanggan':
-                      nameCtrl.text, // 👈 NAMA PELANGGAN UNTUK PENCARIAN CRM
-                  'sku': item['sku'] == "No SKU" ? null : item['sku'],
-                  'nama_produk': item['nama_produk'] ?? item['nama'],
-                  'kategori': item['kategori'],
-                  'qty_request': qtyNeeded,
-                  'tipe_request':
-                      sisaStokGudang <= 0 ? 'RESTOCK_LIMIT' : 'PRE_ORDER',
-                  'status': 'PENDING',
-                  'tracking_status': 'DIPROSES_DI_CABANG'
-                }).select('id').single();
-
-                // Tandai item keranjang: stok belum ready → checkout bisa DP
-                // atau LUNAS pending (admin konfirmasi nanti).
-                setState(() {
-                  final nama =
-                      (item['nama_produk'] ?? item['nama'] ?? '').toString();
-                  final sku = (item['sku'] ?? '').toString();
-                  final idProduk = item['id'];
-                  final idx = cartItems.indexWhere((c) {
-                    if (idProduk != null && c['id'] == idProduk) return true;
-                    return c['sku'] == sku &&
-                        (c['nama_produk'] == nama || c['nama'] == nama);
-                  });
-                  if (idx >= 0) {
-                    cartItems[idx]['needs_fulfillment'] = true;
-                    cartItems[idx]['qty'] =
-                        (cartItems[idx]['qty'] as int? ?? 1) + qtyNeeded;
-                    final harga =
-                        cartItems[idx]['harga'] as int? ?? 0;
-                    cartItems[idx]['subtotal'] =
-                        (cartItems[idx]['qty'] as int) * harga;
-                  } else {
-                    final harga = ProductIdentity.sellPriceOf(item);
-                    cartItems.add({
-                      'id': idProduk,
-                      'nama_produk': nama,
-                      'nama': nama,
-                      'sku': sku.isEmpty ? 'No SKU' : sku,
-                      'harga': harga,
-                      'harga_jual': harga,
-                      'qty': qtyNeeded,
-                      'subtotal': harga * qtyNeeded,
-                      'kategori': item['kategori'],
-                      'is_lensa_custom': false,
-                      'needs_fulfillment': true,
-                    });
-                  }
-                });
-
-                Navigator.pop(context);
-                if (TrainingMode.instance.isActive && mounted) {
-                  final outcome = await TrainingApprovalSimulator
-                      .simulatePendingRequestIfTraining(
-                    context,
-                    id: inserted['id'],
-                    body: 'training_approval_sim_body_request_order'.tr(),
-                    trackingFor: RequestOrderService.trackingFor,
-                  );
-                  _showSnack(
-                    'training_ro_outcome_${outcome?.name ?? 'pending'}'.tr(),
-                    OptikAdminTokens.training,
-                  );
-                } else {
-                  _showSnack(
-                    isRoEmpty
-                        ? 'RO $qtyNeeded pcs + masuk keranjang (stok pending). '
-                            'Bisa DP atau bayar lunas.'
-                        : 'Pre-Order $qtyNeeded pcs + masuk keranjang (stok pending). '
-                            'Bisa DP atau bayar lunas.',
-                    OptikAdminTokens.success,
-                  );
-                }
-              } catch (e) {
-                _showSnack("Gagal menyimpan request: $e", OptikAdminTokens.danger);
-              }
+              _applyStockRoToCart(item, qtyNeeded);
+              await _finalizePendingRoFromPos(
+                roRow: roRow,
+                isRoEmpty: isRoEmpty,
+                qtyNeeded: qtyNeeded,
+                popDialog: true,
+              );
             },
             child: Text(
               isRoEmpty ? 'Simpan RO' : 'Simpan Request',
@@ -2765,13 +3023,13 @@ class _SalesPageState extends State<SalesPage> {
                     ? Image.network(
                         fotoUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        errorBuilder: (_, __, ___) => Icon(
                           Icons.image_not_supported,
                           color: OptikAdminTokens.slate,
                           size: 28,
                         ),
                       )
-                    : const Icon(Icons.image, color: OptikAdminTokens.lineStrong, size: 28),
+                    : Icon(Icons.image, color: OptikAdminTokens.lineStrong, size: 28),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -2780,7 +3038,7 @@ class _SalesPageState extends State<SalesPage> {
                   children: [
                     Text(
                       nama,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -2790,7 +3048,7 @@ class _SalesPageState extends State<SalesPage> {
                     const SizedBox(height: 6),
                     Text(
                       'SKU: $sku',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         fontSize: 12.5,
                         height: 1.3,
@@ -2807,7 +3065,7 @@ class _SalesPageState extends State<SalesPage> {
                     ),
                     Text(
                       'Total semua lokasi (Master): Real $totalReal',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         fontSize: 12,
                         height: 1.35,
@@ -2816,7 +3074,7 @@ class _SalesPageState extends State<SalesPage> {
                     const SizedBox(height: 6),
                     Text(
                       'Rp $harga',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -2826,7 +3084,7 @@ class _SalesPageState extends State<SalesPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 20),
                 child: Icon(Icons.add_shopping_cart_rounded,
                     color: OptikAdminTokens.navy, size: 26),
@@ -2887,11 +3145,11 @@ class _SalesPageState extends State<SalesPage> {
               actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-                side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                side: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
               title: Text(
                 "pos_pilih_produk_frame".tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -2903,14 +3161,14 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   children: [
                     TextField(
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                       decoration: InputDecoration(
                         hintText: "pos_filter_nama_sku".tr(),
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             color: OptikAdminTokens.navy, size: 22),
                         filled: true,
                         fillColor: OptikAdminTokens.bgMid,
@@ -2919,19 +3177,19 @@ class _SalesPageState extends State<SalesPage> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.navy, width: 1.4),
                         ),
                       ),
@@ -2943,14 +3201,14 @@ class _SalesPageState extends State<SalesPage> {
                     const SizedBox(height: 14),
                     Expanded(
                       child: isLoading
-                          ? const Center(
+                          ? Center(
                               child: CircularProgressIndicator(
                                   color: OptikAdminTokens.ice))
                           : searchResults.isEmpty
                               ? Center(
                                   child: Text(
                                     "pos_produk_tidak_ditemukan".tr(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.slate),
                                   ),
                                 )
@@ -3042,11 +3300,11 @@ class _SalesPageState extends State<SalesPage> {
               backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-                side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                side: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
               title: Text(
                 "pos_pilih_merk_lensa".tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -3059,24 +3317,24 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   children: [
                     TextField(
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.navy, fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: "Search brand...",
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        hintText: 'admin_auto_536589a119'.tr(),
+                        prefixIcon: Icon(Icons.search_rounded,
                             color: OptikAdminTokens.navy, size: 18),
                         filled: true,
                         fillColor: OptikAdminTokens.bgMid,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                       ),
@@ -3086,7 +3344,7 @@ class _SalesPageState extends State<SalesPage> {
                     const SizedBox(height: 12),
                     Expanded(
                       child: filteredMerk.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 "Brand not registered",
                                 style: TextStyle(color: OptikAdminTokens.slate),
@@ -3098,13 +3356,13 @@ class _SalesPageState extends State<SalesPage> {
                                 return ListTile(
                                   title: Text(
                                     filteredMerk[index],
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  trailing: const Icon(
+                                  trailing: Icon(
                                       Icons.arrow_forward_ios_rounded,
                                       color: OptikAdminTokens.slate,
                                       size: 12),
@@ -3181,11 +3439,11 @@ class _SalesPageState extends State<SalesPage> {
               actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-                side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                side: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
               title: Text(
                 "pos_pilih_aksesoris".tr(),
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -3197,14 +3455,14 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   children: [
                     TextField(
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                       decoration: InputDecoration(
                         hintText: "pos_filter_nama_sku".tr(),
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             color: OptikAdminTokens.navy, size: 22),
                         filled: true,
                         fillColor: OptikAdminTokens.bgMid,
@@ -3213,19 +3471,19 @@ class _SalesPageState extends State<SalesPage> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.lineStrong),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                               OptikAdminTokens.radiusSm),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                               color: OptikAdminTokens.navy, width: 1.4),
                         ),
                       ),
@@ -3237,14 +3495,14 @@ class _SalesPageState extends State<SalesPage> {
                     const SizedBox(height: 14),
                     Expanded(
                       child: isLoading
-                          ? const Center(
+                          ? Center(
                               child: CircularProgressIndicator(
                                   color: OptikAdminTokens.ice))
                           : searchResults.isEmpty
                               ? Center(
                                   child: Text(
                                     "pos_produk_tidak_ditemukan".tr(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.slate),
                                   ),
                                 )
@@ -3368,6 +3626,7 @@ class _SalesPageState extends State<SalesPage> {
       }
     });
     unawaited(_syncPosHoldAfterCartChange());
+    _schedulePosDraftAutosave();
   }
 
   int get _subtotalBelanja {
@@ -3388,11 +3647,11 @@ class _SalesPageState extends State<SalesPage> {
 // 🎯 FIXED FINAL CONFIG: DATA PELANGGAN KIRI, METADATA + KASIR KANAN, BADGE ATAS QR
   Future<void> _bukaLayarPreviewInvoice() async {
     if (cartItems.isEmpty) {
-      _showSnack("pos_err_keranjang_kosong".tr(), OptikAdminTokens.danger);
+      _showSnack('admin_auto_e7fb026182'.tr(), OptikAdminTokens.danger);
       return;
     }
     if (nameCtrl.text.isEmpty) {
-      _showSnack("pos_err_nama_pelanggan".tr(), OptikAdminTokens.danger);
+      _showSnack('admin_auto_25dbc45893'.tr(), OptikAdminTokens.danger);
       return;
     }
     if (paymentStatus == 'DP') {
@@ -3400,24 +3659,20 @@ class _SalesPageState extends State<SalesPage> {
               paidCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
           0;
       if (um <= 0) {
-        _showSnack(
-          'Uang muka DP harus lebih dari Rp 0',
+        _showSnack('admin_gl_row_014cbbc414'.tr(),
           OptikAdminTokens.danger,
         );
         return;
       }
       if (um >= _totalAkhir) {
-        _showSnack(
-          'Uang muka DP harus kurang dari total. '
-          'Pilih Lunas jika bayar penuh.',
+        _showSnack('admin_auto_1a41dff311'.tr(),
           OptikAdminTokens.warning,
         );
         return;
       }
     }
     if (_appliedVoucherPointsCost > 0 && phoneCtrl.text.trim().isEmpty) {
-      _showSnack(
-        'Voucher butuh $_appliedVoucherPointsCost poin — isi No. WA member',
+      _showSnack('admin_auto_5cdd5a58cb'.tr(namedArgs: {'_appliedVoucherPointsCost': '$_appliedVoucherPointsCost'}),
         OptikAdminTokens.warning,
       );
       return;
@@ -3580,7 +3835,7 @@ class _SalesPageState extends State<SalesPage> {
               }
               docLines.add(InvoiceDocLine(
                 label: formattedItemLine,
-                amount: formatRupiah(item['subtotal'] ?? 0),
+                amount: formatRupiah(context,item['subtotal'] ?? 0),
                 group: InvoiceLayout.groupOfProduct(
                   tipe: item['tipe_produk']?.toString() ??
                       item['kategori']?.toString(),
@@ -3616,9 +3871,9 @@ class _SalesPageState extends State<SalesPage> {
               backgroundColor: OptikAdminTokens.card,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-                side: const BorderSide(color: OptikAdminTokens.lineStrong),
+                side: BorderSide(color: OptikAdminTokens.lineStrong),
               ),
-              title: const Text(
+              title: Text(
                 "PRATINJAU NOTA PENJUALAN",
                 style: TextStyle(
                   color: OptikAdminTokens.navy,
@@ -3661,12 +3916,12 @@ class _SalesPageState extends State<SalesPage> {
                         }),
                       ),
                       lines: docLines,
-                      totalFormatted: formatRupiah(_totalAkhir),
+                      totalFormatted: formatRupiah(context,_totalAkhir),
                       paidLabel: sisaTagihan > 0
                           ? 'Uang muka (DP)'
                           : 'Dibayar',
-                      paidFormatted: formatRupiah(uangMukaDP),
-                      remainingFormatted: formatRupiah(sisaTagihan),
+                      paidFormatted: formatRupiah(context,uangMukaDP),
+                      remainingFormatted: formatRupiah(context,sisaTagihan),
                       hasRemainingDebt: sisaTagihan > 0,
                       extras: lensExtra,
                       itemsTitle: 'Rincian item pesanan',
@@ -3677,7 +3932,7 @@ class _SalesPageState extends State<SalesPage> {
               actions: [
                 TextButton(
                   onPressed: confirming ? null : () => Navigator.pop(ctx),
-                  child: const Text("Edit Data Kembali",
+                  child: Text('admin_pos_edit_back'.tr(),
                       style: TextStyle(color: OptikAdminTokens.slate)),
                 ),
                 FilledButton.icon(
@@ -3699,7 +3954,7 @@ class _SalesPageState extends State<SalesPage> {
                           await _prosesCheckout();
                         },
                   icon: confirming
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
@@ -3768,7 +4023,7 @@ class _SalesPageState extends State<SalesPage> {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: OptikAdminTokens.bgMid),
+                decoration: BoxDecoration(color: OptikAdminTokens.bgMid),
                 children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                     .map((t) => cell(t, header: true))
                     .toList(),
@@ -3811,25 +4066,23 @@ class _SalesPageState extends State<SalesPage> {
 
   Future<void> _prosesCheckout() async {
     if (cartItems.isEmpty) {
-      _showSnack("pos_err_keranjang_kosong".tr(), OptikAdminTokens.danger);
+      _showSnack('admin_auto_e7fb026182'.tr(), OptikAdminTokens.danger);
       return;
     }
     if (nameCtrl.text.isEmpty) {
-      _showSnack("pos_err_nama_pelanggan".tr(), OptikAdminTokens.danger);
+      _showSnack('admin_auto_25dbc45893'.tr(), OptikAdminTokens.danger);
       return;
     }
     final tenant = AttendanceAdminScope.tenantIdOf(widget.profile);
     if (tenant == null || tenant.isEmpty) {
-      _showSnack(
-        'Kode usaha belum terverifikasi. Tidak boleh jual merek lain.',
+      _showSnack('admin_gl_row_f10450e3a5'.tr(),
         OptikAdminTokens.danger,
       );
       return;
     }
     final tokoForGate = (widget.profile['toko_id'] ?? '').toString();
     if (!AttendanceAdminScope.canPosCheckoutToko(widget.profile, tokoForGate)) {
-      _showSnack(
-        'Hanya kasir toko ini yang boleh checkout.',
+      _showSnack('admin_gl_row_047518963d'.tr(),
         OptikAdminTokens.danger,
       );
       return;
@@ -3839,8 +4092,7 @@ class _SalesPageState extends State<SalesPage> {
     final cashierId = activeCashier?['id']?.toString();
     final cashierNik = activeCashier?['nik']?.toString();
     if (cashierId == null || cashierId.isEmpty) {
-      _showSnack(
-        'Unlock kasir dulu — checkout tanpa petugas ditolak.',
+      _showSnack('admin_gl_row_e7e447d291'.tr(),
         OptikAdminTokens.danger,
       );
       return;
@@ -3886,8 +4138,7 @@ class _SalesPageState extends State<SalesPage> {
         if (bayar <= 0) {
           if (mounted) {
             setState(() => isProcessing = false);
-            _showSnack(
-              'Uang muka DP harus lebih dari Rp 0',
+            _showSnack('admin_gl_row_014cbbc414'.tr(),
               OptikAdminTokens.danger,
             );
           }
@@ -3896,9 +4147,7 @@ class _SalesPageState extends State<SalesPage> {
         if (bayar >= total) {
           if (mounted) {
             setState(() => isProcessing = false);
-            _showSnack(
-              'Uang muka DP harus kurang dari total. '
-              'Pilih Lunas jika bayar penuh.',
+            _showSnack('admin_auto_1a41dff311'.tr(),
               OptikAdminTokens.warning,
             );
           }
@@ -3910,8 +4159,7 @@ class _SalesPageState extends State<SalesPage> {
           phoneCtrl.text.trim().isEmpty) {
         if (mounted) {
           setState(() => isProcessing = false);
-          _showSnack(
-            'Voucher butuh $_appliedVoucherPointsCost poin — isi No. WA member',
+          _showSnack('admin_auto_5cdd5a58cb'.tr(namedArgs: {'_appliedVoucherPointsCost': '$_appliedVoucherPointsCost'}),
             OptikAdminTokens.warning,
           );
         }
@@ -3957,8 +4205,7 @@ class _SalesPageState extends State<SalesPage> {
         if (charge <= 0) {
           if (mounted) {
             setState(() => isProcessing = false);
-            _showSnack(
-              'Nominal Midtrans tidak valid',
+            _showSnack('admin_gl_row_403a2229fd'.tr(),
               OptikAdminTokens.warning,
             );
           }
@@ -3977,7 +4224,7 @@ class _SalesPageState extends State<SalesPage> {
         if (!paid.ok || !paid.settled) {
           setState(() => isProcessing = false);
           _showSnack(
-            paid.error ?? 'Pembayaran Midtrans dibatalkan',
+            paid.error ?? 'admin_auto_midtrans_cancelled'.tr(),
             OptikAdminTokens.warning,
           );
           return;
@@ -4117,10 +4364,8 @@ class _SalesPageState extends State<SalesPage> {
             setState(() => isProcessing = false);
             _showSnack(
               rolledBack
-                  ? 'Checkout dibatalkan — voucher gagal di-redeem: '
-                      '${redeem['error'] ?? 'unknown'}'
-                  : 'KRITIS: voucher gagal redeem & nota gagal dibatalkan. '
-                      'Cek manual sale $saleId / ${redeem['error']}',
+                  ? '${'admin_auto_checkout_voucher_fail'.tr()}${redeem['error'] ?? 'unknown'}'
+                  : '${'admin_auto_checkout_critical_fail'.tr()}Cek manual sale $saleId / ${redeem['error']}',
               OptikAdminTokens.danger,
             );
           }
@@ -4263,9 +4508,7 @@ class _SalesPageState extends State<SalesPage> {
         } catch (e) {
           debugPrint("Buku besar gagal mencatat pemasukan: $e");
           if (mounted) {
-            _showSnack(
-              'Nota OK, tapi Buku Besar gagal dicatat: $e. '
-              'Cek ulang di Keuangan / COA.',
+            _showSnack('admin_auto_a1a56610a8'.tr(namedArgs: {'error': '$e'}),
               OptikAdminTokens.danger,
             );
           }
@@ -4378,7 +4621,7 @@ class _SalesPageState extends State<SalesPage> {
           debugPrint('Rollback sale setelah gagal checkout: $delErr');
         }
       }
-      _showSnack("${"pos_err_simpan_transaksi".tr()}$e", OptikAdminTokens.danger);
+      _showSnack('${'admin_auto_5f48e16dd0'.tr()}$e', OptikAdminTokens.danger);
       // Best-effort: hold ulang keranjang siap bayar.
       if (cartItems.isNotEmpty) {
         unawaited(_ensurePosStockHold());
@@ -4435,6 +4678,7 @@ class _SalesPageState extends State<SalesPage> {
         forPdf: true,
       );
 
+      final moneyCtx = context;
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a5,
@@ -4455,7 +4699,7 @@ class _SalesPageState extends State<SalesPage> {
               }
               pdfLines.add(InvoiceDocLine(
                 label: '$rawName  ×${item['qty'] ?? 1}',
-                amount: formatRupiah((item['subtotal'] ?? 0) as int),
+                amount: formatRupiah(moneyCtx, (item['subtotal'] ?? 0) as int),
                 group: InvoiceLayout.groupOfProduct(
                   tipe: item['tipe_produk']?.toString() ??
                       item['kategori']?.toString(),
@@ -4586,10 +4830,10 @@ class _SalesPageState extends State<SalesPage> {
                 ),
               ),
               lines: pdfLines,
-              totalFormatted: formatRupiah(totalHarga),
+              totalFormatted: formatRupiah(moneyCtx, totalHarga),
               paidLabel: sisaTagihan > 0 ? 'Uang muka (DP)' : 'Dibayar',
-              paidFormatted: formatRupiah(uangMukaDP),
-              remainingFormatted: formatRupiah(sisaTagihan),
+              paidFormatted: formatRupiah(moneyCtx, uangMukaDP),
+              remainingFormatted: formatRupiah(moneyCtx, sisaTagihan),
               hasRemainingDebt: sisaTagihan > 0,
               extras: lensPdf,
               qrChild: qrPdf,
@@ -4618,7 +4862,7 @@ class _SalesPageState extends State<SalesPage> {
           SnackBar(
             content: Text(
               delivered.summary,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.snow,
                 fontWeight: FontWeight.w700,
               ),
@@ -4639,12 +4883,18 @@ class _SalesPageState extends State<SalesPage> {
     unawaited(_releasePosHold(clearState: true));
     setState(() {
       cartItems.clear();
+      pendingLensRequests.clear();
+      _pendingRoLocal.clear();
       nameCtrl.clear();
       phoneCtrl.clear();
       addressCtrl.clear();
       emailCtrl.clear();
       _clearAppliedVoucher();
       paidCtrl.clear();
+      lensBrandCtrl.clear();
+      lensJenis = 'Standar';
+      lensBahan = 'Supersin';
+      lensJenisLama = 'Standar';
       _resetFormResepLensa();
       isInputKacamataLamaActive = false;
       _generateInvoice();
@@ -4723,7 +4973,7 @@ class _SalesPageState extends State<SalesPage> {
           Container(
             width: double.infinity,
             height: double.infinity,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -4754,7 +5004,7 @@ class _SalesPageState extends State<SalesPage> {
                           color: OptikAdminTokens.warning, size: 80),
                     ),
                     const SizedBox(height: 32),
-                    const Text(
+                    Text(
                       "TOKO SAAT INI TUTUP",
                       style: TextStyle(
                           color: OptikAdminTokens.navy,
@@ -4786,7 +5036,7 @@ class _SalesPageState extends State<SalesPage> {
                           ),
                         ),
                         icon: isLoading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
@@ -4852,7 +5102,7 @@ class _SalesPageState extends State<SalesPage> {
           title: "pos_otorisasi_kasir".tr(),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            tooltip: "Kembali ke Dashboard",
+            tooltip: 'admin_btn_back_dashboard'.tr(),
             onPressed: () async {
               await kameraLoginCtrl.stop();
               await _requestLeavePos();
@@ -4871,7 +5121,7 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const PremiumIconBadge(
+                    PremiumIconBadge(
                       icon: Icons.qr_code_scanner_rounded,
                       color: OptikAdminTokens.navy,
                       size: 56,
@@ -4880,7 +5130,7 @@ class _SalesPageState extends State<SalesPage> {
                     Text(
                       "pos_otorisasi_kasir".tr(),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -4924,13 +5174,13 @@ class _SalesPageState extends State<SalesPage> {
                       controller: _unlockNikManualCtrl,
                       textInputAction: TextInputAction.done,
                       decoration: InputDecoration(
-                        labelText: 'NIK karyawan (ketik / HID)',
-                        hintText: 'Scan wedge atau ketik lalu Enter',
+                        labelText: 'admin_auto_702716fabf'.tr(),
+                        hintText: 'admin_auto_e45763c9ef'.tr(),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         suffixIcon: IconButton(
-                          tooltip: 'Unlock',
+                          tooltip: 'admin_btn_unlock'.tr(),
                           icon: const Icon(Icons.login_rounded),
                           onPressed: () {
                             final nik = _unlockNikManualCtrl.text.trim();
@@ -4988,9 +5238,9 @@ class _SalesPageState extends State<SalesPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
-        title: const Text(
+        title: Text(
           'Stok habis',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -5002,8 +5252,8 @@ class _SalesPageState extends State<SalesPage> {
           'stok tersedia 0.\n\n'
           'Tanyakan ke pelanggan:\n'
           '• Lanjutkan Request Order (RO) ke Pusat, atau\n'
-          '• Pilih produk lain?',
-          style: const TextStyle(
+          'admin_auto_pick_other_product'.tr(),
+          style: TextStyle(
             color: OptikAdminTokens.slate,
             height: 1.4,
             fontSize: 13.5,
@@ -5012,7 +5262,7 @@ class _SalesPageState extends State<SalesPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
+            child: Text(
               'Tidak — produk lain',
               style: TextStyle(color: OptikAdminTokens.slate),
             ),
@@ -5023,7 +5273,7 @@ class _SalesPageState extends State<SalesPage> {
               foregroundColor: OptikAdminTokens.snow,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lanjutkan ke RO'),
+            child: Text('admin_pos_continue_ro'.tr()),
           ),
         ],
       ),
@@ -5043,7 +5293,7 @@ class _SalesPageState extends State<SalesPage> {
   // ==========================================================================
   void _openAbsensiFromPos() {
     if (TrainingMode.instance.isActive) {
-      _showSnack('training_pos_absensi_blocked'.tr(), OptikAdminTokens.training);
+      _showSnack('admin_auto_6865ffa66f'.tr(), OptikAdminTokens.training);
       return;
     }
     // Push (bukan replace) agar keranjang/transaksi POS tetap utuh saat kembali.
@@ -5064,7 +5314,7 @@ class _SalesPageState extends State<SalesPage> {
             ? namaKasir.split(' ').first.toUpperCase()
             : null,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
               size: 20, color: OptikAdminTokens.navy),
           tooltip: 'leave_title_pos'.tr(),
           onPressed: _requestLeavePos,
@@ -5072,18 +5322,18 @@ class _SalesPageState extends State<SalesPage> {
         actions: [
           if (R.isNarrow(context)) ...[
             IconButton(
-              icon: const Icon(Icons.face_retouching_natural_rounded,
+              icon: Icon(Icons.face_retouching_natural_rounded,
                   color: OptikAdminTokens.navy),
               tooltip: "pos_ttip_absen".tr(),
               onPressed: _openAbsensiFromPos,
             ),
             IconButton(
-              icon: const Icon(Icons.more_vert, color: OptikAdminTokens.slate),
-              tooltip: 'Menu POS',
+              icon: Icon(Icons.more_vert, color: OptikAdminTokens.slate),
+              tooltip: 'admin_pos_menu'.tr(),
               onPressed: () async {
                 final sel = await showAdminPicker<String>(
                   context: context,
-                  title: 'Menu POS',
+                  title: 'admin_pos_menu'.tr(),
                   searchable: false,
                   headerIcon: Icons.more_horiz_rounded,
                   options: [
@@ -5092,14 +5342,14 @@ class _SalesPageState extends State<SalesPage> {
                       label: "pos_trip_close".tr(),
                       icon: Icons.power_settings_new_rounded,
                     ),
-                    const AdminPickerOption(
+                    AdminPickerOption(
                       value: 'lock',
-                      label: 'Lock & Switch Cashier',
+                      label: 'admin_auto_aefd180f43'.tr(),
                       icon: Icons.lock_outline_rounded,
                     ),
-                    const AdminPickerOption(
+                    AdminPickerOption(
                       value: 'clear',
-                      label: 'Kosongkan Keranjang',
+                      label: 'admin_auto_fc44dcc8c4'.tr(),
                       icon: Icons.delete_sweep,
                     ),
                   ],
@@ -5112,13 +5362,13 @@ class _SalesPageState extends State<SalesPage> {
                   case 'lock':
                     _resetForm();
                     await _lockPosSession();
-                    _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
+                    _showSnack('admin_auto_f958c9697a'.tr(),
                         OptikAdminTokens.warning);
                     break;
                   case 'clear':
                     _resetForm();
                     _showSnack(
-                        "Keranjang transaksi berhasil dikosongkan", OptikAdminTokens.danger);
+                        'admin_auto_cart_cleared'.tr(), OptikAdminTokens.danger);
                     break;
                 }
               },
@@ -5133,11 +5383,11 @@ class _SalesPageState extends State<SalesPage> {
                   message: "pos_ttip_absen".tr(),
                   child: TextButton.icon(
                     onPressed: _openAbsensiFromPos,
-                    icon: const Icon(Icons.face_retouching_natural_rounded,
+                    icon: Icon(Icons.face_retouching_natural_rounded,
                         color: OptikAdminTokens.navy, size: 20),
                     label: Text(
                       "pos_btn_absen".tr(),
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: OptikAdminTokens.navy),
@@ -5161,11 +5411,11 @@ class _SalesPageState extends State<SalesPage> {
                 IconButton(
                   icon: const Icon(Icons.lock_outline_rounded,
                       color: OptikAdminTokens.warning),
-                  tooltip: "Lock & Switch Cashier",
+                  tooltip: 'admin_btn_lock_switch_cashier'.tr(),
                   onPressed: () async {
                     _resetForm();
                     await _lockPosSession();
-                    _showSnack("Sesi dikunci. Silakan scan ID Karyawan baru.",
+                    _showSnack('admin_auto_f958c9697a'.tr(),
                         OptikAdminTokens.warning);
                   },
                 ),
@@ -5176,7 +5426,7 @@ class _SalesPageState extends State<SalesPage> {
                       ? NetworkImage(activeCashier!['face_url'])
                       : null,
                   child: activeCashier?['face_url'] == null
-                      ? const Icon(Icons.person,
+                      ? Icon(Icons.person,
                           size: 16, color: OptikAdminTokens.navy)
                       : null,
                 ),
@@ -5197,7 +5447,7 @@ class _SalesPageState extends State<SalesPage> {
                   onPressed: () {
                     _resetForm();
                     _showSnack(
-                        "Keranjang transaksi berhasil dikosongkan", OptikAdminTokens.danger);
+                        'admin_auto_cart_cleared'.tr(), OptikAdminTokens.danger);
                   },
                 )
               ],
@@ -5265,7 +5515,7 @@ class _SalesPageState extends State<SalesPage> {
                                 : "pos_memuat".tr(),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -5284,7 +5534,7 @@ class _SalesPageState extends State<SalesPage> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: OptikAdminTokens.lineStrong),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
                           Icon(Icons.calendar_month_rounded,
                               color: OptikAdminTokens.navy, size: 16),
@@ -5341,7 +5591,7 @@ class _SalesPageState extends State<SalesPage> {
                           TextField(
                             controller: nameCtrl,
                             textCapitalization: TextCapitalization.words,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.w600,
                             ),
@@ -5362,7 +5612,7 @@ class _SalesPageState extends State<SalesPage> {
                                   inputFormatters: [
                                     FilteringTextInputFormatter.digitsOnly
                                   ],
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -5382,7 +5632,7 @@ class _SalesPageState extends State<SalesPage> {
                                   maxLines: 2,
                                   textCapitalization:
                                       TextCapitalization.words,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -5400,7 +5650,7 @@ class _SalesPageState extends State<SalesPage> {
                           TextField(
                             controller: emailCtrl,
                             keyboardType: TextInputType.emailAddress,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.w600,
                             ),
@@ -5426,16 +5676,16 @@ class _SalesPageState extends State<SalesPage> {
                           // 1. KOLOM SCANNER GLOBAL (HID → field jika fokusokus; else HardwareBarcodeListener)
                           TextField(
                             controller: skuScanCtrl,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.w600,
                             ),
                             decoration: InputDecoration(
                               labelText: "pos_scan_global".tr(),
-                              prefixIcon: const Icon(Icons.search_rounded,
+                              prefixIcon: Icon(Icons.search_rounded,
                                   size: 20, color: OptikAdminTokens.navy),
                               suffixIcon: IconButton(
-                                icon: const Icon(Icons.qr_code_scanner_rounded,
+                                icon: Icon(Icons.qr_code_scanner_rounded,
                                     color: OptikAdminTokens.navy),
                                 onPressed: () async {
                                   final code = await _scanBarcode();
@@ -5501,9 +5751,9 @@ class _SalesPageState extends State<SalesPage> {
                               bool stokHabis = stock <= 0;
                               return ListTile(
                                 contentPadding: EdgeInsets.zero,
-                                title: Text(selectedFrame!['nama'] ?? 'Frame',
+                                title: Text(selectedFrame!['nama'] ?? 'admin_lbl_frame_fallback'.tr(),
                                     style:
-                                        const TextStyle(color: OptikAdminTokens.navy)),
+                                        TextStyle(color: OptikAdminTokens.navy)),
                                 subtitle: Text(
                                   stokHabis
                                       ? "pos_stok_habis".tr()
@@ -5577,7 +5827,7 @@ class _SalesPageState extends State<SalesPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text("pos_cari_frame".tr(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w800)),
@@ -5586,15 +5836,15 @@ class _SalesPageState extends State<SalesPage> {
                                     readOnly: true,
                                     onTap: () =>
                                         _munculkanDialogPilihFrame(context),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13),
                                     decoration: InputDecoration(
                                       labelText: "pos_hint_cari_frame".tr(),
-                                      labelStyle: const TextStyle(
+                                      labelStyle: TextStyle(
                                           color: OptikAdminTokens.slate, fontSize: 11),
-                                      suffixIcon: const Icon(
+                                      suffixIcon: Icon(
                                           Icons.touch_app_rounded,
                                           color: OptikAdminTokens.navy,
                                           size: 20),
@@ -5602,12 +5852,12 @@ class _SalesPageState extends State<SalesPage> {
                                       fillColor: OptikAdminTokens.card,
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong),
                                       ),
                                     ),
@@ -5622,9 +5872,9 @@ class _SalesPageState extends State<SalesPage> {
                         // --- SUB: LENSA MANUAL (BACK TO BASIC) ---
                         // ==========================================================
                         if (isLensaActive) ...[
-                          const Divider(color: OptikAdminTokens.line, height: 30),
+                          Divider(color: OptikAdminTokens.line, height: 30),
                           Text("pos_id_lensa".tr(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold)),
@@ -5641,13 +5891,13 @@ class _SalesPageState extends State<SalesPage> {
                                       true, // Kunci agar memilih dari master
                                   onTap: () =>
                                       _munculkanDialogPilihMerk(context),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700),
                                   decoration: InputDecoration(
                                     labelText: "pos_merk_lensa".tr(),
-                                    labelStyle: const TextStyle(
+                                    labelStyle: TextStyle(
                                         fontSize: 11, color: OptikAdminTokens.slate),
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
@@ -5656,13 +5906,13 @@ class _SalesPageState extends State<SalesPage> {
                                     fillColor: OptikAdminTokens.bgMid,
                                     border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong)),
                                     enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong)),
-                                    suffixIcon: const Icon(Icons.search_rounded,
+                                    suffixIcon: Icon(Icons.search_rounded,
                                         color: OptikAdminTokens.navy, size: 16),
                                   ),
                                 ),
@@ -5712,7 +5962,7 @@ class _SalesPageState extends State<SalesPage> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text("pos_mata_kanan".tr(),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               color: OptikAdminTokens.navy,
                                               fontSize: 11,
                                               fontWeight: FontWeight.w800)),
@@ -5725,7 +5975,7 @@ class _SalesPageState extends State<SalesPage> {
                                             child: Align(
                                                 alignment: Alignment.center,
                                                 child: ResepInput(
-                                                    label: "SPH (R)",
+                                                    label: 'admin_auto_df645846b3'.tr(),
                                                     controller: sphRCtrl,
                                                     onChanged: (v) =>
                                                         setState(() {}))),
@@ -5736,7 +5986,7 @@ class _SalesPageState extends State<SalesPage> {
                                                   CrossAxisAlignment.center,
                                               children: [
                                                 ResepInput(
-                                                    label: "CYL (R)",
+                                                    label: 'admin_auto_bc9a587955'.tr(),
                                                     controller: cylRCtrl,
                                                     onChanged: (v) =>
                                                         setState(() {})),
@@ -5755,14 +6005,14 @@ class _SalesPageState extends State<SalesPage> {
                                                       controller: axisRCtrl,
                                                       keyboardType:
                                                           TextInputType.number,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           color: OptikAdminTokens.navy,
                                                           fontSize: 13),
                                                       decoration: InputDecoration(
-                                                          labelText: "pos_axis_kanan"
+                                                          labelText: 'pos_axis_kanan'.tr()
                                                               .tr(),
                                                           labelStyle:
-                                                              const TextStyle(
+                                                              TextStyle(
                                                                   fontSize: 10,
                                                                   color: OptikAdminTokens.slate),
                                                           isDense: true,
@@ -5796,7 +6046,7 @@ class _SalesPageState extends State<SalesPage> {
                                       if (lensJenis == 'Progresif' ||
                                           lensJenis == 'Kryptok') ...[
                                         const SizedBox(height: 12),
-                                        const Divider(
+                                        Divider(
                                             color: OptikAdminTokens.line, height: 1),
                                         const SizedBox(height: 12),
                                         Row(
@@ -5807,7 +6057,7 @@ class _SalesPageState extends State<SalesPage> {
                                               child: Align(
                                                   alignment: Alignment.center,
                                                   child: ResepInput(
-                                                      label: "ADD (R)",
+                                                      label: 'admin_auto_33c36a6baf'.tr(),
                                                       controller: addRCtrl,
                                                       onChanged: (v) =>
                                                           setState(() {}))),
@@ -5823,11 +6073,11 @@ class _SalesPageState extends State<SalesPage> {
                                                       controller: pdRCtrl,
                                                       keyboardType:
                                                           TextInputType.number,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           color: OptikAdminTokens.navy,
                                                           fontSize: 13),
                                                       decoration: InputDecoration(
-                                                          labelText: "pos_pd_kanan"
+                                                          labelText: 'pos_pd_kanan'.tr()
                                                               .tr(),
                                                           labelStyle:
                                                               const TextStyle(
@@ -5879,7 +6129,7 @@ class _SalesPageState extends State<SalesPage> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text("pos_mata_kiri".tr(),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               color: OptikAdminTokens.navy,
                                               fontSize: 11,
                                               fontWeight: FontWeight.w800)),
@@ -5892,7 +6142,7 @@ class _SalesPageState extends State<SalesPage> {
                                             child: Align(
                                                 alignment: Alignment.center,
                                                 child: ResepInput(
-                                                    label: "SPH (L)",
+                                                    label: 'admin_auto_40a137fb3a'.tr(),
                                                     controller: sphLCtrl,
                                                     onChanged: (v) =>
                                                         setState(() {}))),
@@ -5903,7 +6153,7 @@ class _SalesPageState extends State<SalesPage> {
                                                   CrossAxisAlignment.center,
                                               children: [
                                                 ResepInput(
-                                                    label: "CYL (L)",
+                                                    label: 'admin_auto_d35d8d7918'.tr(),
                                                     controller: cylLCtrl,
                                                     onChanged: (v) =>
                                                         setState(() {})),
@@ -5922,7 +6172,7 @@ class _SalesPageState extends State<SalesPage> {
                                                       controller: axisLCtrl,
                                                       keyboardType:
                                                           TextInputType.number,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           color: OptikAdminTokens.navy,
                                                           fontSize: 13),
                                                       decoration: InputDecoration(
@@ -5930,7 +6180,7 @@ class _SalesPageState extends State<SalesPage> {
                                                               "pos_axis_kiri"
                                                                   .tr(),
                                                           labelStyle:
-                                                              const TextStyle(
+                                                              TextStyle(
                                                                   fontSize: 10,
                                                                   color: OptikAdminTokens.slate),
                                                           isDense: true,
@@ -5965,7 +6215,7 @@ class _SalesPageState extends State<SalesPage> {
                                       if (lensJenis == 'Progresif' ||
                                           lensJenis == 'Kryptok') ...[
                                         const SizedBox(height: 12),
-                                        const Divider(
+                                        Divider(
                                             color: OptikAdminTokens.line, height: 1),
                                         const SizedBox(height: 12),
                                         Row(
@@ -5976,7 +6226,7 @@ class _SalesPageState extends State<SalesPage> {
                                               child: Align(
                                                   alignment: Alignment.center,
                                                   child: ResepInput(
-                                                      label: "ADD (L)",
+                                                      label: 'admin_auto_dc4c5f05fc'.tr(),
                                                       controller: addLCtrl,
                                                       onChanged: (v) =>
                                                           setState(() {}))),
@@ -5992,7 +6242,7 @@ class _SalesPageState extends State<SalesPage> {
                                                       controller: pdLCtrl,
                                                       keyboardType:
                                                           TextInputType.number,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                           color: OptikAdminTokens.navy,
                                                           fontSize: 13),
                                                       decoration: InputDecoration(
@@ -6037,12 +6287,12 @@ class _SalesPageState extends State<SalesPage> {
                           ),
 
                           // 4. RIWAYAT KACAMATA LAMA
-                          const Divider(color: OptikAdminTokens.line, height: 25),
+                          Divider(color: OptikAdminTokens.line, height: 25),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text("pos_tanya_kacamata_lama".tr(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: OptikAdminTokens.slate, fontSize: 11)),
                               Switch(
                                   value: isInputKacamataLamaActive,
@@ -6063,7 +6313,7 @@ class _SalesPageState extends State<SalesPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text("pos_resep_lama".tr(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold)),
@@ -6102,7 +6352,7 @@ class _SalesPageState extends State<SalesPage> {
                                             child: TextField(
                                                 controller: axisOldRCtrl,
                                                 decoration: InputDecoration(
-                                                    labelText: "pos_axis_r_lama"
+                                                    labelText: 'pos_axis_r_lama'.tr()
                                                         .tr()))),
                                       ]
                                     ],
@@ -6135,7 +6385,7 @@ class _SalesPageState extends State<SalesPage> {
                                             child: TextField(
                                                 controller: axisOldLCtrl,
                                                 decoration: InputDecoration(
-                                                    labelText: "pos_axis_l_lama"
+                                                    labelText: 'pos_axis_l_lama'.tr()
                                                         .tr()))),
                                       ]
                                     ],
@@ -6259,7 +6509,9 @@ class _SalesPageState extends State<SalesPage> {
                                         "Kiri (SPH ${sphLCtrl.text} CYL ${cylLCtrl.text} ADD ${addLCtrl.text})");
 
                                   _showSnack(
-                                      "🛑 Gagal! Ukuran ${missingItems.join(' & ')} tidak tersedia di katalog cabang. Silakan klik Lapor Pusat!",
+                                      'admin_auto_lens_not_in_catalog'.tr(namedArgs: {
+                                        'items': missingItems.join(' & '),
+                                      }),
                                       OptikAdminTokens.danger);
                                   return;
                                 }
@@ -6274,18 +6526,17 @@ class _SalesPageState extends State<SalesPage> {
                                   if (stockR >= 2) {
                                     _tambahKeKeranjangLensaLangsung(
                                         lensaKanan, lensaKiri);
-                                    _showSnack("pos_lensa_masuk_keranjang".tr(),
+                                    _showSnack('admin_auto_20b982ca8c'.tr(),
                                         OptikAdminTokens.success);
                                   } else {
-                                    _showSnack(
-                                        "🛑 Gagal! Stok lensa kembar kurang (Sisa: $stockR Pcs). Silakan klik Lapor Pusat!",
+                                    _showSnack('admin_auto_624cf50dae'.tr(namedArgs: {'stockR': '$stockR'}),
                                         OptikAdminTokens.danger);
                                   }
                                 } else {
                                   if (stockR >= 1 && stockL >= 1) {
                                     _tambahKeKeranjangLensaLangsung(
                                         lensaKanan, lensaKiri);
-                                    _showSnack("pos_lensa_masuk_keranjang".tr(),
+                                    _showSnack('admin_auto_20b982ca8c'.tr(),
                                         OptikAdminTokens.success);
                                   } else {
                                     List<String> lowStock = [];
@@ -6294,7 +6545,9 @@ class _SalesPageState extends State<SalesPage> {
                                     if (stockL < 1)
                                       lowStock.add("Kiri (Stok: $stockL)");
                                     _showSnack(
-                                        "🛑 Gagal! Stok habis pada mata: ${lowStock.join(' & ')}. Silakan klik Lapor Pusat!",
+                                        'admin_auto_lens_stock_report'.tr(namedArgs: {
+                                          'stock': lowStock.join(' & '),
+                                        }),
                                         OptikAdminTokens.danger);
                                   }
                                 }
@@ -6307,7 +6560,7 @@ class _SalesPageState extends State<SalesPage> {
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: OptikAdminTokens.navy,
-                                side: const BorderSide(
+                                side: BorderSide(
                                     color: OptikAdminTokens.navy, width: 1.2),
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
@@ -6327,8 +6580,7 @@ class _SalesPageState extends State<SalesPage> {
                                   return;
                                 }
                                 if (nameCtrl.text.trim().isEmpty) {
-                                  _showSnack(
-                                      "Nama pelanggan wajib diisi sebelum melaporkan pesanan khusus!",
+                                  _showSnack('admin_auto_a1a755eab3'.tr(),
                                       OptikAdminTokens.danger);
                                   return;
                                 }
@@ -6336,26 +6588,26 @@ class _SalesPageState extends State<SalesPage> {
                                 try {
                                   final tokoId =
                                       widget.profile['toko_id'] ?? 'PUSAT';
-
-                                  final inserted = await supabase
-                                      .from('pending_requests')
-                                      .insert({
+                                  final detailResep =
+                                      "R: SPH ${sphRCtrl.text}/CYL ${cylRCtrl.text}/AXIS ${axisRCtrl.text}/ADD ${addRCtrl.text} | "
+                                      "L: SPH ${sphLCtrl.text}/CYL ${cylLCtrl.text}/AXIS ${axisLCtrl.text}/ADD ${addLCtrl.text} | "
+                                      "PD: ${pdRCtrl.text.isEmpty ? '-' : pdRCtrl.text}/${pdLCtrl.text.isEmpty ? '-' : pdLCtrl.text} mm";
+                                  final roRow = <String, dynamic>{
+                                    'local_key':
+                                        '$noInvoice|CUSTOM_HQ|${DateTime.now().millisecondsSinceEpoch}',
                                     'toko_id': tokoId,
                                     'no_invoice': noInvoice,
                                     'nama_pelanggan': nameCtrl.text.trim(),
-                                    'sku': "CUSTOM_HQ",
+                                    'sku': 'CUSTOM_HQ',
                                     'nama_produk':
-                                        "Special Order: Lensa $inputMerk $lensJenis ($lensBahan)",
+                                        'Special Order: Lensa $inputMerk $lensJenis ($lensBahan)',
                                     'kategori': 'Lensa',
                                     'qty_request': 2,
                                     'tipe_request': 'PRE_ORDER',
                                     'status': 'PENDING',
                                     'tracking_status': 'DIPROSES_DI_CABANG',
-                                    'detail_resep':
-                                        "R: SPH ${sphRCtrl.text}/CYL ${cylRCtrl.text}/AXIS ${axisRCtrl.text}/ADD ${addRCtrl.text} | "
-                                            "L: SPH ${sphLCtrl.text}/CYL ${cylLCtrl.text}/AXIS ${axisLCtrl.text}/ADD ${addLCtrl.text} | "
-                                            "PD: ${pdRCtrl.text.isEmpty ? '-' : pdRCtrl.text}/${pdLCtrl.text.isEmpty ? '-' : pdLCtrl.text} mm"
-                                  }).select('id').single();
+                                    'detail_resep': detailResep,
+                                  };
 
                                   setState(() {
                                     pendingLensRequests.add({
@@ -6363,54 +6615,38 @@ class _SalesPageState extends State<SalesPage> {
                                       'jenis': lensJenis,
                                       'bahan': lensBahan,
                                       'resep_r':
-                                          "SPH: ${sphRCtrl.text}, CYL: ${cylRCtrl.text}, AXIS: ${axisRCtrl.text}",
+                                          'SPH: ${sphRCtrl.text}, CYL: ${cylRCtrl.text}, AXIS: ${axisRCtrl.text}',
                                       'resep_l':
-                                          "SPH: ${sphLCtrl.text}, CYL: ${cylLCtrl.text}, AXIS: ${axisLCtrl.text}",
+                                          'SPH: ${sphLCtrl.text}, CYL: ${cylLCtrl.text}, AXIS: ${axisLCtrl.text}',
                                       'add_pd':
-                                          "ADD R: ${addRCtrl.text}, ADD L: ${addLCtrl.text}, PD R: ${pdRCtrl.text}, PD L: ${pdLCtrl.text}",
-                                      'waktu': DateTime.now().toIso8601String()
+                                          'ADD R: ${addRCtrl.text}, ADD L: ${addLCtrl.text}, PD R: ${pdRCtrl.text}, PD L: ${pdLCtrl.text}',
+                                      'waktu':
+                                          DateTime.now().toIso8601String(),
                                     });
 
                                     cartItems.add({
                                       'nama_produk':
-                                          "Special Order: $inputMerk $lensJenis (R: ${sphRCtrl.text}/${cylRCtrl.text} L: ${sphLCtrl.text}/${cylLCtrl.text})",
-                                      'sku': "CUSTOM_HQ",
+                                          'Special Order: $inputMerk $lensJenis (R: ${sphRCtrl.text}/${cylRCtrl.text} L: ${sphLCtrl.text}/${cylLCtrl.text})',
+                                      'sku': 'CUSTOM_HQ',
                                       'harga': 0,
                                       'harga_jual': 0,
                                       'qty': 1,
                                       'subtotal': 0,
                                       'kategori': 'Lensa',
                                       'is_lensa_custom': true,
-                                      'detail': "pos_menunggu_pusat".tr()
+                                      'detail': 'pos_menunggu_pusat'.tr(),
                                     });
                                   });
+                                  _schedulePosDraftAutosave();
 
-                                  if (TrainingMode.instance.isActive &&
-                                      mounted) {
-                                    final outcome =
-                                        await TrainingApprovalSimulator
-                                            .simulatePendingRequestIfTraining(
-                                      context,
-                                      id: inserted['id'],
-                                      body:
-                                          'training_approval_sim_body_request_order'
-                                              .tr(),
-                                      trackingFor:
-                                          RequestOrderService.trackingFor,
-                                    );
-                                    _showSnack(
-                                      'training_ro_outcome_${outcome?.name ?? 'pending'}'
-                                          .tr(),
-                                      OptikAdminTokens.training,
-                                    );
-                                  } else {
-                                    _showSnack(
-                                        "✓ Real-time: Laporan ukuran khusus berhasil dikirim ke database pusat!",
-                                        OptikAdminTokens.success);
-                                  }
+                                  await _finalizePendingRoFromPos(
+                                    roRow: roRow,
+                                    isRoEmpty: true,
+                                    qtyNeeded: 2,
+                                    popDialog: false,
+                                  );
                                 } catch (e) {
-                                  _showSnack(
-                                      "🛑 Gagal mengirim laporan ke pusat: $e",
+                                  _showSnack('admin_auto_66895144b5'.tr(namedArgs: {'error': '$e'}),
                                       OptikAdminTokens.danger);
                                 }
                               },
@@ -6428,7 +6664,7 @@ class _SalesPageState extends State<SalesPage> {
                               contentPadding: EdgeInsets.zero,
                               title: Text(
                                   selectedAksesoris!['nama'] ?? 'Aksesoris',
-                                  style: const TextStyle(color: OptikAdminTokens.navy)),
+                                  style: TextStyle(color: OptikAdminTokens.navy)),
                               subtitle: Text(
                                   "Rp ${ProductIdentity.sellPriceOf(selectedAksesoris!)}",
                                   style: const TextStyle(
@@ -6471,7 +6707,7 @@ class _SalesPageState extends State<SalesPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text("pos_cari_aksesoris".tr(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w800)),
@@ -6480,15 +6716,15 @@ class _SalesPageState extends State<SalesPage> {
                                     readOnly: true, // DIKUNCI
                                     onTap: () => _munculkanDialogPilihLainnya(
                                         context), // MUNCULKAN POP-UP saat diklik
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontWeight: FontWeight.w700,
                                         fontSize: 13),
                                     decoration: InputDecoration(
                                       labelText: "pos_hint_cari_aksesoris".tr(),
-                                      labelStyle: const TextStyle(
+                                      labelStyle: TextStyle(
                                           color: OptikAdminTokens.slate, fontSize: 11),
-                                      suffixIcon: const Icon(
+                                      suffixIcon: Icon(
                                           Icons.touch_app_rounded,
                                           color: OptikAdminTokens.navy,
                                           size: 20),
@@ -6496,12 +6732,12 @@ class _SalesPageState extends State<SalesPage> {
                                       fillColor: OptikAdminTokens.card,
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong),
                                       ),
                                       enabledBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        borderSide: const BorderSide(
+                                        borderSide: BorderSide(
                                             color: OptikAdminTokens.lineStrong),
                                       ),
                                     ),
@@ -6544,14 +6780,25 @@ class _SalesPageState extends State<SalesPage> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(item['nama_produk'] ?? '-',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                     color: OptikAdminTokens.navy,
                                                     fontSize: 12,
                                                     fontWeight:
                                                         FontWeight.bold)),
                                             const SizedBox(height: 4),
-                                            Text("Rp ${item['harga']} / pcs",
-                                                style: const TextStyle(
+                                            Text(
+                                                'admin_pos_per_pcs'.tr(namedArgs: {
+                                                  'price': formatRupiah(
+                                                    context,
+                                                    int.tryParse(
+                                                          item['harga']
+                                                              ?.toString() ??
+                                                              '0',
+                                                        ) ??
+                                                        0,
+                                                  ),
+                                                }),
+                                                style: TextStyle(
                                                     color: OptikAdminTokens.slate,
                                                     fontSize: 11)),
                                             if (item['detail_r'] != null ||
@@ -6581,7 +6828,7 @@ class _SalesPageState extends State<SalesPage> {
                                               onPressed: () =>
                                                   _ubahQtyCartItem(i, -1)),
                                           Text("${item['qty']}",
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                   color: OptikAdminTokens.navy,
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 13)),
@@ -6599,11 +6846,20 @@ class _SalesPageState extends State<SalesPage> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.end,
                                         children: [
-                                          Text("Rp ${item['subtotal']}",
-                                              style: const TextStyle(
-                                                  color: OptikAdminTokens.success,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12)),
+                                          Text(
+                                            formatRupiah(
+                                              context,
+                                              int.tryParse(item['subtotal']
+                                                      ?.toString() ??
+                                                  '0') ??
+                                                  0,
+                                            ),
+                                            style: const TextStyle(
+                                              color: OptikAdminTokens.success,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
                                           IconButton(
                                               icon: const Icon(
                                                   Icons.delete_outline,
@@ -6635,12 +6891,12 @@ class _SalesPageState extends State<SalesPage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text("pos_subtotal".tr(),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.slate,
                                   fontWeight: FontWeight.w600,
                                 )),
-                            Text("Rp $_subtotalBelanja",
-                                style: const TextStyle(
+                            Text(formatRupiah(context, _subtotalBelanja),
+                                style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontWeight: FontWeight.w800,
                                   fontSize: 16,
@@ -6656,17 +6912,17 @@ class _SalesPageState extends State<SalesPage> {
                                 controller: voucherCtrl,
                                 textCapitalization:
                                     TextCapitalization.characters,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontWeight: FontWeight.w600,
                                 ),
                                 decoration: InputDecoration(
-                                  labelText: 'Kode voucher Member',
-                                  hintText: 'Contoh: PROMO50',
+                                  labelText: 'admin_auto_2e2ce6425c'.tr(),
+                                  hintText: 'admin_auto_17da876882'.tr(),
                                   suffixIcon: _appliedVoucherCode == null
                                       ? null
                                       : IconButton(
-                                          tooltip: 'Hapus voucher',
+                                          tooltip: 'admin_pos_remove_voucher'.tr(),
                                           onPressed: () => setState(() {
                                             _clearAppliedVoucher();
                                             if (paymentStatus == 'Lunas') {
@@ -6674,7 +6930,7 @@ class _SalesPageState extends State<SalesPage> {
                                                   _totalAkhir.toString();
                                             }
                                           }),
-                                          icon: const Icon(Icons.close,
+                                          icon: Icon(Icons.close,
                                               color: OptikAdminTokens.slate),
                                         ),
                                 ),
@@ -6692,7 +6948,7 @@ class _SalesPageState extends State<SalesPage> {
                                     ? null
                                     : _applyMemberVoucher,
                                 child: _lookingUpVoucher
-                                    ? const SizedBox(
+                                    ? SizedBox(
                                         width: 18,
                                         height: 18,
                                         child: CircularProgressIndicator(
@@ -6730,7 +6986,7 @@ class _SalesPageState extends State<SalesPage> {
                           // tetap pakai potongan (kebocoran kuota).
                           readOnly: _appliedVoucherCode != null,
                           keyboardType: TextInputType.number,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.navy,
                               fontWeight: FontWeight.bold),
                           onChanged: (v) => setState(() {
@@ -6750,7 +7006,7 @@ class _SalesPageState extends State<SalesPage> {
                               filled: true,
                               fillColor: OptikAdminTokens.bgMid),
                         ),
-                        const Divider(height: 30, color: OptikAdminTokens.line),
+                        Divider(height: 30, color: OptikAdminTokens.line),
                         Container(
                           padding: const EdgeInsets.all(15),
                           decoration: BoxDecoration(
@@ -6762,11 +7018,11 @@ class _SalesPageState extends State<SalesPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text("pos_total_nett".tr(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: OptikAdminTokens.slate,
                                       fontWeight: FontWeight.bold)),
-                              Text("Rp $_totalAkhir",
-                                  style: const TextStyle(
+                              Text(formatRupiah(context, _totalAkhir),
+                                  style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold)),
@@ -6842,7 +7098,7 @@ class _SalesPageState extends State<SalesPage> {
                           ? null
                           : () => _bukaLayarPreviewInvoice(),
                       child: isProcessing
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
@@ -6892,7 +7148,7 @@ class _SalesPageState extends State<SalesPage> {
               title.toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontWeight: FontWeight.w800,
                 fontSize: 12,

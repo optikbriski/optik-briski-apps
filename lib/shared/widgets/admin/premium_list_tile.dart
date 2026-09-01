@@ -8,7 +8,7 @@ class PremiumListTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.icon,
-    this.iconColor = OptikAdminTokens.ice,
+    this.iconColor,
     this.leading,
     this.trailing,
     this.onTap,
@@ -19,12 +19,25 @@ class PremiumListTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final IconData? icon;
-  final Color iconColor;
+  final Color? iconColor;
   final Widget? leading;
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool dense;
   final EdgeInsetsGeometry margin;
+
+  static Color? _navIconColor(Color? color) {
+    if (!OptikAdminTokens.isKombo) return color;
+    if (color == null) return OptikAdminTokens.navy;
+    if (color == OptikAdminTokens.warning ||
+        color == OptikAdminTokens.danger ||
+        color == OptikAdminTokens.success ||
+        color == OptikAdminTokens.training ||
+        color == OptikAdminTokens.trainingSoft) {
+      return color;
+    }
+    return OptikAdminTokens.navy;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +45,7 @@ class PremiumListTile extends StatelessWidget {
         (icon != null
             ? PremiumIconBadge(
                 icon: icon!,
-                color: iconColor,
+                color: _navIconColor(iconColor),
                 size: dense ? 40 : 44,
               )
             : null);
@@ -51,9 +64,16 @@ class PremiumListTile extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              color: OptikAdminTokens.card,
+              color: OptikAdminTokens.isDark ? OptikAdminTokens.card : null,
+              gradient:
+                  OptikAdminTokens.isDark ? null : OptikAdminTokens.cardSheen,
               border: Border.all(
-                color: OptikAdminTokens.ice.withOpacity(0.4),
+                color: OptikAdminTokens.chromeEdge.withOpacity(
+                  OptikAdminTokens.isDark
+                      ? 1
+                      : (OptikAdminTokens.isKombo ? 1 : 0.72),
+                ),
+                width: OptikAdminTokens.isDark ? 0.8 : 1,
               ),
               boxShadow: OptikAdminTokens.cardShadow,
             ),
@@ -69,7 +89,7 @@ class PremiumListTile extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                           fontSize: 13.5,
@@ -96,7 +116,7 @@ class PremiumListTile extends StatelessWidget {
                 trailing ??
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: OptikAdminTokens.slate.withOpacity(0.45),
+                      color: OptikAdminTokens.navy.withOpacity(0.55),
                       size: 20,
                     ),
               ],

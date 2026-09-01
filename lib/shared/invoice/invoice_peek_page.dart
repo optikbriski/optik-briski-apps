@@ -71,7 +71,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
         title: Text('invoice_hub_title'.tr()),
       ),
       body: _loading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.navy),
             )
           : _error != null
@@ -81,7 +81,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
                     child: Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: OptikAdminTokens.slate),
+                      style: TextStyle(color: OptikAdminTokens.slate),
                     ),
                   ),
                 )
@@ -105,7 +105,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
             children: [
               Text(
                 h['no_invoice']?.toString() ?? widget.noInvoice,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -114,7 +114,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
               const SizedBox(height: 8),
               Text(
                 h['nama_pelanggan']?.toString() ?? '-',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 16,
                 ),
@@ -122,7 +122,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
               const SizedBox(height: 4),
               Text(
                 '${h['status_pembayaran'] ?? '-'} · ${h['tracking_status'] ?? '-'}',
-                style: const TextStyle(color: OptikAdminTokens.slate),
+                style: TextStyle(color: OptikAdminTokens.slate),
               ),
               const SizedBox(height: 16),
               _row('Total', formatRupiah(total)),
@@ -132,7 +132,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Items',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -150,12 +150,12 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
                 Expanded(
                   child: Text(
                     m['nama_produk']?.toString() ?? '-',
-                    style: const TextStyle(color: OptikAdminTokens.slate),
+                    style: TextStyle(color: OptikAdminTokens.slate),
                   ),
                 ),
                 Text(
                   formatRupiah(sub),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.w600,
                   ),
@@ -168,7 +168,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
           const SizedBox(height: 20),
           Text(
             'invoice_hub_garansi'.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w700,
             ),
@@ -181,7 +181,7 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
               child: Text(
                 '${g['jenis_garansi'] ?? '-'} · ${g['status'] ?? '-'}'
                 '${g['tanggal_akhir'] != null ? ' · s/d ${g['tanggal_akhir']}' : ''}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 13,
                 ),
@@ -211,12 +211,12 @@ class _InvoicePeekPageState extends State<InvoicePeekPage> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: OptikAdminTokens.slate),
+              style: TextStyle(color: OptikAdminTokens.slate),
             ),
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w600,
             ),

@@ -1,0 +1,26 @@
+# Keep Vercel CLI upload under the 10mb body limit.
+.git
+.dart_tool
+build
+coverage
+android
+ios
+macos
+linux
+windows
+.idea
+.vscode
+.cursor
+.vercel
+.tmp_screenrec
+scripts/face_shape
+.venv
+venv
+.venv-slides
+supabase/.temp
+*.apk
+*.aab
+*.ipa
+*.zip
+*.symbols
+app.*.map.json

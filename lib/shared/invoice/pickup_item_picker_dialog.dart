@@ -29,7 +29,7 @@ Future<List<String>?> showPickupItemPickerDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
-        title: const Text(
+        title: Text(
           'Tidak ada item READY',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -37,7 +37,7 @@ Future<List<String>?> showPickupItemPickerDialog(
             fontSize: 15,
           ),
         ),
-        content: const Text(
+        content: Text(
           'Semua item masih RO pending atau sudah diambil. '
           'Tunggu stok RO / konfirmasi barang ready dulu.',
           style: TextStyle(color: OptikAdminTokens.slate, height: 1.35),
@@ -71,9 +71,9 @@ Future<List<String>?> showPickupItemPickerDialog(
             backgroundColor: OptikAdminTokens.card,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              side: const BorderSide(color: OptikAdminTokens.lineStrong),
+              side: BorderSide(color: OptikAdminTokens.lineStrong),
             ),
-            title: const Text(
+            title: Text(
               'Pilih item diambil sekarang',
               style: TextStyle(
                 color: OptikAdminTokens.navy,
@@ -88,7 +88,7 @@ Future<List<String>?> showPickupItemPickerDialog(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'Centang produk yang diserahkan + garansi diaktifkan. '
                       'Item READY lain bisa diambil belakangan (scan QR lagi). '
                       'RO pending tidak bisa dipilih.',
@@ -121,7 +121,7 @@ Future<List<String>?> showPickupItemPickerDialog(
                         },
                         title: Text(
                           name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
@@ -148,9 +148,9 @@ Future<List<String>?> showPickupItemPickerDialog(
                     }),
                     if (blocked.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      const Divider(color: OptikAdminTokens.line),
+                      Divider(color: OptikAdminTokens.line),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Belum bisa diambil',
                         style: TextStyle(
                           color: OptikAdminTokens.slate,
@@ -199,7 +199,7 @@ Future<List<String>?> showPickupItemPickerDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text(
+                child: Text(
                   'Batal',
                   style: TextStyle(color: OptikAdminTokens.slate),
                 ),
@@ -212,7 +212,7 @@ Future<List<String>?> showPickupItemPickerDialog(
                       ..addAll(ready.map((e) => e['id'].toString()));
                   });
                 },
-                child: const Text(
+                child: Text(
                   'Pilih semua READY',
                   style: TextStyle(color: OptikAdminTokens.navy),
                 ),

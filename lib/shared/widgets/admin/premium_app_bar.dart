@@ -36,7 +36,7 @@ class PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
     final titleWidget = subtitle == null
         ? Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -51,7 +51,7 @@ class PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -61,7 +61,7 @@ class PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
               const SizedBox(height: 2),
               Text(
                 subtitle!,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.slate,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
@@ -81,7 +81,7 @@ class PremiumAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: titleWidget,
       actions: actions,
       bottom: bottom,
-      iconTheme: const IconThemeData(color: OptikAdminTokens.navy),
+      iconTheme: IconThemeData(color: OptikAdminTokens.navy),
     );
   }
 }

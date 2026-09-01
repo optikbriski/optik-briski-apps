@@ -208,7 +208,7 @@ abstract final class StockActorGate {
 
             return AlertDialog(
               backgroundColor: OptikAdminTokens.card,
-              title: const Text(
+              title: Text(
                 'Scan barcode karyawan',
                 style: TextStyle(
                     color: OptikAdminTokens.navy, fontWeight: FontWeight.bold),
@@ -234,12 +234,12 @@ abstract final class StockActorGate {
                       focusNode: focus,
                       enabled: !busy,
                       autofocus: true,
-                      style: const TextStyle(color: OptikAdminTokens.navy),
+                      style: TextStyle(color: OptikAdminTokens.navy),
                       decoration: InputDecoration(
                         labelText: 'Barcode NIK / tempel QR',
-                        labelStyle: const TextStyle(color: OptikAdminTokens.slate),
+                        labelStyle: TextStyle(color: OptikAdminTokens.slate),
                         hintText: 'Arahkan scanner toko ke sini…',
-                        hintStyle: const TextStyle(color: OptikAdminTokens.slate),
+                        hintStyle: TextStyle(color: OptikAdminTokens.slate),
                         filled: true,
                         fillColor: OptikAdminTokens.bgMid,
                         border: OutlineInputBorder(
@@ -401,10 +401,10 @@ abstract final class StockActorGate {
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.card,
         title: Text(title,
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: Text(message,
-            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4)),
+            style: TextStyle(color: OptikAdminTokens.slate, height: 1.4)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),

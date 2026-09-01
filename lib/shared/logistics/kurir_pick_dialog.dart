@@ -28,11 +28,11 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.ice, width: 1.2),
+          side: BorderSide(color: OptikAdminTokens.ice, width: 1.2),
         ),
         title: Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontWeight: FontWeight.w800,
             fontSize: 16,
@@ -40,7 +40,7 @@ Future<Map<String, dynamic>?> showKurirPickDialog(
         ),
         content: Text(
           'pos_duty_picker_empty'.tr(),
-          style: const TextStyle(color: OptikAdminTokens.slate),
+          style: TextStyle(color: OptikAdminTokens.slate),
         ),
         actions: [
           if (allowSkip)

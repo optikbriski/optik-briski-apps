@@ -9,8 +9,11 @@ class PosCupsPrint {
   static Future<String?> ensureQueue({
     String queue = 'POS-80',
     String nameHint = 'POS-80',
+    bool recreateIfPostScript = true,
   }) async =>
       null;
+
+  static Future<void> cancelAll(String queue) async {}
 
   static Future<void> printRaw({
     required String queue,

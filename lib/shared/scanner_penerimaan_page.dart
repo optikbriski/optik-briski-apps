@@ -203,7 +203,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                 const SizedBox(height: 15),
                 Text(pesan,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.slate, fontSize: 14, height: 1.5)),
                 const SizedBox(height: 30),
                 SizedBox(
@@ -231,7 +231,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                       sukses
                           ? "scan_btn_tutup".tr()
                           : "scan_btn_coba_lagi".tr(),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.snow, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -271,10 +271,10 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
         ),
         body: Center(
           child: _isProcessing
-              ? const CircularProgressIndicator(color: OptikAdminTokens.navy)
+              ? CircularProgressIndicator(color: OptikAdminTokens.navy)
               : Text(
                   '${widget.cabangKaryawan} · ${widget.karyawanNama ?? '-'}',
-                  style: const TextStyle(color: OptikAdminTokens.slate),
+                  style: TextStyle(color: OptikAdminTokens.slate),
                 ),
         ),
       );
@@ -284,16 +284,16 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
       appBar: AppBar(
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: OptikAdminTokens.snow),
+          icon: Icon(Icons.close, color: OptikAdminTokens.snow),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('scan_qr'.tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.snow, fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.flashlight_on_rounded, color: OptikAdminTokens.ice),
+            icon: Icon(Icons.flashlight_on_rounded, color: OptikAdminTokens.ice),
             onPressed: () => cameraController.toggleTorch(),
           ),
         ],
@@ -304,7 +304,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
           MobileScanner(
             controller: cameraController,
             errorBuilder: (context, error) {
-              return const Center(
+              return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -333,7 +333,7 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
           if (_isProcessing)
             Container(
               color: OptikAdminTokens.navy.withOpacity(0.54),
-              child: const Center(
+              child: Center(
                 child: CircularProgressIndicator(color: OptikAdminTokens.navy),
               ),
             ),
@@ -368,14 +368,14 @@ class _ScannerPenerimaanPageState extends State<ScannerPenerimaanPage> {
                         Text(
                           "scan_instruksi".tr(),
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.snow, fontSize: 14),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           '${widget.cabangKaryawan} · ${widget.karyawanNama ?? '-'}',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.slate, fontSize: 12),
                         ),
                       ],

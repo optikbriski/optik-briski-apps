@@ -6,6 +6,7 @@
 : "${ROOT:?ROOT harus di-set sebelum source brand_env.sh}"
 
 BRAND="${BRAND:-rekasa}"
+export BRAND
 BRAND_FILE="$ROOT/brands/${BRAND}.json"
 
 if [[ ! -f "$BRAND_FILE" ]]; then

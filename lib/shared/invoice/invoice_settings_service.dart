@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../attendance/attendance_admin_scope.dart';
 import '../brand/brand_service.dart';
+import '../tenant/tenant_service.dart';
 import 'invoice_status_footer.dart';
 
 /// Konfigurasi layout nota per cabang (`invoice_settings`).
@@ -301,6 +302,8 @@ class InvoiceSettingsService {
 
     final payload = toSave.toMap();
     payload['updated_at'] = DateTime.now().toIso8601String();
+    final tid = TenantService.instance.id;
+    if (tid != null && tid.isNotEmpty) payload['tenant_id'] = tid;
 
     final saved = await _db
         .from('invoice_settings')

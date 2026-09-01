@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'brand/brand_slug_rules.dart';
+import 'config.dart';
 import 'training/training_mode.dart';
 
 class AppUpdateInfo {
@@ -94,7 +95,33 @@ class BackgroundDownloadResult {
   final String? message;
 }
 
-/// Update APK Karyawan: auto-download aman, install tetap konfirmasi user.
+/// Update APK in-app (Karyawan / Admin / Member): unduh aman, pasang tetap konfirmasi.
+class AppUpdateFlavor {
+  static const karyawan = 'karyawan';
+  static const admin = 'admin';
+  static const member = 'member';
+
+  static String normalize(String raw) {
+    final f = raw.trim().toLowerCase();
+    if (f == admin || f == member || f == karyawan) return f;
+    return fromConfig();
+  }
+
+  /// Flavor APK yang sedang jalan — jangan default karyawan di Admin/Member.
+  static String fromConfig() {
+    switch (currentFlavor) {
+      case AppFlavor.admin:
+        return admin;
+      case AppFlavor.member:
+        return member;
+      case AppFlavor.karyawan:
+      case AppFlavor.store:
+        return karyawan;
+    }
+  }
+}
+
+/// Update APK: auto-download aman, install tetap konfirmasi user.
 class AppUpdateService {
   AppUpdateService({SupabaseClient? client, Dio? dio})
       : _client = client ?? Supabase.instance.client,
@@ -102,7 +129,7 @@ class AppUpdateService {
             Dio(BaseOptions(
               connectTimeout: const Duration(seconds: 20),
               receiveTimeout: const Duration(minutes: 10),
-              followRedirects: true,
+              followRedirects: false,
               validateStatus: (s) => s != null && s < 500,
             ));
 
@@ -120,11 +147,11 @@ class AppUpdateService {
   static const minApkBytes = 512 * 1024;
   static const storageBufferBytes = 40 * 1024 * 1024; // +40 MB buffer
 
-  static bool _downloadBusy = false;
+  static final _downloadBusy = <String, bool>{};
 
   static String _prefKey(String base, String appFlavor) {
-    final f = appFlavor.trim().toLowerCase();
-    if (f.isEmpty || f == 'karyawan') return base;
+    final f = AppUpdateFlavor.normalize(appFlavor);
+    if (f == AppUpdateFlavor.karyawan) return base;
     return '${base}_$f';
   }
 
@@ -142,35 +169,91 @@ class AppUpdateService {
   }
 
   static int compareSemver(String server, String local) {
-    List<int> parse(String v) {
-      final core = v.split('+').first.split('-').first.trim();
-      if (core.isEmpty) return [0];
-      return core
+    List<int> core(String v) {
+      final head = v.split('+').first.split('-').first.trim();
+      if (head.isEmpty) return [0];
+      return head
           .split('.')
           .map((e) => int.tryParse(e.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
           .toList();
     }
 
-    final a = parse(server);
-    final b = parse(local);
+    int build(String v) {
+      final plus = v.split('+');
+      if (plus.length < 2) return 0;
+      return int.tryParse(
+            plus[1].split('-').first.replaceAll(RegExp(r'[^0-9]'), ''),
+          ) ??
+          0;
+    }
+
+    final a = core(server);
+    final b = core(local);
     final len = a.length > b.length ? a.length : b.length;
     for (var i = 0; i < len; i++) {
       final x = i < a.length ? a[i] : 0;
       final y = i < b.length ? b[i] : 0;
       if (x != y) return x.compareTo(y);
     }
-    return 0;
+    return build(server).compareTo(build(local));
   }
 
+  static bool isHttpOk(int? code) =>
+      code != null && ((code >= 200 && code < 300) || code == 206);
+
   static bool isSafeDownloadUrl(String url) {
+    return isAllowedReleaseUrl(
+      url,
+      flavor: AppUpdateFlavor.fromConfig(),
+      channel: BrandSlugRules.releaseChannel(),
+    );
+  }
+
+  /// URL APK hanya host project + bucket app-releases + nama {slug}-{flavor}-{semver}.apk.
+  static bool isAllowedReleaseUrl(
+    String url, {
+    required String flavor,
+    required String channel,
+    String? supabaseHost,
+    String? expectedVersion,
+  }) {
     final uri = Uri.tryParse(url.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return false;
-    final path = uri.path.toLowerCase();
-    if (path.endsWith('.html') || path.endsWith('.htm')) return false;
+    if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty) {
+      return false;
+    }
+    if (uri.query.isNotEmpty || uri.fragment.isNotEmpty) return false;
+    if (uri.hasPort && uri.port != 443) return false;
+    final expectedHost = (supabaseHost ?? Uri.tryParse(supabaseUrl)?.host ?? '')
+        .trim()
+        .toLowerCase();
+    if (expectedHost.isEmpty || uri.host.toLowerCase() != expectedHost) {
+      return false;
+    }
+    if (!uri.host.toLowerCase().endsWith('.supabase.co')) return false;
+    final segs = uri.pathSegments;
+    if (segs.length != 6) return false;
+    if (segs[0] != 'storage' ||
+        segs[1] != 'v1' ||
+        segs[2] != 'object' ||
+        segs[3] != 'public' ||
+        segs[4] != 'app-releases') {
+      return false;
+    }
+    final parsed = BrandSlugRules.parseReleaseFilename(segs[5]);
+    if (parsed == null) return false;
+    final f = AppUpdateFlavor.normalize(flavor);
+    if (parsed.flavor != f) return false;
+    var ch = channel.trim().toLowerCase();
+    if (ch == 'optik') ch = 'optik-briski';
+    if (parsed.slug != ch) return false;
+    if (expectedVersion != null) {
+      final core = expectedVersion.split('+').first.split('-').first.trim();
+      if (core.isEmpty || parsed.versi != core) return false;
+    }
     return true;
   }
 
-  Future<bool> isAutoUpdateEnabled({String appFlavor = 'karyawan'}) async {
+  Future<bool> isAutoUpdateEnabled({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     // Default ON: auto-unduh di background; install tetap konfirmasi.
     return prefs.getBool(_prefKey(prefAutoUpdate, appFlavor)) ?? true;
@@ -178,34 +261,33 @@ class AppUpdateService {
 
   Future<void> setAutoUpdateEnabled(
     bool value, {
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefKey(prefAutoUpdate, appFlavor), value);
   }
 
-  Future<bool> shouldEnforceForceUpdate({String appFlavor = 'karyawan'}) async {
+  Future<bool> shouldEnforceForceUpdate({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     final until = prefs.getInt(_prefKey(prefSkipForceUntil, appFlavor)) ?? 0;
     return DateTime.now().millisecondsSinceEpoch >= until;
   }
 
-  Future<void> registerDownloadFailure({String appFlavor = 'karyawan'}) async {
+  Future<void> registerDownloadFailure({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     final keyFail = _prefKey(prefFailCount, appFlavor);
     final keySkip = _prefKey(prefSkipForceUntil, appFlavor);
     final n = (prefs.getInt(keyFail) ?? 0) + 1;
     await prefs.setInt(keyFail, n);
     if (n >= 3) {
-      final until = DateTime.now()
-          .add(const Duration(hours: 6))
-          .millisecondsSinceEpoch;
+      final until =
+          DateTime.now().add(const Duration(hours: 6)).millisecondsSinceEpoch;
       await prefs.setInt(keySkip, until);
       await prefs.setInt(keyFail, 0);
     }
   }
 
-  Future<void> clearFailureState({String appFlavor = 'karyawan'}) async {
+  Future<void> clearFailureState({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefKey(prefFailCount, appFlavor));
     await prefs.remove(_prefKey(prefSkipForceUntil, appFlavor));
@@ -213,19 +295,20 @@ class AppUpdateService {
 
   Future<void> markInstallPending(
     String expectedVersion, {
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKey(prefPendingVersion, appFlavor), expectedVersion);
+    await prefs.setString(
+        _prefKey(prefPendingVersion, appFlavor), expectedVersion);
   }
 
-  Future<void> clearInstallPending({String appFlavor = 'karyawan'}) async {
+  Future<void> clearInstallPending({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefKey(prefPendingVersion, appFlavor));
   }
 
   Future<InstallOutcome> checkPendingInstallResult({
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
   }) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final local = packageInfo.version;
@@ -285,15 +368,23 @@ class AppUpdateService {
     );
   }
 
-  Future<bool> preflightUrl(String url) async {
-    if (!isSafeDownloadUrl(url)) return false;
+  Future<bool> preflightUrl(
+    String url, {
+    required String flavor,
+    required String channel,
+    String? expectedVersion,
+  }) async {
+    if (!isAllowedReleaseUrl(
+      url,
+      flavor: flavor,
+      channel: channel,
+      expectedVersion: expectedVersion,
+    )) {
+      return false;
+    }
     try {
       final head = await _dio.head(url);
-      if (head.statusCode != null &&
-          head.statusCode! >= 200 &&
-          head.statusCode! < 400) {
-        return true;
-      }
+      if (isHttpOk(head.statusCode)) return true;
     } catch (_) {}
     try {
       final res = await _dio.get<List<int>>(
@@ -303,20 +394,26 @@ class AppUpdateService {
           headers: {'Range': 'bytes=0-3'},
         ),
       );
-      final code = res.statusCode ?? 0;
-      return code == 200 || code == 206;
+      if (!isHttpOk(res.statusCode)) return false;
+      final bytes = res.data;
+      if (bytes == null || bytes.length < 4) return false;
+      return bytes[0] == 0x50 &&
+          bytes[1] == 0x4B &&
+          bytes[2] == 0x03 &&
+          bytes[3] == 0x04;
     } catch (_) {
       return false;
     }
   }
 
-  Future<AppUpdateInfo> checkForUpdate({String appFlavor = 'karyawan'}) async {
+  Future<AppUpdateInfo> checkForUpdate({String appFlavor = ''}) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final local = packageInfo.version;
-    final flavor = appFlavor.trim().toLowerCase();
+    final flavor = AppUpdateFlavor.normalize(appFlavor);
 
     Map<String, dynamic>? data;
     final channel = BrandSlugRules.releaseChannel();
+    var rpcFailed = false;
     try {
       final raw = await _client.rpc(
         'lookup_app_release',
@@ -324,13 +421,12 @@ class AppUpdateService {
       );
       if (raw is Map && raw['ok'] == true) {
         data = Map<String, dynamic>.from(raw);
-      } else if (raw is Map && raw['ok'] == false) {
-        data = null;
       }
+      // ok:false = server menolak (none/url/host). Jangan baca tabel mentah.
     } catch (_) {
-      data = null;
+      rpcFailed = true;
     }
-    if (data == null) {
+    if (data == null && rpcFailed) {
       try {
         data = await _client
             .from('versi_app')
@@ -341,39 +437,35 @@ class AppUpdateService {
             .limit(1)
             .maybeSingle();
       } catch (_) {
-        // 000049 belum: APK Optik boleh baris flavor lama. APK bersama jangan unduh Optik.
-        if (BrandSlugRules.isOptikSlug(channel)) {
-          try {
-            data = await _client
-                .from('versi_app')
-                .select()
-                .eq('app_flavor', flavor)
-                .order('created_at', ascending: false)
-                .limit(1)
-                .maybeSingle();
-          } catch (_) {
-            data = null;
-          }
-        }
+        data = null;
       }
     }
-    // Jangan fallback ke merek / flavor lain.
 
     final server = (data?['versi_terbaru'] ?? local).toString().trim();
     final url = (data?['url_download'] ?? '').toString().trim();
     final forceFlag = data?['force_update'] == true;
     final notes = data?['catatan_rilis']?.toString();
-    final newer = compareSemver(server, local) > 0 && url.isNotEmpty;
+    final urlOk = isAllowedReleaseUrl(
+      url,
+      flavor: flavor,
+      channel: channel,
+      expectedVersion: server,
+    );
+    final newer = compareSemver(server, local) > 0 && urlOk;
 
     var reachable = true;
     int? remoteSize;
     if (newer) {
-      reachable = await preflightUrl(url);
+      reachable = await preflightUrl(
+        url,
+        flavor: flavor,
+        channel: channel,
+        expectedVersion: server,
+      );
       if (reachable) remoteSize = await probeRemoteSizeBytes(url);
     }
 
-    final enforceForce =
-        await shouldEnforceForceUpdate(appFlavor: flavor);
+    final enforceForce = await shouldEnforceForceUpdate(appFlavor: flavor);
     final force = newer && forceFlag && reachable && enforceForce;
 
     return AppUpdateInfo(
@@ -388,20 +480,20 @@ class AppUpdateService {
     );
   }
 
-  Future<String?> readyApkPath({String appFlavor = 'karyawan'}) async {
+  Future<String?> readyApkPath({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_prefKey(prefReadyPath, appFlavor));
     final ver = prefs.getString(_prefKey(prefReadyVersion, appFlavor));
     if (path == null || ver == null) return null;
     final f = File(path);
-    if (!await f.exists()) {
+    if (!await _isValidApkFile(f)) {
       await clearReadyApk(appFlavor: appFlavor);
       return null;
     }
     return path;
   }
 
-  Future<String?> readyApkVersion({String appFlavor = 'karyawan'}) async {
+  Future<String?> readyApkVersion({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_prefKey(prefReadyVersion, appFlavor));
   }
@@ -409,14 +501,14 @@ class AppUpdateService {
   Future<void> _markReadyApk(
     String path,
     String version, {
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey(prefReadyPath, appFlavor), path);
     await prefs.setString(_prefKey(prefReadyVersion, appFlavor), version);
   }
 
-  Future<void> clearReadyApk({String appFlavor = 'karyawan'}) async {
+  Future<void> clearReadyApk({String appFlavor = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_prefKey(prefReadyPath, appFlavor));
     await prefs.remove(_prefKey(prefReadyPath, appFlavor));
@@ -446,18 +538,44 @@ class AppUpdateService {
     }
   }
 
-  String _apkPathFor(String version, {String appFlavor = 'karyawan'}) {
-    final safe = version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_');
-    final flavor = appFlavor.trim().toLowerCase().isEmpty
-        ? 'karyawan'
-        : appFlavor.trim().toLowerCase();
+  String _apkPathFor(String version, {String appFlavor = ''}) {
+    final safe = version.replaceAll(RegExp(r'[^0-9A-Za-z._+-]'), '_');
+    final flavor = AppUpdateFlavor.normalize(appFlavor);
     final channel = BrandSlugRules.releaseChannel();
     return '${channel}_${flavor}_$safe.apk';
   }
 
+  Future<Directory> _updatesDir() async {
+    final root = await getApplicationSupportDirectory();
+    final dir = Directory('${root.path}/apk_updates');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  Future<void> _purgeStaleApks({
+    required String appFlavor,
+    required String keepPath,
+  }) async {
+    try {
+      final dir = await _updatesDir();
+      final flavor = AppUpdateFlavor.normalize(appFlavor);
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = entity.path.split(RegExp(r'[/\\]')).last;
+        if (!name.contains('_${flavor}_')) continue;
+        if (entity.path == keepPath || entity.path == '$keepPath.part') {
+          continue;
+        }
+        try {
+          await entity.delete();
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
   /// Auto-unduh di background. Tidak membuka installer.
   Future<BackgroundDownloadResult> downloadInBackground({
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
     void Function(double progress)? onProgress,
   }) async {
     // Training: Dio bypasses TrainingHttpClient — never download APKs mid-session.
@@ -482,16 +600,21 @@ class AppUpdateService {
       );
     }
 
-    // Sudah siap?
+    // Sudah siap untuk versi server ini?
     final existing = await readyApkPath(appFlavor: appFlavor);
     final readyVer = await readyApkVersion(appFlavor: appFlavor);
-    if (existing != null && readyVer == info.serverVersion) {
+    if (existing != null &&
+        readyVer == info.serverVersion &&
+        await _isValidApkFile(File(existing))) {
       return BackgroundDownloadResult(
         status: BackgroundDownloadStatus.readyToInstall,
         info: info,
         apkPath: existing,
         message: 'Update ${info.serverVersion} sudah siap dipasang.',
       );
+    }
+    if (existing != null && readyVer != info.serverVersion) {
+      await clearReadyApk(appFlavor: appFlavor);
     }
 
     final storage = await checkStorageForUpdate(
@@ -508,7 +631,8 @@ class AppUpdateService {
       );
     }
 
-    if (_downloadBusy) {
+    final flavor = AppUpdateFlavor.normalize(appFlavor);
+    if (_downloadBusy[flavor] == true) {
       return BackgroundDownloadResult(
         status: BackgroundDownloadStatus.downloading,
         info: info,
@@ -516,8 +640,8 @@ class AppUpdateService {
       );
     }
 
-    _downloadBusy = true;
-    final dir = await getTemporaryDirectory();
+    _downloadBusy[flavor] = true;
+    final dir = await _updatesDir();
     final finalPath =
         '${dir.path}/${_apkPathFor(info.serverVersion, appFlavor: appFlavor)}';
     final partPath = '$finalPath.part';
@@ -525,15 +649,38 @@ class AppUpdateService {
     final finalFile = File(finalPath);
 
     try {
+      if (!isAllowedReleaseUrl(
+        info.downloadUrl,
+        flavor: flavor,
+        channel: BrandSlugRules.releaseChannel(),
+        expectedVersion: info.serverVersion,
+      )) {
+        return BackgroundDownloadResult(
+          status: BackgroundDownloadStatus.failed,
+          info: info,
+          message: 'URL update tidak sah. App lama tetap aman.',
+        );
+      }
       if (await partFile.exists()) await partFile.delete();
+      await _purgeStaleApks(appFlavor: appFlavor, keepPath: finalPath);
 
-      await _dio.download(
+      final resp = await _dio.download(
         info.downloadUrl,
         partPath,
         onReceiveProgress: (received, total) {
           if (total > 0) onProgress?.call(received / total);
         },
       );
+      if (!isHttpOk(resp.statusCode)) {
+        await registerDownloadFailure(appFlavor: appFlavor);
+        if (await partFile.exists()) await partFile.delete();
+        return BackgroundDownloadResult(
+          status: BackgroundDownloadStatus.failed,
+          info: info,
+          message:
+              'Server menolak unduhan (HTTP ${resp.statusCode}). App lama tetap aman.',
+        );
+      }
 
       if (!await _isValidApkFile(partFile)) {
         await registerDownloadFailure(appFlavor: appFlavor);
@@ -542,6 +689,17 @@ class AppUpdateService {
           status: BackgroundDownloadStatus.failed,
           info: info,
           message: 'File update tidak valid. App lama tetap aman.',
+        );
+      }
+      final got = await partFile.length();
+      final expect = info.remoteSizeBytes;
+      if (expect != null && expect > 0 && (got - expect).abs() > 2048) {
+        await registerDownloadFailure(appFlavor: appFlavor);
+        if (await partFile.exists()) await partFile.delete();
+        return BackgroundDownloadResult(
+          status: BackgroundDownloadStatus.failed,
+          info: info,
+          message: 'Ukuran file update tidak cocok. App lama tetap aman.',
         );
       }
 
@@ -558,7 +716,8 @@ class AppUpdateService {
         status: BackgroundDownloadStatus.readyToInstall,
         info: info,
         apkPath: finalPath,
-        message: 'Update ${info.serverVersion} siap. Konfirmasi untuk memasang.',
+        message:
+            'Update ${info.serverVersion} siap. Konfirmasi untuk memasang.',
       );
     } on DioException catch (e) {
       await registerDownloadFailure(appFlavor: appFlavor);
@@ -589,7 +748,7 @@ class AppUpdateService {
         message: 'Gagal unduh update: $e',
       );
     } finally {
-      _downloadBusy = false;
+      _downloadBusy[flavor] = false;
       if (await partFile.exists()) {
         try {
           await partFile.delete();
@@ -602,9 +761,20 @@ class AppUpdateService {
   Future<void> confirmAndOpenInstaller({
     required String apkPath,
     required String expectedVersion,
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
   }) async {
     final file = File(apkPath);
+    final dir = await _updatesDir();
+    final prefix = '${dir.path}${Platform.pathSeparator}';
+    final flavor = AppUpdateFlavor.normalize(appFlavor);
+    final name = file.uri.pathSegments.isEmpty
+        ? ''
+        : file.uri.pathSegments.last;
+    if (!file.absolute.path.startsWith(prefix) ||
+        !name.contains('_${flavor}_')) {
+      await clearReadyApk(appFlavor: appFlavor);
+      throw Exception('File update tidak dari saluran resmi.');
+    }
     if (!await _isValidApkFile(file)) {
       await clearReadyApk(appFlavor: appFlavor);
       throw Exception('File update hilang/rusak. Akan diunduh ulang.');
@@ -630,7 +800,7 @@ class AppUpdateService {
   Future<String> downloadOnly(
     String url, {
     required String expectedVersion,
-    String appFlavor = 'karyawan',
+    String appFlavor = '',
     void Function(double progress)? onProgress,
   }) async {
     final result = await downloadInBackground(

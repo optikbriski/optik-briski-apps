@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -11,6 +12,7 @@ import '../../shared/logistics/logistics_status_timeline.dart';
 import '../../shared/logistics/logistics_status_timeline_view.dart';
 import '../../shared/logistics/logistics_tracking_rules.dart';
 import '../../shared/logistics/logistics_tracking_service.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import 'do_preparing_page.dart';
@@ -28,7 +30,7 @@ class LogisticsTrackingPage extends StatefulWidget {
 
 class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   final _svc = LogisticsTrackingService();
-  final _dt = DateFormat('dd MMM yyyy · HH:mm', 'id_ID');
+  DateFormat get _dt => AdminFormat.date(context, 'dd MMM yyyy · HH:mm');
   final _searchCtrl = TextEditingController();
 
   bool _loading = true;
@@ -157,10 +159,8 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       status: move['status']?.toString(),
     )) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'Hanya gudang asal yang boleh set kurir, dan hanya saat paket masih terbuka.',
-        ),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_gl_row_9fd38795ab'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ));
       return;
@@ -172,7 +172,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       pusatOnly: isPusat,
       tokoId: isPusat ? null : widget.profile['toko_id']?.toString(),
       allowSkip: true,
-      title: 'Pilih kurir',
+      title: 'admin_auto_c3d060b4ae'.tr(),
     );
     if (kurirPickCancelled(picked) || !mounted) return;
 
@@ -193,7 +193,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           kurirPickSkipped(picked)
-              ? 'Kurir dihapus dari surat jalan.'
+              ? 'admin_auto_courier_removed_do'.tr()
               : 'Kurir diset: ${picked!['nama']}',
         ),
         backgroundColor: OptikAdminTokens.success,
@@ -203,7 +203,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal set kurir: $e'),
+          content: Text('admin_auto_bdb2c18aad'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -275,10 +275,10 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Tracking Logistics',
+        title: 'admin_auto_dc4846eef8'.tr(),
         actions: [
           IconButton(
-            tooltip: 'Muat ulang',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -288,12 +288,12 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? PremiumEmptyState(
-                  message: 'Gagal memuat tracking.\n$_error',
+                  message: 'admin_err_load_tracking'.tr(namedArgs: {'error': '$_error'}),
                   icon: Icons.cloud_off_rounded,
                   accent: OptikAdminTokens.danger,
                   action: FilledButton(
                     onPressed: _load,
-                    child: const Text('Coba lagi'),
+                    child: Text('common_retry'.tr()),
                   ),
                 )
               : Padding(
@@ -353,9 +353,9 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
               setState(() {});
               _ensureSelection();
             },
-            style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
+            style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
             decoration: InputDecoration(
-              hintText: 'Cari resi, cabang, kurir…',
+              hintText: 'admin_auto_f8904e132a'.tr(),
               hintStyle: TextStyle(
                 color: OptikAdminTokens.navy.withOpacity(0.35),
                 fontSize: 13,
@@ -365,11 +365,11 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
               fillColor: OptikAdminTokens.navy.withOpacity(0.03),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: OptikAdminTokens.line),
+                borderSide: BorderSide(color: OptikAdminTokens.line),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: OptikAdminTokens.line),
+                borderSide: BorderSide(color: OptikAdminTokens.line),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -380,7 +380,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
           PremiumChipWrap(
             children: [
               _chip(
-                label: 'Semua (${_moves.length})',
+                label: 'admin_lbl_semua_moves'.tr(namedArgs: {'n': '${_moves.length}'}),
                 selected: _kindFilter.isEmpty,
                 onTap: () {
                   setState(() => _kindFilter = '');
@@ -417,7 +417,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
           PremiumChipWrap(
             children: [
               _chip(
-                label: 'Semua status',
+                label: 'admin_auto_a665414fb9'.tr(),
                 selected: _statusFilter.isEmpty,
                 onTap: () {
                   setState(() => _statusFilter = '');
@@ -425,7 +425,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                 },
               ),
               _chip(
-                label: 'Disiapkan ($nPrep)',
+                label: 'admin_auto_4dbcd7aa0a'.tr(namedArgs: {'nPrep': '$nPrep'}),
                 selected: _statusFilter == 'preparing',
                 onTap: () {
                   setState(() => _statusFilter = 'preparing');
@@ -433,7 +433,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                 },
               ),
               _chip(
-                label: 'Perjalanan ($nTransit)',
+                label: 'admin_auto_cd149fb296'.tr(namedArgs: {'nTransit': '$nTransit'}),
                 selected: _statusFilter == 'transit',
                 onTap: () {
                   setState(() => _statusFilter = 'transit');
@@ -441,7 +441,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                 },
               ),
               _chip(
-                label: 'Verifikasi ($nPending)',
+                label: 'admin_auto_b1be5f354e'.tr(namedArgs: {'nPending': '$nPending'}),
                 selected: _statusFilter == 'pending',
                 onTap: () {
                   setState(() => _statusFilter = 'pending');
@@ -496,13 +496,13 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Text(
               'Surat jalan aktif (${list.length})',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.textPrimary,
                 fontWeight: FontWeight.w800,
               ),
             ),
           ),
-          const Divider(color: OptikAdminTokens.line, height: 1),
+          Divider(color: OptikAdminTokens.line, height: 1),
           Expanded(
             child: list.isEmpty
                 ? PremiumEmptyState(
@@ -515,7 +515,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                 : ListView.separated(
                     itemCount: list.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(color: OptikAdminTokens.line, height: 1),
+                        Divider(color: OptikAdminTokens.line, height: 1),
                     itemBuilder: (_, i) {
                       final m = list[i];
                       final selected =
@@ -534,7 +534,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                             OptikAdminTokens.navy.withOpacity(0.08),
                         title: Text(
                           m['product_name']?.toString() ?? '-',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
@@ -559,7 +559,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                                     : dibuat != null
                                         ? 'Belum berangkat · dibuat ${_fmt(dibuat)}'
                                         : 'Belum berangkat',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w700,
@@ -604,7 +604,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                           status: st,
                         )
                             ? IconButton(
-                                tooltip: 'Ganti / hapus kurir',
+                                tooltip: 'admin_auto_e260805ca2'.tr(),
                                 onPressed: _busyKurir
                                     ? null
                                     : () => _assignKurir(m),
@@ -698,7 +698,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
   Widget _detailAndMap({required bool showMap}) {
     final m = _selected;
     if (m == null) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.all(16),
         child: Text(
           'Pilih surat jalan untuk lihat jam berangkat dan kota besar di jalur.',
@@ -780,7 +780,7 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                     foregroundColor: OptikAdminTokens.bg,
                   ),
                   icon: _busyKurir
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -797,13 +797,13 @@ class _LogisticsTrackingPageState extends State<LogisticsTrackingPage> {
                 OutlinedButton.icon(
                   onPressed: () => _openPreparing(m),
                   icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                  label: const Text('Buka Disiapkan'),
+                  label: Text('admin_auto_0a3b243c70'.tr()),
                 ),
               if (isPending)
                 OutlinedButton.icon(
                   onPressed: _openVerifikasi,
                   icon: const Icon(Icons.fact_check_outlined, size: 18),
-                  label: const Text('Verifikasi Terima'),
+                  label: Text('admin_auto_15fafa87c4'.tr()),
                 ),
             ],
           ),

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
@@ -39,7 +40,7 @@ class AdminPickerField extends StatelessWidget {
     required this.valueText,
     required this.onTap,
     this.icon = Icons.list_alt_rounded,
-    this.badgeColor = OptikAdminTokens.ice,
+    this.badgeColor,
     this.enabled = true,
     this.hint,
   });
@@ -48,7 +49,7 @@ class AdminPickerField extends StatelessWidget {
   final String valueText;
   final VoidCallback? onTap;
   final IconData icon;
-  final Color badgeColor;
+  final Color? badgeColor;
   final bool enabled;
   final String? hint;
 
@@ -67,7 +68,7 @@ class AdminPickerField extends StatelessWidget {
             color: OptikAdminTokens.snow,
             border: Border.all(
               color: canTap
-                  ? OptikAdminTokens.ice
+                  ? OptikAdminTokens.chromeEdge
                   : OptikAdminTokens.lineStrong,
               width: 1.2,
             ),
@@ -86,7 +87,7 @@ class AdminPickerField extends StatelessWidget {
                   children: [
                     Text(
                       label.toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -132,12 +133,12 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
   required List<AdminPickerOption<T>> options,
   T? selected,
   bool searchable = true,
-  String searchHint = 'Cari…',
+  String? searchHint,
   String? clearLabel,
   String? clearSubtitle,
   IconData? clearIcon,
   IconData headerIcon = Icons.list_alt_rounded,
-  Color headerBadgeColor = OptikAdminTokens.ice,
+  Color? headerBadgeColor,
   bool Function(AdminPickerOption<T> option, String query)? filterOption,
 }) {
   return showDialog<AdminPickerSelection<T>>(
@@ -146,6 +147,8 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
       var query = '';
       return StatefulBuilder(
         builder: (ctx, setModal) {
+          final resolvedSearchHint =
+              searchHint ?? 'admin_picker_search_hint'.tr();
           final q = query.trim().toLowerCase();
           final filtered = options.where((o) {
             if (q.isEmpty) return true;
@@ -158,7 +161,7 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
             backgroundColor: OptikAdminTokens.card,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              side: const BorderSide(color: OptikAdminTokens.ice, width: 1.2),
+              side: BorderSide(color: OptikAdminTokens.chromeEdge, width: 1.2),
             ),
             titlePadding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
             contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -177,7 +180,7 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -187,7 +190,7 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.slate,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -198,9 +201,9 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Tutup',
+                  tooltip: 'admin_btn_close'.tr(),
                   onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: Icon(Icons.close_rounded,
                       color: OptikAdminTokens.slate),
                 ),
               ],
@@ -213,16 +216,16 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                   if (searchable) ...[
                     TextField(
                       autofocus: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 14,
                       ),
                       decoration: InputDecoration(
-                        hintText: searchHint,
+                        hintText: resolvedSearchHint,
                         hintStyle: TextStyle(
                           color: OptikAdminTokens.slate.withOpacity(0.85),
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search_rounded,
                           color: OptikAdminTokens.navy,
                         ),
@@ -238,20 +241,20 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                             OptikAdminTokens.radiusSm,
                           ),
                           borderSide:
-                              const BorderSide(color: OptikAdminTokens.ice),
+                              BorderSide(color: OptikAdminTokens.chromeEdge),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                             OptikAdminTokens.radiusSm,
                           ),
                           borderSide:
-                              const BorderSide(color: OptikAdminTokens.ice),
+                              BorderSide(color: OptikAdminTokens.chromeEdge),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                             OptikAdminTokens.radiusSm,
                           ),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                             color: OptikAdminTokens.navy,
                             width: 1.4,
                           ),
@@ -266,7 +269,7 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                       decoration: BoxDecoration(
                         color: OptikAdminTokens.bgMid,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: OptikAdminTokens.ice),
+                        border: Border.all(color: OptikAdminTokens.chromeEdge),
                       ),
                       child: ListView(
                         padding: const EdgeInsets.all(8),
@@ -283,11 +286,11 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                               ),
                             ),
                           if (filtered.isEmpty)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 28),
                               child: Center(
                                 child: Text(
-                                  'Tidak ada opsi cocok.',
+                                  'admin_picker_no_match'.tr(),
                                   style: TextStyle(
                                     color: OptikAdminTokens.slate,
                                   ),
@@ -323,7 +326,7 @@ Future<AdminPickerSelection<T>?> showAdminPicker<T>({
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.slate,
                 ),
-                child: const Text('Batal'),
+                child: Text('appr_btn_batal'.tr()),
               ),
             ],
           );
@@ -342,9 +345,9 @@ Future<Set<T>?> showAdminMultiPicker<T>({
   Set<T>? selected,
   int? maxSelect,
   bool searchable = true,
-  String searchHint = 'Cari…',
+  String? searchHint,
   IconData headerIcon = Icons.checklist_rounded,
-  String confirmLabel = 'Terapkan',
+  String? confirmLabel,
 }) {
   return showDialog<Set<T>>(
     context: context,
@@ -353,6 +356,8 @@ Future<Set<T>?> showAdminMultiPicker<T>({
       final chosen = <T>{...(selected ?? {})};
       return StatefulBuilder(
         builder: (ctx, setModal) {
+          final resolvedSearchHint =
+              searchHint ?? 'admin_picker_search_hint'.tr();
           final q = query.trim().toLowerCase();
           final filtered = options.where((o) {
             if (q.isEmpty) return true;
@@ -364,7 +369,7 @@ Future<Set<T>?> showAdminMultiPicker<T>({
             backgroundColor: OptikAdminTokens.card,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-              side: const BorderSide(color: OptikAdminTokens.ice, width: 1.2),
+              side: BorderSide(color: OptikAdminTokens.chromeEdge, width: 1.2),
             ),
             titlePadding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
             contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -383,7 +388,7 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -393,9 +398,18 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                       Text(
                         subtitle ??
                             (maxSelect == null
-                                ? '${chosen.length} dipilih'
-                                : '${chosen.length}/$maxSelect dipilih'),
-                        style: const TextStyle(
+                                ? 'admin_picker_selected_count'.tr(
+                                    namedArgs: {
+                                      'count': '${chosen.length}',
+                                    },
+                                  )
+                                : 'admin_picker_selected_max'.tr(
+                                    namedArgs: {
+                                      'count': '${chosen.length}',
+                                      'max': '$maxSelect',
+                                    },
+                                  )),
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -405,9 +419,9 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Tutup',
+                  tooltip: 'admin_btn_close'.tr(),
                   onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: Icon(Icons.close_rounded,
                       color: OptikAdminTokens.slate),
                 ),
               ],
@@ -420,16 +434,16 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                   if (searchable) ...[
                     TextField(
                       autofocus: true,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 14,
                       ),
                       decoration: InputDecoration(
-                        hintText: searchHint,
+                        hintText: resolvedSearchHint,
                         hintStyle: TextStyle(
                           color: OptikAdminTokens.slate.withOpacity(0.85),
                         ),
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.search_rounded,
                           color: OptikAdminTokens.navy,
                         ),
@@ -441,20 +455,20 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                             OptikAdminTokens.radiusSm,
                           ),
                           borderSide:
-                              const BorderSide(color: OptikAdminTokens.ice),
+                              BorderSide(color: OptikAdminTokens.chromeEdge),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                             OptikAdminTokens.radiusSm,
                           ),
                           borderSide:
-                              const BorderSide(color: OptikAdminTokens.ice),
+                              BorderSide(color: OptikAdminTokens.chromeEdge),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(
                             OptikAdminTokens.radiusSm,
                           ),
-                          borderSide: const BorderSide(
+                          borderSide: BorderSide(
                             color: OptikAdminTokens.navy,
                             width: 1.4,
                           ),
@@ -469,17 +483,17 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                       decoration: BoxDecoration(
                         color: OptikAdminTokens.bgMid,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: OptikAdminTokens.ice),
+                        border: Border.all(color: OptikAdminTokens.chromeEdge),
                       ),
                       child: ListView(
                         padding: const EdgeInsets.all(8),
                         children: [
                           if (filtered.isEmpty)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 28),
                               child: Center(
                                 child: Text(
-                                  'Tidak ada opsi cocok.',
+                                  'admin_picker_no_match'.tr(),
                                   style: TextStyle(
                                     color: OptikAdminTokens.slate,
                                   ),
@@ -524,7 +538,7 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.slate,
                 ),
-                child: const Text('Batal'),
+                child: Text('appr_btn_batal'.tr()),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, Set<T>.from(chosen)),
@@ -532,7 +546,7 @@ Future<Set<T>?> showAdminMultiPicker<T>({
                   backgroundColor: OptikAdminTokens.navy,
                   foregroundColor: OptikAdminTokens.snow,
                 ),
-                child: Text(confirmLabel),
+                child: Text(confirmLabel ?? 'admin_picker_apply'.tr()),
               ),
             ],
           );
@@ -575,12 +589,12 @@ class _AdminPickerTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               color: selected
-                  ? OptikAdminTokens.ice.withOpacity(0.35)
+                  ? OptikAdminTokens.chromeEdge.withOpacity(0.35)
                   : OptikAdminTokens.card,
               border: Border.all(
                 color: selected
                     ? OptikAdminTokens.navy.withOpacity(0.55)
-                    : OptikAdminTokens.ice,
+                    : OptikAdminTokens.chromeEdge,
                 width: selected ? 1.4 : 1,
               ),
             ),
@@ -626,7 +640,7 @@ class _AdminPickerTile extends StatelessWidget {
                           subtitle!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.slate,
                             fontSize: 11,
                           ),
@@ -641,7 +655,7 @@ class _AdminPickerTile extends StatelessWidget {
                 ],
                 if (!multiCheck)
                   selected
-                      ? const Icon(
+                      ? Icon(
                           Icons.check_circle_rounded,
                           color: OptikAdminTokens.navy,
                           size: 20,

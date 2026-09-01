@@ -8,6 +8,9 @@ cd "$ROOT"
 VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)"
 # shellcheck source=scripts/brand_env.sh
 source "$ROOT/scripts/brand_env.sh"
+
+python3 "$ROOT/scripts/generate_flavor_launcher_icons.py"
+
 OUT_DIR="build/app/outputs/flutter-apk"
 if [[ "$STORE_SLUG" == "optik-briski" ]]; then
   DEST_ARM64="build/optik-karyawan-${VERSION}.apk"
@@ -64,8 +67,21 @@ if [[ -z "$ARM64_SRC" ]]; then
   exit 1
 fi
 cp -f "$ARM64_SRC" "$DEST_ARM64"
-# Lolos Supabase Free 50MB: buang aset non-Android / tidak dipakai (kualitas fitur tetap).
-bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
+# Lolos WA / Supabase 50 MB: kompres .so (diekstrak saat install).
+# Streak, OCR, kamera, peta, barcode tetap. Bukan DROP_MEMBER_ASSETS (api streak Karyawan).
+LIMIT=$((50 * 1000 * 1000))
+EXTRA_ASSET_RECOMPRESS=1 \
+  bash "$ROOT/scripts/shrink_apk_for_supabase.sh" "$DEST_ARM64"
+
+BYTES=$(stat -f%z "$DEST_ARM64" 2>/dev/null || stat -c%s "$DEST_ARM64")
+python3 - <<PY
+b=$BYTES
+limit=$LIMIT
+print(f"==> Ukuran akhir: {b/1e6:.3f} MB (WA) / {b/1024/1024:.3f} MiB  (limit {limit} byte)")
+if b >= limit:
+    raise SystemExit(f"ERROR: APK {b/1e6:.3f} MB masih >= 50 MB — jangan kirim/upload.")
+print("==> OK di bawah 50 MB — aman kirim WA / upload Supabase Free")
+PY
 # HP lama 32-bit (opsional)
 for candidate in \
   "$OUT_DIR/app-armeabi-v7a-karyawan-release.apk" \
@@ -91,6 +107,8 @@ echo "2. Upload file: $DEST_ARM64"
 echo "Nama wajib: ${STORE_SLUG}-karyawan-${VERSION}.apk"
 echo "3. Setelah migration auto-sync: selesai — versi_app terisi otomatis."
 echo "   Atau: bash scripts/publish_karyawan_apk.sh (upload + mengandalkan trigger)"
+echo "   Versi di pubspec HARUS lebih tinggi dari yang terpasang (1.3.1 → 1.3.2),"
+echo "   kalau tidak app tidak melihat update."
 echo ""
 echo "Force update (opsional, SQL Editor):"
 echo "  update public.versi_app set force_update = true"

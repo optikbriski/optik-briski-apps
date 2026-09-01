@@ -1,10 +1,13 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../../shared/connectivity/connectivity_reload.dart';
 import '../../shared/member/member_home_controller.dart';
 import '../../shared/member/member_inbox_unread.dart';
 import '../../shared/member/member_session.dart';
 import '../../shared/member/member_status_watch.dart';
 import '../../shared/qr/universal_qr_nav.dart';
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/theme.dart';
 import 'home_member_page.dart';
 import 'member_layout.dart';
@@ -23,6 +26,8 @@ class MemberShell extends StatefulWidget {
 }
 
 class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
+  static final Object _connectivityReloadOwner = Object();
+
   int _index = 0;
   final _update = MemberUpdateCoordinator();
 
@@ -40,12 +45,31 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     if (MemberSession.instance.isLoggedIn) {
       MemberStatusWatch.instance.start();
       MemberInboxUnread.instance.refresh();
+      _bindForceSync();
     }
     MemberSession.instance.addListener(_onSession);
+    ConnectivityReload.bind(_connectivityReloadOwner, _reloadFromConnectivityBanner);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _update.checkSilent(context);
     });
+  }
+
+  void _bindForceSync() {
+    ClientForceSync.bindFromTenantService(
+      localTokoId: MemberSession.instance.preferredTokoId,
+      onRemote: (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('client_force_sync_remote_ok'.tr()),
+            backgroundColor: OptikAdminTokens.navy,
+          ),
+        );
+        MemberHomeController.instance.ensureLoaded(force: true);
+        MemberInboxUnread.instance.refresh();
+      },
+    );
   }
 
   void _selectTab(int i) {
@@ -55,6 +79,14 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     if (i == 0 && prev != 0) {
       MemberHomeController.instance.ensureLoaded();
     }
+  }
+
+  Future<void> _reloadFromConnectivityBanner() async {
+    MemberHomeController.instance.bind();
+    await MemberHomeController.instance.refresh(force: true);
+    await MemberInboxUnread.instance.refresh();
+    await MemberStatusWatch.instance.start();
+    if (mounted) setState(() {});
   }
 
   /// Jaga state tiap tab tanpa IndexedStack (tinggi tab lain tidak merenggangkan Beranda).
@@ -83,6 +115,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     MemberSession.instance.removeListener(_onSession);
+    ConnectivityReload.unbind(_connectivityReloadOwner);
+    ClientForceSync.unbind();
     super.dispose();
   }
 
@@ -92,6 +126,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
       _update.onAppResumed(context);
       // Setelah admin Update CMS, buka ulang app → beranda ikut segar.
       MemberHomeController.instance.ensureLoaded(force: true);
+    } else if (state == AppLifecycleState.paused) {
+      _update.onAppPaused();
     }
   }
 
@@ -100,8 +136,10 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
     if (MemberSession.instance.isLoggedIn) {
       MemberStatusWatch.instance.start();
       MemberInboxUnread.instance.refresh();
+      _bindForceSync();
     } else {
       MemberStatusWatch.instance.stop();
+      ClientForceSync.unbind();
     }
   }
 
@@ -154,8 +192,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                       NavigationRailDestination(
                         icon: Icon(Icons.storefront_outlined,
                             size: m.navIconSize),
-                        selectedIcon: Icon(Icons.storefront_rounded,
-                            size: m.navIconSize),
+                        selectedIcon:
+                            Icon(Icons.storefront_rounded, size: m.navIconSize),
                         label: Text(
                           'Cabang',
                           style: TextStyle(fontSize: m.navLabelSize),
@@ -200,8 +238,8 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
                   height: m.bottomNavHeight,
                   child: Row(
                     children: [
-                      _navItem(
-                          0, Icons.home_outlined, Icons.home_rounded, 'Beranda', m),
+                      _navItem(0, Icons.home_outlined, Icons.home_rounded,
+                          'Beranda', m),
                       _navItem(1, Icons.receipt_long_outlined,
                           Icons.receipt_long, 'Pesanan', m),
                       const SizedBox(width: 56),
@@ -233,8 +271,9 @@ class _MemberShellState extends State<MemberShell> with WidgetsBindingObserver {
           children: [
             Icon(
               selected ? iconActive : icon,
-              color:
-                  selected ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted,
+              color: selected
+                  ? OptikMemberTokens.blue
+                  : OptikMemberTokens.inkMuted,
               size: m.navIconSize,
             ),
             const SizedBox(height: 3),
@@ -348,8 +387,8 @@ class _OrdersTab extends StatelessWidget {
                     subtitle: 'Semua transaksi',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            const MemberOrdersListPage(title: 'Riwayat belanja'),
+                        builder: (_) => const MemberOrdersListPage(
+                            title: 'Riwayat belanja'),
                       ),
                     ),
                   ),

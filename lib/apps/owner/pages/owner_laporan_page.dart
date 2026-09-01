@@ -223,17 +223,17 @@ class _OwnerLaporanPageState extends State<OwnerLaporanPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: OptikAdminTokens.line),
               ),
-              child: const Icon(Icons.storefront_rounded, size: 18, color: OptikAdminTokens.navy),
+              child: Icon(Icons.storefront_rounded, size: 18, color: OptikAdminTokens.navy),
             ),
           ),
         IconButton(
           tooltip: 'Pilih periode',
           onPressed: _pickDate,
-          icon: const Icon(Icons.calendar_month_rounded, color: OptikAdminTokens.navy),
+          icon: Icon(Icons.calendar_month_rounded, color: OptikAdminTokens.navy),
         ),
       ],
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
           : _error != null
               ? OwnerEmptyState(_error!, icon: Icons.error_outline_rounded)
               : ListView(
@@ -515,7 +515,7 @@ class _Row extends StatelessWidget {
       decoration: BoxDecoration(
         border: last
             ? null
-            : const Border(bottom: BorderSide(color: OptikAdminTokens.line)),
+            : Border(bottom: BorderSide(color: OptikAdminTokens.line)),
       ),
       child: Row(
         children: [

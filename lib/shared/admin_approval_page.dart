@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -10,6 +12,8 @@ import 'liveness_camera_page.dart';
 import 'responsive.dart';
 import 'brand/brand_service.dart';
 import 'theme.dart';
+import 'admin/admin_nav_badge_service.dart';
+import 'widgets/admin/admin_nav_badge.dart';
 import 'widgets/admin/admin_premium.dart';
 
 /// Tone nilai di baris info profil — warna semantik, bukan dekorasi.
@@ -122,20 +126,20 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
         ),
         title: Text(
           k['nama'] ?? '-',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
             color: OptikAdminTokens.navy,
           ),
         ),
         subtitle: Text(
           "${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.slate,
             fontSize: 13,
           ),
         ),
         trailing: IconButton(
-          icon: const Icon(Icons.info_outline_rounded,
+          icon: Icon(Icons.info_outline_rounded,
               color: OptikAdminTokens.slate),
           onPressed: () => _tampilkanDetailKaryawan(k),
         ),
@@ -167,20 +171,20 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.badge_rounded,
+                        Icon(Icons.badge_rounded,
                             color: OptikAdminTokens.navy),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             "appr_detail_title".tr(),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close_rounded,
+                          icon: Icon(Icons.close_rounded,
                               color: OptikAdminTokens.slate),
                           onPressed: () => Navigator.pop(ctx),
                         )
@@ -351,12 +355,12 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.remove_red_eye,
+              Icon(Icons.remove_red_eye,
                   color: OptikAdminTokens.navy, size: 24),
               const SizedBox(width: 8),
               Text(
                 BrandService.name,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -367,11 +371,11 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           const SizedBox(height: 5),
           Text(
             "appr_id_card_pos".tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.slate, fontSize: 8, letterSpacing: 2),
           ),
           const SizedBox(height: 15),
-          const Divider(color: OptikAdminTokens.line, thickness: 1),
+          Divider(color: OptikAdminTokens.line, thickness: 1),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(4),
@@ -379,7 +383,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               shape: BoxShape.circle,
               border: Border.all(color: OptikAdminTokens.ice, width: 2),
             ),
-            child: const CircleAvatar(
+            child: CircleAvatar(
               radius: 45,
               backgroundColor: OptikAdminTokens.cardElevated,
               child:
@@ -390,7 +394,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           Text(
             data['nama'] ?? '-',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -401,7 +405,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             (data['jabatan'] ?? 'default_karyawan'.tr())
                 .toString()
                 .toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.slate,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
@@ -417,7 +421,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             ),
             child: Text(
               "${'hr_cabang'.tr()} ${(data['cabang']?.toString().toUpperCase() ?? 'appr_pusat'.tr())}",
-              style: const TextStyle(
+              style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 10,
                   fontWeight: FontWeight.bold),
@@ -446,7 +450,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           const SizedBox(height: 15),
           Text(
             "appr_scan_barcode".tr(),
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.slate,
                 fontSize: 9,
                 fontWeight: FontWeight.bold,
@@ -475,7 +479,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontWeight: FontWeight.bold,
                     fontSize: 14),
@@ -484,7 +488,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           ],
         ),
         const SizedBox(height: 8),
-        const Divider(color: OptikAdminTokens.line, thickness: 1),
+        Divider(color: OptikAdminTokens.line, thickness: 1),
         const SizedBox(height: 10),
         ...rows,
       ],
@@ -505,7 +509,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
             width: 90,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                   color: OptikAdminTokens.slate, fontSize: 12),
             ),
           ),
@@ -527,6 +531,10 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 
   /// Satu pintu: buka HALAMAN DETAIL → pilih data valid → baru Tolak/Approve.
   Future<void> _bukaReviewVerifikasi(Map karyawan) async {
+    final kid = karyawan['id']?.toString() ?? '';
+    if (kid.isNotEmpty) {
+      unawaited(AdminNavBadgeService.instance.markEntitySeen('karyawan', kid));
+    }
     try {
       final data = <String, dynamic>{
         for (final e in karyawan.entries) e.key.toString(): e.value,
@@ -564,83 +572,98 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
   // 5. WIDGET CARD KARYAWAN PENDING — tanpa Tolak/Approve di luar
   Widget _buildCardKaryawanPending(Map<String, dynamic> k) {
     final String nama = k['nama']?.toString() ?? '-';
+    final kid = k['id']?.toString() ?? '';
     final hasKtp = (k['ktp_photo_url']?.toString() ?? '').isNotEmpty;
+    final unread = kid.isNotEmpty &&
+        AdminNavBadgeService.instance.isEntityUnread('karyawan', kid);
 
-    return PremiumPanel(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 12),
-      borderRadius: 16,
-      borderColor: OptikAdminTokens.warning.withOpacity(0.35),
-      onTap: () => _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              PremiumIconBadge(
-                icon: Icons.person_outline_rounded,
-                color: OptikAdminTokens.warning,
-                size: 44,
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(nama,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: OptikAdminTokens.navy,
-                            fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
-                        style: const TextStyle(
-                            color: OptikAdminTokens.slate, fontSize: 13)),
-                    Text(
-                      hasKtp
-                          ? 'Ada foto KTP + jejak OCR'
-                          : 'Belum ada foto KTP',
-                      style: TextStyle(
-                        color:
-                            hasKtp ? OptikAdminTokens.success : OptikAdminTokens.warning,
-                        fontSize: 11,
+    return GestureDetector(
+      onLongPress: kid.isEmpty
+          ? null
+          : () {
+              unawaited(AdminNavBadgeService.instance
+                  .markEntityUnread('karyawan', kid));
+            },
+      child: PremiumPanel(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 12),
+        borderRadius: 16,
+        borderColor: OptikAdminTokens.warning.withOpacity(0.35),
+        onTap: () => _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                AdminNavBadgeOverlay(
+                  count: unread ? 1 : 0,
+                  child: PremiumIconBadge(
+                    icon: Icons.person_outline_rounded,
+                    color: OptikAdminTokens.warning,
+                    size: 44,
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nama,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: OptikAdminTokens.navy,
+                              fontSize: 16)),
+                      const SizedBox(height: 4),
+                      Text("${k['jabatan'] ?? '-'} - ${k['cabang'] ?? '-'}",
+                          style: TextStyle(
+                              color: OptikAdminTokens.slate, fontSize: 13)),
+                      Text(
+                        hasKtp
+                            ? 'Ada foto KTP + jejak OCR'
+                            : 'Belum ada foto KTP',
+                        style: TextStyle(
+                          color: hasKtp
+                              ? OptikAdminTokens.success
+                              : OptikAdminTokens.warning,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: OptikAdminTokens.slate),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: OptikAdminTokens.navy,
+                  foregroundColor: OptikAdminTokens.snow,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () =>
+                    _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
+                icon: const Icon(Icons.fact_check_rounded, size: 18),
+                label: const Text(
+                  'Buka detail & putuskan',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: OptikAdminTokens.slate),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: OptikAdminTokens.navy,
-                foregroundColor: OptikAdminTokens.snow,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () =>
-                  _bukaReviewVerifikasi(Map<String, dynamic>.from(k)),
-              icon: const Icon(Icons.fact_check_rounded, size: 18),
-              label: const Text(
-                'Buka detail & putuskan',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Tolak / Approve hanya setelah review data di dalam detail.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              'Tolak / Approve hanya setelah review data di dalam detail.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -651,28 +674,33 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: PremiumScaffold(
+    return ListenableBuilder(
+      listenable: AdminNavBadgeService.instance,
+      builder: (context, _) {
+        final verifBadge =
+            AdminNavBadgeService.instance.displayCount('karyawan');
+        return DefaultTabController(
+          length: 2,
+          child: PremiumScaffold(
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          iconTheme: const IconThemeData(color: OptikAdminTokens.navy),
+          iconTheme: IconThemeData(color: OptikAdminTokens.navy),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "appr_title".tr(),
-                style: const TextStyle(
+                style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
                     color: OptikAdminTokens.navy),
               ),
               Text(
                 _isPusat ? "appr_semua_cabang".tr() : widget.cabangAdmin,
-                style: const TextStyle(fontSize: 11, color: OptikAdminTokens.slate),
+                style: TextStyle(fontSize: 11, color: OptikAdminTokens.slate),
               ),
             ],
           ),
@@ -732,7 +760,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
               ),
             IconButton(
               tooltip: "appr_tooltip_refresh".tr(),
-              icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+              icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
               onPressed: _tarikDataKaryawan,
             )
           ],
@@ -764,21 +792,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                       const Icon(Icons.how_to_reg_rounded, size: 18),
                       const SizedBox(width: 6),
                       Text("appr_tab_verifikasi".tr()),
-                      if (_listKaryawanPending.isNotEmpty) ...[
+                      if (verifBadge > 0) ...[
                         const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                              color: OptikAdminTokens.danger,
-                              shape: BoxShape.circle),
-                          child: Text(
-                            _listKaryawanPending.length.toString(),
-                            style: const TextStyle(
-                                color: OptikAdminTokens.snow,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        )
+                        AdminNavBadge(count: verifBadge, compact: true),
                       ]
                     ],
                   ),
@@ -788,7 +804,7 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
           ),
         ),
         body: _isLoading
-            ? const Center(
+            ? Center(
                 child: CircularProgressIndicator(color: OptikAdminTokens.ice))
             : TabBarView(
                 children: [
@@ -822,7 +838,9 @@ class _AdminApprovalPageState extends State<AdminApprovalPage> {
                         ),
                 ],
               ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

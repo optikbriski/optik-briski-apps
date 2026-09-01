@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../shared/brand/rekasa_tokens.dart';
@@ -99,7 +100,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: RekasaPillButton(
-                    label: selected != null ? 'Ganti bidang' : '← Halaman utama',
+                    label: selected != null ? 'admin_btn_ganti_bidang'.tr() : 'admin_auto_ec0583c156'.tr(),
                     onTap: selected != null ? () => _boot() : _openCompanyHome,
                   ),
                 ),
@@ -112,7 +113,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
     return Scaffold(
       backgroundColor: RekasaTokens.canvas,
       appBar: AppBar(
-        title: Text(_companyHome ? 'REKASA KARYA INDONESIA' : 'Etalase Rekasa'),
+        title: Text(_companyHome ? 'REKASA KARYA INDONESIA' : 'admin_lbl_etalase_rekasa'.tr()),
         leading: (_companyHome)
             ? null
             : IconButton(
@@ -253,7 +254,7 @@ class _RekasaStorePageState extends State<RekasaStorePage> {
                       alignment: Alignment.centerLeft,
                       child: TextButton(
                         onPressed: _openCompanyHome,
-                        child: const Text('← Halaman utama'),
+                        child: Text('admin_auto_ec0583c156'.tr()),
                       ),
                     ),
                     const SizedBox(height: 8),

@@ -145,6 +145,8 @@ class KaryawanI18nDisplay {
         return 'pengajuan_tipe_cuti'.tr();
       case 'TUKAR':
         return 'pengajuan_tipe_tukar'.tr();
+      case 'DINAS':
+        return 'pengajuan_tipe_dinas'.tr();
       default:
         return (raw ?? '-').trim().isEmpty ? '-' : raw!.trim();
     }

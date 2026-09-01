@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/services.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import 'payroll_workspace_page.dart';
 
 /// Admin Pusat / Owner Utama: run payroll period + post saldo pusat↔toko.
 /// RPCs: admin_run_payroll_period, admin_post_saldo_movement.
+/// Prefer [PayrollWorkspacePage] for flexible bonus/OT/PPh.
 class OwnerFinanceOpsPage extends StatefulWidget {
   const OwnerFinanceOpsPage({super.key, required this.profile});
 
@@ -93,17 +96,17 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
 
   Future<void> _runPayroll() async {
     if (!_canRun) {
-      _snack('Hanya Admin Pusat / Owner Utama.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_cffde148d9'.tr(), OptikAdminTokens.danger);
       return;
     }
     final toko = _tokoId;
     final ym = _periode.text.trim();
     if (toko == null || toko.isEmpty) {
-      _snack('Pilih cabang.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_fdae65f210'.tr(), OptikAdminTokens.warning);
       return;
     }
     if (!RegExp(r'^\d{4}-\d{2}$').hasMatch(ym)) {
-      _snack('Periode harus YYYY-MM.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_7b53b8eadd'.tr(), OptikAdminTokens.warning);
       return;
     }
     setState(() => _busyPayroll = true);
@@ -136,17 +139,17 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
 
   Future<void> _postSaldo() async {
     if (!_canRun) {
-      _snack('Hanya Admin Pusat / Owner Utama.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_cffde148d9'.tr(), OptikAdminTokens.danger);
       return;
     }
     final toko = _tokoId;
     final amount = int.tryParse(_amount.text.trim().replaceAll('.', ''));
     if (toko == null || toko.isEmpty) {
-      _snack('Pilih cabang.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_fdae65f210'.tr(), OptikAdminTokens.warning);
       return;
     }
     if (amount == null || amount <= 0) {
-      _snack('Nominal harus > 0.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_6c55d78035'.tr(), OptikAdminTokens.warning);
       return;
     }
     setState(() => _busySaldo = true);
@@ -167,7 +170,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{'raw': raw};
       setState(() => _lastSaldo = map);
-      _snack('Mutasi saldo tercatat.', OptikAdminTokens.success);
+      _snack('admin_gl_row_c98c868185'.tr(), OptikAdminTokens.success);
       _amount.clear();
     } catch (e) {
       if (!mounted) return;
@@ -192,7 +195,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: const Text('Payroll & Saldo Owner'),
+        title: Text('admin_auto_bb2f026863'.tr()),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
       ),
@@ -208,11 +211,26 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                       'owner_list_cabang / owner_list_saldo_ledger.',
                       style: TextStyle(color: OptikAdminTokens.slate),
                     ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PayrollWorkspacePage(
+                              profile: widget.profile,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.payments_rounded),
+                      label: Text('admin_auto_5cb45ecd54'.tr()),
+                    ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       value: _tokoId,
-                      decoration: const InputDecoration(
-                        labelText: 'Cabang',
+                      decoration: InputDecoration(
+                        labelText: 'work_sum_toko'.tr(),
                         border: OutlineInputBorder(),
                       ),
                       items: [
@@ -225,18 +243,18 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                       onChanged: (v) => setState(() => _tokoId = v),
                     ),
                     const SizedBox(height: 24),
-                    const PremiumSectionHeader(label: 'Run payroll period'),
+                    PremiumSectionHeader(label: 'admin_auto_7e24f15ee9'.tr()),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _periode,
-                      decoration: const InputDecoration(
-                        labelText: 'Periode (YYYY-MM)',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_9562db598e'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Kunci period setelah run'),
+                      title: Text('admin_auto_b9b697e972'.tr()),
                       value: _lockPayroll,
                       onChanged: (v) => setState(() => _lockPayroll = v),
                     ),
@@ -247,7 +265,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                         minimumSize: const Size.fromHeight(48),
                       ),
                       child: _busyPayroll
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
@@ -255,7 +273,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                                 color: OptikAdminTokens.snow,
                               ),
                             )
-                          : const Text('Jalankan payroll'),
+                          : Text('admin_auto_cd5c55776d'.tr()),
                     ),
                     if (_lastPayroll != null) ...[
                       const SizedBox(height: 8),
@@ -268,22 +286,22 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                       ),
                     ],
                     const SizedBox(height: 28),
-                    const PremiumSectionHeader(label: 'Post mutasi saldo'),
+                    PremiumSectionHeader(label: 'admin_auto_10bf5cc5be'.tr()),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: _direction,
-                      decoration: const InputDecoration(
-                        labelText: 'Arah',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_2b20ac2df6'.tr(),
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
                           value: 'pusat_ke_toko',
-                          child: Text('Pusat → Toko'),
+                          child: Text('admin_auto_e8d57ef9d1'.tr()),
                         ),
                         DropdownMenuItem(
                           value: 'toko_ke_pusat',
-                          child: Text('Toko → Pusat'),
+                          child: Text('admin_auto_5b806fbc42'.tr()),
                         ),
                       ],
                       onChanged: (v) =>
@@ -296,16 +314,16 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                       ],
-                      decoration: const InputDecoration(
-                        labelText: 'Nominal (Rp)',
+                      decoration: InputDecoration(
+                        labelText: 'admin_lbl_nominal_rp'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _note,
-                      decoration: const InputDecoration(
-                        labelText: 'Catatan (opsional)',
+                      decoration: InputDecoration(
+                        labelText: 'ops_reimburse_catatan_admin'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -317,7 +335,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                         minimumSize: const Size.fromHeight(48),
                       ),
                       child: _busySaldo
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
@@ -325,7 +343,7 @@ class _OwnerFinanceOpsPageState extends State<OwnerFinanceOpsPage> {
                                 color: OptikAdminTokens.snow,
                               ),
                             )
-                          : const Text('Post mutasi saldo'),
+                          : Text('admin_auto_10bf5cc5be'.tr()),
                     ),
                     if (_lastSaldo != null) ...[
                       const SizedBox(height: 8),

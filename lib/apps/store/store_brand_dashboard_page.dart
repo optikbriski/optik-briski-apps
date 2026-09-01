@@ -1,9 +1,14 @@
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/brand/rekasa_tokens.dart';
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/tenant/tenant_billing.dart';
+import '../../shared/theme.dart';
 import '../../shared/widgets/rekasa_mark.dart';
 import '../../shared/widgets/rekasa_surface.dart';
 import '../../shared/widgets/tenant_contract_sign_page.dart';
@@ -39,6 +44,22 @@ class _StoreBrandDashboardPageState extends State<StoreBrandDashboardPage> {
       Navigator.pop(context);
       return;
     }
+    final tid = (snap.tenantId ?? '').trim();
+    if (tid.isNotEmpty) {
+      unawaited(ClientForceSync.bind(
+        tenantId: tid,
+        onRemote: (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('client_force_sync_remote_ok'.tr()),
+              backgroundColor: OptikAdminTokens.navy,
+            ),
+          );
+          _boot();
+        },
+      ));
+    }
     setState(() {
       _account = snap;
       _error = snap.ok ? null : (snap.error ?? 'Tidak bisa memuat akun');
@@ -47,9 +68,16 @@ class _StoreBrandDashboardPageState extends State<StoreBrandDashboardPage> {
   }
 
   Future<void> _logout() async {
+    await ClientForceSync.unbind();
     await supabase.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  @override
+  void dispose() {
+    unawaited(ClientForceSync.unbind());
+    super.dispose();
   }
 
   @override

@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:typed_data'; // Untuk konversi data binary Uint8List gambar hasil crop
 import 'package:image_picker/image_picker.dart';
@@ -62,9 +63,9 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     final role = widget.profile['role']?.toString().toLowerCase() ?? '';
     if (role != 'owner' && role != 'admin_pusat') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              'Akses ditolak. Hanya Owner & Admin Pusat yang dapat mengatur layout invoice.'),
+              'admin_auto_invoice_layout_denied'.tr()),
           backgroundColor: OptikAdminTokens.danger,
         ));
         Navigator.pop(context);
@@ -159,7 +160,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal ambil footer Pusat: $e'),
+        content: Text('admin_auto_09637425e0'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     }
@@ -302,8 +303,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
 
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih cabang',
-      subtitle: 'Layout invoice per cabang',
+      title: 'ops_chat_pilih_toko'.tr(),
+      subtitle: 'admin_auto_e847f4b673'.tr(),
       headerIcon: Icons.storefront_rounded,
       searchHint: 'Cari kode cabang…',
       selected: _selectedTokoId,
@@ -312,7 +313,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           AdminPickerOption(
             value: cabang,
             label: cabang,
-            subtitle: cabang == 'PUSAT' ? 'Pusat (master)' : 'Cabang',
+            subtitle: cabang == 'PUSAT' ? 'admin_lbl_pusat_master'.tr() : 'admin_lbl_cabang'.tr(),
             icon: cabang == 'PUSAT'
                 ? Icons.apartment_rounded
                 : Icons.storefront_rounded,
@@ -368,7 +369,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     } catch (e) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal menyimpan: $e'),
+          content: Text('admin_auto_831198e145'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
       return false;
     } finally {
@@ -379,8 +380,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
   Future<void> _hapusSettingCabang() async {
     final toko = InvoiceSettingsService.normalizeTokoId(_selectedTokoId);
     if (toko == 'PUSAT') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Setting PUSAT tidak boleh dihapus.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('admin_auto_c53cfc3571'.tr()),
           backgroundColor: OptikAdminTokens.warning));
       return;
     }
@@ -389,25 +390,24 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           context: context,
           builder: (c) => AlertDialog(
             backgroundColor: OptikAdminTokens.card,
-            title: Text('Hapus layout $toko?',
-                style: const TextStyle(
+            title: Text('admin_auto_4103c81d76'.tr(namedArgs: {'toko': toko}),
+                style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 14,
                     fontWeight: FontWeight.bold)),
-            content: Text(
-                'Layout kustom $toko dihapus. Cetak akan memakai fallback PUSAT / default.',
-                style: const TextStyle(
+            content: Text('admin_auto_a9ca535b3a'.tr(namedArgs: {'toko': toko}),
+                style: TextStyle(
                     color: OptikAdminTokens.textSecondary, fontSize: 12)),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(c, false),
-                  child: const Text('Batal',
+                  child: Text('appr_btn_batal'.tr(),
                       style: TextStyle(color: OptikAdminTokens.textMuted))),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: OptikAdminTokens.danger),
                 onPressed: () => Navigator.pop(c, true),
-                child: const Text('Hapus',
+                child: Text('btn_hapus'.tr(),
                     style: TextStyle(fontWeight: FontWeight.bold)),
               )
             ],
@@ -420,14 +420,14 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
       await _settingsSvc.deleteCabang(toko);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Layout $toko dihapus.'),
+        content: Text('admin_auto_98a128782a'.tr(namedArgs: {'toko': toko})),
         backgroundColor: OptikAdminTokens.warning,
       ));
       await _loadSettings();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Gagal menghapus: $e'),
+          content: Text('admin_auto_b8735137e4'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger));
     }
   }
@@ -467,7 +467,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
         preferWidth: 480,
         child: AlertDialog(
           backgroundColor: OptikAdminTokens.card,
-          title: const Text(
+          title: Text(
             'Crop logo cabang',
             style: TextStyle(
               color: OptikAdminTokens.navy,
@@ -520,7 +520,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
           actions: [
             TextButton(
               onPressed: () => safePop(ctx, null),
-              child: const Text(
+              child: Text(
                 'Batal',
                 style: TextStyle(color: OptikAdminTokens.textMuted),
               ),
@@ -562,7 +562,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
       setState(() {
         _logoUrlCtrl.text = publicUrl;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
             'Logo diunggah. Simpan layout agar dipakai di POS/PDF.'),
         backgroundColor: OptikAdminTokens.success,
@@ -570,7 +570,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Gagal mengunggah logo: $e'),
+        content: Text('admin_auto_b60f5f7c2a'.tr(namedArgs: {'error': '$e'})),
         backgroundColor: OptikAdminTokens.danger,
       ));
     } finally {
@@ -621,7 +621,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Footer per status invoice',
           style: TextStyle(
             color: OptikAdminTokens.navy,
@@ -657,7 +657,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
               inherit
                   ? 'Status: mengikuti footer Pusat (sync otomatis).'
                   : 'Status: footer kustom cabang (tidak ikut perubahan Pusat).',
-              style: const TextStyle(
+              style: TextStyle(
                 color: OptikAdminTokens.navy,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
@@ -715,7 +715,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
               TextButton.icon(
                 onPressed: _samakanFooterDenganPusat,
                 icon: const Icon(Icons.sync_rounded, size: 18),
-                label: const Text('Samakan dengan Pusat'),
+                label: Text('admin_auto_e3b91495ef'.tr()),
                 style: TextButton.styleFrom(
                   foregroundColor: OptikAdminTokens.navy,
                 ),
@@ -723,7 +723,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
             TextButton.icon(
               onPressed: _resetFooterStatusDefault,
               icon: const Icon(Icons.restart_alt_rounded, size: 18),
-              label: const Text('Reset default status ini'),
+              label: Text('admin_auto_4cad431e8c'.tr()),
               style: TextButton.styleFrom(
                 foregroundColor: OptikAdminTokens.slate,
               ),
@@ -854,7 +854,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
             },
             children: [
               TableRow(
-                decoration: const BoxDecoration(color: OptikAdminTokens.bgMid),
+                decoration: BoxDecoration(color: OptikAdminTokens.bgMid),
                 children: ['OD/OS', 'SPH', 'CYL', 'AXIS', 'ADD']
                     .map((t) => cell(t, header: true))
                     .toList(),
@@ -908,7 +908,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
       },
       child: PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Adjust Invoice',
+        title: 'admin_auto_519b02bbf6'.tr(),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _requestLeaveInvoiceConfig,
@@ -927,13 +927,13 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pilih cabang & atur layout',
+                  Text('admin_auto_bcf67c1a48'.tr(),
                       style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.bold,
                           fontSize: 13)),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Setting ini dipakai POS, PDF, detail nota, dan Hub — tanpa jalur terpisah.',
                     style: TextStyle(
                         color: OptikAdminTokens.textMuted, fontSize: 11),
@@ -943,7 +943,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                     children: [
                       Expanded(
                         child: AdminPickerField(
-                          label: 'Cabang',
+                          label: 'work_sum_toko'.tr(),
                           valueText: _selectedTokoId,
                           icon: Icons.storefront_rounded,
                           badgeColor: OptikAdminTokens.warning,
@@ -952,21 +952,21 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                       ),
                       const SizedBox(width: 10),
                       IconButton(
-                          icon: const Icon(Icons.sync_rounded,
+                          icon: Icon(Icons.sync_rounded,
                               color: OptikAdminTokens.navy),
-                          tooltip: 'Muat ulang daftar cabang',
+                          tooltip: 'admin_auto_4ea0a85b87'.tr(),
                           onPressed: _fetchDaftarCabangTerdata),
                       IconButton(
                           icon: const Icon(Icons.delete_forever_rounded,
                               color: OptikAdminTokens.danger),
-                          tooltip: 'Hapus setting cabang ini',
+                          tooltip: 'admin_auto_2e428e51a5'.tr(),
                           onPressed: _hapusSettingCabang),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  const Divider(color: OptikAdminTokens.line),
+                  Divider(color: OptikAdminTokens.line),
                   if (_isLoading)
-                    const Padding(
+                    Padding(
                         padding: EdgeInsets.all(40.0),
                         child: Center(
                             child: CircularProgressIndicator(color: OptikAdminTokens.ice)))
@@ -974,29 +974,29 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                     TextField(
                         controller: _shopNameCtrl,
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                            labelText: 'Nama toko / banner struk')),
+                        decoration: InputDecoration(
+                            labelText: 'admin_auto_0e33a1f206'.tr())),
                     const SizedBox(height: 10),
                     TextField(
                         controller: _addressCtrl,
                         maxLines: 3,
                         onChanged: (_) => setState(() {}),
                         decoration:
-                            const InputDecoration(labelText: 'Alamat cabang')),
+                            InputDecoration(labelText: 'admin_auto_3091314523'.tr())),
                     const SizedBox(height: 10),
                     TextField(
                         controller: _phoneCtrl,
                         onChanged: (_) => setState(() {}),
-                        decoration: const InputDecoration(
-                            labelText: 'Nomor telepon cabang')),
+                        decoration: InputDecoration(
+                            labelText: 'admin_auto_d508d22ff3'.tr())),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _logoUrlCtrl,
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
-                        labelText: 'URL logo (PNG)',
+                        labelText: 'admin_auto_720658df57'.tr(),
                         suffixIcon: _uploadingLogo
-                            ? const Padding(
+                            ? Padding(
                                 padding: EdgeInsets.all(12),
                                 child: SizedBox(
                                   width: 18,
@@ -1011,13 +1011,13 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                 icon: const Icon(
                                     Icons.add_photo_alternate_rounded,
                                     color: OptikAdminTokens.warning),
-                                tooltip: 'Upload & crop logo',
+                                tooltip: 'admin_auto_b7847463b3'.tr(),
                                 onPressed: _pilihDanCropLogo,
                               ),
                       ),
                     ),
                     const SizedBox(height: 15),
-                    const Text('Tata letak header',
+                    Text('admin_auto_8ca7f9c363'.tr(),
                         style: TextStyle(
                             color: OptikAdminTokens.textMuted, fontSize: 11)),
                     Row(
@@ -1026,7 +1026,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                             value: 'CENTER',
                             groupValue: _alignment,
                             onChanged: (v) => setState(() => _alignment = v!)),
-                        const Text('Rata tengah',
+                        Text('admin_auto_d5eefce0a6'.tr(),
                             style: TextStyle(
                                 color: OptikAdminTokens.navy, fontSize: 12)),
                         const SizedBox(width: 20),
@@ -1034,15 +1034,15 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                             value: 'LEFT',
                             groupValue: _alignment,
                             onChanged: (v) => setState(() => _alignment = v!)),
-                        const Text('Rata kiri',
+                        Text('admin_auto_1cba78b1f8'.tr(),
                             style: TextStyle(
                                 color: OptikAdminTokens.navy, fontSize: 12)),
                       ],
                     ),
-                    const Divider(color: OptikAdminTokens.line),
+                    Divider(color: OptikAdminTokens.line),
                     Text(
                         'Ukuran font judul: ${_fontSizeHeader.toInt()} px',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: OptikAdminTokens.navy, fontSize: 12)),
                     Slider(
                         value: _fontSizeHeader,
@@ -1050,8 +1050,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                         max: 28,
                         divisions: 8,
                         onChanged: (v) => setState(() => _fontSizeHeader = v)),
-                    Text('Ukuran font isi: ${_fontSizeBody.toInt()} px',
-                        style: const TextStyle(
+                    Text('admin_lbl_font_size_body'.tr(namedArgs: {'px': '${_fontSizeBody.toInt()}'}),
+                        style: TextStyle(
                             color: OptikAdminTokens.navy, fontSize: 12)),
                     Slider(
                         value: _fontSizeBody,
@@ -1060,7 +1060,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                         divisions: 9,
                         onChanged: (v) => setState(() => _fontSizeBody = v)),
                     SwitchListTile(
-                        title: const Text('Tampilkan QR code invoice',
+                        title: Text('admin_auto_9087b2dcdf'.tr(),
                             style: TextStyle(
                                 color: OptikAdminTokens.navy, fontSize: 12)),
                         value: _showQr,
@@ -1069,8 +1069,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                     TextField(
                       controller: _googleReviewUrlCtrl,
                       onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        labelText: 'URL Google Review (Maps / g.page)',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_460f08026e'.tr(),
                         helperText:
                             'Tombol review di Hub QR invoice. Kosongkan jika belum ada.',
                         helperMaxLines: 2,
@@ -1086,7 +1086,7 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                       child: ElevatedButton.icon(
                         onPressed: _isSaving ? null : _saveSettings,
                         icon: _isSaving
-                            ? const SizedBox(
+                            ? SizedBox(
                                 height: 18,
                                 width: 18,
                                 child: CircularProgressIndicator(
@@ -1105,8 +1105,8 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
             ),
           ),
           narrow
-              ? const Divider(color: OptikAdminTokens.line, height: 1)
-              : const VerticalDivider(color: OptikAdminTokens.line, width: 1),
+              ? Divider(color: OptikAdminTokens.line, height: 1)
+              : VerticalDivider(color: OptikAdminTokens.line, width: 1),
 
           // ===================================================================
           // 📄 PANEL LIVE PREVIEW KANAN: 100% SECURE ZERO HARDCODED SYSTEM
@@ -1224,12 +1224,12 @@ class _InvoiceConfigPageState extends State<InvoiceConfigPage> {
                                         data: demoQrPayload,
                                         version: QrVersions.auto,
                                         gapless: true,
-                                        eyeStyle: const QrEyeStyle(
+                                        eyeStyle: QrEyeStyle(
                                           eyeShape: QrEyeShape.square,
                                           color: OptikAdminTokens.navy,
                                         ),
                                         dataModuleStyle:
-                                            const QrDataModuleStyle(
+                                            QrDataModuleStyle(
                                           dataModuleShape:
                                               QrDataModuleShape.square,
                                           color: OptikAdminTokens.navy,

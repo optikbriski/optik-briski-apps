@@ -178,7 +178,9 @@ class StockRealtime {
       // Trigger DB / postgres_changes tetap jadi jalur utama.
     } finally {
       try {
-        await client.removeChannel(channel);
+        await client
+            .removeChannel(channel)
+            .timeout(const Duration(seconds: 2));
       } catch (_) {}
     }
   }

@@ -88,6 +88,16 @@ const moduleCatalog = <StoreModuleDef>[
     addOnPriceIdr: 80000,
   ),
   StoreModuleDef(
+    key: 'payroll',
+    label: 'Payroll & bonus',
+    summary: 'Gaji, lembur, bonus poin, PPh — dikonfigurasi Admin.',
+    body:
+        'Periode gaji fleksibel: pokok, tunjangan/potongan, lembur, bonus dari poin '
+        '(pool atau Rp/poin), PPh %/nominal, slip karyawan, export bank. '
+        'Nilai diisi Admin — tidak hardcode di sistem.',
+    addOnPriceIdr: 70000,
+  ),
+  StoreModuleDef(
     key: 'online_orders',
     label: 'Pesanan online',
     summary: 'Order dari member, ongkir, dan pengiriman.',

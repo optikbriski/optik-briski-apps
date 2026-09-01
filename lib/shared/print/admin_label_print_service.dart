@@ -315,7 +315,7 @@ class AdminLabelPrintSheet {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
+                    Text(
                       'Cetak label barcode / QR',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
@@ -338,14 +338,14 @@ class AdminLabelPrintSheet {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                         color: OptikAdminTokens.navy,
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text(
+                    Text(
                       'Simbol',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
@@ -378,7 +378,7 @@ class AdminLabelPrintSheet {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    const Text(
+                    Text(
                       'Ukuran label',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
@@ -402,7 +402,7 @@ class AdminLabelPrintSheet {
                     const SizedBox(height: 14),
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           'Salinan',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,

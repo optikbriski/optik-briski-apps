@@ -13,6 +13,7 @@ import '../../shared/responsive.dart';
 import '../../shared/safe_image_picker.dart';
 import '../../shared/training/training_approval_simulator.dart';
 import '../../shared/training/training_mode.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
@@ -90,7 +91,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       DateTime.now().subtract(const Duration(days: 6));
   DateTime _filterEnd = DateTime.now();
   String _filterPresetId = 'last7';
-  final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
+  DateFormat get _dayFmt => AdminFormat.date(context, 'd MMM yyyy');
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -287,7 +288,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   String _formatTanggalIndonesia(String dateStr) {
     try {
       DateTime parsed = DateTime.parse(dateStr);
-      return DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(parsed);
+      return AdminFormat.date(context, 'EEEE, dd MMMM yyyy').format(parsed);
     } catch (e) {
       return dateStr;
     }
@@ -416,7 +417,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengekspor PDF: $e'),
+          content: Text('admin_auto_5e1de07fdf'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.danger,
         ),
       );
@@ -665,40 +666,40 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   }
 
   // --- DIALOG ENTRI JURNAL MANUAL BERBASIS CHART OF ACCOUNTS (COA) STANDARD ---
-  static const _coaJenisOptions = [
+  static List<AdminPickerOption<String>> get _coaJenisOptions => [
     AdminPickerOption(
       value: 'PEMASUKAN',
-      label: 'Pemasukan kas',
+      label: 'admin_auto_34be66dac0'.tr(),
       icon: Icons.arrow_downward_rounded,
     ),
     AdminPickerOption(
       value: 'PENGELUARAN',
-      label: 'Beban operasional',
+      label: 'admin_auto_3de5928066'.tr(),
       icon: Icons.arrow_upward_rounded,
     ),
     AdminPickerOption(
       value: 'PIUTANG',
-      label: 'Piutang usaha',
+      label: 'admin_auto_ba908a3f21'.tr(),
       icon: Icons.account_balance_wallet_outlined,
     ),
     AdminPickerOption(
       value: 'HUTANG',
-      label: 'Hutang supplier',
+      label: 'admin_auto_876bbd7377'.tr(),
       icon: Icons.receipt_long_outlined,
     ),
   ];
 
-  static const _coaMetodeOptions = [
-    AdminPickerOption(value: 'CASH', label: 'Tunai', icon: Icons.payments_outlined),
-    AdminPickerOption(value: 'BCA', label: 'BCA', icon: Icons.account_balance_outlined),
-    AdminPickerOption(value: 'MANDIRI', label: 'Mandiri', icon: Icons.account_balance_outlined),
-    AdminPickerOption(value: 'QRIS', label: 'QRIS', icon: Icons.qr_code_rounded),
-    AdminPickerOption(value: 'LAINNYA', label: 'Lainnya', icon: Icons.more_horiz_rounded),
+  static List<AdminPickerOption<String>> get _coaMetodeOptions => [
+    AdminPickerOption(value: 'CASH', label: 'admin_auto_692901d186'.tr(), icon: Icons.payments_outlined),
+    AdminPickerOption(value: 'BCA', label: 'mock_bca'.tr(), icon: Icons.account_balance_outlined),
+    AdminPickerOption(value: 'MANDIRI', label: 'admin_auto_a917d2bae1'.tr(), icon: Icons.account_balance_outlined),
+    AdminPickerOption(value: 'QRIS', label: 'admin_auto_4efba2f908'.tr(), icon: Icons.qr_code_rounded),
+    AdminPickerOption(value: 'LAINNYA', label: 'pengaduan_kat_lainnya'.tr(), icon: Icons.more_horiz_rounded),
   ];
 
-  static const _coaStatusOptions = [
-    AdminPickerOption(value: 'LUNAS', label: 'Lunas', icon: Icons.check_circle_outline),
-    AdminPickerOption(value: 'BELUM LUNAS', label: 'Belum lunas', icon: Icons.pending_outlined),
+  static List<AdminPickerOption<String>> get _coaStatusOptions => [
+    AdminPickerOption(value: 'LUNAS', label: 'admin_auto_39288f766b'.tr(), icon: Icons.check_circle_outline),
+    AdminPickerOption(value: 'BELUM LUNAS', label: 'admin_auto_e194e34cf2'.tr(), icon: Icons.pending_outlined),
   ];
 
   String _coaJenisLabel(String value) =>
@@ -749,14 +750,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             backgroundColor: OptikAdminTokens.card,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-            title: const Text("Catat keuangan manual",
+            title: Text('admin_auto_63921b0fb4'.tr(),
                 style: TextStyle(
                     color: OptikAdminTokens.navy,
                     fontSize: 14,
                     fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: isSaving
-                  ? const SizedBox(
+                  ? SizedBox(
                       height: 100,
                       child: Center(
                           child: CircularProgressIndicator(color: OptikAdminTokens.ice)))
@@ -780,25 +781,25 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 color: OptikAdminTokens.navy.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(8)),
                             child: Row(children: [
-                              const Icon(Icons.calendar_today,
+                              Icon(Icons.calendar_today,
                                   color: OptikAdminTokens.navy, size: 18),
                               const SizedBox(width: 10),
                               Text(
                                   "Tanggal Buku: ${selectedDate.toString().split(' ')[0]}",
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: OptikAdminTokens.navy, fontSize: 13)),
                             ]),
                           ),
                         ),
                         const SizedBox(height: 12),
                         AdminPickerField(
-                          label: 'Jenis transaksi',
+                          label: 'admin_auto_160c9b91b7'.tr(),
                           valueText: _coaJenisLabel(selectedJenis),
                           icon: Icons.account_balance_outlined,
                           onTap: () async {
                             final sel = await showAdminPicker<String>(
                               context: context,
-                              title: 'Klasifikasi Akun Akuntansi',
+                              title: 'admin_auto_2b995f2a6c'.tr(),
                               selected: selectedJenis,
                               searchable: false,
                               options: _coaJenisOptions,
@@ -810,12 +811,12 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         const SizedBox(height: 12),
                         TextField(
                           controller: kategoriCtrl,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.navy, fontSize: 13),
                           decoration: InputDecoration(
-                              labelText: "Kategori",
-                              hintText: "e.g. Listrik, Sewa Ruko, Modal Awal",
-                              hintStyle: const TextStyle(color: OptikAdminTokens.lineStrong),
+                              labelText: 'ops_reimburse_kat'.tr(),
+                              hintText: 'admin_auto_3b0c716acd'.tr(),
+                              hintStyle: TextStyle(color: OptikAdminTokens.lineStrong),
                               filled: true,
                               fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                               border: OutlineInputBorder(
@@ -839,7 +840,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                               fontWeight: FontWeight.bold,
                               fontSize: 14),
                           decoration: InputDecoration(
-                              labelText: "Nominal (Rp)",
+                              labelText: 'admin_lbl_nominal_rp'.tr(),
                               prefixText: "Rp ",
                               filled: true,
                               fillColor: OptikAdminTokens.snow.withOpacity(0.05),
@@ -879,10 +880,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         TextField(
                           controller: deskripsiCtrl,
                           maxLines: 2,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.navy, fontSize: 13),
                           decoration: InputDecoration(
-                              labelText: "Catatan / keterangan",
+                              labelText: 'admin_auto_f8a510cb80'.tr(),
                               filled: true,
                               fillColor: OptikAdminTokens.snow.withOpacity(0.05),
                               border: OutlineInputBorder(
@@ -949,13 +950,13 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         Row(children: [
                           Expanded(
                             child: AdminPickerField(
-                              label: 'Metode bayar',
+                              label: 'admin_auto_915c8784d7'.tr(),
                               valueText: _coaMetodeLabel(selectedMetode),
                               icon: Icons.payments_outlined,
                               onTap: () async {
                                 final sel = await showAdminPicker<String>(
                                   context: context,
-                                  title: 'Kanal Likuiditas',
+                                  title: 'admin_auto_79c28298df'.tr(),
                                   selected: selectedMetode,
                                   searchable: false,
                                   options: _coaMetodeOptions,
@@ -968,13 +969,13 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: AdminPickerField(
-                              label: 'Status bayar',
+                              label: 'admin_auto_050b7c5f32'.tr(),
                               valueText: _coaStatusLabel(selectedStatus),
                               icon: Icons.flag_outlined,
                               onTap: () async {
                                 final sel = await showAdminPicker<String>(
                                   context: context,
-                                  title: 'Klarifikasi Status',
+                                  title: 'admin_auto_dbcabd02ae'.tr(),
                                   selected: selectedStatus,
                                   searchable: false,
                                   options: _coaStatusOptions,
@@ -996,7 +997,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       padding: const EdgeInsets.only(right: 8.0),
                       child: TextButton(
                           onPressed: () => Navigator.pop(ctx),
-                          child: const Text("Batal",
+                          child: Text('appr_btn_batal'.tr(),
                               style: TextStyle(color: OptikAdminTokens.textMuted))),
                     ),
                     ElevatedButton(
@@ -1007,18 +1008,18 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         if (nominalCtrl.text.isEmpty ||
                             kategoriCtrl.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                   content: Text(
-                                      "⚠️ Data administrasi belum lengkap!")));
+                                      'admin_auto_admin_data_incomplete'.tr())));
                           return;
                         }
 
                         // 2. Validasi nominal cicilan jika status BELUM LUNAS
                         if (selectedStatus == 'BELUM LUNAS' &&
                             dibayarCtrl.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                               content: Text(
-                                  "⚠️ Masukkan nominal biaya yang dibayarkan sekarang!")));
+                                  'admin_auto_enter_payment_now'.tr())));
                           return;
                         }
 
@@ -1144,11 +1145,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                           setInnerState(() => isSaving = false);
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                               content:
-                                  Text("Gagal menyimpan entri: $e"),
+                                  Text('admin_auto_f54929d2a2'.tr(namedArgs: {'error': '$e'})),
                               backgroundColor: OptikAdminTokens.danger));
                         }
                       },
-                      child: const Text("Simpan jurnal"),
+                      child: Text('admin_auto_75e52f8712'.tr()),
                     )
                   ],
           ),
@@ -1168,9 +1169,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
     final options = <AdminPickerOption<String>>[];
     if (role == 'owner' && isPending && !isPosAuto) {
-      options.add(const AdminPickerOption(
+      options.add(AdminPickerOption(
         value: 'approve',
-        label: 'Setujui transaksi',
+        label: 'admin_auto_43c4599fb0'.tr(),
         icon: Icons.check_circle_rounded,
       ));
     }
@@ -1187,8 +1188,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
     if (options.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Tidak ada tindakan yang tersedia untuk transaksi ini.'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('admin_auto_504d08f046'.tr()),
         backgroundColor: OptikAdminTokens.textMuted,
       ));
       return;
@@ -1196,7 +1197,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
 
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Pilih tindakan',
+      title: 'admin_auto_af8bb3340b'.tr(),
       searchable: false,
       headerIcon: Icons.gavel_rounded,
       options: options,
@@ -1204,7 +1205,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
     if (sel == null || sel.isClear) return;
 
     final actionLabel = sel.value == 'approve'
-        ? 'setujui transaksi kas'
+        ? 'admin_auto_approve_cash_tx'.tr()
         : 'hapus rekaman kas';
     final allowed = await StockActorGate.requireMatchingViaKaryawanQr(
       context: context,
@@ -1243,20 +1244,20 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: OptikAdminTokens.card,
-          title: const Text('Hapus transaksi?',
+          title: Text('admin_auto_95a607d20f'.tr(),
               style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 15,
                   fontWeight: FontWeight.bold)),
           content: Text(
             'Rekaman "${item['kategori'] ?? '-'}" akan dihapus permanen.',
-            style: const TextStyle(
+            style: TextStyle(
                 color: OptikAdminTokens.textSecondary, fontSize: 13),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal',
+              child: Text('appr_btn_batal'.tr(),
                   style: TextStyle(color: OptikAdminTokens.textMuted)),
             ),
             FilledButton(
@@ -1265,7 +1266,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 foregroundColor: OptikAdminTokens.snow,
               ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Hapus'),
+              child: Text('btn_hapus'.tr()),
             ),
           ],
         ),
@@ -1309,7 +1310,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Gagal menghapus rekaman: $e"),
+            content: Text('admin_auto_8cd4885a34'.tr(namedArgs: {'error': '$e'})),
             backgroundColor: OptikAdminTokens.danger));
       }
     }
@@ -1329,8 +1330,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
   // ==========================================================================
   Widget _buildStage1ListCabang() {
     if (listCabangUnik.isEmpty) {
-      return const PremiumEmptyState(
-        message: 'Belum ada perputaran dana di cabang mana pun.',
+      return PremiumEmptyState(
+        message: 'admin_auto_40b9132dff'.tr(),
         icon: Icons.account_balance_wallet_outlined,
       );
     }
@@ -1341,7 +1342,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         final tokoId = listCabangUnik[index];
         return PremiumListTile(
           title: '${BrandService.name} · ${_tokoLabel(tokoId)}',
-          subtitle: 'Buka jurnal keuangan cabang',
+          subtitle: 'admin_auto_95afdc0f9e'.tr(),
           icon: Icons.store_rounded,
           iconColor: OptikAdminTokens.navy,
           onTap: () {
@@ -1379,27 +1380,27 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           items: [
             PremiumStatItem(
-              label: 'Kas masuk',
+              label: 'admin_auto_4d717fa2e4'.tr(),
               value: _formatRupiah(kpiCashIn),
               color: OptikAdminTokens.success,
             ),
             PremiumStatItem(
-              label: 'Pengeluaran',
+              label: 'fin_pengeluaran'.tr(),
               value: _formatRupiah(kpiOut),
               color: OptikAdminTokens.danger,
             ),
             PremiumStatItem(
-              label: 'Omzet riil',
+              label: 'admin_auto_07fcfd43be'.tr(),
               value: _formatRupiah(kpiOmzet),
               color: OptikAdminTokens.navy,
             ),
             PremiumStatItem(
-              label: 'Belum bayar',
+              label: 'admin_auto_75e1266e1c'.tr(),
               value: _formatRupiah(kpiDebt),
               color: OptikAdminTokens.warning,
             ),
             PremiumStatItem(
-              label: 'Saldo toko',
+              label: 'admin_auto_d94ef16f5d'.tr(),
               value: _formatRupiah(kpiSaldo),
               color: OptikAdminTokens.navy,
             ),
@@ -1419,10 +1420,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("DPP (omzet netto):",
+                  Text('admin_auto_f8b3d8acdf'.tr(),
                       style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10.5)),
                   Text(_formatRupiah(kpiDpp),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: OptikAdminTokens.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.bold)),
@@ -1432,7 +1433,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("PPN keluaran (11%):",
+                  Text('admin_auto_0873984934'.tr(),
                       style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10.5)),
                   Text(_formatRupiah(kpiPpn),
                       style: const TextStyle(
@@ -1451,7 +1452,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 "Jurnal Keuangan Harian",
                 style: TextStyle(
                     color: OptikAdminTokens.textSecondary,
@@ -1465,28 +1466,28 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               ),
               const SizedBox(height: OptikAdminTokens.spaceMd),
               AdminPickerField(
-                label: 'Rentang tanggal',
+                label: 'admin_auto_15e7977a86'.tr(),
                 valueText:
                     _useDateFilter ? 'Pakai tanggal' : 'Semua tanggal',
                 icon: Icons.date_range_rounded,
                 onTap: () async {
                   final sel = await showAdminPicker<bool>(
                     context: context,
-                    title: 'Filter tanggal jurnal',
+                    title: 'admin_auto_0181f9ef3f'.tr(),
                     searchable: false,
                     selected: _useDateFilter,
                     headerIcon: Icons.date_range_rounded,
-                    options: const [
+                    options: [
                       AdminPickerOption(
                         value: true,
-                        label: 'Pakai tanggal',
-                        subtitle: 'Tampilkan hanya rentang terpilih',
+                        label: 'admin_lbl_pakai_tanggal'.tr(),
+                        subtitle: 'admin_auto_9fdb5f0764'.tr(),
                         icon: Icons.event_available_rounded,
                       ),
                       AdminPickerOption(
                         value: false,
-                        label: 'Semua tanggal',
-                        subtitle: 'Tampilkan seluruh jurnal',
+                        label: 'admin_lbl_semua_tanggal'.tr(),
+                        subtitle: 'admin_auto_167ad64da6'.tr(),
                         icon: Icons.event_busy_rounded,
                       ),
                     ],
@@ -1508,8 +1509,8 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               final displayedDates = _datesInFilter(listTanggalJurnal);
 
               if (displayedDates.isEmpty) {
-                return const PremiumEmptyState(
-                  message: 'Tidak ada arsip pembukuan untuk periode terpilih.',
+                return PremiumEmptyState(
+                  message: 'admin_auto_79d06c74e3'.tr(),
                   icon: Icons.event_busy_rounded,
                 );
               }
@@ -1565,7 +1566,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   Expanded(
                                     child: Text(
                                       _formatTanggalIndonesia(tglKey),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.navy,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 11.5),
@@ -1601,12 +1602,12 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  Text("Masuk: ${_formatRupiah(dayIn)}",
+                                  Text('admin_lbl_masuk_amount'.tr(namedArgs: {'amount': _formatRupiah(dayIn)}),
                                       style: const TextStyle(
                                           color: OptikAdminTokens.success,
                                           fontSize: 11)),
                                   const SizedBox(width: 10),
-                                  Text("Keluar: ${_formatRupiah(dayOut)}",
+                                  Text('admin_lbl_keluar_amount'.tr(namedArgs: {'amount': _formatRupiah(dayOut)}),
                                       style: const TextStyle(
                                           color: OptikAdminTokens.danger, fontSize: 11)),
                                 ],
@@ -1614,13 +1615,13 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             ],
                           ),
                         ),
-                        Text("Netto: ${_formatRupiah(dayNet)}",
+                        Text('admin_lbl_netto_amount'.tr(namedArgs: {'amount': _formatRupiah(dayNet)}),
                             style: TextStyle(
                                 color: netColor,
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold)),
                         const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right_rounded,
+                        Icon(Icons.chevron_right_rounded,
                             color: OptikAdminTokens.textMuted, size: 18),
                       ],
                     ),
@@ -1671,11 +1672,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("↳ DPP (omzet netto):",
+                      Text('admin_auto_e35a2b0ebb'.tr(),
                           style:
                               TextStyle(color: OptikAdminTokens.lineStrong, fontSize: 10)),
                       Text(_formatRupiah(dailyDppNetto),
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: OptikAdminTokens.textMuted, fontSize: 10)),
                     ],
                   ),
@@ -1685,7 +1686,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("↳ PPN keluaran (11%):",
+                      Text('admin_auto_4958f9afbb'.tr(),
                           style:
                               TextStyle(color: OptikAdminTokens.lineStrong, fontSize: 10)),
                       Text(_formatRupiah(dailyPpnKeluaran),
@@ -1697,7 +1698,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                 ),
                 _buildRowFinansialCorporate("Total HPP / modal pokok",
                     "- ${_formatRupiah(dailyTotalHppModal)}", OptikAdminTokens.textSecondary),
-                const Divider(color: OptikAdminTokens.line, height: 16),
+                Divider(color: OptikAdminTokens.line, height: 16),
                 _buildRowFinansialCorporate(
                     "Pemasukan kas manual",
                     "+ ${_formatRupiah(totalPemasukanKasManual)}",
@@ -1706,11 +1707,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                     "Beban operasional",
                     "- ${_formatRupiah(biayaOpex)}",
                     OptikAdminTokens.danger),
-                const Divider(color: OptikAdminTokens.lineStrong, thickness: 1, height: 20),
+                Divider(color: OptikAdminTokens.lineStrong, thickness: 1, height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("Laba bersih harian",
+                    Text('admin_auto_0018c05490'.tr(),
                         style: TextStyle(
                             color: OptikAdminTokens.navy,
                             fontSize: 11,
@@ -1741,7 +1742,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                     "Rekonsiliasi kanal setoran harian",
                     style: TextStyle(
                         color: OptikAdminTokens.navy,
@@ -1763,10 +1764,10 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text("${e.key}: ",
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: OptikAdminTokens.textMuted, fontSize: 10)),
                           Text(_formatRupiah(e.value),
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: OptikAdminTokens.navy,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold)),
@@ -1781,15 +1782,15 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           const SizedBox(height: 20),
 
           // 📦 PANEL C: TABEL DETAIL MUTASI BARANG KELUAR DENGAN JEJAK DOKUMEN AUDIT TRAIL KORPORAT
-          const Text("Barang keluar & margin",
+          Text('admin_auto_a23fcd35da'.tr(),
               style: TextStyle(
                   color: OptikAdminTokens.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           dailyItemsSold.isEmpty
-              ? const PremiumEmptyState(
-                  message: 'Tidak ada sirkulasi produk keluar pada hari ini.',
+              ? PremiumEmptyState(
+                  message: 'admin_auto_035e87a364'.tr(),
                   icon: Icons.inventory_2_outlined,
                 )
               : Container(
@@ -1815,7 +1816,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                       children: [
                         TableRow(
                           decoration:
-                              const BoxDecoration(color: OptikAdminTokens.bgMid),
+                              BoxDecoration(color: OptikAdminTokens.bgMid),
                           children: [
                             'Produk',
                             'Qty',
@@ -1827,7 +1828,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   padding: const EdgeInsets.symmetric(
                                       vertical: 8, horizontal: 4),
                                   child: Text(txt,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.textMuted,
                                           fontSize: 9,
                                           fontWeight: FontWeight.bold),
@@ -1844,14 +1845,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(item['nama_produk'].toString(),
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: OptikAdminTokens.navy,
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 3),
                                     Text(
                                         "${item['no_invoice']} • ${item['nama_pelanggan']}",
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: OptikAdminTokens.textMuted,
                                             fontSize: 8.5,
                                             fontStyle: FontStyle.italic)),
@@ -1861,20 +1862,20 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(item['qty'].toString(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.textSecondary, fontSize: 11),
                                       textAlign: TextAlign.center)),
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(_formatRupiah(item['harga_jual']),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.navy, fontSize: 11),
                                       textAlign: TextAlign.end)),
                               Padding(
                                   padding: const EdgeInsets.all(8),
                                   child: Text(
                                       _formatRupiah(item['harga_modal']),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: OptikAdminTokens.textMuted, fontSize: 11),
                                       textAlign: TextAlign.end)),
                               Padding(
@@ -1892,11 +1893,11 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                         // 🏛️ BARIS BARU: KESIMPULAN REKONSILIASI TOTAL ASET DI LUAR ITERASI MAP
                         TableRow(
                           decoration:
-                              const BoxDecoration(color: OptikAdminTokens.bgMid),
+                              BoxDecoration(color: OptikAdminTokens.bgMid),
                           children: [
                             Padding(
                                 padding: const EdgeInsets.all(8),
-                                child: const Text('Total',
+                                child: Text('fin_total'.tr(),
                                     style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontSize: 10,
@@ -1905,7 +1906,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 padding: const EdgeInsets.all(8),
                                 child: Text(
                                     '${dailyItemsSold.fold(0, (sum, item) => sum + (item['qty'] as int))}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
@@ -1913,7 +1914,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             Padding(
                                 padding: const EdgeInsets.all(8),
                                 child: Text(_formatRupiah(dailyOmzetPemasukan),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
@@ -1921,7 +1922,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                             Padding(
                                 padding: const EdgeInsets.all(8),
                                 child: Text(_formatRupiah(dailyTotalHppModal),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: OptikAdminTokens.navy,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold),
@@ -1946,14 +1947,14 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
           const SizedBox(height: 20),
 
           // 🏛 PANEL D: REKAMAN MUTASI OPERASIONAL DENGAN USER IDENTIFIER SISTEM
-          const Text("Beban OPEX & mutasi operasional",
+          Text('admin_auto_0c6b1afd62'.tr(),
               style: TextStyle(
                   color: OptikAdminTokens.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           txKasManual.isEmpty
-              ? const PremiumEmptyState(
+              ? PremiumEmptyState(
                   message:
                       'Tidak ada rekaman mutasi operasional pada tanggal ini.',
                   icon: Icons.receipt_long_outlined,
@@ -2032,7 +2033,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
                                 ),
                                 child: Text(
                                   _isClosingShift(tx) ? "Tutup toko" : "POS / DP",
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: OptikAdminTokens.navy,
                                       fontSize: 8,
                                       fontWeight: FontWeight.bold),
@@ -2093,7 +2094,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 11)),
+              style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 11)),
           Text(value,
               style: TextStyle(
                   color: color, fontSize: 11, fontWeight: FontWeight.bold))
@@ -2111,9 +2112,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: OptikAdminTokens.textPrimary),
+        iconTheme: IconThemeData(color: OptikAdminTokens.textPrimary),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: OptikAdminTokens.navy, size: 20),
+          icon: Icon(Icons.arrow_back, color: OptikAdminTokens.navy, size: 20),
           onPressed: () {
             final role =
                 widget.profile['role']?.toString().toLowerCase() ?? '';
@@ -2138,7 +2139,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
               : selectedTokoId != null
                   ? "Jurnal · ${_tokoLabel(selectedTokoId)}"
                   : "Keuangan & Kas",
-          style: const TextStyle(
+          style: TextStyle(
               color: OptikAdminTokens.navy,
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -2148,9 +2149,9 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
         actions: [
           if (_canAccessGl)
             IconButton(
-              icon: const Icon(Icons.account_balance_rounded,
+              icon: Icon(Icons.account_balance_rounded,
                   color: OptikAdminTokens.navy, size: 20),
-              tooltip: 'General Ledger',
+              tooltip: 'admin_auto_99df167760'.tr(),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -2168,7 +2169,7 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             IconButton(
               icon: const Icon(Icons.gavel_rounded,
                   color: OptikAdminTokens.warning, size: 20),
-              tooltip: "Persetujuan COA manual",
+              tooltip: 'admin_auto_f0a0f937b1'.tr(),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -2184,30 +2185,30 @@ class _BukuBesarPageState extends State<BukuBesarPage> {
             Center(
               child: Text(
                 "Sinkron: $lastSyncTime  ",
-                style: const TextStyle(
+                style: TextStyle(
                     color: OptikAdminTokens.textMuted,
                     fontSize: 9.5,
                     fontWeight: FontWeight.bold),
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.refresh_rounded,
+              icon: Icon(Icons.refresh_rounded,
                   color: OptikAdminTokens.navy, size: 20),
-              tooltip: "Tarik Data Terbaru Cabang",
+              tooltip: 'admin_auto_2474a29f13'.tr(),
               onPressed: () => _fetchTransaksiPerCabang(selectedTokoId!),
             ),
           ],
           if (selectedDateStr != null)
             IconButton(
-              icon: const Icon(Icons.download_for_offline_rounded,
+              icon: Icon(Icons.download_for_offline_rounded,
                   color: OptikAdminTokens.navy, size: 20),
-              tooltip: "Ekspor PDF laporan harian",
+              tooltip: 'admin_auto_d8f59d8ffc'.tr(),
               onPressed: _exportDailyLedgerPdf,
             ),
         ],
       ),
       body: isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _orchestrateBukuBesarFlowLayout(),
       floatingActionButton: selectedTokoId == null

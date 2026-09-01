@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 import 'dart:convert';
+import 'package:easy_localization/easy_localization.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -10,10 +11,23 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
+import '../../shared/widgets/app_brand_mark.dart';
 import '../../shared/brand/brand_service.dart';
 import '../../shared/member/member_home_models.dart';
 import '../../shared/member/member_home_rules.dart';
 import '../../shared/tenant/tenant_service.dart';
+
+InputDecoration _cmsDeco(String label, {String? helper}) {
+  return InputDecoration(
+    labelText: label,
+    helperText: helper,
+    helperMaxLines: 3,
+    alignLabelWithHint: true,
+    floatingLabelBehavior: FloatingLabelBehavior.always,
+  );
+}
+
+const _cmsFieldGap = SizedBox(height: 14);
 
 /// CMS Member: layout hide/show, banner bergambar, promo detail (Member + POS).
 class MemberHomeContentPage extends StatefulWidget {
@@ -56,29 +70,29 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       _brand.text.trim().isEmpty ? _defaultBrandLabel : _brand.text.trim();
   String? _error;
 
-  static const _defaultSections = [
-    {'key': 'hero', 'label': 'Header / Banner', 'visible': true, 'order': 0},
-    {'key': 'greeting', 'label': 'Kartu sapaan', 'visible': true, 'order': 1},
-    {'key': 'promo', 'label': 'Kartu promo', 'visible': true, 'order': 2},
-    {'key': 'reminders', 'label': 'Pengingat', 'visible': true, 'order': 3},
-    {'key': 'store', 'label': 'Cabang saya', 'visible': true, 'order': 4},
+  static List<Map<String, dynamic>> get _defaultSections => [
+    {'key': 'hero', 'label': 'admin_mhc_section_hero'.tr(), 'visible': true, 'order': 0},
+    {'key': 'greeting', 'label': 'admin_mhc_section_greeting'.tr(), 'visible': true, 'order': 1},
+    {'key': 'promo', 'label': 'admin_mhc_section_promo'.tr(), 'visible': true, 'order': 2},
+    {'key': 'reminders', 'label': 'admin_mhc_section_reminders'.tr(), 'visible': true, 'order': 3},
+    {'key': 'store', 'label': 'admin_mhc_section_store'.tr(), 'visible': true, 'order': 4},
     {
       'key': 'services_main',
-      'label': 'Layanan utama',
+      'label': 'admin_mhc_section_services_main'.tr(),
       'visible': true,
       'order': 5
     },
-    {'key': 'services_other', 'label': 'Lainnya', 'visible': true, 'order': 6},
+    {'key': 'services_other', 'label': 'admin_mhc_section_services_other'.tr(), 'visible': true, 'order': 6},
   ];
 
-  static const _flagLabels = {
-    'katalog': 'Belanja Online',
-    'janji_kontrol': 'Janji kontrol',
-    'resep': 'Resep / reorder',
-    'rating': 'Rating',
-    'notif': 'Inbox',
-    'perawatan': 'Perawatan',
-    'bentuk_wajah': 'Bentuk (referensi frame)',
+  static Map<String, String> get _flagLabels => {
+    'katalog': 'member_shop_title'.tr(),
+    'janji_kontrol': 'admin_mhc_flag_janji_kontrol'.tr(),
+    'resep': 'admin_mhc_flag_resep'.tr(),
+    'rating': 'admin_mhc_flag_rating'.tr(),
+    'notif': 'member_inbox_title'.tr(),
+    'perawatan': 'admin_mhc_flag_perawatan'.tr(),
+    'bentuk_wajah': 'admin_mhc_flag_bentuk_wajah'.tr(),
   };
 
   static const _sectionMeta = <String, ({IconData icon, String hint})>{
@@ -120,8 +134,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     if (role != 'owner' && role != 'admin_pusat' && role != 'super_admin') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Hanya Owner / Admin Pusat.'),
+          SnackBar(
+            content: Text('admin_auto_fbb4dba519'.tr()),
             backgroundColor: OptikAdminTokens.danger,
           ),
         );
@@ -231,13 +245,13 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       if (slidesList.isEmpty) {
         slidesList = [
           {
-            'title': 'Kacamata siap?\nLangsung tahu di sini',
-            'subtitle': 'Pantau status pesanan & ambil tanpa ribet',
+            'title': 'admin_auto_kacamata_siap_title'.tr(),
+            'subtitle': 'admin_auto_c8dae62f61'.tr(),
             'image_url': '',
           },
           {
-            'title': 'Garansi digital\n${BrandService.name}',
-            'subtitle': 'Data asli sistem · klaim wajib cek di toko',
+            'title': 'admin_mhc_slide2_title'.tr(namedArgs: {'brand': BrandService.name}),
+            'subtitle': 'admin_mhc_slide2_sub'.tr(),
             'image_url': '',
           },
         ];
@@ -415,7 +429,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload gagal: $e')),
+        SnackBar(content: Text('admin_auto_0dde50f348'.tr(namedArgs: {'error': '$e'}))),
       );
     }
   }
@@ -444,7 +458,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$e'),
+          content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})),
           backgroundColor: OptikAdminTokens.warning,
         ),
       );
@@ -455,19 +469,16 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Simpan draft?'),
-        content: const Text(
-          'Draft di kunci di editor. APK Member belum berubah — '
-          'tekan Update setelah ini untuk apply ke APK.',
-        ),
+        title: Text('admin_auto_07b5ee28fa'.tr()),
+        content: Text('admin_auto_7175bb3a6d'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Simpan draft'),
+            child: Text('admin_auto_fb9c77167e'.tr()),
           ),
         ],
       ),
@@ -483,10 +494,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Draft tersimpan. APK belum berubah — tekan Update untuk apply.',
-        ),
+      SnackBar(
+        content: Text('admin_gl_row_5ba088f5bf'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ),
     );
@@ -554,8 +563,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     if (_publishing) return;
     if (_draftDirty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ada edit baru. Tekan Simpan dulu, lalu Update.'),
+        SnackBar(
+          content: Text('admin_auto_b2bf716b54'.tr()),
           backgroundColor: OptikAdminTokens.warning,
         ),
       );
@@ -566,18 +575,16 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Update ke APK Member?'),
-        content: const Text(
-          'Draft yang sudah disimpan akan diterapkan ke beranda APK Member. Lanjutkan?',
-        ),
+        title: Text('admin_auto_62dcf584da'.tr()),
+        content: Text('admin_gl_row_091abb59d1'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Update APK'),
+            child: Text('dash_menu_update_apk'.tr()),
           ),
         ],
       ),
@@ -601,8 +608,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         _draftDirty = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Beranda Member diperbarui di APK.'),
+        SnackBar(
+          content: Text('admin_auto_d80b7d9188'.tr()),
           backgroundColor: OptikAdminTokens.success,
         ),
       );
@@ -679,18 +686,16 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buang draft?'),
-        content: const Text(
-          'Semua edit yang belum di-Update ke APK akan dibuang. Kembali ke data server?',
-        ),
+        title: Text('admin_auto_c3a435b8c8'.tr()),
+        content: Text('admin_gl_row_1b72c272e8'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Buang draft'),
+            child: Text('admin_auto_4880e310e3'.tr()),
           ),
         ],
       ),
@@ -704,7 +709,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Keluar tanpa Update?'),
+        title: Text('admin_auto_9f59e9bc60'.tr()),
         content: Text(
           _pendingUpdate && !_draftDirty
               ? 'Draft sudah di-Simpan tapi belum di-Update ke APK. Keluar dan buang?'
@@ -713,11 +718,11 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Lanjut edit'),
+            child: Text('admin_auto_186d712a62'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Buang & keluar'),
+            child: Text('admin_auto_1c72019858'.tr()),
           ),
         ],
       ),
@@ -778,197 +783,331 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text(isNew ? 'Tambah promo' : 'Edit promo'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
+        builder: (ctx, setLocal) => Dialog(
+          backgroundColor: OptikAdminTokens.card,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(color: OptikAdminTokens.chromeEdge),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 520,
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.88,
+            ),
+            child: _cmsThemed(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                      controller: title,
-                      decoration: const InputDecoration(labelText: 'Judul *')),
-                  TextField(
-                      controller: desc,
-                      maxLines: 2,
-                      decoration:
-                          const InputDecoration(labelText: 'Deskripsi')),
-                  TextField(
-                      controller: code,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                          labelText:
-                              'Kode voucher * (wajib jika Nominal/Persen)',
-                          helperText:
-                              'Dipakai redeem kuota/poin di POS & Belanja Online')),
-                  const SizedBox(height: 8),
-                  AdminPickerField(
-                    label: 'Tipe diskon POS',
-                    valueText: switch (discType) {
-                      'percent' => 'Persen (%)',
-                      'info' => 'Info saja (tanpa potong POS)',
-                      _ => 'Nominal (Rp)',
-                    },
-                    icon: Icons.discount_outlined,
-                    onTap: () async {
-                      const options = [
-                        AdminPickerOption(
-                          value: 'nominal',
-                          label: 'Nominal (Rp)',
-                          icon: Icons.payments_outlined,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 20, 12, 8),
+                    child: Row(
+                      children: [
+                        PremiumIconBadge(
+                          icon: Icons.local_offer_outlined,
+                          color: OptikAdminTokens.navy,
+                          size: 40,
                         ),
-                        AdminPickerOption(
-                          value: 'percent',
-                          label: 'Persen (%)',
-                          icon: Icons.percent_rounded,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            isNew ? 'Tambah promo' : 'Edit promo',
+                            style: TextStyle(
+                              color: OptikAdminTokens.navy,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
                         ),
-                        AdminPickerOption(
-                          value: 'info',
-                          label: 'Info saja (tanpa potong POS)',
-                          icon: Icons.info_outline_rounded,
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: OptikAdminTokens.slate,
+                          ),
                         ),
-                      ];
-                      final sel = await showAdminPicker<String>(
-                        context: ctx,
-                        title: 'Tipe diskon POS',
-                        selected: discType,
-                        searchable: false,
-                        options: options,
-                      );
-                      if (sel == null || sel.isClear) return;
-                      setLocal(() => discType = sel.value!);
-                    },
-                  ),
-                  TextField(
-                    controller: discVal,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                        labelText: 'Nilai diskon (Rp atau %)'),
-                  ),
-                  TextField(
-                    controller: points,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Biaya poin Member'),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: qty,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Kuota total (kosong=∞)'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: qtyLeft,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Sisa kuota'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  TextField(
-                    controller: sort,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Urutan tampil'),
-                  ),
-                  TextField(
-                    controller: terms,
-                    maxLines: 2,
-                    decoration:
-                        const InputDecoration(labelText: 'Syarat & ketentuan'),
-                  ),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(validUntil == null
-                        ? 'Tanpa tanggal habis'
-                        : 'Berlaku s/d ${validUntil!.toLocal().toString().substring(0, 10)}'),
-                    trailing: TextButton(
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: ctx,
-                          firstDate: DateTime(2024),
-                          lastDate: DateTime(2100),
-                          initialDate: validUntil ?? DateTime.now(),
-                        );
-                        if (d != null) setLocal(() => validUntil = d);
-                      },
-                      child: const Text('Pilih'),
+                      ],
                     ),
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Aktif'),
-                    value: active,
-                    onChanged: (v) => setLocal(() => active = v),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Tampil di APK Member'),
-                    value: onMember,
-                    onChanged: (v) => setLocal(() => onMember = v),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Bisa dipakai di POS'),
-                    value: onPos,
-                    onChanged: (v) => setLocal(() => onPos = v),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      if (imageUrl.isNotEmpty)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(imageUrl,
-                              width: 64, height: 64, fit: BoxFit.cover),
-                        ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final file = await ImagePicker().pickImage(
-                            source: ImageSource.gallery,
-                            maxWidth: 1200,
-                            imageQuality: 85,
-                          );
-                          if (file == null) return;
-                          final bytes = await file.readAsBytes();
-                          try {
-                            final url =
-                                await _uploadBanner(bytes, file.name);
-                            setLocal(() => imageUrl = url ?? '');
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Upload gagal: $e')),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.image_outlined),
-                        label: const Text('Gambar promo'),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _cmsEyebrow('Identitas'),
+                          TextField(
+                            controller: title,
+                            decoration: _cmsDeco('Judul *'),
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: desc,
+                            maxLines: 2,
+                            decoration: _cmsDeco('Deskripsi'),
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: code,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: _cmsDeco(
+                              'Kode voucher *',
+                              helper:
+                                  'Wajib jika Nominal/Persen. Dipakai redeem kuota/poin di POS & Belanja Online.',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _cmsEyebrow('Diskon & kuota'),
+                          AdminPickerField(
+                            label: 'admin_auto_ae15fa1f5b'.tr(),
+                            valueText: switch (discType) {
+                              'percent' => 'Persen (%)',
+                              'info' => 'Info saja (tanpa potong POS)',
+                              _ => 'Nominal (Rp)',
+                            },
+                            icon: Icons.discount_outlined,
+                            onTap: () async {
+                              final options = [
+                                AdminPickerOption(
+                                  value: 'nominal',
+                                  label: 'admin_lbl_nominal_rp'.tr(),
+                                  icon: Icons.payments_outlined,
+                                ),
+                                AdminPickerOption(
+                                  value: 'percent',
+                                  label: 'admin_auto_b895a4d7da'.tr(),
+                                  icon: Icons.percent_rounded,
+                                ),
+                                AdminPickerOption(
+                                  value: 'info',
+                                  label: 'admin_auto_700e8db6fa'.tr(),
+                                  icon: Icons.info_outline_rounded,
+                                ),
+                              ];
+                              final sel = await showAdminPicker<String>(
+                                context: ctx,
+                                title: 'admin_auto_ae15fa1f5b'.tr(),
+                                selected: discType,
+                                searchable: false,
+                                options: options,
+                              );
+                              if (sel == null || sel.isClear) return;
+                              setLocal(() => discType = sel.value!);
+                            },
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: discVal,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            decoration: _cmsDeco('Nilai diskon (Rp atau %)'),
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: points,
+                            keyboardType: TextInputType.number,
+                            decoration: _cmsDeco('Biaya poin Member'),
+                          ),
+                          _cmsFieldGap,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: qty,
+                                  keyboardType: TextInputType.number,
+                                  decoration:
+                                      _cmsDeco('Kuota total (kosong=∞)'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: qtyLeft,
+                                  keyboardType: TextInputType.number,
+                                  decoration: _cmsDeco('Sisa kuota'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: sort,
+                            keyboardType: TextInputType.number,
+                            decoration: _cmsDeco('Urutan tampil'),
+                          ),
+                          _cmsFieldGap,
+                          TextField(
+                            controller: terms,
+                            maxLines: 2,
+                            decoration: _cmsDeco('Syarat & ketentuan'),
+                          ),
+                          const SizedBox(height: 8),
+                          _cmsEyebrow('Tayang'),
+                          _cmsSoftCard(
+                            child: Column(
+                              children: [
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    validUntil == null
+                                        ? 'Tanpa tanggal habis'
+                                        : 'Berlaku s/d ${validUntil!.toLocal().toString().substring(0, 10)}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  trailing: TextButton(
+                                    onPressed: () async {
+                                      final d = await showDatePicker(
+                                        context: ctx,
+                                        firstDate: DateTime(2024),
+                                        lastDate: DateTime(2100),
+                                        initialDate:
+                                            validUntil ?? DateTime.now(),
+                                      );
+                                      if (d != null) {
+                                        setLocal(() => validUntil = d);
+                                      }
+                                    },
+                                    child: Text('admin_btn_pilih'.tr()),
+                                  ),
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('admin_lbl_aktif'.tr()),
+                                  value: active,
+                                  onChanged: (v) =>
+                                      setLocal(() => active = v),
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('admin_auto_d1ce83b6e9'.tr()),
+                                  value: onMember,
+                                  onChanged: (v) =>
+                                      setLocal(() => onMember = v),
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('admin_auto_f82ba34521'.tr()),
+                                  value: onPos,
+                                  onChanged: (v) => setLocal(() => onPos = v),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () async {
+                                final file = await ImagePicker().pickImage(
+                                  source: ImageSource.gallery,
+                                  maxWidth: 1200,
+                                  imageQuality: 85,
+                                );
+                                if (file == null) return;
+                                final bytes = await file.readAsBytes();
+                                try {
+                                  final url =
+                                      await _uploadBanner(bytes, file.name);
+                                  setLocal(() => imageUrl = url ?? '');
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('admin_auto_0dde50f348'.tr(namedArgs: {'error': '$e'}))),
+                                  );
+                                }
+                              },
+                              child: Ink(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: OptikAdminTokens.ice.withOpacity(0.3),
+                                  border: Border.all(
+                                    color: OptikAdminTokens.chromeEdge,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (imageUrl.isNotEmpty)
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.network(
+                                          imageUrl,
+                                          width: 56,
+                                          height: 56,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    else
+                                      PremiumIconBadge(
+                                        icon: Icons.image_outlined,
+                                        color: OptikAdminTokens.navy,
+                                        size: 44,
+                                      ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            imageUrl.isEmpty
+                                                ? 'Gambar promo'
+                                                : 'Ganti gambar',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              color: OptikAdminTokens.navy,
+                                            ),
+                                          ),
+                                          Text(
+                                            'JPG/PNG · tampil di kartu beranda Member',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: OptikAdminTokens.slate,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: OptikAdminTokens.slate,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 8, 22, 18),
+                    child: Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text('appr_btn_batal'.tr()),
+                        ),
+                        const Spacer(),
+                        PremiumPrimaryButton(
+                          expand: false,
+                          label: 'admin_auto_a8b888bfb3'.tr(),
+                          onPressed: () => Navigator.pop(ctx, true),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Batal')),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Ke draft')),
-          ],
         ),
       ),
     );
@@ -976,17 +1115,14 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     if (ok != true) return;
     if (title.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Judul wajib diisi')),
+        SnackBar(content: Text('admin_auto_7ad7078762'.tr())),
       );
       return;
     }
     if (discType != 'info' && code.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Kode voucher wajib diisi untuk tipe Nominal/Persen '
-            '(supaya bisa di-redeem di POS & Belanja Online).',
-          ),
+        SnackBar(
+          content: Text('admin_auto_d171181a04'.tr()),
           backgroundColor: OptikAdminTokens.warning,
         ),
       );
@@ -994,8 +1130,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     }
     if (!MemberHomeRules.promoDiscountValueOk(discType, discVal.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nilai diskon harus > 0 untuk Nominal/Persen'),
+        SnackBar(
+          content: Text('admin_auto_b140f08203'.tr()),
           backgroundColor: OptikAdminTokens.warning,
         ),
       );
@@ -1040,8 +1176,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Promo masuk draft. Simpan → Update untuk ke APK.'),
+      SnackBar(
+        content: Text('admin_auto_5d6e0228d6'.tr()),
         backgroundColor: OptikAdminTokens.warning,
       ),
     );
@@ -1051,17 +1187,17 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus promo dari draft?'),
+        title: Text('admin_auto_6fa2cf0781'.tr()),
         content: Text(
           'Hapus "${p['title']}"? Baru hilang dari APK setelah Update.',
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+              child: Text('appr_btn_batal'.tr())),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Hapus')),
+              child: Text('btn_hapus'.tr())),
         ],
       ),
     );
@@ -1103,11 +1239,11 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                             gradient: OptikAdminTokens.accentGradient,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.phone_iphone_rounded,
+                          child: Icon(Icons.phone_iphone_rounded,
                               size: 18, color: OptikAdminTokens.navy),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1149,7 +1285,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                               ? 'Preview draft lokal — tekan Simpan lalu Update ke APK.'
                               : 'Preview sesuai data yang sedang di editor.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontSize: 11.5,
                       ),
@@ -1197,7 +1333,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       promoPreviews: memberPromos
           .take(6)
           .map((p) => (
-                title: (p['title'] ?? 'Promo').toString(),
+                title: (p['title'] ?? 'admin_lbl_promo_fallback'.tr()).toString(),
                 label: _promoDiscountPreview(p),
                 code: (p['voucher_code'] ?? '').toString(),
               ))
@@ -1239,7 +1375,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Long-press di preview untuk ubah urutan section.',
                 style: TextStyle(
                   color: OptikAdminTokens.textMuted,
@@ -1256,7 +1392,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                         Navigator.pop(ctx);
                       },
                       icon: const Icon(Icons.arrow_upward_rounded),
-                      label: const Text('Naik'),
+                      label: Text('admin_btn_naik'.tr()),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1267,7 +1403,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                         Navigator.pop(ctx);
                       },
                       icon: const Icon(Icons.arrow_downward_rounded),
-                      label: const Text('Turun'),
+                      label: Text('admin_btn_turun'.tr()),
                     ),
                   ),
                 ],
@@ -1282,6 +1418,44 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   String _promoDiscountPreview(Map<String, dynamic> p) =>
       MemberHomeSnapshot.promoDiscountLabel(p);
 
+  Widget _cmsThemed({required Widget child}) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        inputDecorationTheme: base.inputDecorationTheme.copyWith(
+          filled: true,
+          fillColor: OptikAdminTokens.card,
+          contentPadding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _cmsEyebrow(String label) {
+    return PremiumSectionHeader(
+      label: label,
+      padding: const EdgeInsets.only(bottom: 12, top: 6),
+    );
+  }
+
+  Widget _cmsSoftCard({required Widget child, EdgeInsetsGeometry? padding}) {
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.fromLTRB(14, 4, 14, 8),
+      decoration: BoxDecoration(
+        color: OptikAdminTokens.ice.withOpacity(
+          OptikAdminTokens.isKombo ? 0.5 : 0.34,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: OptikAdminTokens.chromeEdge.withOpacity(0.72),
+        ),
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -1293,6 +1467,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       },
       child: PremiumScaffold(
         body: SafeArea(
+          top: false,
           child: Column(
             children: [
               _buildTopBar(),
@@ -1306,13 +1481,15 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
                         ? _buildError()
-                        : TabBarView(
-                            controller: _tabs,
-                            children: [
-                              _buildLayoutTab(),
-                              _buildBannerTab(),
-                              _buildPromoTab(),
-                            ],
+                        : _cmsThemed(
+                            child: TabBarView(
+                              controller: _tabs,
+                              children: [
+                                _buildLayoutTab(),
+                                _buildBannerTab(),
+                                _buildPromoTab(),
+                              ],
+                            ),
                           ),
               ),
             ],
@@ -1353,104 +1530,89 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: _publishing
-                    ? null
-                    : () async {
-                        final leave = await _confirmLeaveIfDirty();
-                        if (leave && mounted) Navigator.pop(context);
-                      },
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Konten Home Member',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    Text(
-                      _draftDirty
-                          ? 'Draft di preview · tekan Simpan (belum ke APK)'
-                          : _pendingUpdate
-                              ? 'Draft siap · tekan Update untuk apply ke APK'
-                              : 'Ketuk HP untuk atur · Simpan lalu Update ke APK',
-                      style: TextStyle(
-                        color: _hasUnpublishedWork
-                            ? OptikAdminTokens.warning
-                            : OptikAdminTokens.textMuted,
-                        fontSize: 12.5,
-                        fontWeight: _hasUnpublishedWork
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (statusChip != null) statusChip,
-            ],
-          ),
-          if (!_loading && _error == null) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (_hasUnpublishedWork)
-                  TextButton(
-                    onPressed:
-                        _loading || _publishing ? null : _discardDraft,
-                    child: const Text('Buang'),
+                const Text(
+                  'Konten Home Member',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    letterSpacing: -0.2,
                   ),
-                OutlinedButton.icon(
-                  onPressed: _publishing ? null : _openPreview,
-                  icon: const Icon(Icons.fullscreen_rounded, size: 18),
-                  label: const Text('Fullscreen'),
                 ),
-                OutlinedButton.icon(
-                  onPressed:
-                      _loading || _publishing || !_draftDirty
-                          ? null
-                          : _saveDraft,
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('Simpan'),
-                ),
-                FilledButton.icon(
-                  onPressed: _loading ||
-                          _publishing ||
-                          _draftDirty ||
-                          !_pendingUpdate
-                      ? null
-                      : _publishToApk,
-                  icon: _publishing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: OptikAdminTokens.navy,
-                          ),
-                        )
-                      : const Icon(Icons.system_update_alt_rounded, size: 18),
-                  label: Text(_publishing ? 'Updating…' : 'Update'),
+                Text(
+                  _draftDirty
+                      ? 'Draft di preview · tekan Simpan (belum ke APK)'
+                      : _pendingUpdate
+                          ? 'Draft siap · tekan Update untuk apply ke APK'
+                          : 'Simpan dulu, lalu Update supaya APK Member ikut',
+                  style: TextStyle(
+                    color: _hasUnpublishedWork
+                        ? OptikAdminTokens.warning
+                        : OptikAdminTokens.textMuted,
+                    fontSize: 11.5,
+                    fontWeight: _hasUnpublishedWork
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
                 ),
               ],
             ),
+          ),
+          if (statusChip != null) ...[
+            statusChip,
+            const SizedBox(width: 8),
           ],
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_hasUnpublishedWork)
+                    TextButton(
+                      onPressed:
+                          _loading || _publishing ? null : _discardDraft,
+                      child: Text('admin_auto_c02364c24d'.tr()),
+                    ),
+                  IconButton(
+                    tooltip: 'admin_auto_e928402a95'.tr(),
+                    onPressed: _publishing ? null : _openPreview,
+                    icon: const Icon(Icons.fullscreen_rounded),
+                  ),
+                  const SizedBox(width: 4),
+                  OutlinedButton(
+                    onPressed: _loading || _publishing || !_draftDirty
+                        ? null
+                        : _saveDraft,
+                    child: Text('btn_simpan'.tr()),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _loading ||
+                            _publishing ||
+                            _draftDirty ||
+                            !_pendingUpdate
+                        ? null
+                        : _publishToApk,
+                    child: _publishing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text('admin_btn_update'.tr()),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1496,9 +1658,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               const SizedBox(height: 12),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 12),
-              FilledButton(onPressed: _load, child: const Text('Coba lagi')),
+              FilledButton(onPressed: _load, child: Text('common_retry'.tr())),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Jalankan migration:\n'
                 '20260728000001_member_home_content.sql\n'
                 '20260728000002_member_cms_layout_promo.sql',
@@ -1537,7 +1699,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 15)),
                 Text(subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: OptikAdminTokens.textMuted,
                         fontSize: 12.5,
                         height: 1.3)),
@@ -1572,21 +1734,21 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         children: [
           Expanded(
             flex: 5,
-            child: Container(
-              decoration: BoxDecoration(
-                color: OptikAdminTokens.bgMid,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: OptikAdminTokens.line),
-              ),
+            child: PremiumPanel(
+              padding: EdgeInsets.zero,
+              borderRadius: 22,
               child: Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 8),
                     child: Row(
                       children: [
-                        const Icon(Icons.touch_app_rounded,
-                            size: 18, color: OptikAdminTokens.navy),
-                        const SizedBox(width: 8),
+                        PremiumIconBadge(
+                          icon: Icons.touch_app_rounded,
+                          size: 36,
+                          color: OptikAdminTokens.navy,
+                        ),
+                        const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
                             'Ketuk bagian di HP untuk membuka setting',
@@ -1598,7 +1760,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                         ),
                         TextButton(
                           onPressed: _openPreview,
-                          child: const Text('Fullscreen'),
+                          child: Text('admin_btn_fullscreen'.tr()),
                         ),
                       ],
                     ),
@@ -1631,49 +1793,68 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
     final idx = _sections.indexWhere((s) => (s['key'] ?? '') == key);
 
     return PremiumPanel(
+      showAccentBar: true,
+      padding: const EdgeInsets.fromLTRB(18, 16, 16, 12),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+        padding: const EdgeInsets.fromLTRB(0, 0, 4, 16),
         children: [
           _sectionHeader(
             'Mengatur: $label',
             'Edit = draft. Simpan = kunci draft. Update = apply ke APK.',
             icon: meta?.icon ?? Icons.tune_rounded,
           ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          PremiumChipWrap(
             children: [
               for (final s in _sections)
-                ChoiceChip(
+                FilterChip(
+                  showCheckmark: false,
+                  selected: (s['key'] ?? '') == key,
                   label: Text(
                     (s['label'] ?? s['key']).toString(),
-                    style: const TextStyle(fontSize: 11.5),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: (s['key'] ?? '') == key
+                          ? OptikAdminTokens.onHighlight
+                          : OptikAdminTokens.navy,
+                    ),
                   ),
-                  selected: (s['key'] ?? '') == key,
+                  selectedColor: OptikAdminTokens.navy,
+                  backgroundColor: OptikAdminTokens.ice.withOpacity(0.4),
+                  side: BorderSide(
+                    color: (s['key'] ?? '') == key
+                        ? OptikAdminTokens.navy
+                        : OptikAdminTokens.chromeEdge,
+                  ),
                   onSelected: (_) =>
                       _selectSection((s['key'] ?? '').toString()),
-                  selectedColor: OptikAdminTokens.accent.withOpacity(0.35),
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           if (section != null) ...[
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Tampil di beranda'),
-              subtitle: Text(visible
-                  ? 'Section ini muncul di APK (setelah Update)'
-                  : 'Disembunyikan dari beranda'),
-              value: visible,
-              onChanged: (v) => _markDraft(() => section['visible'] = v),
+            _cmsSoftCard(
+              child: SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Tampil di beranda',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                subtitle: Text(visible
+                    ? 'Section ini muncul di APK (setelah Update)'
+                    : 'Disembunyikan dari beranda'),
+                value: visible,
+                onChanged: (v) => _markDraft(() => section['visible'] = v),
+              ),
             ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: idx <= 0 ? null : () => _moveSection(key, -1),
                     icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-                    label: const Text('Naik'),
+                    label: Text('admin_btn_naik'.tr()),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1683,12 +1864,13 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                         ? null
                         : () => _moveSection(key, 1),
                     icon: const Icon(Icons.arrow_downward_rounded, size: 18),
-                    label: const Text('Turun'),
+                    label: Text('admin_btn_turun'.tr()),
                   ),
                 ),
               ],
             ),
-            const Divider(height: 28),
+            const SizedBox(height: 8),
+            _cmsEyebrow('Isi section'),
           ],
           ..._inspectorFieldsFor(key),
         ],
@@ -1702,9 +1884,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         return [
           TextField(
             controller: _brand,
-            decoration: InputDecoration(
-              labelText: 'Label brand di banner',
-              hintText: _defaultBrandLabel,
+            decoration: _cmsDeco(
+              'Label brand di banner',
+              helper: _defaultBrandLabel,
             ),
           ),
           const SizedBox(height: 14),
@@ -1714,17 +1896,15 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < _slides.length; i++) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: OptikAdminTokens.line),
-                borderRadius: BorderRadius.circular(12),
-                color: OptikAdminTokens.panel,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: PremiumPanel(
+                showAccentBar: true,
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 14),
+                borderRadius: 16,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   Row(
                     children: [
                       Text(
@@ -1734,7 +1914,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                       const Spacer(),
                       if (_slides.length > 1)
                         IconButton(
-                          tooltip: 'Hapus slide',
+                          tooltip: 'admin_auto_c733f62af8'.tr(),
                           onPressed: () => _markDraft(() {
                             _slides[i].dispose();
                             _slides.removeAt(i);
@@ -1759,32 +1939,36 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                   ],
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => _pickSlideImage(i),
                         icon: const Icon(Icons.image_outlined, size: 16),
-                        label: const Text('Gambar'),
+                        label: Text('admin_auto_5b891268ee'.tr()),
                       ),
                       if (_slides[i].imageUrl.isNotEmpty)
                         TextButton(
                           onPressed: () =>
                               _markDraft(() => _slides[i].imageUrl = ''),
-                          child: const Text('Hapus gambar'),
+                          child: Text('admin_auto_e1d5663fd3'.tr()),
                         ),
                     ],
                   ),
+                  _cmsFieldGap,
                   TextField(
                     controller: _slides[i].titleCtrl,
                     maxLines: 2,
-                    decoration: const InputDecoration(labelText: 'Judul'),
+                    decoration: _cmsDeco('Judul'),
                   ),
+                  _cmsFieldGap,
                   TextField(
                     controller: _slides[i].subtitleCtrl,
                     maxLines: 2,
-                    decoration: const InputDecoration(labelText: 'Subtitle'),
+                    decoration: _cmsDeco('Subtitle'),
                   ),
                 ],
               ),
+            ),
             ),
           ],
           OutlinedButton.icon(
@@ -1794,12 +1978,12 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               _wireSlideListeners();
             }),
             icon: const Icon(Icons.add),
-            label: const Text('Tambah slide'),
+            label: Text('admin_auto_d8a386f75e'.tr()),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => _tabs.animateTo(1),
-            child: const Text('Buka tab Banner (panduan ukuran)'),
+            child: Text('admin_auto_23a9b62203'.tr()),
           ),
         ];
       case 'greeting':
@@ -1807,15 +1991,15 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           TextField(
             controller: _greeting,
             decoration:
-                const InputDecoration(labelText: 'Sapaan (belum login)'),
+                InputDecoration(labelText: 'admin_auto_da57bf579e'.tr()),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _greetingSub,
-            decoration: const InputDecoration(labelText: 'Subtitle sapaan'),
+            decoration: InputDecoration(labelText: 'admin_auto_e7e900d8ca'.tr()),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Poin / Pesanan / Garansi diisi otomatis dari data Member (live di APK).',
             style: TextStyle(
               color: OptikAdminTokens.textMuted,
@@ -1827,13 +2011,13 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         return [
           TextField(
             controller: _promoTitle,
-            decoration: const InputDecoration(labelText: 'Judul kartu promo'),
+            decoration: InputDecoration(labelText: 'admin_auto_436fa08acc'.tr()),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _promoSub,
             decoration:
-                const InputDecoration(labelText: 'Subtitle kartu promo'),
+                InputDecoration(labelText: 'admin_auto_7c47aba2d6'.tr()),
           ),
           const SizedBox(height: 12),
           Row(
@@ -1847,13 +2031,13 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               FilledButton.tonalIcon(
                 onPressed: () => _editPromo(),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Tambah'),
+                label: Text('pm_btn_tambah'.tr()),
               ),
             ],
           ),
           const SizedBox(height: 8),
           if (_promos.isEmpty)
-            const Text(
+            Text(
               'Belum ada promo di draft.',
               style: TextStyle(
                 color: OptikAdminTokens.textMuted,
@@ -1894,7 +2078,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               ),
           TextButton(
             onPressed: () => _tabs.animateTo(2),
-            child: const Text('Buka tab Promo lengkap'),
+            child: Text('admin_auto_68d4a3b163'.tr()),
           ),
         ];
       case 'reminders':
@@ -1923,13 +2107,13 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         return [
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Belanja Online'),
+            title: Text('member_shop_title'.tr()),
             value: _flags['katalog'] != false,
             onChanged: (v) => _markDraft(() => _flags['katalog'] = v),
           ),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Janji Kontrol'),
+            title: Text('admin_auto_61c450577c'.tr()),
             value: _flags['janji_kontrol'] != false,
             onChanged: (v) => _markDraft(() => _flags['janji_kontrol'] = v),
           ),
@@ -1947,7 +2131,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         ];
       default:
         return [
-          Text('Pilih bagian di preview HP.'),
+          Text('admin_auto_6035815194'.tr()),
         ];
     }
   }
@@ -1959,6 +2143,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         _buildBannerGuide(),
         const SizedBox(height: 12),
         PremiumPanel(
+          showAccentBar: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1969,9 +2154,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
               ),
               TextField(
                 controller: _brand,
-                decoration: InputDecoration(
-                  labelText: 'Label brand',
-                  hintText: _defaultBrandLabel,
+                decoration: _cmsDeco(
+                  'Label brand',
+                  helper: _defaultBrandLabel,
                 ),
               ),
             ],
@@ -1980,6 +2165,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
         const SizedBox(height: 12),
         for (var i = 0; i < _slides.length; i++) ...[
           PremiumPanel(
+            showAccentBar: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1989,21 +2175,22 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        gradient: OptikAdminTokens.accentGradient,
+                        color: OptikAdminTokens.navy,
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
                         'Banner ${i + 1}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
+                          color: OptikAdminTokens.onHighlight,
                         ),
                       ),
                     ),
                     const Spacer(),
                     if (_slides.length > 1)
                       IconButton(
-                        tooltip: 'Hapus banner',
+                        tooltip: 'admin_auto_be1c09179c'.tr(),
                         onPressed: () => _markDraft(() {
                           _slides[i].dispose();
                           _slides.removeAt(i);
@@ -2014,8 +2201,8 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Di APK Member (full-bleed, cover)',
+                Text(
+                  'Sama seperti hero APK Member: gambar cover, overlay gelap, teks putih.',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -2023,43 +2210,48 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                   ),
                 ),
                 const SizedBox(height: 8),
-                _BannerApkMock(
+                _MemberHeroSlide(
                   brand: _bannerBrand,
                   title: _slides[i].titleCtrl.text,
                   subtitle: _slides[i].subtitleCtrl.text,
                   imageUrl: _slides[i].imageUrl,
+                  pageIndex: i,
+                  pageCount: _slides.length,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
                       onPressed: () => _pickSlideImage(i),
                       icon: const Icon(Icons.image_outlined),
-                      label: const Text('Ganti gambar'),
+                      label: Text('admin_auto_ed95ab401d'.tr()),
                     ),
                     if (_slides[i].imageUrl.isNotEmpty)
                       TextButton(
                         onPressed: () =>
                             _markDraft(() => _slides[i].imageUrl = ''),
-                        child: const Text('Hapus gambar'),
+                        child: Text('admin_auto_e1d5663fd3'.tr()),
                       ),
                   ],
                 ),
+                _cmsFieldGap,
                 TextField(
                   controller: _slides[i].titleCtrl,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Judul',
-                    helperText: 'Maks ~2–3 baris di HP kecil',
+                  decoration: _cmsDeco(
+                    'Judul',
+                    helper: 'Maks ~2–3 baris di HP kecil',
                   ),
                 ),
+                _cmsFieldGap,
                 TextField(
                   controller: _slides[i].subtitleCtrl,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Subtitle',
-                    helperText: '1–2 kalimat pendek',
+                  decoration: _cmsDeco(
+                    'Subtitle',
+                    helper: '1–2 kalimat pendek',
                   ),
                 ),
               ],
@@ -2073,7 +2265,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
             _wireSlideListeners();
           }),
           icon: const Icon(Icons.add),
-          label: const Text('Tambah banner'),
+          label: Text('admin_auto_9173401dcb'.tr()),
         ),
       ],
     );
@@ -2096,11 +2288,11 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _guideRow(Icons.crop_landscape_rounded, 'Rasio ideal',
-                      '2 : 1 (lebar × tinggi)'),
+                      '~2,1 : 1 — sama tinggi hero APK (~168 px di HP)'),
                   _guideRow(Icons.high_quality_outlined, 'Ukuran upload',
-                      '1200 × 600 px (JPG/PNG)'),
+                      '1200 × 560 px (JPG/PNG)'),
                   _guideRow(Icons.fit_screen_rounded, 'Di APK',
-                      'Full lebar HP · tinggi ~168–200 px · BoxFit.cover'),
+                      'Full lebar HP · tinggi ~168 px · BoxFit.cover'),
                   _guideRow(Icons.center_focus_strong_outlined, 'Area aman',
                       'Subjek & teks penting di tengah (±15% dari tepi)'),
                   _guideRow(Icons.text_fields_rounded, 'Teks overlay',
@@ -2142,7 +2334,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
             child: OutlinedButton.icon(
               onPressed: _openPreview,
               icon: const Icon(Icons.phone_iphone_rounded, size: 18),
-              label: const Text('Lihat preview beranda lengkap'),
+              label: Text('admin_auto_eb315c26d6'.tr()),
             ),
           ),
         ],
@@ -2161,7 +2353,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.textSecondary,
                   fontSize: 12.5,
                   height: 1.35,
@@ -2169,7 +2361,7 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                 children: [
                   TextSpan(
                     text: '$title · ',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: OptikAdminTokens.textPrimary,
                     ),
@@ -2189,7 +2381,9 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
       children: [
         PremiumPanel(
+          showAccentBar: true,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: _sectionHeader(
@@ -2198,18 +2392,32 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
                   icon: Icons.confirmation_number_outlined,
                 ),
               ),
-              FilledButton.icon(
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
                 onPressed: () => _editPromo(),
-                icon: const Icon(Icons.add),
-                label: const Text('Tambah'),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text('pm_btn_tambah'.tr()),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: OptikAdminTokens.navy,
+                  side: BorderSide(color: OptikAdminTokens.navy),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  minimumSize: const Size(0, 40),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         if (_promos.isEmpty)
-          const PremiumPanel(
-            child: Text('Belum ada promo. Ketuk Tambah.'),
+          PremiumPanel(
+            child: PremiumEmptyState(
+              title: 'admin_auto_07a6a4b99e'.tr(),
+              message: 'admin_auto_2247210139'.tr(),
+              icon: Icons.confirmation_number_outlined,
+            ),
           )
         else
           ..._promos.map((p) {
@@ -2217,61 +2425,88 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
             final code = (p['voucher_code'] ?? '-').toString();
             final dtype = (p['discount_type'] ?? 'info').toString();
             final dval = p['discount_value'] ?? 0;
+            final img = (p['image_url'] ?? '').toString();
             return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: 12),
               child: PremiumPanel(
+                showAccentBar: true,
+                onTap: () => _editPromo(p),
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        if ((p['image_url'] ?? '').toString().isNotEmpty)
+                        if (img.isNotEmpty) ...[
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             child: Image.network(
-                              p['image_url'].toString(),
+                              img,
                               width: 56,
                               height: 56,
                               fit: BoxFit.cover,
                             ),
                           ),
-                        if ((p['image_url'] ?? '').toString().isNotEmpty)
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
+                        ] else
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: PremiumIconBadge(
+                              icon: Icons.local_offer_outlined,
+                              color: OptikAdminTokens.navy,
+                              size: 44,
+                            ),
+                          ),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 (p['title'] ?? '-').toString(),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w800),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15.5,
+                                  color: OptikAdminTokens.navy,
+                                  letterSpacing: -0.2,
+                                ),
                               ),
-                              Text('Kode: $code',
-                                  style: const TextStyle(
-                                      color: OptikAdminTokens.textSecondary, fontSize: 12.5)),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Kode $code',
+                                style: TextStyle(
+                                  color: OptikAdminTokens.slate,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         IconButton(
+                          tooltip: 'admin_auto_7dce122004'.tr(),
                           onPressed: () => _editPromo(p),
-                          icon: const Icon(Icons.edit_outlined),
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            color: OptikAdminTokens.slate,
+                          ),
                         ),
                         IconButton(
+                          tooltip: 'btn_hapus'.tr(),
                           onPressed: () => _deletePromo(p),
                           icon: const Icon(Icons.delete_outline,
                               color: OptikAdminTokens.danger),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
+                    const SizedBox(height: 10),
+                    PremiumChipWrap(
                       children: [
                         _chip(p['active'] == true ? 'Aktif' : 'Nonaktif',
                             ok: p['active'] == true),
-                        if (p['show_on_member'] == true) _chip('Member'),
-                        if (p['show_on_pos'] == true) _chip('POS'),
+                        if (p['show_on_member'] == true)
+                          _chip('Member', ok: true),
+                        if (p['show_on_pos'] == true) _chip('POS', ok: true),
                         _chip(qty == null ? 'Kuota ∞' : 'Sisa $qty'),
                         _chip(dtype == 'nominal'
                             ? 'Diskon Rp $dval'
@@ -2290,24 +2525,25 @@ class _MemberHomeContentPageState extends State<MemberHomeContentPage>
   }
 
   Widget _chip(String t, {bool ok = false}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: ok
-              ? OptikAdminTokens.success.withOpacity(0.15)
-              : OptikAdminTokens.line,
+              ? OptikAdminTokens.ice.withOpacity(0.72)
+              : OptikAdminTokens.card,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: ok
-                ? OptikAdminTokens.success.withOpacity(0.35)
-                : OptikAdminTokens.line,
+                ? OptikAdminTokens.navy.withOpacity(0.28)
+                : OptikAdminTokens.chromeEdge,
           ),
         ),
         child: Text(
           t,
           style: TextStyle(
             fontSize: 11,
-            color: ok ? OptikAdminTokens.success : null,
-            fontWeight: FontWeight.w600,
+            color: OptikAdminTokens.navy,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.15,
           ),
         ),
       );
@@ -2339,13 +2575,13 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AspectRatio(
-          aspectRatio: 2,
+          aspectRatio: _MemberHeroSlide.apkRatio,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                const DecoratedBox(
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -2400,7 +2636,7 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                         color: OptikAdminTokens.success.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
                           'AREA AMAN\n(subjek & fokus penting)',
                           textAlign: TextAlign.center,
@@ -2418,7 +2654,7 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Positioned(
+                Positioned(
                   left: 10,
                   top: 8,
                   child: Text(
@@ -2431,7 +2667,7 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Positioned(
+                Positioned(
                   left: 10,
                   bottom: 28,
                   child: Text(
@@ -2452,17 +2688,17 @@ class _BannerSafeZoneDiagram extends StatelessWidget {
           children: [
             _LegendDot(
               color: OptikAdminTokens.danger.withOpacity(0.53),
-              label: 'Bisa kepotong',
+              label: 'admin_auto_4a4ef204b6'.tr(),
             ),
             const SizedBox(width: 12),
-            const _LegendDot(
+            _LegendDot(
               color: OptikAdminTokens.success,
-              label: 'Area aman',
+              label: 'admin_auto_2eafe9c4c2'.tr(),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Contoh kerangka 1200×600 (2:1)',
           style: TextStyle(
             color: OptikAdminTokens.textMuted,
@@ -2494,131 +2730,248 @@ class _LegendDot extends StatelessWidget {
         ),
         const SizedBox(width: 5),
         Text(label,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 11, color: OptikAdminTokens.textMuted)),
       ],
     );
   }
 }
 
-/// Mock banner seperti di beranda Member (rasio & overlay teks).
-class _BannerApkMock extends StatelessWidget {
-  const _BannerApkMock({
+/// Hero slide visual — mirror `_HeroBanner` di APK Member (bukan token Admin).
+class _MemberHeroSlide extends StatelessWidget {
+  const _MemberHeroSlide({
     required this.brand,
     required this.title,
     required this.subtitle,
     required this.imageUrl,
+    this.pageIndex = 0,
+    this.pageCount = 1,
+    this.compact = false,
   });
+
+  /// Lebar HP tipikal : tinggi hero APK (168).
+  static const apkRatio = 360 / 168;
 
   final String brand;
   final String title;
   final String subtitle;
   final String imageUrl;
+  final int pageIndex;
+  final int pageCount;
+  final bool compact;
+
+  static const _fallbackGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      OptikMemberTokens.blueDeep,
+      OptikMemberTokens.blue,
+      Color(0xFF2E86DE),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 2,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (imageUrl.trim().isNotEmpty)
+    final hasImage = imageUrl.trim().isNotEmpty;
+    final titleStyle = TextStyle(
+      color: Colors.white,
+      fontSize: compact ? 13 : 16,
+      fontWeight: FontWeight.w800,
+      height: 1.15,
+    );
+    final subStyle = TextStyle(
+      color: Colors.white.withOpacity(0.88),
+      fontSize: compact ? 9.5 : 12,
+      height: 1.3,
+    );
+    final stack = Stack(
+      fit: StackFit.expand,
+      children: [
+            if (hasImage)
               Image.network(
                 imageUrl.trim(),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        OptikAdminTokens.navy,
-                        OptikAdminTokens.navy,
-                      ],
-                    ),
-                  ),
-                ),
+                errorBuilder: (_, __, ___) =>
+                    const DecoratedBox(decoration: BoxDecoration(gradient: _fallbackGradient)),
               )
             else
               const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      OptikAdminTokens.navy,
-                      OptikAdminTokens.navy,
-                      OptikAdminTokens.accent,
-                    ],
-                  ),
-                ),
+                decoration: BoxDecoration(gradient: _fallbackGradient),
               ),
-            if (imageUrl.trim().isNotEmpty)
-              DecoratedBox(
+            if (hasImage)
+              const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      OptikAdminTokens.bgMid.withOpacity(0.33),
-                      OptikAdminTokens.bgMid.withOpacity(0.60),
-                    ],
+                    colors: [Color(0x660F172A), Color(0x990F172A)],
                   ),
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              padding: EdgeInsets.fromLTRB(
+                compact ? 12 : 16,
+                compact ? 8 : 12,
+                compact ? 12 : 16,
+                compact ? 16 : 18,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    brand,
-                    style: TextStyle(
-                      color: OptikAdminTokens.navy.withOpacity(0.75),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
-                      fontSize: 9,
+                  Row(
+                    children: [
+                      AppBrandMark(height: compact ? 14 : 20, onDark: true),
+                      if (brand.trim().isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            brand,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.92),
+                              fontWeight: FontWeight.w800,
+                              fontSize: compact ? 8 : 11,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  SizedBox(height: compact ? 4 : 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title.trim().isEmpty ? 'Judul banner' : title,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
+                        ),
+                        if (subtitle.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: subStyle,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    title.trim().isEmpty ? 'Judul banner' : title,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: OptikAdminTokens.navy,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
-                  ),
-                  if (subtitle.trim().isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: OptikAdminTokens.navy.withOpacity(0.88),
-                        fontSize: 11,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-            if (imageUrl.trim().isEmpty)
-              const Positioned(
+            if (pageCount > 1)
+              Positioned(
+                right: compact ? 10 : 14,
+                bottom: compact ? 10 : 12,
+                child: Row(
+                  children: List.generate(pageCount, (i) {
+                    final on = i == pageIndex;
+                    return Container(
+                      margin: const EdgeInsets.only(left: 4),
+                      width: on ? 12 : 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(on ? 0.95 : 0.45),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            if (!hasImage)
+              Positioned(
                 right: 12,
-                top: 12,
+                top: 10,
                 child: Text(
                   'Belum ada gambar',
-                  style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 10),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: compact ? 8 : 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
           ],
-        ),
+        );
+    final clipped = ClipRRect(
+      borderRadius: BorderRadius.circular(compact ? 0 : 14),
+      child: stack,
+    );
+    if (compact) return clipped;
+    return AspectRatio(aspectRatio: apkRatio, child: clipped);
+  }
+}
+
+class _PreviewHeroCarousel extends StatefulWidget {
+  const _PreviewHeroCarousel({
+    required this.brand,
+    required this.slides,
+  });
+
+  final String brand;
+  final List<({String title, String subtitle, String imageUrl})> slides;
+
+  @override
+  State<_PreviewHeroCarousel> createState() => _PreviewHeroCarouselState();
+}
+
+class _PreviewHeroCarouselState extends State<_PreviewHeroCarousel> {
+  final _controller = PageController();
+  int _page = 0;
+
+  List<({String title, String subtitle, String imageUrl})> get _slides {
+    if (widget.slides.isNotEmpty) return widget.slides;
+    return [
+      (
+        title: 'admin_auto_kacamata_siap_title'.tr(),
+        subtitle: 'admin_auto_c8dae62f61'.tr(),
+        imageUrl: '',
+      ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant _PreviewHeroCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slides.length != widget.slides.length && _page > 0) {
+      _page = 0;
+      if (_controller.hasClients) _controller.jumpToPage(0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = _slides;
+    return AspectRatio(
+      aspectRatio: _MemberHeroSlide.apkRatio,
+      child: PageView.builder(
+        controller: _controller,
+        onPageChanged: (i) => setState(() => _page = i),
+        itemCount: slides.length,
+        itemBuilder: (context, i) {
+          final s = slides[i];
+          return _MemberHeroSlide(
+            brand: widget.brand,
+            title: s.title,
+            subtitle: s.subtitle,
+            imageUrl: s.imageUrl,
+            pageIndex: _page,
+            pageCount: slides.length,
+            compact: true,
+          );
+        },
       ),
     );
   }
@@ -2684,14 +3037,6 @@ class _MemberHomePhonePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     const phoneW = 280.0;
     const phoneH = 580.0;
-    final slide = slides.isEmpty
-        ? (
-            title: 'Kacamata siap?\nLangsung tahu di sini',
-            subtitle: 'Pantau status pesanan & ambil tanpa ribet',
-            imageUrl: '',
-          )
-        : slides.first;
-
     return Column(
       children: [
         Container(
@@ -2759,7 +3104,10 @@ class _MemberHomePhonePreview extends StatelessWidget {
                             _tapWrap(
                               key,
                               child: key == 'hero'
-                                  ? _previewHero(slide)
+                                  ? _PreviewHeroCarousel(
+                                      brand: brand,
+                                      slides: slides,
+                                    )
                                   : key == 'greeting'
                                       ? _previewGreeting()
                                       : key == 'promo'
@@ -2775,7 +3123,7 @@ class _MemberHomePhonePreview extends StatelessWidget {
                                                           : const SizedBox
                                                               .shrink(),
                             ),
-                          const SizedBox(height: 64),
+                          const SizedBox(height: 56),
                         ],
                       ),
                       if (_visible('hero'))
@@ -2792,31 +3140,6 @@ class _MemberHomePhonePreview extends StatelessWidget {
                                 Icons.shopping_cart_outlined,
                                 size: 14,
                                 color: OptikMemberTokens.blueDeep,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (interactive)
-                        Positioned(
-                          left: 8,
-                          bottom: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: OptikAdminTokens.navy.withOpacity(0.82),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              pendingUpdate
-                                  ? 'SIAP UPDATE · belum ke APK'
-                                  : draftBadge
-                                      ? 'DRAFT · Simpan dulu'
-                                      : 'Ketuk edit · tahan urutan',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
@@ -2863,11 +3186,28 @@ class _MemberHomePhonePreview extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
+        if (interactive)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              pendingUpdate
+                  ? 'SIAP UPDATE · belum ke APK'
+                  : draftBadge
+                      ? 'DRAFT · Simpan dulu'
+                      : 'Ketuk bagian di HP untuk edit · tahan untuk urutan',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: OptikAdminTokens.navy,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         Text(
           promoPreviews.isEmpty
               ? 'Belum ada promo Member · samakan dengan tab Promo'
               : '${promoPreviews.length} promo tampil di strip beranda',
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.textMuted,
             fontSize: 11.5,
           ),
@@ -2975,102 +3315,6 @@ class _MemberHomePhonePreview extends StatelessWidget {
               fontSize: 8,
               fontWeight: on ? FontWeight.w700 : FontWeight.w500,
               color: on ? OptikMemberTokens.blue : OptikMemberTokens.inkMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _previewHero(
-      ({String title, String subtitle, String imageUrl}) slide) {
-    return SizedBox(
-      height: 132,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (slide.imageUrl.trim().isNotEmpty)
-            Image.network(
-              slide.imageUrl.trim(),
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      OptikMemberTokens.blueDeep,
-                      OptikMemberTokens.blue,
-                      Color(0xFF2E86DE),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    OptikMemberTokens.blueDeep,
-                    OptikMemberTokens.blue,
-                    Color(0xFF2E86DE),
-                  ],
-                ),
-              ),
-            ),
-          if (slide.imageUrl.trim().isNotEmpty)
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x660F172A), Color(0x990F172A)],
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  brand,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.92),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                    fontSize: 9,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  slide.title.isEmpty ? 'Judul banner' : slide.title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  slide.subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.88),
-                    fontSize: 9.5,
-                    height: 1.3,
-                  ),
-                ),
-              ],
             ),
           ),
         ],

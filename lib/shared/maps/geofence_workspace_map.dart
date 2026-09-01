@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../theme.dart';
 import 'google_maps_js.dart';
+import 'google_maps_support.dart';
 
 /// Kotak lintang/bujur untuk fit kamera (Google atau OSM).
 class GeoBounds {
@@ -210,6 +211,12 @@ class _GoogleGeofenceMapState extends State<GoogleGeofenceMap> {
 
   @override
   Widget build(BuildContext context) {
+    if (!googleMapsPluginSupported) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onFailed();
+      });
+      return const SizedBox.expand();
+    }
     return FutureBuilder<void>(
       future: _ready,
       builder: (context, snap) {
@@ -217,12 +224,12 @@ class _GoogleGeofenceMapState extends State<GoogleGeofenceMap> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             widget.onFailed();
           });
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: OptikAdminTokens.ice),
           );
         }
         if (snap.connectionState != ConnectionState.done) {
-          return const Center(
+          return Center(
             child: CircularProgressIndicator(color: OptikAdminTokens.ice),
           );
         }

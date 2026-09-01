@@ -20,6 +20,9 @@ class JadwalPengajuanService {
     required String alasan,
     DateTime? tanggalTukar,
     String? partnerKaryawanId,
+    double? lat,
+    double? lng,
+    String? fotoUrl,
   }) async {
     final t = JadwalKerjaRules.tipeOf(tipe);
     if (!JadwalKerjaRules.isAllowedTipe(t)) {
@@ -32,6 +35,14 @@ class JadwalPengajuanService {
       }
       if (tanggalTukar == null) throw 'Pilih tanggal tukar partner.';
     }
+    if (t == 'DINAS') {
+      if (lat == null || lng == null) {
+        throw 'Dinas luar wajib pin lokasi GPS.';
+      }
+      if ((fotoUrl ?? '').trim().isEmpty) {
+        throw 'Dinas luar wajib foto bukti.';
+      }
+    }
 
     await _client.from('jadwal_pengajuan').insert({
       'karyawan_id': karyawanId,
@@ -43,6 +54,9 @@ class JadwalPengajuanService {
       'partner_karyawan_id': partnerKaryawanId,
       'alasan': alasan.trim(),
       'status': 'PENDING',
+      if (t == 'DINAS') 'lat': lat,
+      if (t == 'DINAS') 'lng': lng,
+      if (t == 'DINAS') 'foto_url': fotoUrl,
     });
   }
 

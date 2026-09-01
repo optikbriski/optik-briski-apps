@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
@@ -5,6 +7,7 @@ import '../../theme.dart';
 class PremiumScaffold extends StatelessWidget {
   const PremiumScaffold({
     super.key,
+    this.scaffoldKey,
     this.appBar,
     required this.body,
     this.floatingActionButton,
@@ -17,6 +20,7 @@ class PremiumScaffold extends StatelessWidget {
     this.padding,
   });
 
+  final GlobalKey<ScaffoldState>? scaffoldKey;
   final PreferredSizeWidget? appBar;
   final Widget body;
   final Widget? floatingActionButton;
@@ -31,7 +35,8 @@ class PremiumScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: OptikAdminTokens.snow,
+      key: scaffoldKey,
+      backgroundColor: OptikAdminTokens.bg,
       extendBodyBehindAppBar: extendBodyBehindAppBar,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: appBar,
@@ -45,7 +50,14 @@ class PremiumScaffold extends StatelessWidget {
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
         children: [
-          const IgnorePointer(child: _PremiumBackdrop()),
+          IgnorePointer(
+            child: ColoredBox(
+              color: OptikAdminTokens.bg,
+              child: OptikAdminTokens.isKombo
+                  ? const SizedBox.expand()
+                  : const _PremiumBackdrop(),
+            ),
+          ),
           padding == null ? body : Padding(padding: padding!, child: body),
         ],
       ),
@@ -66,11 +78,11 @@ class _PremiumBackdrop extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(-0.9, -1.1),
-                radius: 1.25,
+                center: const Alignment(-0.85, -1.05),
+                radius: 1.15,
                 colors: [
-                  OptikAdminTokens.ice.withOpacity(0.22),
-                  OptikAdminTokens.ice.withOpacity(0.0),
+                  OptikAdminTokens.ice.withOpacity(0.34),
+                  Colors.transparent,
                 ],
               ),
             ),
@@ -78,12 +90,23 @@ class _PremiumBackdrop extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(1.05, 1.2),
-                radius: 1.1,
+                center: const Alignment(1.1, -0.2),
+                radius: 0.95,
                 colors: [
-                  OptikAdminTokens.slate.withOpacity(0.04),
+                  OptikAdminTokens.navy.withOpacity(0.06),
                   Colors.transparent,
                 ],
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _IceGrainPainter(
+                  ink: OptikAdminTokens.navy,
+                  frost: OptikAdminTokens.ice,
+                ),
+                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -92,3 +115,40 @@ class _PremiumBackdrop extends StatelessWidget {
     );
   }
 }
+
+/// Fine ice grain so the canvas is not a flat pale wash.
+class _IceGrainPainter extends CustomPainter {
+  const _IceGrainPainter({required this.ink, required this.frost});
+
+  final Color ink;
+  final Color frost;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final inkPaint = Paint()..color = ink.withOpacity(0.028);
+    final frostPaint = Paint()..color = frost.withOpacity(0.22);
+    const step = 6.0;
+    for (var y = 0.0; y < size.height; y += step) {
+      for (var x = 0.0; x < size.width; x += step) {
+        final n = _hash(x, y);
+        if (n > 0.72) {
+          canvas.drawCircle(
+            Offset(x + n * 2.4, y + (1 - n) * 2.1),
+            n > 0.9 ? 1.15 : 0.65,
+            n > 0.88 ? frostPaint : inkPaint,
+          );
+        }
+      }
+    }
+  }
+
+  static double _hash(double x, double y) {
+    final v = math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return v - v.floorToDouble();
+  }
+
+  @override
+  bool shouldRepaint(covariant _IceGrainPainter oldDelegate) =>
+      oldDelegate.ink != ink || oldDelegate.frost != frost;
+}
+

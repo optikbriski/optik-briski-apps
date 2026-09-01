@@ -9,17 +9,18 @@ class FaceShapeSilhouette extends StatelessWidget {
     super.key,
     required this.shape,
     this.size = 88,
-    this.color = OptikAdminTokens.navy,
+    this.color,
     this.fillOpacity = 0.12,
   });
 
   final FaceShapeType shape;
   final double size;
-  final Color color;
+  final Color? color;
   final double fillOpacity;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? OptikAdminTokens.navy;
     return SizedBox(
       width: size,
       height: size * 1.15,

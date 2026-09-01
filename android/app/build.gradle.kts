@@ -1,3 +1,6 @@
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -21,7 +24,7 @@ fun googleMapsKey(): String {
     if (prop.isNotEmpty()) return prop
     val localFile = rootProject.file("local.properties")
     if (localFile.exists()) {
-        val p = java.util.Properties()
+        val p = Properties()
         localFile.inputStream().use { p.load(it) }
         val fromLocal = (
             p.getProperty("GOOGLE_MAPS_API_KEY")
@@ -52,20 +55,16 @@ android {
             "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!BLEServer.exe"
     }
 
-compileOptions {
+    compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "21"
-    }
-
     defaultConfig {
         // Base ID — tiap flavor punya applicationId sendiri agar tidak saling “update”.
         applicationId = "com.example.toko_kacamata_natan"
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -119,6 +118,20 @@ compileOptions {
             )
         }
     }
+
+    // Kompres .so di file APK (diekstrak saat install). Fitur/kualitas sama;
+    // yang mengecil hanya ukuran file kirim WA / upload Supabase (<50 MB).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+    }
 }
 
 // Member tidak pakai OCR KTP — buang native/model OCR (~12 MB) agar lolos WA <50 MB desimal.
@@ -143,4 +156,9 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+// FCM: apply hanya jika google-services.json sudah ditaruh (build tanpa file tetap jalan).
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

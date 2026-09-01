@@ -6,9 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/admin/admin_code_login_service.dart';
+import '../../shared/app_update/app_update_chrome.dart';
+import '../../shared/app_update/app_update_coordinator.dart';
+import '../../shared/attendance/attendance_admin_scope.dart';
+import '../../shared/admin_appearance.dart';
 import '../../shared/bootstrap.dart';
 import '../../shared/qr/hardware_barcode_listener.dart';
+import '../../shared/sync/client_force_sync.dart';
 import '../../shared/theme.dart';
+import '../../shared/connectivity/connectivity_banner.dart';
 import '../../shared/training/training_banner.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
@@ -44,12 +50,36 @@ class AdminApp extends StatefulWidget {
   State<AdminApp> createState() => _AdminAppState();
 }
 
-class _AdminAppState extends State<AdminApp> {
+class _AdminAppState extends State<AdminApp> with WidgetsBindingObserver {
+  final _update = AppUpdateCoordinator(chrome: AppUpdateChrome.admin);
+
   @override
   void initState() {
     super.initState();
     // Wipe orphan training dirs / crash-recovery flags before any UI write path.
     TrainingMode.instance.recoverOnLaunch();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = AdminApp.navigatorKey.currentContext;
+      if (ctx != null) unawaited(_update.checkSilent(ctx));
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final ctx = AdminApp.navigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_update.onAppResumed(ctx));
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(_update.onAppPaused());
+    }
   }
 
   Future<void> _onExitTraining() async {
@@ -70,33 +100,39 @@ class _AdminAppState extends State<AdminApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: BrandChrome.windowTitle,
-      onGenerateTitle: (_) => BrandChrome.windowTitle,
-      debugShowCheckedModeBanner: false,
-      navigatorKey: AdminApp.navigatorKey,
-      localizationsDelegates: context.localizationDelegates,
-      supportedLocales: context.supportedLocales,
-      locale: context.locale,
-      theme: buildAdminTheme(),
-      builder: (context, child) => GlobalHardwareBarcodeShell(
-        navigatorKey: AdminApp.navigatorKey,
-        child: Column(
-          children: [
-            TrainingBanner(onExitRequested: _onExitTraining),
-            Expanded(child: child ?? const SizedBox.shrink()),
-          ],
-        ),
-      ),
-      home: () {
-        if (kIsWeb) {
-          final token = TenantBilling.tokenFromUri(Uri.base);
-          if (token != null) {
-            return TenantContractSignPage(token: token);
-          }
-        }
-        return const AdminAuthWrapper();
-      }(),
+    return ListenableBuilder(
+      listenable: AdminAppearance.instance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: BrandChrome.windowTitle,
+          onGenerateTitle: (_) => BrandChrome.windowTitle,
+          debugShowCheckedModeBanner: false,
+          navigatorKey: AdminApp.navigatorKey,
+          localizationsDelegates: context.localizationDelegates,
+          supportedLocales: context.supportedLocales,
+          locale: context.locale,
+          theme: buildAdminTheme(),
+          builder: (context, child) => GlobalHardwareBarcodeShell(
+            navigatorKey: AdminApp.navigatorKey,
+            child: Column(
+              children: [
+                const ConnectivityBanner(),
+                TrainingBanner(onExitRequested: _onExitTraining),
+                Expanded(child: child ?? const SizedBox.shrink()),
+              ],
+            ),
+          ),
+          home: () {
+            if (kIsWeb) {
+              final token = TenantBilling.tokenFromUri(Uri.base);
+              if (token != null) {
+                return TenantContractSignPage(token: token);
+              }
+            }
+            return const AdminAuthWrapper();
+          }(),
+        );
+      },
     );
   }
 }
@@ -127,6 +163,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
   @override
   void dispose() {
     _authSub?.cancel();
+    unawaited(ClientForceSync.unbind());
     super.dispose();
   }
 
@@ -140,6 +177,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
 
     if (data.event == AuthChangeEvent.signedOut) {
       unawaited(AdminCodeLoginService.clearActor());
+      unawaited(ClientForceSync.unbind());
       setState(() {
         _session = null;
         _profile = null;
@@ -191,7 +229,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       if (!mounted) return;
 
       if (row == null) {
-        await supabase.auth.signOut();
+        await signOutQuiet();
         if (!mounted) return;
         setState(() {
           _session = null;
@@ -205,7 +243,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
 
       final role = (row['role'] ?? '').toString().toLowerCase();
       if (!_adminRoles.contains(role)) {
-        await supabase.auth.signOut();
+        await signOutQuiet();
         if (!mounted) return;
         setState(() {
           _session = null;
@@ -231,6 +269,19 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
       await BrandService.load();
       await TenantModules.instance.load();
       final access = await TenantAccess.load();
+      await ClientForceSync.bindFromTenantService(
+        localTokoId: AttendanceAdminScope.tokoOf(merged),
+        onRemote: (_) {
+          final ctx = AdminApp.navigatorKey.currentContext;
+          if (ctx == null || !ctx.mounted) return;
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text('client_force_sync_remote_ok'.tr()),
+              backgroundColor: OptikAdminTokens.navy,
+            ),
+          );
+        },
+      );
 
       setState(() {
         _session = session;
@@ -265,7 +316,7 @@ class _AdminAuthWrapperState extends State<AdminAuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_booting) {
-      return const PremiumScaffold(
+      return PremiumScaffold(
         body: Center(
           child: CircularProgressIndicator(color: OptikAdminTokens.ice),
         ),

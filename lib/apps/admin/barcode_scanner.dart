@@ -44,10 +44,10 @@ class _OptikBRiskiScannerState extends State<OptikBRiskiScanner> {
         elevation: 0,
         title: Text(
           "scan_title".tr(),
-          style: const TextStyle(
+          style: TextStyle(
               color: OptikAdminTokens.navy, fontWeight: FontWeight.bold, fontSize: 15),
         ),
-        iconTheme: const IconThemeData(color: OptikAdminTokens.navy),
+        iconTheme: IconThemeData(color: OptikAdminTokens.navy),
         centerTitle: true,
       ),
       body: Stack(
@@ -111,7 +111,7 @@ class _OptikBRiskiScannerState extends State<OptikBRiskiScanner> {
                     child: Text(
                       "scan_instruksi".tr(),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.navy,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -189,7 +189,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                 color: OptikAdminTokens.warning, size: 22),
             const SizedBox(width: 10),
             Expanded(
-              child: Text("Detail Audit Pusat",
+              child: Text('admin_auto_c491c4ff5a'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.warning.withOpacity(0.35),
                       fontSize: 15,
@@ -208,28 +208,28 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                   trx['created_at'] != null
                       ? trx['created_at'].toString().split('T')[0]
                       : '-'),
-              const Divider(color: OptikAdminTokens.lineStrong, height: 20),
+              Divider(color: OptikAdminTokens.lineStrong, height: 20),
               _rowDetail("Cabang / Toko", trx['toko_id'],
                   isHighlight: true, color: OptikAdminTokens.warning),
               _rowDetail("Nama Kasir", trx['nama_kasir']),
               _rowDetail("Nama Pelanggan", trx['nama_pelanggan']),
               _rowDetail("Status Bayar", trx['status_pembayaran']),
-              const Divider(color: OptikAdminTokens.lineStrong, height: 20),
+              Divider(color: OptikAdminTokens.lineStrong, height: 20),
               _rowDetail(
                   "Total Transaksi",
-                  formatRupiah(
+                  formatRupiah(context,
                       int.tryParse(trx['total_harga']?.toString() ?? '0') ?? 0),
                   isHighlight: true,
                   color: OptikAdminTokens.navy),
               _rowDetail(
                   "Tunai Masuk",
-                  formatRupiah(
+                  formatRupiah(context,
                       int.tryParse(trx['dibayarkan']?.toString() ?? '0') ?? 0),
                   isHighlight: true,
                   color: OptikAdminTokens.success),
               _rowDetail(
                   "Sisa Piutang (DP)",
-                  formatRupiah(
+                  formatRupiah(context,
                       int.tryParse(trx['sisa_tagihan']?.toString() ?? '0') ??
                           0),
                   isHighlight: true,
@@ -240,7 +240,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c),
-              child: const Text("Tutup",
+              child: Text('admin_btn_close'.tr(),
                   style: TextStyle(
                       color: OptikAdminTokens.textMuted,
                       fontWeight: FontWeight.bold,
@@ -258,7 +258,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12)),
+          Text(label, style: TextStyle(color: OptikAdminTokens.textMuted, fontSize: 12)),
           const SizedBox(width: 15),
           Expanded(
             child: Text(
@@ -280,13 +280,13 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
   @override
   Widget build(BuildContext context) {
     return PremiumScaffold(
-      appBar: const PremiumAppBar(title: 'Riwayat Transaksi Kasir'),
+      appBar: PremiumAppBar(title: 'admin_auto_d7c59f7a9e'.tr()),
       body: isLoading
-          ? const Center(
+          ? Center(
               child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : listTransaksi.isEmpty
-              ? const PremiumEmptyState(
-                  message: 'Belum ada transaksi di database',
+              ? PremiumEmptyState(
+                  message: 'admin_auto_a68deb3f92'.tr(),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(15),
@@ -309,7 +309,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 15, vertical: 6),
                         title: Text(trx['no_invoice'] ?? '-',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: OptikAdminTokens.navy,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13)),
@@ -318,12 +318,12 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                           children: [
                             const SizedBox(height: 5),
                             Text(
-                                "${trx['nama_pelanggan'] ?? 'Pasien Tanpa Nama'} • ${formatRupiah(totalHarga)}",
-                                style: const TextStyle(
+                                "${trx['nama_pelanggan'] ?? 'Pasien Tanpa Nama'} • ${formatRupiah(context, totalHarga)}",
+                                style: TextStyle(
                                     color: OptikAdminTokens.textSecondary, fontSize: 12)),
                             const SizedBox(height: 2),
                             Text(formattedDate,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: OptikAdminTokens.navy,
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold)),
@@ -334,9 +334,9 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                           runSpacing: OptikAdminTokens.spaceSm,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.receipt_long,
+                              icon: Icon(Icons.receipt_long,
                                   color: OptikAdminTokens.navy, size: 22),
-                              tooltip: "Cetak / Bagikan Struk",
+                              tooltip: 'admin_auto_a02c81ee52'.tr(),
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -351,7 +351,7 @@ class _RiwayatTransaksiPageState extends State<RiwayatTransaksiPage> {
                               IconButton(
                                 icon: const Icon(Icons.admin_panel_settings,
                                     color: OptikAdminTokens.warning, size: 22),
-                                tooltip: "Detail Internal Pusat",
+                                tooltip: 'admin_auto_ac20baeb6b'.tr(),
                                 onPressed: () =>
                                     _showDetailKhususPusat(context, trx),
                               ),

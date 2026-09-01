@@ -43,7 +43,7 @@ class TrainingBanner extends StatelessWidget {
                       children: [
                         Text(
                           'training_banner_title'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.snow,
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
@@ -94,14 +94,14 @@ class TrainingBanner extends StatelessWidget {
 /// Kartu dialog latihan: kanvas terang, teks gelap.
 /// Dipakai Admin Optik dan Admin Rekasa (satu overlay).
 abstract final class TrainingDialogSkin {
-  static const Color surface = OptikAdminTokens.card;
-  static const Color title = OptikAdminTokens.navy;
-  static const Color body = OptikAdminTokens.textSecondary;
-  static const Color muted = OptikAdminTokens.slate;
+  static Color get surface => OptikAdminTokens.card;
+  static Color get title => OptikAdminTokens.navy;
+  static Color get body => OptikAdminTokens.textSecondary;
+  static Color get muted => OptikAdminTokens.slate;
   static const Color accent = OptikAdminTokens.training;
   static const Color accentSoft = OptikAdminTokens.trainingSoft;
-  static const Color chipFill = OptikAdminTokens.bgMid;
-  static const Color onAccent = OptikAdminTokens.snow;
+  static Color get chipFill => OptikAdminTokens.bgMid;
+  static Color get onAccent => OptikAdminTokens.snow;
 }
 
 /// Premium confirm + enter-loading experience for Training Mode.
@@ -233,7 +233,7 @@ class TrainingModeDialogs {
                       Expanded(
                         child: Text(
                           'training_exit_title'.tr(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: TrainingDialogSkin.title,
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
@@ -344,7 +344,7 @@ class _TrainingBodyText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       keyName.tr(),
-      style: const TextStyle(
+      style: TextStyle(
         color: TrainingDialogSkin.body,
         fontSize: 13.5,
         height: 1.45,
@@ -387,7 +387,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                     colors: [amberSoft, amber],
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.school_rounded,
                   color: TrainingDialogSkin.onAccent,
                   size: 28,
@@ -410,7 +410,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       'training_enter_title'.tr(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: TrainingDialogSkin.title,
                         fontWeight: FontWeight.w800,
                         fontSize: 20,
@@ -427,7 +427,7 @@ class _EnterConfirmSheet extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'training_enter_modules_label'.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               color: TrainingDialogSkin.muted,
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -459,7 +459,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         moduleKeys[i].tr(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: TrainingDialogSkin.title,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -486,7 +486,7 @@ class _EnterConfirmSheet extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'training_enter_safe_note'.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: TrainingDialogSkin.body,
                       fontSize: 12.5,
                       height: 1.4,
@@ -499,7 +499,7 @@ class _EnterConfirmSheet extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             'training_enter_wipe_note'.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               color: TrainingDialogSkin.muted,
               fontSize: 12,
               height: 1.4,
@@ -619,7 +619,7 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
                 child: child,
               );
             },
-            child: const Icon(
+            child: Icon(
               Icons.school_rounded,
               color: TrainingDialogSkin.onAccent,
               size: 34,
@@ -629,7 +629,7 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
           Text(
             'training_loading_title'.tr(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: TrainingDialogSkin.title,
               fontWeight: FontWeight.w800,
               fontSize: 17,
@@ -642,7 +642,7 @@ class _EnteringLoadingOverlayState extends State<_EnteringLoadingOverlay>
               _steps[_step].tr(),
               key: ValueKey(_step),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: TrainingDialogSkin.muted,
                 fontSize: 13,
                 height: 1.35,

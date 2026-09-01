@@ -50,6 +50,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
   String? _tokoId;
   AttendanceQrIssue? _issue;
   int _secondsLeft = 0;
+  bool _rotateInFlight = false;
 
   _TokoAbsensiPhase _phase = _TokoAbsensiPhase.waitingQr;
   AttendanceGeoUnlock? _activeUnlock;
@@ -123,7 +124,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         return;
       }
       await _rotateQr();
-      _startQrTimers();
+      _startTickTimer();
       _startWaitingListeners();
       if (!mounted) return;
       setState(() => _loading = false);
@@ -136,40 +137,66 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     }
   }
 
-  void _startQrTimers() {
-    _rotateTimer?.cancel();
+  void _startTickTimer() {
     _tickTimer?.cancel();
-    _rotateTimer = Timer.periodic(
-      Duration(seconds: AttendanceConfig.qrRotateSeconds),
-      (_) {
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _syncCountdown();
+    });
+  }
+
+  void _syncCountdown() {
+    final exp = _issue?.expiresAt;
+    if (exp == null) return;
+    final left = AttendanceConfig.qrSecondsUntilExpiry(exp);
+    if (!mounted) return;
+    setState(() => _secondsLeft = left);
+  }
+
+  void _scheduleNextRotate() {
+    _rotateTimer?.cancel();
+    final exp = _issue?.expiresAt;
+    if (exp == null) return;
+    _rotateTimer = Timer(
+      AttendanceConfig.qrDelayUntilPrefetch(exp),
+      () {
         if (_phase == _TokoAbsensiPhase.waitingQr && !_busy) {
           unawaited(_rotateQr());
         }
       },
     );
-    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final exp = _issue?.expiresAt;
-      if (exp == null) return;
-      final left = exp.difference(DateTime.now()).inSeconds;
-      if (!mounted) return;
-      setState(() => _secondsLeft = left < 0 ? 0 : left);
-    });
   }
 
   Future<void> _rotateQr() async {
+    if (_rotateInFlight) return;
     final toko = _tokoId;
     if (toko == null || toko.isEmpty) return;
+    _rotateInFlight = true;
     try {
       final issue = await _qrService.issueToken(tokoId: toko);
       if (!mounted) return;
       setState(() {
         _issue = issue;
-        _secondsLeft = issue.expiresAt.difference(DateTime.now()).inSeconds;
+        _secondsLeft = AttendanceConfig.qrSecondsUntilExpiry(issue.expiresAt);
         _error = null;
       });
+      if (_phase == _TokoAbsensiPhase.waitingQr && !_busy) {
+        _scheduleNextRotate();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '$e');
+      if (_phase == _TokoAbsensiPhase.waitingQr && !_busy) {
+        _rotateTimer?.cancel();
+        _rotateTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted &&
+              _phase == _TokoAbsensiPhase.waitingQr &&
+              !_busy) {
+            unawaited(_rotateQr());
+          }
+        });
+      }
+    } finally {
+      _rotateInFlight = false;
     }
   }
 
@@ -262,7 +289,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     try {
       // Geofence wajib di bukti unlock (QR saja tidak cukup).
       if (unlock.latitude == null || unlock.longitude == null) {
-        _snack('absensi_toko_unlock_no_gps'.tr(), OptikAdminTokens.danger);
+        _snack('admin_auto_3b7d852624'.tr(), OptikAdminTokens.danger);
         await _returnToQr(consume: true);
         return;
       }
@@ -270,7 +297,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
       final full = await _service.fetchKaryawanById(unlock.karyawanId);
       if (!mounted) return;
       if (full == null) {
-        _snack('absensi_toko_karyawan_not_found'.tr(), OptikAdminTokens.danger);
+        _snack('admin_auto_ab66d44e08'.tr(), OptikAdminTokens.danger);
         await _returnToQr(consume: true);
         return;
       }
@@ -281,7 +308,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           sessionTenant.isEmpty ||
           karyawanTenant.isEmpty ||
           sessionTenant != karyawanTenant) {
-        _snack('Akun karyawan bukan milik usaha ini.', OptikAdminTokens.danger);
+        _snack('admin_gl_row_a2f8c79525'.tr(), OptikAdminTokens.danger);
         await _returnToQr(consume: true);
         return;
       }
@@ -348,7 +375,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         qrTokenId: unlock.qrTokenId,
       );
       if (!mounted) return;
-      _snack('absensi_toko_pulang_ok'.tr(), OptikAdminTokens.success);
+      _snack('admin_auto_4edb7ae0f5'.tr(), OptikAdminTokens.success);
       await _returnToQr(consume: true);
     } catch (e) {
       _snack('$e', OptikAdminTokens.danger);
@@ -389,18 +416,18 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           backgroundColor: OptikAdminTokens.card,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-            side: const BorderSide(color: OptikAdminTokens.lineStrong),
+            side: BorderSide(color: OptikAdminTokens.lineStrong),
           ),
           title: Text(
             'absensi_toko_need_enroll'.tr(),
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
             ),
           ),
           content: Text(
             'absensi_toko_enroll_now_hint'.tr(),
-            style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+            style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
           ),
           actions: [
             TextButton(
@@ -430,7 +457,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     if (action != 'ENROLL' &&
         kIsWeb &&
         (karyawan['face_photo_url'] ?? '').toString().trim().isEmpty) {
-      _snack('absensi_toko_need_photo_reenroll'.tr(), OptikAdminTokens.warning);
+      _snack('admin_auto_bb7f69845c'.tr(), OptikAdminTokens.warning);
       await _returnToQr(consume: true);
       return;
     }
@@ -439,7 +466,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
     try {
       // Lokasi dari unlock HP karyawan — tanpa GPS Admin/Mac.
       if (unlock.latitude == null || unlock.longitude == null) {
-        _snack('absensi_toko_unlock_no_gps'.tr(), OptikAdminTokens.danger);
+        _snack('admin_auto_3b7d852624'.tr(), OptikAdminTokens.danger);
         await _returnToQr(consume: true);
         return;
       }
@@ -457,12 +484,12 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         onInfo: (key) => _snack(key.tr(), OptikAdminTokens.navy),
       );
       if (liveness == null || !liveness.success) {
-        _snack('aws_liveness_cancelled'.tr(), OptikAdminTokens.warning);
+        _snack('admin_auto_b04d4f8724'.tr(), OptikAdminTokens.warning);
         await _returnToQr(consume: true);
         return;
       }
       if (liveness.photoBytes == null) {
-        _snack('aws_liveness_face_unclear'.tr(), OptikAdminTokens.danger);
+        _snack('admin_auto_ab21624baf'.tr(), OptikAdminTokens.danger);
         await _returnToQr(consume: true);
         return;
       }
@@ -480,7 +507,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           liveness: liveness,
           geo: geo,
         );
-        _snack('absensi_toko_enroll_ok'.tr(), OptikAdminTokens.success);
+        _snack('admin_auto_23d44d4de8'.tr(), OptikAdminTokens.success);
       } else {
         // MASUK: foto liveness → attendance_logs + antrean Monitor Absensi.
         final late = await _service.clockIn(
@@ -514,7 +541,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         backgroundColor: color,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w600,
           ),
@@ -532,7 +559,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
           if (_phase == _TokoAbsensiPhase.waitingQr)
             IconButton(
               onPressed: _busy ? null : _rotateQr,
-              icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+              icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
               tooltip: 'attendance_qr_refresh'.tr(),
             ),
           if (_phase == _TokoAbsensiPhase.faceMatch)
@@ -544,7 +571,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
           : _phase == _TokoAbsensiPhase.waitingQr
               ? _buildWaitingQr()
               : _buildFacePhase(),
@@ -572,7 +599,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         Text(
           _tokoId ?? '-',
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -585,14 +612,14 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
             'detik': '${AttendanceConfig.qrTtlSeconds}',
           }),
           textAlign: TextAlign.center,
-          style: const TextStyle(color: OptikAdminTokens.slate, height: 1.4),
+          style: TextStyle(color: OptikAdminTokens.slate, height: 1.4),
         ),
         const SizedBox(height: 20),
         Center(
           child: _issue == null
               ? Text(
                   'attendance_qr_waiting'.tr(),
-                  style: const TextStyle(color: OptikAdminTokens.slate),
+                  style: TextStyle(color: OptikAdminTokens.slate),
                 )
               : Column(
                   children: [
@@ -628,14 +655,14 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
                           ? _statusLine!
                           : 'absensi_toko_waiting_scan'.tr(),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: OptikAdminTokens.slate,
                         height: 1.4,
                       ),
                     ),
                     if (_busy) ...[
                       const SizedBox(height: 20),
-                      const CircularProgressIndicator(color: OptikAdminTokens.ice),
+                      CircularProgressIndicator(color: OptikAdminTokens.ice),
                     ],
                   ],
                 ),
@@ -669,7 +696,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
             children: [
               Text(
                 nama,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -678,18 +705,18 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
               const SizedBox(height: 6),
               Text(
                 '${_selected?['jabatan'] ?? '-'} • ${_selected?['toko_id'] ?? '-'}',
-                style: const TextStyle(color: OptikAdminTokens.slate),
+                style: TextStyle(color: OptikAdminTokens.slate),
               ),
               const SizedBox(height: 10),
               Text(
                 'absensi_toko_akan_masuk'.tr(),
-                style: const TextStyle(color: OptikAdminTokens.navy),
+                style: TextStyle(color: OptikAdminTokens.navy),
               ),
               if (_statusLine != null) ...[
                 const SizedBox(height: 8),
                 Text(
                   _statusLine!,
-                  style: const TextStyle(color: OptikAdminTokens.slate, height: 1.35),
+                  style: TextStyle(color: OptikAdminTokens.slate, height: 1.35),
                 ),
               ],
             ],
@@ -697,7 +724,7 @@ class _AbsensiTokoPageState extends State<AbsensiTokoPage> {
         ),
         const SizedBox(height: 16),
         if (_busy)
-          const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+          Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
         else ...[
           _actionButton(
             label: 'absensi_toko_masuk'.tr(),

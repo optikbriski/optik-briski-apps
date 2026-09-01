@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/attendance/attendance_admin_scope.dart';
 import '../../shared/attendance/attendance_verification_config.dart';
 import '../../shared/attendance/attendance_verification_service.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/widgets/zoomable_network_image.dart';
@@ -23,7 +25,7 @@ class VerifikasiAbsensiPage extends StatefulWidget {
 
 class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
   final _svc = AttendanceVerificationService();
-  final _dayFmt = DateFormat('d MMM yyyy HH:mm', 'id_ID');
+  DateFormat get _dayFmt => AdminFormat.date(context, 'd MMM yyyy HH:mm');
 
   bool _loading = true;
   bool _acting = false;
@@ -133,11 +135,11 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         row['toko_id']?.toString(),
         rowTenantId: row['tenant_id']?.toString(),
       )) {
-      _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_d7705cfa27'.tr(), OptikAdminTokens.danger);
       return;
     }
     final ok = await _confirm(
-      title: 'Tandai Valid?',
+      title: 'admin_auto_be4b2cf189'.tr(),
       body:
           'Absensi wajah hari ini akan ditandai AMAN dan karyawan mendapat '
           '+${AttendanceVerificationConfig.validDayPoints} poin ABSEN.\n\n'
@@ -178,11 +180,11 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         row['toko_id']?.toString(),
         rowTenantId: row['tenant_id']?.toString(),
       )) {
-      _snack('Tidak berhak menilai absensi toko ini.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_d7705cfa27'.tr(), OptikAdminTokens.danger);
       return;
     }
     final ok = await _confirm(
-      title: 'Tandai Mencurigakan?',
+      title: 'admin_auto_1e27415c59'.tr(),
       body:
           'Masuk ke antrean Tinjauan Mencurigakan untuk keputusan lanjut.\n'
           'Belum ada potongan poin / SP pada langkah ini.',
@@ -199,7 +201,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         notes: 'Perlu tinjauan lanjut',
       );
       if (!mounted) return;
-      _snack('Masuk antrean tinjauan mencurigakan.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_37ea28bca7'.tr(), OptikAdminTokens.warning);
       _selected = null;
       await _load();
     } catch (e) {
@@ -222,15 +224,15 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         backgroundColor: OptikAdminTokens.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(OptikAdminTokens.radiusLg),
-          side: const BorderSide(color: OptikAdminTokens.lineStrong),
+          side: BorderSide(color: OptikAdminTokens.lineStrong),
         ),
         title: Text(title,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w800,
             )),
         content: Text(body,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.slate,
               height: 1.4,
             )),
@@ -238,7 +240,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(foregroundColor: OptikAdminTokens.slate),
-            child: const Text('Batal'),
+            child: Text('appr_btn_batal'.tr()),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -269,12 +271,12 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
 
     final sel = await showAdminPicker<String>(
       context: context,
-      title: 'Filter toko',
-      subtitle: 'Pilih cabang untuk antrean verifikasi',
+      title: 'admin_auto_78058947dd'.tr(),
+      subtitle: 'admin_auto_6ba7225956'.tr(),
       headerIcon: Icons.storefront_rounded,
       searchHint: 'Cari kode toko…',
-      clearLabel: _allStores ? 'Semua toko' : null,
-      clearSubtitle: _allStores ? 'Tampilkan seluruh antrean' : null,
+      clearLabel: _allStores ? 'admin_lbl_semua_toko'.tr() : null,
+      clearSubtitle: _allStores ? 'admin_lbl_tampilkan_seluruh_antrean'.tr() : null,
       clearIcon: Icons.apps_rounded,
       selected: _tokoFilter,
       options: [
@@ -282,7 +284,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
           AdminPickerOption(
             value: t,
             label: t,
-            subtitle: AttendanceAdminScope.isPusatTokoId(t) ? 'Pusat' : 'Cabang',
+            subtitle: AttendanceAdminScope.isPusatTokoId(t) ? 'admin_lbl_pusat'.tr() : 'admin_lbl_cabang'.tr(),
             icon: AttendanceAdminScope.isPusatTokoId(t)
                 ? Icons.apartment_rounded
                 : Icons.storefront_rounded,
@@ -306,7 +308,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         backgroundColor: color,
         content: Text(
           msg,
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.snow,
             fontWeight: FontWeight.w600,
           ),
@@ -321,10 +323,10 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
 
     return PremiumScaffold(
       appBar: PremiumAppBar(
-        title: 'Verifikasi Absensi',
+        title: 'appr_verifikasi_absensi'.tr(),
         actions: [
           IconButton(
-            tooltip: 'Tinjauan Mencurigakan',
+            tooltip: 'appr_tinjauan_mencurigakan'.tr(),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -336,9 +338,9 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                 color: OptikAdminTokens.warning),
           ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'admin_btn_refresh'.tr(),
             onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
+            icon: Icon(Icons.refresh_rounded, color: OptikAdminTokens.navy),
           ),
         ],
       ),
@@ -351,7 +353,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
               padding: const EdgeInsets.all(14),
               borderRadius: 16,
               borderColor: OptikAdminTokens.ice.withOpacity(0.55),
-              child: const Text(
+              child: Text(
                 'Bandingkan foto capture absen (kiri) dengan foto wajah '
                 'terdaftar (kanan). Valid = aman + poin. Mencurigakan = '
                 'antrean tinjauan. Bukan untuk keterlambatan.',
@@ -367,7 +369,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: AdminPickerField(
-                label: 'Filter toko',
+                label: 'admin_auto_78058947dd'.tr(),
                 valueText: _tokoFilterLabel,
                 icon: Icons.storefront_rounded,
                 onTap: _pickTokoFilter,
@@ -381,9 +383,9 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
+                ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.ice))
                 : _rows.isEmpty
-                    ? const PremiumEmptyState(
+                    ? PremiumEmptyState(
                         message:
                             'Tidak ada absensi menunggu verifikasi wajah.',
                         icon: Icons.verified_user_outlined,
@@ -393,7 +395,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               SizedBox(width: 320, child: _buildList()),
-                              const VerticalDivider(width: 1, color: OptikAdminTokens.line),
+                              VerticalDivider(width: 1, color: OptikAdminTokens.line),
                               Expanded(child: _buildDetail()),
                             ],
                           )
@@ -410,7 +412,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                                         foregroundColor: OptikAdminTokens.navy,
                                       ),
                                       icon: const Icon(Icons.arrow_back_rounded),
-                                      label: const Text('Daftar'),
+                                      label: Text('admin_btn_daftar'.tr()),
                                     ),
                                   ),
                                   Expanded(child: _buildDetail()),
@@ -453,7 +455,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                     children: [
                       Text(
                         _svc.namaOf(r),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontWeight: FontWeight.w700,
                         ),
@@ -461,14 +463,14 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                       Text(
                         '${r['toko_id'] ?? '-'}'
                         '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 12,
                         ),
                       ),
                       Text(
                         at != null ? _dayFmt.format(at.toLocal()) : '-',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.slate,
                           fontSize: 11,
                         ),
@@ -476,7 +478,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
+                Icon(Icons.chevron_right, color: OptikAdminTokens.slate),
               ],
             ),
           );
@@ -488,8 +490,8 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
   Widget _buildDetail() {
     final r = _selected;
     if (r == null) {
-      return const PremiumEmptyState(
-        message: 'Pilih absensi di daftar untuk membandingkan foto.',
+      return PremiumEmptyState(
+        message: 'admin_auto_2f76cbe621'.tr(),
         icon: Icons.compare_rounded,
       );
     }
@@ -503,7 +505,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
       children: [
         Text(
           _svc.namaOf(r),
-          style: const TextStyle(
+          style: TextStyle(
             color: OptikAdminTokens.navy,
             fontSize: 20,
             fontWeight: FontWeight.w800,
@@ -514,28 +516,28 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
           '${r['toko_id'] ?? '-'}'
           '${_svc.jabatanOf(r).isNotEmpty ? ' · ${_svc.jabatanOf(r)}' : ''}'
           '${at != null ? ' · ${_dayFmt.format(at.toLocal())}' : ''}',
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
         ),
         const SizedBox(height: 6),
         Text(
           'Skor match: ${score ?? '-'}'
           ' · Liveness: ${r['liveness_ok'] == true ? 'OK' : '-'}'
           '${r['liveness_provider'] != null ? ' (${r['liveness_provider']})' : ''}',
-          style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
+          style: TextStyle(color: OptikAdminTokens.slate, fontSize: 12),
         ),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, c) {
             final stacked = c.maxWidth < 560;
             final left = _photoPane(
-              label: 'Capture absen (hari ini)',
-              subtitle: 'Hasil liveness / face match saat masuk',
+              label: 'admin_auto_7187985eb2'.tr(),
+              subtitle: 'admin_auto_fcaaddc7ab'.tr(),
               url: capture,
               accent: OptikAdminTokens.navy,
             );
             final right = _photoPane(
-              label: 'Foto terdaftar',
-              subtitle: 'face_photo_url / enroll karyawan',
+              label: 'admin_auto_e8847690d4'.tr(),
+              subtitle: 'admin_auto_92b69be5ad'.tr(),
               url: enrolled,
               accent: OptikAdminTokens.success,
             );
@@ -557,7 +559,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
           children: [
             Expanded(
               child: PremiumPrimaryButton(
-                label: 'Valid',
+                label: 'admin_auto_3ac705f2ac'.tr(),
                 icon: Icons.verified_rounded,
                 loading: _acting,
                 onPressed: _acting ? null : _markValid,
@@ -569,7 +571,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
             const SizedBox(width: 12),
             Expanded(
               child: PremiumPrimaryButton(
-                label: 'Mencurigakan',
+                label: 'admin_auto_a62e01bd59'.tr(),
                 icon: Icons.warning_amber_rounded,
                 loading: _acting,
                 onPressed: _acting ? null : _markMencurigakan,
@@ -608,7 +610,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 11),
           ),
           const SizedBox(height: 10),
           ZoomableNetworkImagePane(url: url),
@@ -623,7 +625,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
+        child: Icon(Icons.person, color: OptikAdminTokens.slate, size: 22),
       );
     }
     return Image.network(
@@ -635,7 +637,7 @@ class _VerifikasiAbsensiPageState extends State<VerifikasiAbsensiPage> {
         width: size,
         height: size,
         color: OptikAdminTokens.bgMid,
-        child: const Icon(Icons.broken_image, color: OptikAdminTokens.slate, size: 18),
+        child: Icon(Icons.broken_image, color: OptikAdminTokens.slate, size: 18),
       ),
     );
   }

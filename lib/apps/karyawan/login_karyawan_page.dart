@@ -130,7 +130,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     try {
       final email = (user.email ?? '').trim().toLowerCase();
       if (email.isEmpty) {
-        await Supabase.instance.client.auth.signOut();
+        await signOutQuiet();
         return;
       }
       final routed = await _routeAfterAuth(userId: user.id, email: email);
@@ -139,7 +139,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     } catch (e) {
       debugPrint('bootstrap session login: $e');
       try {
-        await Supabase.instance.client.auth.signOut();
+        await signOutQuiet();
       } catch (_) {}
     } finally {
       if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -170,7 +170,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     if (role == 'owner') {
       try {
         if (!_tenantMatchesLogin(profileRow?['tenant_id']?.toString())) {
-          await Supabase.instance.client.auth.signOut();
+          await signOutQuiet();
           if (!mounted) return false;
           _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
           return false;
@@ -186,7 +186,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
         return true;
       } catch (e) {
         debugPrint('owner profile: $e');
-        await Supabase.instance.client.auth.signOut();
+        await signOutQuiet();
         OwnerSession.instance.clear();
         if (!mounted) return false;
         _snack(
@@ -241,14 +241,14 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
     } on PostgrestException catch (e) {
       // Duplikat row / RLS / schema → anggap profil tidak bisa diverifikasi.
       debugPrint('assert karyawan aktif: $e');
-      await Supabase.instance.client.auth.signOut();
+      await signOutQuiet();
       if (!mounted) return false;
       _snack("profil_tidak_ditemukan".tr(), color: Colors.redAccent);
       return false;
     }
 
     if (userData == null) {
-      await Supabase.instance.client.auth.signOut();
+      await signOutQuiet();
       if (!mounted) return false;
       _snack("profil_tidak_ditemukan".tr(), color: Colors.redAccent);
       return false;
@@ -256,7 +256,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
 
     final status = (userData['status_approval'] ?? '').toString().trim();
     if (status.toLowerCase() != 'aktif') {
-      await Supabase.instance.client.auth.signOut();
+      await signOutQuiet();
       if (!mounted) return false;
       final ditolak = status.toLowerCase().startsWith('ditolak');
       _snack(
@@ -269,7 +269,7 @@ class _LoginKaryawanPageState extends State<LoginKaryawanPage>
       return false;
     }
     if (!_tenantMatchesLogin(userData['tenant_id']?.toString())) {
-      await Supabase.instance.client.auth.signOut();
+      await signOutQuiet();
       if (!mounted) return false;
       _snack('Akun ini bukan staf ${BrandService.name}.', color: Colors.redAccent);
       return false;

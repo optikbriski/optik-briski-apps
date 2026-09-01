@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/theme.dart';
@@ -93,24 +94,24 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
 
   Future<void> _submit() async {
     if (!_canProvision) {
-      _snack('Hanya Admin Pusat / Owner Utama.', OptikAdminTokens.danger);
+      _snack('admin_gl_row_cffde148d9'.tr(), OptikAdminTokens.danger);
       return;
     }
     final nama = _nama.text.trim();
     final email = _email.text.trim().toLowerCase();
     final password = _password.text;
     if (nama.isEmpty || email.isEmpty || password.length < 6) {
-      _snack('Nama, email, password (≥6) wajib.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_82e43f80b5'.tr(), OptikAdminTokens.warning);
       return;
     }
     if (_ownerType == 'toko' && _selectedToko.isEmpty) {
-      _snack('Owner Toko wajib pilih minimal 1 cabang.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_4f4418f374'.tr(), OptikAdminTokens.warning);
       return;
     }
     final pctU = num.tryParse(_pctUtama.text.trim()) ?? 50;
     final pctT = num.tryParse(_pctToko.text.trim()) ?? 50;
     if ((pctU + pctT).round() != 100) {
-      _snack('Persentase harus jumlah 100.', OptikAdminTokens.warning);
+      _snack('admin_gl_row_b019116111'.tr(), OptikAdminTokens.warning);
       return;
     }
 
@@ -161,7 +162,7 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
       }
 
       if (!mounted) return;
-      _snack('Owner $email berhasil diprovision.', OptikAdminTokens.success);
+      _snack('admin_auto_81f331c156'.tr(namedArgs: {'email': email}), OptikAdminTokens.success);
       _nama.clear();
       _email.clear();
       _password.clear();
@@ -221,7 +222,7 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: const Text('Buat Owner'),
+        title: Text('admin_auto_99c0cdbfe4'.tr()),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
       ),
@@ -232,7 +233,7 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    const PremiumSectionHeader(label: 'Provision akun Owner'),
+                    PremiumSectionHeader(label: 'admin_auto_d3b6571884'.tr()),
                     const SizedBox(height: 8),
                     Text(
                       'Owner masuk APK Karyawan → shell Owner. '
@@ -242,8 +243,8 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: _nama,
-                      decoration: const InputDecoration(
-                        labelText: 'Nama',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_c6e88f1b17'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -251,8 +252,8 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                     TextField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email login',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_4bcaf1b235'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -260,34 +261,34 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                     TextField(
                       controller: _password,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Password awal',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_df434e759f'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Telepon (opsional)',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_6f56f62cac'.tr(),
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: _ownerType,
-                      decoration: const InputDecoration(
-                        labelText: 'Tipe Owner',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_6b969aac32'.tr(),
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(
                           value: 'utama',
-                          child: Text('Owner Utama (semua cabang)'),
+                          child: Text('admin_auto_c7551fb865'.tr()),
                         ),
                         DropdownMenuItem(
                           value: 'toko',
-                          child: Text('Owner Toko (franchise)'),
+                          child: Text('admin_auto_3c95140888'.tr()),
                         ),
                       ],
                       onChanged: (v) =>
@@ -300,8 +301,8 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                           child: TextField(
                             controller: _pctUtama,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '% Owner Utama',
+                            decoration: InputDecoration(
+                              labelText: 'admin_auto_cc2646a93e'.tr(),
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -311,8 +312,8 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                           child: TextField(
                             controller: _pctToko,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '% Owner Toko',
+                            decoration: InputDecoration(
+                              labelText: 'admin_auto_a34a275a47'.tr(),
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -356,7 +357,7 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                         minimumSize: const Size.fromHeight(48),
                       ),
                       child: _saving
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
@@ -364,13 +365,13 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                                 color: OptikAdminTokens.snow,
                               ),
                             )
-                          : const Text('Buat Owner'),
+                          : Text('admin_auto_99c0cdbfe4'.tr()),
                     ),
                     const SizedBox(height: 28),
-                    const PremiumSectionHeader(label: 'Owner terdaftar'),
+                    PremiumSectionHeader(label: 'admin_auto_7f2374b056'.tr()),
                     const SizedBox(height: 8),
                     if (_owners.isEmpty)
-                      const Text('Belum ada row di public.owners')
+                      Text('admin_auto_33b1303c07'.tr())
                     else
                       ..._owners.map((o) {
                         final tokoIds = o['toko_ids'];
@@ -381,7 +382,7 @@ class _OwnerProvisionPageState extends State<OwnerProvisionPage> {
                           contentPadding: EdgeInsets.zero,
                           title: Text(
                             '${o['nama']} (${o['owner_type']})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: OptikAdminTokens.navy,
                             ),

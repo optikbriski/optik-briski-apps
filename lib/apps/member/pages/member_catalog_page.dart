@@ -155,6 +155,13 @@ class _MemberCatalogPageState extends State<MemberCatalogPage> {
       tokoId: _stockTokoId,
       onEvent: (ev) {
         if (!mounted || ev.sku.isEmpty) return;
+        if (ev.sku == '*FORCE_SYNC*') {
+          _stockRtDebounce?.cancel();
+          _stockRtDebounce = Timer(const Duration(milliseconds: 200), () {
+            if (mounted) unawaited(_load(silent: true));
+          });
+          return;
+        }
         var patched = false;
         final next = _all.map((p) {
           final sku = (p['sku'] ?? '').toString().trim().toUpperCase();

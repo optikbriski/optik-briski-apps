@@ -27,23 +27,36 @@ class PremiumPanel extends StatelessWidget {
     final radius = borderRadius ?? 20.0;
     final decoration = BoxDecoration(
       borderRadius: BorderRadius.circular(radius),
-      gradient: OptikAdminTokens.cardSheen,
+      color: OptikAdminTokens.isDark ? OptikAdminTokens.card : null,
+      gradient: OptikAdminTokens.isDark ? null : OptikAdminTokens.cardSheen,
       border: Border.all(
-        color: borderColor ?? OptikAdminTokens.ice.withOpacity(0.4),
-        width: 1,
+        color: borderColor ??
+            OptikAdminTokens.chromeEdge.withOpacity(
+              OptikAdminTokens.isDark
+                  ? 1
+                  : (OptikAdminTokens.isKombo ? 1 : 0.7),
+            ),
+        width: OptikAdminTokens.isDark ? 0.8 : 1.15,
       ),
       boxShadow: OptikAdminTokens.cardShadow,
     );
 
     Widget content = child;
     if (showAccentBar) {
-      content = IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
+      // Stack + Positioned, bukan IntrinsicHeight: aman di ListView
+      // dan tidak crash kalau child memakai LayoutBuilder.
+      content = Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 17),
+            child: child,
+          ),
+          Positioned(
+            left: 0,
+            top: 4,
+            bottom: 4,
+            child: Container(
               width: 3,
-              margin: const EdgeInsets.symmetric(vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(2),
                 gradient: LinearGradient(
@@ -51,15 +64,15 @@ class PremiumPanel extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     OptikAdminTokens.navy,
-                    OptikAdminTokens.ice,
+                    OptikAdminTokens.isDark
+                        ? OptikAdminTokens.navy
+                        : OptikAdminTokens.chromeGarnish,
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(child: child),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -97,7 +110,7 @@ class PremiumStatCard extends StatelessWidget {
     this.icon = Icons.trending_up_rounded,
     this.loading = false,
     this.trailing,
-    this.accent = OptikAdminTokens.ice,
+    this.accent,
   });
 
   final String label;
@@ -105,10 +118,11 @@ class PremiumStatCard extends StatelessWidget {
   final IconData icon;
   final bool loading;
   final Widget? trailing;
-  final Color accent;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
+    final accent = this.accent ?? OptikAdminTokens.ice;
     return PremiumPanel(
       padding: const EdgeInsets.fromLTRB(18, 18, 20, 18),
       borderRadius: 20,
@@ -120,10 +134,8 @@ class PremiumStatCard extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: OptikAdminTokens.ice.withOpacity(0.35),
-              border: Border.all(
-                color: OptikAdminTokens.ice,
-              ),
+              color: accent.withOpacity(0.35),
+              border: Border.all(color: accent),
             ),
             child: Icon(icon, color: OptikAdminTokens.navy, size: 24),
           ),
@@ -143,7 +155,7 @@ class PremiumStatCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         height: 28,
                         width: 28,
                         child: CircularProgressIndicator(
@@ -153,7 +165,7 @@ class PremiumStatCard extends StatelessWidget {
                       )
                     : Text(
                         value,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 30,
                           fontWeight: FontWeight.w800,

@@ -12,6 +12,7 @@ import '../../shared/export/monthly_data_export_service.dart';
 import '../../shared/training/training_mode.dart';
 import '../../shared/widgets/app_loading_overlay.dart';
 import '../../shared/widgets/premium_date_range_picker.dart';
+import '../../shared/admin/admin_format.dart';
 import '../../shared/theme.dart';
 import '../../shared/widgets/admin/admin_premium.dart';
 import '../../shared/brand/brand_service.dart';
@@ -28,8 +29,8 @@ class MonthlyExportPage extends StatefulWidget {
 
 class _MonthlyExportPageState extends State<MonthlyExportPage> {
   final _service = MonthlyDataExportService();
-  final _dayFmt = DateFormat('d MMM yyyy', 'id_ID');
-  final _historyDtFmt = DateFormat('d MMM yyyy HH:mm', 'id_ID');
+  DateFormat get _dayFmt => AdminFormat.date(context, 'd MMM yyyy');
+  DateFormat get _historyDtFmt => AdminFormat.date(context, 'd MMM yyyy HH:mm');
   final _domainScrollCtrl = ScrollController();
   final _domainSearchCtrl = TextEditingController();
 
@@ -54,8 +55,8 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
   List<File> _lastExportFiles = const [];
   List<ExportDownloadHistoryEntry> _history = const [];
 
-  static const _bg = OptikAdminTokens.bgMid;
-  static const _accent = OptikAdminTokens.ice;
+  static Color get _bg => OptikAdminTokens.bgMid;
+  static Color get _accent => OptikAdminTokens.ice;
   static const _gold = OptikAdminTokens.trainingSoft;
 
   static const _presetLabels = {
@@ -566,17 +567,17 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
               padding: const EdgeInsets.only(bottom: 18),
               items: [
                 PremiumStatItem(
-                  label: 'Domain dipilih',
+                  label: 'admin_auto_00261fa359'.tr(),
                   value: '${_selectedDomainIds.length}',
                   color: _accent,
                 ),
                 PremiumStatItem(
-                  label: 'Riwayat ekspor',
+                  label: 'admin_auto_abfd03de55'.tr(),
                   value: _historyLoading ? '…' : '${_history.length}',
                   color: _gold,
                 ),
                 PremiumStatItem(
-                  label: 'Salinan berikut',
+                  label: 'admin_auto_e933ade3d6'.tr(),
                   value: _salinanPreviewLabel,
                   color: OptikAdminTokens.navy,
                 ),
@@ -983,7 +984,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
                           s,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: OptikAdminTokens.textSecondary,
                             fontSize: 12,
                           ),
@@ -1154,7 +1155,7 @@ class _MonthlyExportPageState extends State<MonthlyExportPage> {
           const SizedBox(height: 6),
           Text(
             period,
-            style: const TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
+            style: TextStyle(color: OptikAdminTokens.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(

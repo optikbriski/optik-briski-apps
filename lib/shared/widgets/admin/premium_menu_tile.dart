@@ -43,8 +43,10 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
                 color: OptikAdminTokens.card,
                 border: Border.all(
                   color: _hover
-                      ? OptikAdminTokens.ice
-                      : OptikAdminTokens.ice.withOpacity(0.35),
+                      ? OptikAdminTokens.chromeGarnish
+                      : OptikAdminTokens.chromeEdge.withOpacity(
+                          OptikAdminTokens.isKombo ? 1 : 0.35,
+                        ),
                 ),
                 boxShadow: _hover
                     ? OptikAdminTokens.cardShadowHover
@@ -56,26 +58,38 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
                   children: [
                     Builder(
                       builder: (_) {
-                        final c = widget.color;
-                        final isIce = c == OptikAdminTokens.ice ||
+                        final c = OptikAdminTokens.isKombo
+                            ? OptikAdminTokens.navy
+                            : widget.color;
+                        final isWash = c == OptikAdminTokens.ice ||
                             c == OptikAdminTokens.accentSoft ||
                             c == OptikAdminTokens.accentDeep ||
                             c == OptikAdminTokens.slate ||
                             c == OptikAdminTokens.navy;
-                        final wash = isIce ? OptikAdminTokens.ice : c;
+                        final wash = OptikAdminTokens.isKombo
+                            ? OptikAdminTokens.navy
+                            : (isWash ? OptikAdminTokens.ice : c);
                         return Container(
                           width: 38,
                           height: 38,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(11),
-                            color: wash.withOpacity(isIce ? 0.32 : 0.16),
+                            color: wash.withOpacity(
+                              OptikAdminTokens.isKombo ? 0.14 : (isWash ? 0.32 : 0.16),
+                            ),
                             border: Border.all(
-                              color: wash.withOpacity(isIce ? 0.9 : 0.85),
+                              color: wash.withOpacity(
+                                OptikAdminTokens.isDark
+                                    ? 0.0
+                                    : (isWash ? 0.9 : 0.85),
+                              ),
                             ),
                           ),
                           child: Icon(
                             widget.icon,
-                            color: isIce ? OptikAdminTokens.navy : c,
+                            color: OptikAdminTokens.isKombo
+                                ? OptikAdminTokens.navy
+                                : (isWash ? OptikAdminTokens.navy : c),
                             size: 18,
                           ),
                         );
@@ -87,7 +101,7 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
                         widget.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: OptikAdminTokens.navy,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
@@ -99,8 +113,8 @@ class _PremiumMenuTileState extends State<PremiumMenuTile> {
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 18,
-                      color: OptikAdminTokens.slate.withOpacity(
-                        _hover ? 0.75 : 0.4,
+                      color: OptikAdminTokens.navy.withOpacity(
+                        _hover ? 0.85 : 0.55,
                       ),
                     ),
                   ],

@@ -276,15 +276,15 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: OptikAdminTokens.bgMid,
-        title: const Text('Tolak pendaftaran?',
+        title: Text('Tolak pendaftaran?',
             style: TextStyle(color: OptikAdminTokens.navy, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: alasanCtrl,
-          style: const TextStyle(color: OptikAdminTokens.navy),
+          style: TextStyle(color: OptikAdminTokens.navy),
           maxLines: 3,
           decoration: InputDecoration(
             hintText: 'Alasan penolakan wajib diisi…',
-            hintStyle: const TextStyle(color: OptikAdminTokens.slate),
+            hintStyle: TextStyle(color: OptikAdminTokens.slate),
             filled: true,
             fillColor: OptikAdminTokens.card,
             border: OutlineInputBorder(
@@ -296,7 +296,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal', style: TextStyle(color: OptikAdminTokens.slate)),
+            child: Text('Batal', style: TextStyle(color: OptikAdminTokens.slate)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -403,7 +403,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Foto KTP',
             style: TextStyle(
               color: OptikAdminTokens.snow,
@@ -453,7 +453,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             child: Image.network(
               photo,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Padding(
+              errorBuilder: (_, __, ___) => Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
                   'Foto KTP gagal dimuat',
@@ -486,7 +486,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             children: [
               Text(
                 nama,
-                style: const TextStyle(
+                style: TextStyle(
                   color: OptikAdminTokens.navy,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -495,7 +495,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
               const SizedBox(height: 6),
               Text(
                 '$jabatan · $cabang',
-                style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13.5),
+                style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13.5),
               ),
               const SizedBox(height: 12),
               _metaRow(Icons.email_outlined, email),
@@ -524,15 +524,15 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             controller: _gajiCtrl,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontWeight: FontWeight.w600,
             ),
             decoration: InputDecoration(
               prefixText: 'Rp ',
-              prefixStyle: const TextStyle(color: OptikAdminTokens.slate),
+              prefixStyle: TextStyle(color: OptikAdminTokens.slate),
               hintText: '0',
-              hintStyle: const TextStyle(color: OptikAdminTokens.slate),
+              hintStyle: TextStyle(color: OptikAdminTokens.slate),
               filled: true,
               fillColor: OptikAdminTokens.bgMid,
               border: OutlineInputBorder(
@@ -778,7 +778,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                     minimumSize: const Size(0, 50),
                   ),
                   icon: _saving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
@@ -787,7 +787,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
                       : const Icon(Icons.check_rounded, size: 18),
                   label: Text(
                     _canApprove ? 'Approve & aktifkan' : 'Pilih data dulu',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: OptikAdminTokens.snow,
                     ),
@@ -804,7 +804,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
   Widget _sectionCard({
     required String title,
     String? subtitle,
-    Color accent = OptikAdminTokens.navy,
+    Color? accent,
     required Widget child,
   }) {
     return Container(
@@ -821,7 +821,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           Text(
             title,
             style: TextStyle(
-              color: accent,
+              color: accent ?? OptikAdminTokens.navy,
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -830,7 +830,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 11.5),
+              style: TextStyle(color: OptikAdminTokens.slate, fontSize: 11.5),
             ),
           ],
           const SizedBox(height: 14),
@@ -848,7 +848,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
+            style: TextStyle(color: OptikAdminTokens.slate, fontSize: 13),
           ),
         ),
       ],
@@ -877,7 +877,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
           const SizedBox(height: 6),
           Text(
             value.isEmpty ? '-' : value,
-            style: const TextStyle(
+            style: TextStyle(
               color: OptikAdminTokens.navy,
               fontSize: 13.5,
               height: 1.4,
@@ -917,7 +917,7 @@ class _KtpApprovalReviewPageState extends State<KtpApprovalReviewPage> {
             Expanded(
               child: Text(
                 shown.isEmpty ? '-' : shown,
-                style: const TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
+                style: TextStyle(color: OptikAdminTokens.navy, fontSize: 13.5),
               ),
             ),
             Container(

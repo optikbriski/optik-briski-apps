@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../shared/bootstrap.dart';
 import '../../shared/tenant/module_catalog.dart';
@@ -63,8 +64,8 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
       if (map['ok'] != true) throw map['error'] ?? 'Gagal';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lunas & sistem dinyalakan.'),
+        SnackBar(
+          content: Text('admin_auto_9fd09dfcb3'.tr()),
           backgroundColor: OptikAdminTokens.success,
         ),
       );
@@ -72,7 +73,7 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -87,7 +88,7 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             return AlertDialog(
-              title: const Text('Video & teks fitur'),
+              title: Text('admin_auto_f8f7fa2515'.tr()),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -101,27 +102,27 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
                       onChanged: (v) {
                         if (v != null) setLocal(() => pick = v);
                       },
-                      decoration: const InputDecoration(labelText: 'Fitur'),
+                      decoration: InputDecoration(labelText: 'admin_auto_e95fd45658'.tr()),
                     ),
                     TextField(
                       controller: url,
-                      decoration: const InputDecoration(
-                        labelText: 'URL YouTube / video',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_15fcc8e522'.tr(),
                       ),
                     ),
                     TextField(
                       controller: body,
                       maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Paragraf penjelasan (opsional)',
+                      decoration: InputDecoration(
+                        labelText: 'admin_auto_a3768225dc'.tr(),
                       ),
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Simpan')),
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('appr_btn_batal'.tr())),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('btn_simpan'.tr())),
               ],
             );
           },
@@ -143,15 +144,15 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
       if (map['ok'] != true) throw map['error'] ?? 'Gagal';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Penjelasan fitur disimpan.'),
+        SnackBar(
+          content: Text('admin_auto_792ddf130a'.tr()),
           backgroundColor: OptikAdminTokens.success,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: OptikAdminTokens.danger),
+        SnackBar(content: Text('admin_auto_564b2dc6f1'.tr(namedArgs: {'error': '$e'})), backgroundColor: OptikAdminTokens.danger),
       );
     }
   }
@@ -161,12 +162,12 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
     return Scaffold(
       backgroundColor: OptikAdminTokens.bg,
       appBar: AppBar(
-        title: const Text('Pesanan etalase'),
+        title: Text('admin_auto_347b2a5b77'.tr()),
         backgroundColor: OptikAdminTokens.bg,
         foregroundColor: OptikAdminTokens.navy,
         actions: [
           IconButton(
-            tooltip: 'Video / teks fitur',
+            tooltip: 'admin_auto_44a1f92e5f'.tr(),
             onPressed: _editVideo,
             icon: const Icon(Icons.video_library_rounded),
           ),
@@ -179,7 +180,7 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
               children: [
                 if (_error != null)
                   Text(_error!, style: const TextStyle(color: OptikAdminTokens.danger)),
-                if (_rows.isEmpty) const Text('Belum ada pesanan dari etalase.'),
+                if (_rows.isEmpty) Text('admin_auto_cb5ee4d822'.tr()),
                 for (final r in _rows)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -212,7 +213,7 @@ class _RekasaStoreOrdersPageState extends State<RekasaStoreOrdersPage> {
                               ),
                             if (r['status'] != 'paid')
                               IconButton(
-                                tooltip: 'Tandai lunas + nyalakan',
+                                tooltip: 'admin_auto_d40dc087ba'.tr(),
                                 onPressed: () => _activate(r),
                                 icon: const Icon(Icons.verified_rounded),
                               ),

@@ -7,12 +7,14 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../shared/brand/brand_service.dart';
+import '../../shared/karyawan/karyawan_action_outbox.dart';
+import '../../shared/karyawan/karyawan_deep_link.dart';
 import '../../shared/karyawan/karyawan_i18n_display.dart';
 import '../../shared/karyawan/lab_job_service.dart';
 import '../../shared/theme.dart';
 
 /// Hasil tap pengingat — home membuka section terkait.
-enum PengingatDest { lab, sop, shift, home }
+enum PengingatDest { lab, sop, shift, pengajuan, pengaduan, antrian, pengingat, home }
 
 class PengingatNavResult {
   const PengingatNavResult({required this.dest, this.labJobId});
@@ -124,30 +126,11 @@ class _PengingatPageState extends State<PengingatPage> {
   }
 
   PengingatNavResult _destFor(Map<String, dynamic> n) {
-    final tipe = (n['tipe'] ?? '').toString().toUpperCase();
-    final judul = (n['judul'] ?? '').toString();
-    final isi = (n['isi'] ?? '').toString();
-    final jobId = LabJobService.jobIdFromNotifikasiIsi(isi);
-
-    if (jobId != null ||
-        tipe == 'LAB' ||
-        judul.toLowerCase().contains('lab') ||
-        isi.contains('LAB_JOB:')) {
-      return PengingatNavResult(
-        dest: PengingatDest.lab,
-        labJobId: jobId,
-      );
-    }
-    if (tipe == 'SOP' || judul.toUpperCase().contains('SOP')) {
-      return const PengingatNavResult(dest: PengingatDest.sop);
-    }
-    if (tipe == 'SHIFT' ||
-        judul.toLowerCase().contains('jadwal') ||
-        judul.toLowerCase().contains('shift') ||
-        judul.toLowerCase().contains('sif')) {
-      return const PengingatNavResult(dest: PengingatDest.shift);
-    }
-    return const PengingatNavResult(dest: PengingatDest.home);
+    return KaryawanDeepLink.destFor(
+      tipe: n['tipe']?.toString(),
+      judul: n['judul']?.toString(),
+      isi: n['isi']?.toString(),
+    );
   }
 
   String? _footerFor(Map<String, dynamic> n) {
@@ -158,6 +141,13 @@ class _PengingatPageState extends State<PengingatPage> {
         return 'pengingat_buka_sop'.tr();
       case PengingatDest.shift:
         return 'pengingat_buka_jadwal'.tr();
+      case PengingatDest.pengajuan:
+        return 'pengingat_buka_pengajuan'.tr();
+      case PengingatDest.pengaduan:
+        return 'pengingat_buka_pengaduan'.tr();
+      case PengingatDest.antrian:
+        return 'pengingat_buka_antrian'.tr();
+      case PengingatDest.pengingat:
       case PengingatDest.home:
         return null;
     }
@@ -177,16 +167,23 @@ class _PengingatPageState extends State<PengingatPage> {
     final nav = _destFor(n);
     if (!mounted) return;
 
-    // Lab dengan job id: klaim dulu, lalu balik ke Beranda → Antrian lab.
+    // Lab dengan job id: klaim dulu (outbox jika offline), lalu Beranda → lab.
     if (nav.dest == PengingatDest.lab &&
         nav.labJobId != null &&
         nav.labJobId!.isNotEmpty) {
       setState(() => _claimBusy = true);
       try {
-        final res = await _lab.claim(nav.labJobId!);
+        Map<String, dynamic>? res;
+        await KaryawanActionOutbox.instance.runOrEnqueue(
+          kind: 'lab_claim',
+          payload: {'jobId': nav.labJobId},
+          action: () async {
+            res = await _lab.claim(nav.labJobId!);
+          },
+        );
         if (!mounted) return;
-        final inv = res['no_invoice']?.toString() ?? '-';
-        final nama = res['nama']?.toString() ?? '-';
+        final inv = res?['no_invoice']?.toString() ?? '-';
+        final nama = res?['nama']?.toString() ?? '-';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('lab_claim_ok_msg'.tr(args: [inv, nama])),

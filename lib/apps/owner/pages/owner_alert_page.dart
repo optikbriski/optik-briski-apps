@@ -74,7 +74,7 @@ class _OwnerAlertPageState extends State<OwnerAlertPage> {
       subtitle: unread > 0 ? '$unread belum dibaca' : 'Semua sudah dibaca',
       onRefresh: _load,
       child: _loading
-          ? const Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
+          ? Center(child: CircularProgressIndicator(color: OptikAdminTokens.navy))
           : _error != null
               ? OwnerEmptyState(_error!, icon: Icons.error_outline_rounded)
               : _rows.isEmpty

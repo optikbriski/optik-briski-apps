@@ -45,7 +45,8 @@ class OwnerService {
       'owner_payroll_monitor',
       params: {'p_toko_id': tokoId},
     );
-    return Map<String, dynamic>.from(res as Map);
+    if (res is Map) return Map<String, dynamic>.from(res);
+    return {};
   }
 
   Future<Map<String, dynamic>> listPersetujuan() async {
@@ -274,8 +275,15 @@ class OwnerService {
         .toList();
   }
 
-  static String formatRp(num? v) {
-    final n = (v ?? 0).round();
+  static String formatRp(dynamic v) {
+    int n = 0;
+    if (v is int) {
+      n = v;
+    } else if (v is num) {
+      n = v.round();
+    } else if (v != null) {
+      n = int.tryParse('$v'.replaceAll(RegExp(r'[^0-9\-]'), '')) ?? 0;
+    }
     final s = n.abs().toString();
     final buf = StringBuffer();
     for (var i = 0; i < s.length; i++) {

@@ -14,10 +14,17 @@ fi
 export JAVA_HOME
 export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}$PATH"
 
-BUILD_TOOLS="$(ls -d \
-  "${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/*/ \
-  "$HOME"/Library/Android/sdk/build-tools/*/ \
-  2>/dev/null | sort -V | tail -1)"
+BUILD_TOOLS="$(
+  {
+    shopt -s nullglob
+    dirs=(
+      ${ANDROID_HOME:+"$ANDROID_HOME"/build-tools/*/}
+      "$HOME"/Library/Android/sdk/build-tools/*/
+      "$HOME"/android-sdk/build-tools/*/
+    )
+    if ((${#dirs[@]} > 0)); then printf '%s\n' "${dirs[@]}"; fi
+  } | sort -V | tail -1
+)"
 ZIPALIGN="${BUILD_TOOLS}zipalign"
 APKSIGNER="${BUILD_TOOLS}apksigner"
 KS="${DEBUG_KEYSTORE:-$HOME/.android/debug.keystore}"
@@ -55,9 +62,35 @@ DROP=(
 )
 if [[ "$KEEP_FACE_CONTOURS" != "1" ]]; then
   DROP+=("assets/models_bundled/contours.tfl")
-  echo "==> Dropping contours.tfl (Karyawan / non-Member)"
+  echo "==> Dropping contours.tfl (Karyawan / Admin / non-Member)"
 else
   echo "==> Keeping contours.tfl (Member face-shape)"
+fi
+
+# DROP_MEMBER_ASSETS=1 → Admin: foto bentuk wajah + api streak bukan fitur Admin.
+if [[ "${DROP_MEMBER_ASSETS:-0}" == "1" ]]; then
+  echo "==> Dropping Member/Karyawan-only image assets (Admin)"
+  python3 - <<'PY' "$APK"
+import sys, subprocess, zipfile
+apk = sys.argv[1]
+with zipfile.ZipFile(apk) as z:
+    kill = [
+        n for n in z.namelist()
+        if n.startswith("assets/flutter_assets/assets/images/face_shapes/")
+        or n.startswith("assets/flutter_assets/assets/images/streak_flames/")
+    ]
+if kill:
+    for i in range(0, len(kill), 40):
+        subprocess.run(
+            ["zip", "-d", apk, *kill[i : i + 40]],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    print(f"==> Removed {len(kill)} Member/Karyawan image assets")
+else:
+    print("==> No Member/Karyawan image assets found")
+PY
 fi
 
 # DROP_OCR=1 → Member (OCR KTP tidak dipakai). Hemat ~12 MB.
@@ -178,10 +211,10 @@ os.replace(tmp_apk, apk)
 print(f"==> Lossless PNG: {len(original)} -> {len(optimized)} bytes (-{len(original)-len(optimized)})")
 PY
 
-# EXTRA_ASSET_RECOMPRESS=1 → deflate aset max; native .so tetap STORED (aman install).
-# Tidak menghapus fitur — hanya packing ulang.
+# EXTRA_ASSET_RECOMPRESS=1 → deflate semua (termasuk .so). Wajib extractNativeLibs=true
+# (useLegacyPackaging) agar .so diekstrak saat install — fitur/kualitas tidak berubah.
 if [[ "${EXTRA_ASSET_RECOMPRESS:-0}" == "1" ]]; then
-  echo "==> EXTRA_ASSET_RECOMPRESS=1 (so=STORED, assets=deflate-9)"
+  echo "==> EXTRA_ASSET_RECOMPRESS=1 (so+assets=deflate-9, extractNativeLibs)"
   python3 - <<'PY' "$APK"
 import sys, zipfile
 from pathlib import Path
@@ -193,12 +226,8 @@ with zipfile.ZipFile(apk, "r") as zin, zipfile.ZipFile(tmp, "w") as zout:
         ni = zipfile.ZipInfo(filename=info.filename)
         ni.external_attr = info.external_attr
         ni.date_time = info.date_time
-        if info.filename.startswith("lib/") and info.filename.endswith(".so"):
-            ni.compress_type = zipfile.ZIP_STORED
-            zout.writestr(ni, data)
-        else:
-            ni.compress_type = zipfile.ZIP_DEFLATED
-            zout.writestr(ni, data, compresslevel=9)
+        ni.compress_type = zipfile.ZIP_DEFLATED
+        zout.writestr(ni, data, compresslevel=9)
 tmp.replace(apk)
 print("==> Repack selesai")
 PY

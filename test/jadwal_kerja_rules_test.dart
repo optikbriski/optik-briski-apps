@@ -13,10 +13,11 @@ void main() {
       expect(JadwalKerjaRules.isTerminal('PENDING'), isFalse);
     });
 
-    test('tipe hanya IJIN CUTI TUKAR', () {
+    test('tipe hanya IJIN CUTI TUKAR DINAS', () {
       expect(JadwalKerjaRules.isAllowedTipe('ijin'), isTrue);
       expect(JadwalKerjaRules.isAllowedTipe('CUTI'), isTrue);
       expect(JadwalKerjaRules.isAllowedTipe('TUKAR'), isTrue);
+      expect(JadwalKerjaRules.isAllowedTipe('DINAS'), isTrue);
       expect(JadwalKerjaRules.isAllowedTipe('LIBUR'), isFalse);
       expect(JadwalKerjaRules.isAllowedTipe(''), isFalse);
     });

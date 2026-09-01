@@ -275,7 +275,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: OptikAdminTokens.bgMid,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -316,7 +316,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                     Expanded(
                       child: Text(
                         'training_approval_sim_title'.tr(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
                           color: OptikAdminTokens.navy,
@@ -328,7 +328,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                 const SizedBox(height: 10),
                 Text(
                   widget.body ?? 'training_approval_sim_body'.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     height: 1.35,
                     color: OptikAdminTokens.slate,
@@ -388,7 +388,7 @@ class _TrainingApprovalSheetState extends State<_TrainingApprovalSheet> {
                   const SizedBox(height: 14),
                   Text(
                     'training_approval_sim_note_label'.tr(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                       color: OptikAdminTokens.textSecondary,
