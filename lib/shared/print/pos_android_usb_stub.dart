@@ -7,7 +7,7 @@ class PosAndroidUsbPrint {
   static Future<List<({int vid, int pid, String label})>> listDevices() async =>
       const [];
 
-  static Future<void> printRaw({
+  static Future<({int vid, int pid})> printRaw({
     required List<int> bytes,
     int? vendorId,
     int? productId,

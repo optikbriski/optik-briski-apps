@@ -69,7 +69,8 @@ class PosAndroidUsbPrint {
   }
 
   /// Buka USB, kirim bytes ESC/POS, tutup. Meminta izin USB jika perlu.
-  static Future<void> printRaw({
+  /// Mengembalikan VID/PID printer yang benar-benar dipakai (untuk simpan prefs).
+  static Future<({int vid, int pid})> printRaw({
     required List<int> bytes,
     int? vendorId,
     int? productId,
@@ -89,38 +90,33 @@ class PosAndroidUsbPrint {
       vendorId: vendorId,
       productId: productId,
     );
+    var usedVid = resolved.vid;
+    var usedPid = resolved.pid;
 
     try {
-      await _usb.open(vendorId: resolved.vid, productId: resolved.pid);
-      const chunk = 512;
-      final data = Uint8List.fromList(bytes);
-      for (var i = 0; i < data.length; i += chunk) {
-        final end = (i + chunk < data.length) ? i + chunk : data.length;
-        final ok = await _usb.write(Uint8List.sublistView(data, i, end));
-        if (ok != true) {
-          throw 'Gagal kirim data ke printer USB (offset $i).';
-        }
-      }
+      await _sendBytes(resolved.vid, resolved.pid, bytes);
     } on PermissionException {
       throw 'Izin USB ditolak. Izinkan akses printer saat dialog muncul.';
     } on DeviceNotFoundException {
       if (vendorId != null && productId != null) {
-        await _tryFallbackOpen(bytes);
-        return;
+        final fb = await _tryFallbackOpen(bytes);
+        usedVid = fb.vid;
+        usedPid = fb.pid;
+        return (vid: usedVid, pid: usedPid);
       }
       throw 'Printer USB tidak ditemukan.\n'
           'Pastikan OTG/hub + printer menyala, cabut-colok, lalu tap Cetak Termal lagi.\n'
           'Saat dialog USB muncul → pilih OK / Izinkan.';
     } on InterfaceNotFoundException {
       if (vendorId != null && productId != null) {
-        await _tryFallbackOpen(bytes);
-        return;
+        final fb = await _tryFallbackOpen(bytes);
+        return (vid: fb.vid, pid: fb.pid);
       }
       throw 'Printer USB tidak punya interface yang didukung.';
     } on EndpointNotFoundException {
       if (vendorId != null && productId != null) {
-        await _tryFallbackOpen(bytes);
-        return;
+        final fb = await _tryFallbackOpen(bytes);
+        return (vid: fb.vid, pid: fb.pid);
       }
       throw 'Printer USB tidak punya endpoint bulk OUT (bukan ESC/POS?).';
     } on PlatformException catch (e) {
@@ -131,6 +127,20 @@ class PosAndroidUsbPrint {
       try {
         await _usb.close();
       } catch (_) {}
+    }
+    return (vid: usedVid, pid: usedPid);
+  }
+
+  static Future<void> _sendBytes(int vid, int pid, List<int> bytes) async {
+    await _usb.open(vendorId: vid, productId: pid);
+    const chunk = 512;
+    final data = Uint8List.fromList(bytes);
+    for (var i = 0; i < data.length; i += chunk) {
+      final end = (i + chunk < data.length) ? i + chunk : data.length;
+      final ok = await _usb.write(Uint8List.sublistView(data, i, end));
+      if (ok != true) {
+        throw 'Gagal kirim data ke printer USB (offset $i).';
+      }
     }
   }
 
@@ -173,20 +183,11 @@ class PosAndroidUsbPrint {
         '5) Jika tetap gagal, pakai tombol BT (Bluetooth).';
   }
 
-  static Future<void> _tryFallbackOpen(List<int> bytes) async {
+  static Future<({int vid, int pid})> _tryFallbackOpen(List<int> bytes) async {
     for (final fb in PosUsbDevicePick.knownPosPrinters) {
       try {
-        await _usb.open(vendorId: fb.vid, productId: fb.pid);
-        const chunk = 512;
-        final data = Uint8List.fromList(bytes);
-        for (var i = 0; i < data.length; i += chunk) {
-          final end = (i + chunk < data.length) ? i + chunk : data.length;
-          final ok = await _usb.write(Uint8List.sublistView(data, i, end));
-          if (ok != true) {
-            throw 'Gagal kirim data ke printer USB (offset $i).';
-          }
-        }
-        return;
+        await _sendBytes(fb.vid, fb.pid, bytes);
+        return (vid: fb.vid, pid: fb.pid);
       } on PermissionException {
         rethrow;
       } on DeviceNotFoundException {

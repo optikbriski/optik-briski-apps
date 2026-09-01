@@ -284,7 +284,7 @@ class PosPrintService {
       int? pid = savedPid;
 
       // Hanya tampilkan printer/hub di picker — hindari pilih hub by default.
-      final pickerRows = [
+      final List<PosUsbPickRow> pickerRows = [
         for (final d in devices)
           if (!PosUsbDevicePick.isLikelyHub(d.deviceClass, d.label) ||
               PosUsbDevicePick.isLikelyPrinter(
@@ -295,7 +295,8 @@ class PosPrintService {
               ))
             d,
       ];
-      final uiDevices = pickerRows.isNotEmpty ? pickerRows : devices;
+      final List<PosUsbPickRow> uiDevices =
+          pickerRows.isNotEmpty ? pickerRows : devices;
 
       if (uiDevices.isNotEmpty) {
         if (!context.mounted) return;
@@ -348,15 +349,13 @@ class PosPrintService {
 
       final doc = await _doc(sale: sale, items: items);
       final bytes = await buildEscPos(doc, paper: PaperSize.mm80);
-      await android_usb.PosAndroidUsbPrint.printRaw(
+      final used = await android_usb.PosAndroidUsbPrint.printRaw(
         bytes: bytes,
         vendorId: vid,
         productId: pid,
       );
-      if (vid != null && pid != null) {
-        await prefs.setInt(_prefAndroidUsbVid, vid);
-        await prefs.setInt(_prefAndroidUsbPid, pid);
-      }
+      await prefs.setInt(_prefAndroidUsbVid, used.vid);
+      await prefs.setInt(_prefAndroidUsbPid, used.pid);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Nota terkirim ke printer USB OTG (ESC/POS 80mm).'),
