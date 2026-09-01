@@ -9,8 +9,8 @@
 #   SUPABASE_SERVICE_ROLE_KEY=eyJ...
 #
 # Opsional:
-#   APK_PATH=build/optik-admin-1.3.3.apk   # BRAND=optik-briski
-#   APK_PATH=build/rekasa-admin-1.3.3.apk  # BRAND=rekasa (default)
+#   APK_PATH=build/optik-admin-1.3.4.apk   # pakai publish_optik_admin_apk.sh
+#   APK_PATH=build/rekasa-admin-1.3.4.apk  # default BRAND=rekasa
 #   FORCE_UPDATE=false
 #   CATATAN='...'
 #   MANUAL_VERSI_APP=1
@@ -27,6 +27,11 @@ if [[ "$STORE_SLUG" == "optik-briski" ]]; then
   FILE_PREFIX="optik"
 else
   FILE_PREFIX="$STORE_SLUG"
+fi
+if [[ "$STORE_SLUG" == "rekasa" ]]; then
+  echo "NOTE: upload saluran Rekasa (rekasa-admin-*)."
+  echo "      Tablet Optik Admin butuh: bash scripts/publish_optik_admin_apk.sh"
+  echo ""
 fi
 APK_PATH="${APK_PATH:-build/${FILE_PREFIX}-admin-${VERSION}.apk}"
 OBJECT_NAME="${FILE_PREFIX}-admin-${VERSION}.apk"

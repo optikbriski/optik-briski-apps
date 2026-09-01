@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # Muat brands/<BRAND>.json → env.
-# Default BRAND=rekasa (kulit bersama). Optik B. Riski = BRAND=optik-briski.
+# Default BRAND=rekasa (kulit platform). Optik B. Riski = BRAND=optik-briski.
 # Dipakai release_member_apk.sh / release_karyawan_apk.sh / release_admin_apk.sh.
+# Admin toko Optik: pakai scripts/release_optik_admin_apk.sh + publish_optik_admin_apk.sh
 
 : "${ROOT:?ROOT harus di-set sebelum source brand_env.sh}"
 

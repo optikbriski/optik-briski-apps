@@ -118,7 +118,8 @@ if [[ -f "$DEST_ARM32" ]]; then
 fi
 echo ""
 echo "Pasang di tablet/HP Admin toko → login Admin → menu Toko → Update APK."
-echo "Publish update in-app: BRAND=${BRAND:-rekasa} bash scripts/publish_admin_apk.sh"
+echo "Publish Rekasa Admin: bash scripts/publish_admin_apk.sh"
+echo "Publish Optik Admin:  bash scripts/publish_optik_admin_apk.sh"
 echo "  (upload ke app-releases → versi_app flavor=admin terisi otomatis)."
 echo "Face match memakai kamera perangkat ini + geofence toko."
 echo "Admin web (Vercel) tetap untuk POS/monitor; face match tidak jalan di browser."
