@@ -4,27 +4,25 @@ import 'dart:typed_data';
 import 'package:another_flutter_usb_write/another_flutter_usb_write.dart';
 import 'package:flutter/services.dart';
 
+import 'pos_usb_device_pick.dart';
+
+export 'pos_usb_device_pick.dart' show PosUsbDevicePick;
+
+/// Satu baris perangkat USB untuk UI / picker.
+typedef PosUsbDeviceRow = PosUsbPickRow;
+
 /// Cetak ESC/POS raw ke printer USB lewat OTG/hub (Android host).
 class PosAndroidUsbPrint {
   PosAndroidUsbPrint._();
 
   static final FlutterUsbWrite _usb = FlutterUsbWrite();
 
-  /// POS-80 / thermal umum — dipakai jika scan USB kosong tapi printer ada.
-  static const _fallbackPrinters = <({int vid, int pid})>[
-    (vid: 1048, pid: 20497),
-    (vid: 1046, pid: 20497),
-    (vid: 1046, pid: 43707),
-    (vid: 1155, pid: 22336),
-    (vid: 1155, pid: 22337),
-  ];
-
   static Future<bool> hasUsbHost() async {
     if (!Platform.isAndroid) return false;
     return _usb.hasUsbHost();
   }
 
-  static Future<List<({int vid, int pid, String label})>> listDevices() async {
+  static Future<List<PosUsbDeviceRow>> listDevices() async {
     if (!Platform.isAndroid) return const [];
     try {
       final devices = await _usb.listDevices();
@@ -35,6 +33,8 @@ class PosAndroidUsbPrint {
               vid: d.vid!,
               pid: d.pid!,
               label: _deviceLabel(d),
+              deviceClass: d.deviceClass,
+              hasPermission: d.hasPermission,
             ),
       ];
     } on ListDevicesException catch (e) {
@@ -55,6 +55,11 @@ class PosAndroidUsbPrint {
     }
     if ((d.manufacturerName ?? '').trim().isNotEmpty) {
       parts.add(d.manufacturerName!.trim());
+    }
+    if (d.deviceClass == PosUsbDevicePick.usbClassHub) {
+      parts.add('USB Hub');
+    } else if (d.deviceClass == PosUsbDevicePick.usbClassPrinter) {
+      parts.add('Printer');
     }
     if (parts.isEmpty) {
       parts.add('USB ${d.vid!.toRadixString(16)}:${d.pid!.toRadixString(16)}');
@@ -121,30 +126,22 @@ class PosAndroidUsbPrint {
     int? vendorId,
     int? productId,
   }) async {
-    var vid = vendorId;
-    var pid = productId;
-    if (vid != null && pid != null) {
-      return (vid: vid, pid: pid);
+    if (vendorId != null && productId != null) {
+      return (vid: vendorId, pid: productId);
     }
 
     final devices = await listDevices();
     if (devices.isNotEmpty) {
-      ({int vid, int pid, String label}) preferred = devices.first;
-      for (final d in devices) {
-        final l = d.label.toLowerCase();
-        if (l.contains('pos') ||
-            l.contains('printer') ||
-            (d.vid == 1048 && d.pid == 20497) ||
-            (d.vid == 1046 && d.pid == 20497)) {
-          preferred = d;
-          break;
-        }
-      }
-      return (vid: preferred.vid, pid: preferred.pid);
+      final picked = PosUsbDevicePick.pickPreferred(
+        devices: devices,
+        savedVid: null,
+        savedPid: null,
+      );
+      if (picked != null) return picked;
     }
 
     // Scan kosong — coba buka langsung (memicu dialog izin USB di Android 12+).
-    for (final fb in _fallbackPrinters) {
+    for (final fb in PosUsbDevicePick.knownPosPrinters) {
       try {
         await _usb.open(vendorId: fb.vid, productId: fb.pid);
         await _usb.close();

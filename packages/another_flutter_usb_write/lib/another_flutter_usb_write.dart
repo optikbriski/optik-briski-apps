@@ -103,12 +103,33 @@ class UsbDevice {
   /// The Serial number from the USB device.
   final String? serial;
 
-  UsbDevice(this.vid, this.pid, this.productName, this.manufacturerName,
-      this.deviceId, this.serial);
+  /// USB device class (7 = printer, 9 = hub).
+  final int? deviceClass;
+
+  final bool? hasPermission;
+
+  UsbDevice(
+    this.vid,
+    this.pid,
+    this.productName,
+    this.manufacturerName,
+    this.deviceId,
+    this.serial, {
+    this.deviceClass,
+    this.hasPermission,
+  });
 
   static UsbDevice fromJSON(dynamic json) {
-    return UsbDevice(json["vid"], json["pid"], json["productName"],
-        json["manufacturerName"], json["deviceId"], json["serialNumber"]);
+    return UsbDevice(
+      json['vid'],
+      json['pid'],
+      json['productName'],
+      json['manufacturerName'],
+      json['deviceId'],
+      json['serialNumber'],
+      deviceClass: json['deviceClass'],
+      hasPermission: json['hasPermission'],
+    );
   }
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +139,8 @@ class UsbDevice {
         'manufacturerName': manufacturerName,
         'deviceId': deviceId,
         'serialNumber': serial,
+        if (deviceClass != null) 'deviceClass': deviceClass,
+        if (hasPermission != null) 'hasPermission': hasPermission,
       };
 
   @override

@@ -5,13 +5,26 @@ import 'package:optik_b_riski/shared/invoice/invoice_layout.dart';
 import 'package:optik_b_riski/shared/invoice/invoice_settings_service.dart';
 import 'package:optik_b_riski/shared/invoice/invoice_status_footer.dart';
 import 'package:optik_b_riski/shared/pos_print_service.dart';
+import 'package:optik_b_riski/shared/print/pos_usb_device_pick.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('pickAndroidUsbDevice', () {
-    const pos80 = (vid: 1048, pid: 20497, label: 'POS-80 USB');
-    const hub = (vid: 1234, pid: 5678, label: 'USB2.0 Hub');
+    const pos80 = (
+      vid: 1048,
+      pid: 20497,
+      label: 'POS-80 USB',
+      deviceClass: 7,
+      hasPermission: null,
+    );
+    const hub = (
+      vid: 1234,
+      pid: 5678,
+      label: 'USB2.0 Hub',
+      deviceClass: 9,
+      hasPermission: null,
+    );
 
     test('prefers saved VID/PID when still attached', () {
       final picked = PosPrintService.pickAndroidUsbDevice(
@@ -40,8 +53,20 @@ void main() {
   });
 
   group('needsAndroidUsbDevicePicker', () {
-    const pos80 = (vid: 1048, pid: 20497, label: 'POS-80');
-    const hub = (vid: 1, pid: 2, label: 'Hub');
+    const pos80 = (
+      vid: 1048,
+      pid: 20497,
+      label: 'POS-80',
+      deviceClass: 7,
+      hasPermission: null,
+    );
+    const hub = (
+      vid: 1,
+      pid: 2,
+      label: 'Hub',
+      deviceClass: 9,
+      hasPermission: null,
+    );
 
     test('false for single device', () {
       expect(
@@ -125,7 +150,6 @@ void main() {
 
       final bytes = await PosPrintService.buildEscPos(doc, paper: PaperSize.mm80);
       expect(bytes, isNotEmpty);
-      // ESC/POS partial cut (GS V)
       expect(bytes.contains(0x1D), isTrue);
       expect(bytes.contains(0x56), isTrue);
     });

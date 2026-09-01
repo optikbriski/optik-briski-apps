@@ -21,6 +21,8 @@ void main() {
       'STMicroelectronics',
       1002,
       'Printer',
+      deviceClass: 7,
+      hasPermission: true,
     );
     flutterUsbWrite = FlutterUsbWrite.private(methods, events);
   });

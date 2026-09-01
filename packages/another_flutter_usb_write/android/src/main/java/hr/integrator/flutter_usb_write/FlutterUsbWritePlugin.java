@@ -46,7 +46,7 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
   private UsbInterface mInterface;
   private UsbDeviceConnection m_Connection;
 
-  private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
+  private static final String ACTION_USB_PERMISSION = "hr.integrator.flutter_usb_write.USB_PERMISSION";
   private static final String ACTION_USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED";
   private static final String ACTION_USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED";
 
@@ -118,7 +118,11 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     IntentFilter filter = new IntentFilter();
     filter.addAction(ACTION_USB_DETACHED);
     filter.addAction(ACTION_USB_ATTACHED);
-    applicationContext.registerReceiver(usbStateChangeReceiver, filter);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      applicationContext.registerReceiver(usbStateChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+    } else {
+      applicationContext.registerReceiver(usbStateChangeReceiver, filter);
+    }
   }
 
   @Override
@@ -223,6 +227,13 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
 
   public synchronized void close() {
     if (this.m_Connection != null) {
+      if (this.mInterface != null) {
+        try {
+          this.m_Connection.releaseInterface(this.mInterface);
+        } catch (Exception e) {
+          Log.d(TAG, "releaseInterface: " + e.getMessage());
+        }
+      }
       this.m_Connection.close();
       this.ep = null;
       this.mInterface = null;
@@ -328,18 +339,22 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
         if (intent.getAction().equals(ACTION_USB_ATTACHED)) {
           Log.d(TAG, "ACTION_USB_ATTACHED");
           if (events != null) {
-            UsbDevice device = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-            HashMap<String, Object> msg = serializeDevice(device);
-            msg.put("event", ACTION_USB_ATTACHED);
-            events.success(msg);
+            UsbDevice device = getDeviceFromIntent(intent);
+            if (device != null) {
+              HashMap<String, Object> msg = serializeDevice(device);
+              msg.put("event", ACTION_USB_ATTACHED);
+              events.success(msg);
+            }
           }
         } else if (intent.getAction().equals(ACTION_USB_DETACHED)) {
           Log.d(TAG, "ACTION_USB_DETACHED");
           if (events != null) {
-            UsbDevice device = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-            HashMap<String, Object> msg = serializeDevice(device);
-            msg.put("event", ACTION_USB_DETACHED);
-            events.success(msg);
+            UsbDevice device = getDeviceFromIntent(intent);
+            if (device != null) {
+              HashMap<String, Object> msg = serializeDevice(device);
+              msg.put("event", ACTION_USB_DETACHED);
+              events.success(msg);
+            }
           }
         }
       }
@@ -356,6 +371,13 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     void onSuccess(UsbDevice device);
 
     void onFailed(UsbDevice device, String errorCode, String error);
+  }
+
+  private UsbDevice getDeviceFromIntent(Intent intent) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice.class);
+    }
+    return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
   }
 
   private void acquirePermissions(UsbDevice device, AcquirePermissionCallback cb) {
@@ -391,9 +413,10 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
       }
     }
     BRC2 usbReceiver = new BRC2(device, cb);
-    int piFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        ? PendingIntent.FLAG_MUTABLE
-        : 0;
+    int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      piFlags |= PendingIntent.FLAG_MUTABLE;
+    }
     PendingIntent permissionIntent = PendingIntent.getBroadcast(applicationContext, device.getDeviceId(),
         new Intent(ACTION_USB_PERMISSION), piFlags);
     IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);

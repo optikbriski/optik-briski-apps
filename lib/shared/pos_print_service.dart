@@ -14,6 +14,7 @@ import 'print/pos_android_usb_stub.dart'
     if (dart.library.io) 'print/pos_android_usb_io.dart' as android_usb;
 import 'print/pos_cups_print_stub.dart'
     if (dart.library.io) 'print/pos_cups_print_io.dart' as cups;
+import 'print/pos_usb_device_pick.dart';
 import 'theme.dart';
 import 'widgets/admin/admin_picker.dart';
 
@@ -235,39 +236,28 @@ class PosPrintService {
   /// Pilih VID/PID printer USB — murni (testable), tanpa UI.
   @visibleForTesting
   static ({int vid, int pid})? pickAndroidUsbDevice({
-    required List<({int vid, int pid, String label})> devices,
+    required List<PosUsbPickRow> devices,
     int? savedVid,
     int? savedPid,
-  }) {
-    if (devices.isEmpty) return null;
-    final matchSaved = devices.where(
-      (d) => d.vid == savedVid && d.pid == savedPid,
-    );
-    if (matchSaved.isNotEmpty) {
-      final d = matchSaved.first;
-      return (vid: d.vid, pid: d.pid);
-    }
-    final preferred = devices.firstWhere(
-      (d) =>
-          d.label.toLowerCase().contains('pos') ||
-          d.label.toLowerCase().contains('printer') ||
-          (d.vid == 1048 && d.pid == 20497) ||
-          (d.vid == 1046 && d.pid == 20497),
-      orElse: () => devices.first,
-    );
-    return (vid: preferred.vid, pid: preferred.pid);
-  }
+  }) =>
+      PosUsbDevicePick.pickPreferred(
+        devices: devices,
+        savedVid: savedVid,
+        savedPid: savedPid,
+      );
 
   /// Butuh dialog picker manual (≥2 device & belum ada preferensi tersimpan).
   @visibleForTesting
   static bool needsAndroidUsbDevicePicker({
-    required List<({int vid, int pid, String label})> devices,
+    required List<PosUsbPickRow> devices,
     int? savedVid,
     int? savedPid,
-  }) {
-    if (devices.length <= 1) return false;
-    return !devices.any((d) => d.vid == savedVid && d.pid == savedPid);
-  }
+  }) =>
+      PosUsbDevicePick.needsManualPicker(
+        devices: devices,
+        savedVid: savedVid,
+        savedPid: savedPid,
+      );
 
   /// Cetak ESC/POS lewat USB OTG / hub di Android (Poco, tablet, dll).
   static Future<void> printAndroidUsbOtg(
@@ -292,10 +282,25 @@ class PosPrintService {
       final devices = await android_usb.PosAndroidUsbPrint.listDevices();
       int? vid = savedVid;
       int? pid = savedPid;
-      if (devices.isNotEmpty) {
+
+      // Hanya tampilkan printer/hub di picker — hindari pilih hub by default.
+      final pickerRows = [
+        for (final d in devices)
+          if (!PosUsbDevicePick.isLikelyHub(d.deviceClass, d.label) ||
+              PosUsbDevicePick.isLikelyPrinter(
+                vid: d.vid,
+                pid: d.pid,
+                label: d.label,
+                deviceClass: d.deviceClass,
+              ))
+            d,
+      ];
+      final uiDevices = pickerRows.isNotEmpty ? pickerRows : devices;
+
+      if (uiDevices.isNotEmpty) {
         if (!context.mounted) return;
         if (needsAndroidUsbDevicePicker(
-          devices: devices,
+          devices: uiDevices,
           savedVid: savedVid,
           savedPid: savedPid,
         )) {
@@ -307,7 +312,7 @@ class PosPrintService {
             searchable: false,
             selected: null,
             options: [
-              for (final d in devices)
+              for (final d in uiDevices)
                 AdminPickerOption(
                   value: '${d.vid}:${d.pid}',
                   label: d.label,
@@ -322,7 +327,7 @@ class PosPrintService {
           pid = int.tryParse(parts[1]);
         } else {
           final picked = pickAndroidUsbDevice(
-            devices: devices,
+            devices: uiDevices,
             savedVid: savedVid,
             savedPid: savedPid,
           );
@@ -331,6 +336,10 @@ class PosPrintService {
             pid = picked.pid;
           }
         }
+      } else if (vid == null || pid == null) {
+        // Scan kosong & belum pernah simpan — biarkan printRaw coba fallback + dialog izin.
+        vid = null;
+        pid = null;
       }
 
       final doc = await _doc(sale: sale, items: items);

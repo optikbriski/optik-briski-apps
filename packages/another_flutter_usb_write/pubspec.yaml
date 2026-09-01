@@ -1,6 +1,6 @@
 name: another_flutter_usb_write
 description: Write raw data to USB device on Android.
-version: 1.0.4
+version: 1.0.5
 homepage: https://github.com/lcsvcn/another_flutter_usb_write
 
 environment:
