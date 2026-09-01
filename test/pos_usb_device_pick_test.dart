@@ -60,6 +60,13 @@ void main() {
       );
     });
 
+    test('returns null when only hub visible', () {
+      expect(
+        PosUsbDevicePick.pickPreferred(devices: [hub]),
+        isNull,
+      );
+    });
+
     test('known POS VID/PID detected', () {
       expect(PosUsbDevicePick.isKnownPosPrinter(1048, 20497), isTrue);
       expect(PosUsbDevicePick.isKnownPosPrinter(1, 2), isFalse);

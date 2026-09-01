@@ -104,12 +104,24 @@ class PosAndroidUsbPrint {
     } on PermissionException {
       throw 'Izin USB ditolak. Izinkan akses printer saat dialog muncul.';
     } on DeviceNotFoundException {
+      if (vendorId != null && productId != null) {
+        await _tryFallbackOpen(bytes);
+        return;
+      }
       throw 'Printer USB tidak ditemukan.\n'
           'Pastikan OTG/hub + printer menyala, cabut-colok, lalu tap Cetak Termal lagi.\n'
           'Saat dialog USB muncul → pilih OK / Izinkan.';
     } on InterfaceNotFoundException {
+      if (vendorId != null && productId != null) {
+        await _tryFallbackOpen(bytes);
+        return;
+      }
       throw 'Printer USB tidak punya interface yang didukung.';
     } on EndpointNotFoundException {
+      if (vendorId != null && productId != null) {
+        await _tryFallbackOpen(bytes);
+        return;
+      }
       throw 'Printer USB tidak punya endpoint bulk OUT (bukan ESC/POS?).';
     } on PlatformException catch (e) {
       throw e.message?.trim().isNotEmpty == true
@@ -159,5 +171,36 @@ class PosAndroidUsbPrint {
         '3) Cabut-colok kabel USB\n'
         '4) Tap Cetak Termal → izinkan dialog USB\n'
         '5) Jika tetap gagal, pakai tombol BT (Bluetooth).';
+  }
+
+  static Future<void> _tryFallbackOpen(List<int> bytes) async {
+    for (final fb in PosUsbDevicePick.knownPosPrinters) {
+      try {
+        await _usb.open(vendorId: fb.vid, productId: fb.pid);
+        const chunk = 512;
+        final data = Uint8List.fromList(bytes);
+        for (var i = 0; i < data.length; i += chunk) {
+          final end = (i + chunk < data.length) ? i + chunk : data.length;
+          final ok = await _usb.write(Uint8List.sublistView(data, i, end));
+          if (ok != true) {
+            throw 'Gagal kirim data ke printer USB (offset $i).';
+          }
+        }
+        return;
+      } on PermissionException {
+        rethrow;
+      } on DeviceNotFoundException {
+        continue;
+      } on InterfaceNotFoundException {
+        continue;
+      } on EndpointNotFoundException {
+        continue;
+      }
+    }
+    throw DeviceNotFoundException(
+      'DEVICE_NOT_FOUND_ERROR',
+      'No such device',
+      null,
+    );
   }
 }

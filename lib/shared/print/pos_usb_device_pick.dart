@@ -101,6 +101,11 @@ abstract final class PosUsbDevicePick {
     }
 
     final first = pool.first;
+    // Hanya hub terlihat (printer di belakang hub belum enumerate) → null
+    // agar printRaw coba fallback VID/PID POS-80 + dialog izin USB.
+    if (isLikelyHub(first.deviceClass, first.label)) {
+      return null;
+    }
     return (vid: first.vid, pid: first.pid);
   }
 

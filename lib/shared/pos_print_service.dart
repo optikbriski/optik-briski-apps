@@ -334,6 +334,10 @@ class PosPrintService {
           if (picked != null) {
             vid = picked.vid;
             pid = picked.pid;
+          } else {
+            // Hanya hub / tidak bisa auto-pick → pakai fallback di printRaw.
+            vid = null;
+            pid = null;
           }
         }
       } else if (vid == null || pid == null) {
@@ -361,6 +365,12 @@ class PosPrintService {
       }
     } catch (e) {
       if (!context.mounted) return;
+      if ('$e'.contains('tidak ditemukan') ||
+          '$e'.contains('belum terdeteksi')) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefAndroidUsbVid);
+        await prefs.remove(_prefAndroidUsbPid);
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('$e'),
         backgroundColor: OptikAdminTokens.danger,
