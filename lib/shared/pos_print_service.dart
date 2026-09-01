@@ -364,25 +364,32 @@ class PosPrintService {
       }
     } catch (e) {
       if (!context.mounted) return;
-      if ('$e'.contains('tidak ditemukan') ||
-          '$e'.contains('belum terdeteksi')) {
+      final msg = '$e';
+      if (msg.contains('tidak ditemukan') || msg.contains('belum terdeteksi')) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_prefAndroidUsbVid);
         await prefs.remove(_prefAndroidUsbPid);
       }
+      if (!context.mounted) return;
+      final saleCopy = sale;
+      final itemsCopy = items;
+      final formatCopy = formatRupiah;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$e'),
+        content: Text(msg),
         backgroundColor: OptikAdminTokens.danger,
         action: _supportsBluetoothThermal
             ? SnackBarAction(
                 label: 'BT',
                 textColor: OptikAdminTokens.snow,
-                onPressed: () => printBluetooth(
-                  context,
-                  sale: sale,
-                  items: items,
-                  formatRupiah: formatRupiah,
-                ),
+                onPressed: () {
+                  if (!context.mounted) return;
+                  printBluetooth(
+                    context,
+                    sale: saleCopy,
+                    items: itemsCopy,
+                    formatRupiah: formatCopy,
+                  );
+                },
               )
             : null,
       ));
