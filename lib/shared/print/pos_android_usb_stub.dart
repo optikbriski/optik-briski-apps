@@ -2,6 +2,8 @@
 class PosAndroidUsbPrint {
   PosAndroidUsbPrint._();
 
+  static Future<bool> hasUsbHost() async => false;
+
   static Future<List<({int vid, int pid, String label})>> listDevices() async =>
       const [];
 

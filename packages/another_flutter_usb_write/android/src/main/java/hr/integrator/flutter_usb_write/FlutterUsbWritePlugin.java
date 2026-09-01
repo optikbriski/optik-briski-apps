@@ -79,6 +79,9 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     case "listDevices":
       listDevices(result);
       break;
+    case "hasUsbHost":
+      result.success(hasUsbHostFeature());
+      break;
     case "open":
       int vid = (int) (call.argument("vid") == null ? 0 : call.argument("vid"));
       int pid = (int) (call.argument("pid") == null ? 0 : call.argument("pid"));
@@ -262,16 +265,44 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     HashMap<String, Object> dev = new HashMap<>();
     dev.put("vid", device.getVendorId());
     dev.put("pid", device.getProductId());
-    if (android.os.Build.VERSION.SDK_INT >= 21) {
-      dev.put("manufacturerName", device.getManufacturerName());
-      dev.put("productName", device.getProductName());
-      dev.put("serialNumber", device.getSerialNumber());
-    }
     dev.put("deviceId", device.getDeviceId());
+    dev.put("deviceClass", device.getDeviceClass());
+    dev.put("hasPermission", m_Manager.hasPermission(device));
+    // Android 12+ (API 31): nama/serial butuh izin USB — jangan gagalkan listDevices.
+    if (android.os.Build.VERSION.SDK_INT >= 21) {
+      try {
+        String manufacturer = device.getManufacturerName();
+        if (manufacturer != null) {
+          dev.put("manufacturerName", manufacturer);
+        }
+      } catch (Exception e) {
+        Log.d(TAG, "manufacturerName unavailable (permission?): " + e.getMessage());
+      }
+      try {
+        String product = device.getProductName();
+        if (product != null) {
+          dev.put("productName", product);
+        }
+      } catch (Exception e) {
+        Log.d(TAG, "productName unavailable (permission?): " + e.getMessage());
+      }
+      try {
+        String serial = device.getSerialNumber();
+        if (serial != null) {
+          dev.put("serialNumber", serial);
+        }
+      } catch (Exception e) {
+        Log.d(TAG, "serialNumber unavailable (permission?): " + e.getMessage());
+      }
+    }
     return dev;
   }
 
   private void listDevices(Result result) {
+    if (!hasUsbHostFeature()) {
+      result.error("LIST_DEVICES_ERROR", "Perangkat tidak mendukung USB host (OTG).", null);
+      return;
+    }
     Map<String, UsbDevice> devices = m_Manager.getDeviceList();
     if (devices == null) {
       result.error("LIST_DEVICES_ERROR", "Could not get USB device list.", null);
@@ -280,8 +311,13 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     List<HashMap<String, Object>> transferDevices = new ArrayList<>();
 
     for (UsbDevice device : devices.values()) {
-      transferDevices.add(serializeDevice(device));
+      try {
+        transferDevices.add(serializeDevice(device));
+      } catch (Exception e) {
+        Log.e(TAG, "serializeDevice failed for " + device, e);
+      }
     }
+    Log.d(TAG, "listDevices: " + transferDevices.size() + " device(s)");
     result.success(transferDevices);
   }
 
@@ -358,7 +394,7 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
     int piFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         ? PendingIntent.FLAG_MUTABLE
         : 0;
-    PendingIntent permissionIntent = PendingIntent.getBroadcast(applicationContext, 0,
+    PendingIntent permissionIntent = PendingIntent.getBroadcast(applicationContext, device.getDeviceId(),
         new Intent(ACTION_USB_PERMISSION), piFlags);
     IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

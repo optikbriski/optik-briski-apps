@@ -177,6 +177,16 @@ class FlutterUsbWrite {
     return raw.map((e) => UsbDevice.fromJSON(e)).toList();
   }
 
+  /// True jika Android mendukung USB host (OTG).
+  Future<bool> hasUsbHost() async {
+    try {
+      final raw = await _methodChannel!.invokeMethod('hasUsbHost');
+      return raw == true;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// Opens connection to device with specified deviceId, or with specified VendorId and ProductId
   Future<UsbDevice> open({
     int? deviceId,
