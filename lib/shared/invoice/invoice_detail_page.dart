@@ -122,7 +122,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       Map<String, dynamic> sale, List<dynamic> items) async {
     setState(() => isPrinting = true);
     try {
-      await PosPrintService.showPrintOptions(
+      await PosPrintService.printThermalDefault(
         context,
         sale: sale,
         items: items,

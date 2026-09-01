@@ -15,7 +15,7 @@ packages:
       path: "packages/another_flutter_usb_write"
       relative: true
     source: path
-    version: "1.0.2"
+    version: "1.0.3"
   app_links:
     dependency: transitive
     description:

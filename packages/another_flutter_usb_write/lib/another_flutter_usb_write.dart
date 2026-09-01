@@ -165,9 +165,16 @@ class FlutterUsbWrite {
 
   /// Returns a list of UsbDevices currently plugged in.
   Future<List<UsbDevice>> listDevices() async {
-    List<dynamic> devices = await (_methodChannel!.invokeMethod("listDevices")
-        as FutureOr<List<dynamic>>);
-    return devices.map(UsbDevice.fromJSON).toList();
+    final raw = await _methodChannel!.invokeMethod('listDevices');
+    if (raw == null) return const [];
+    if (raw is! List) {
+      throw ListDevicesException(
+        'LIST_DEVICES_ERROR',
+        'Native listDevices returned ${raw.runtimeType}, expected List',
+        null,
+      );
+    }
+    return raw.map((e) => UsbDevice.fromJSON(e)).toList();
   }
 
   /// Opens connection to device with specified deviceId, or with specified VendorId and ProductId

@@ -199,6 +199,76 @@ class PosPrintService {
     await Printing.sharePdf(bytes: bytes, filename: name);
   }
 
+  /// Tombol "Cetak Termal" — langsung ke jalur thermal terbaik per platform.
+  static Future<void> printThermalDefault(
+    BuildContext context, {
+    required Map<String, dynamic> sale,
+    required List<dynamic> items,
+    required String Function(num) formatRupiah,
+  }) async {
+    if (_supportsAndroidUsbOtg) {
+      await printAndroidUsbOtg(
+        context,
+        sale: sale,
+        items: items,
+        formatRupiah: formatRupiah,
+      );
+      return;
+    }
+    if (_supportsBluetoothThermal && !kIsWeb) {
+      await printBluetooth(
+        context,
+        sale: sale,
+        items: items,
+        formatRupiah: formatRupiah,
+      );
+      return;
+    }
+    await showPrintOptions(
+      context,
+      sale: sale,
+      items: items,
+      formatRupiah: formatRupiah,
+    );
+  }
+
+  /// Pilih VID/PID printer USB — murni (testable), tanpa UI.
+  @visibleForTesting
+  static ({int vid, int pid})? pickAndroidUsbDevice({
+    required List<({int vid, int pid, String label})> devices,
+    int? savedVid,
+    int? savedPid,
+  }) {
+    if (devices.isEmpty) return null;
+    final matchSaved = devices.where(
+      (d) => d.vid == savedVid && d.pid == savedPid,
+    );
+    if (matchSaved.isNotEmpty) {
+      final d = matchSaved.first;
+      return (vid: d.vid, pid: d.pid);
+    }
+    final preferred = devices.firstWhere(
+      (d) =>
+          d.label.toLowerCase().contains('pos') ||
+          d.label.toLowerCase().contains('printer') ||
+          (d.vid == 1048 && d.pid == 20497) ||
+          (d.vid == 1046 && d.pid == 20497),
+      orElse: () => devices.first,
+    );
+    return (vid: preferred.vid, pid: preferred.pid);
+  }
+
+  /// Butuh dialog picker manual (≥2 device & belum ada preferensi tersimpan).
+  @visibleForTesting
+  static bool needsAndroidUsbDevicePicker({
+    required List<({int vid, int pid, String label})> devices,
+    int? savedVid,
+    int? savedPid,
+  }) {
+    if (devices.length <= 1) return false;
+    return !devices.any((d) => d.vid == savedVid && d.pid == savedPid);
+  }
+
   /// Cetak ESC/POS lewat USB OTG / hub di Android (Poco, tablet, dll).
   static Future<void> printAndroidUsbOtg(
     BuildContext context, {
@@ -223,20 +293,12 @@ class PosPrintService {
       int? vid = savedVid;
       int? pid = savedPid;
       if (devices.isNotEmpty) {
-        final matchSaved = devices.where(
-          (d) => d.vid == savedVid && d.pid == savedPid,
-        );
-        final chosen = matchSaved.isNotEmpty
-            ? matchSaved.first
-            : devices.firstWhere(
-                (d) =>
-                    d.label.toLowerCase().contains('pos') ||
-                    (d.vid == 1048 && d.pid == 20497) ||
-                    (d.vid == 1046 && d.pid == 20497),
-                orElse: () => devices.first,
-              );
         if (!context.mounted) return;
-        if (devices.length > 1 && matchSaved.isEmpty) {
+        if (needsAndroidUsbDevicePicker(
+          devices: devices,
+          savedVid: savedVid,
+          savedPid: savedPid,
+        )) {
           final sel = await showAdminPicker<String>(
             context: context,
             title: 'Pilih printer USB',
@@ -259,8 +321,15 @@ class PosPrintService {
           vid = int.tryParse(parts[0]);
           pid = int.tryParse(parts[1]);
         } else {
-          vid = chosen.vid;
-          pid = chosen.pid;
+          final picked = pickAndroidUsbDevice(
+            devices: devices,
+            savedVid: savedVid,
+            savedPid: savedPid,
+          );
+          if (picked != null) {
+            vid = picked.vid;
+            pid = picked.pid;
+          }
         }
       }
 

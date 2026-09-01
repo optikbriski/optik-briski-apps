@@ -133,19 +133,17 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
   }
 
   private void write(final byte[] bytes, final Result result) {
-    if (bytes != null) {
-      int transferResult = -1;
-      if (this.ep != null && this.mInterface != null && this.m_Connection != null) {
-        transferResult = this.m_Connection.bulkTransfer(this.ep, bytes, bytes.length, 0);
-      } else {
-        if (this.m_Connection.claimInterface(this.mInterface, true)) {
-          transferResult = this.m_Connection.bulkTransfer(this.ep, bytes, bytes.length, 0);
-        }
-      }
-      result.success(transferResult >= 0);
+    if (bytes == null) {
+      result.success(true);
       return;
     }
-    result.success(true);
+    if (this.m_Connection == null || this.mInterface == null || this.ep == null) {
+      result.error("ENDPOINT_NOT_FOUND_ERROR", "USB connection not open.", null);
+      return;
+    }
+    // 5s timeout — printer murah / hub OTG sering gagal dengan timeout 0.
+    int transferResult = this.m_Connection.bulkTransfer(this.ep, bytes, bytes.length, 5000);
+    result.success(transferResult >= 0);
   }
 
   private void openDevice(UsbDevice device, boolean allowAcquirePermission, final OpenDeviceCallback openDeviceCb) {
@@ -198,6 +196,14 @@ public class FlutterUsbWritePlugin implements FlutterPlugin, MethodCallHandler, 
 
       if (this.mInterface == null || this.ep == null) {
         openDeviceCb.onFailed(device, "ENDPOINT_NOT_FOUND_ERROR", "USB Endpoint not found.");
+        return;
+      }
+      if (m_Connection == null) {
+        openDeviceCb.onFailed(device, "DEVICE_NOT_FOUND_ERROR", "Failed to open USB device.");
+        return;
+      }
+      if (!m_Connection.claimInterface(this.mInterface, true)) {
+        openDeviceCb.onFailed(device, "INTERFACE_NOT_FOUND_ERROR", "Failed to claim USB interface.");
         return;
       }
       openDeviceCb.onSuccess(device);

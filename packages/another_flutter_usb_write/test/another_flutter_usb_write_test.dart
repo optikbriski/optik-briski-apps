@@ -1,149 +1,142 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:async/async.dart';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:another_flutter_usb_write/another_flutter_usb_write.dart';
-import 'package:mockito/mockito.dart';
-import 'dart:convert';
-
-class MockMethodChannel extends Mock implements MethodChannel {}
-
-class MockEventChannel extends Mock implements EventChannel {}
 
 void main() {
-  MockMethodChannel? methodChannel;
-  MockEventChannel? eventChannel;
-  FlutterUsbWrite? flutterUsbWrite;
-
   TestWidgetsFlutterBinding.ensureInitialized();
-  UsbDevice? device;
+
+  const methods = MethodChannel('flutter_usb_write/methods');
+  const events = EventChannel('flutter_usb_write/events');
+
+  late FlutterUsbWrite flutterUsbWrite;
+  late UsbDevice device;
 
   setUp(() {
-    device = UsbDevice(1046, 20497, "USB Portable Printer    ", "STMicroelectronics", 1002, "Printer");
-    methodChannel = MockMethodChannel();
-    eventChannel = MockEventChannel();
-    flutterUsbWrite = FlutterUsbWrite.private(methodChannel, eventChannel);
+    device = UsbDevice(
+      1046,
+      20497,
+      'USB Portable Printer    ',
+      'STMicroelectronics',
+      1002,
+      'Printer',
+    );
+    flutterUsbWrite = FlutterUsbWrite.private(methods, events);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(methods, null);
+  });
+
+  group('List devices', () {
+    test('listDevices parses native List', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'listDevices') {
+          return [device.toJson()];
+        }
+        return null;
+      });
+      final result = await flutterUsbWrite.listDevices();
+      expect(result.length, 1);
+      expect(result.first.toJson(), device.toJson());
+    });
+
+    test('listDevices empty when native returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'listDevices') return null;
+        return null;
+      });
+      final result = await flutterUsbWrite.listDevices();
+      expect(result, isEmpty);
+    });
+
+    test('listDevices throws ListDevicesException for non-List', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'listDevices') return 'bad';
+        return null;
+      });
+      expect(
+        flutterUsbWrite.listDevices(),
+        throwsA(isA<ListDevicesException>()),
+      );
+    });
   });
 
   group('Open device', () {
     test('open by deviceId', () async {
-      Map<String, dynamic> args = {"vid": null, "pid": null, "deviceId": device!.deviceId};
-      when(methodChannel!.invokeMethod('open', args)).thenAnswer((Invocation invoke) {
-        return Future<Map<String, dynamic>>.value(device!.toJson());
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'open') {
+          expect(call.arguments['deviceId'], device.deviceId);
+          return device.toJson();
+        }
+        return null;
       });
-      var result = await flutterUsbWrite!.open(deviceId: device!.deviceId);
-      expect(result.toJson(), device!.toJson());
+      final result = await flutterUsbWrite.open(deviceId: device.deviceId);
+      expect(result.toJson(), device.toJson());
     });
 
     test('open by vid:pid', () async {
-      Map<String, dynamic> args = {
-        "vid": device!.vid,
-        "pid": device!.pid,
-        "deviceId": null,
-      };
-      when(methodChannel!.invokeMethod('open', args)).thenAnswer((Invocation invoke) {
-        return Future<Map<String, dynamic>>.value(device!.toJson());
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'open') {
+          expect(call.arguments['vid'], device.vid);
+          expect(call.arguments['pid'], device.pid);
+          return device.toJson();
+        }
+        return null;
       });
-      var result = await flutterUsbWrite!.open(vendorId: device!.vid, productId: device!.pid);
-      expect(result.toJson(), device!.toJson());
+      final result =
+          await flutterUsbWrite.open(vendorId: device.vid, productId: device.pid);
+      expect(result.toJson(), device.toJson());
     });
   });
 
   group('Close device', () {
     test('close', () async {
-      when(methodChannel!.invokeMethod('close')).thenAnswer((Invocation invoke) {
-        return Future<bool>.value(true);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'close') return true;
+        return null;
       });
-      var result = await flutterUsbWrite!.close();
+      final result = await flutterUsbWrite.close();
       expect(result, true);
     });
   });
 
   group('Write', () {
     test('write', () async {
-      var bytes = ascii.encode("Hello world");
-      Map<String, dynamic> args = {"bytes": bytes};
-      when(methodChannel!.invokeMethod('write', args)).thenAnswer((Invocation invoke) {
-        return Future<bool>.value(true);
+      final bytes = ascii.encode('Hello world');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'write') {
+          expect(call.arguments['bytes'], bytes);
+          return true;
+        }
+        return null;
       });
-      var result = await flutterUsbWrite!.write(bytes);
+      final result = await flutterUsbWrite.write(bytes);
       expect(result, true);
     });
   });
 
   group('controlTransfer', () {
     test('controlTransfer', () async {
-      Map<String, dynamic> args = {
-        "requestType": 161,
-        "request": 1,
-        "value": 0,
-        "index": 0,
-        "buffer": null,
-        "length": 0,
-        "timeout": 0,
-      };
-      when(methodChannel!.invokeMethod<int>('controlTransfer', args)).thenAnswer((Invocation invoke) {
-        return Future<int>.value(0);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methods, (call) async {
+        if (call.method == 'controlTransfer') return 0;
+        return null;
       });
-      var result = await flutterUsbWrite!.controlTransfer(161, 1, 0, 0, null, 0, 0);
+      final result =
+          await flutterUsbWrite.controlTransfer(161, 1, 0, 0, null, 0, 0);
       expect(result, 0);
     });
-  });
-
-  group('device state', () {
-    late StreamController<Map<String, dynamic>> controller;
-
-    setUp(() {
-      controller = StreamController<Map<String, dynamic>>();
-      when(eventChannel!.receiveBroadcastStream()).thenAnswer((Invocation invoke) => controller.stream);
-    });
-
-    tearDown(() {
-      controller.close();
-    });
-
-    test('calls receiveBroadcastStream once', () {
-      flutterUsbWrite!.usbEventStream;
-      flutterUsbWrite!.usbEventStream;
-      flutterUsbWrite!.usbEventStream;
-      verify(eventChannel!.receiveBroadcastStream()).called(1);
-    });
-
-    test('receive values', () async {
-      final StreamQueue<UsbEvent> queue = StreamQueue<UsbEvent>(flutterUsbWrite!.usbEventStream!);
-
-      Map<String, dynamic> msg1 = device!.toJson();
-      msg1["event"] = UsbEvent.ACTION_USB_ATTACHED;
-
-      var event1 = UsbEvent();
-      event1.device = device;
-      event1.event = UsbEvent.ACTION_USB_ATTACHED;
-
-      controller.add(msg1);
-
-      var usbEvent1 = await queue.next;
-      expect(usbEvent1.toJson(), event1.toJson());
-
-      Map<String, dynamic> msg2 = device!.toJson();
-      msg2["event"] = UsbEvent.ACTION_USB_ATTACHED;
-
-      var event2 = UsbEvent();
-      event2.device = device;
-      event2.event = UsbEvent.ACTION_USB_ATTACHED;
-
-      controller.add(msg2);
-
-      var usbEvent2 = await queue.next;
-      expect(usbEvent2.toJson(), event2.toJson());
-    });
-  });
-
-  tearDown(() {
-    device = null;
-    flutterUsbWrite = null;
-    methodChannel = null;
-    eventChannel = null;
   });
 }

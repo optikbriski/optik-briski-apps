@@ -28,6 +28,8 @@ class PosAndroidUsbPrint {
               ].join(' · '),
             ),
       ];
+    } on ListDevicesException {
+      rethrow;
     } on PlatformException {
       return const [];
     }
