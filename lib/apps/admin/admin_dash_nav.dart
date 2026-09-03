@@ -13,6 +13,7 @@ import 'absensi_toko_page.dart';
 import 'attendance_monitor_page.dart';
 import 'buku_besar.dart';
 import 'garansi_page.dart';
+import 'etalase_stock_sim_page.dart';
 import 'inventory.dart';
 import 'admin_document_ocr_page.dart';
 import 'invoice_config_page.dart';
@@ -283,6 +284,16 @@ List<AdminDashNavGroup> buildAdminDashNavGroups({
       icon: Icons.shopping_bag_outlined,
       color: OptikAdminTokens.ice,
       buildPage: _page(OnlineOrdersPage(profile: profile)),
+    ));
+  }
+
+  if (!training && AttendanceAdminScope.canManageInventory(profile)) {
+    stok.add(AdminDashNavItem(
+      id: 'denah_etalase',
+      title: 'Denah etalase',
+      icon: Icons.storefront_rounded,
+      color: OptikAdminTokens.ice,
+      buildPage: _page(EtalaseStockSimPage(profile: profile)),
     ));
   }
 

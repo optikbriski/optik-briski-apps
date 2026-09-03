@@ -23,6 +23,7 @@ const _prefPrinterName = 'pos_bt_printer_name';
 const _prefCupsQueue = 'pos_cups_queue';
 const _prefAndroidUsbVid = 'pos_android_usb_vid';
 const _prefAndroidUsbPid = 'pos_android_usb_pid';
+const _prefCashDrawerPin = 'pos_cash_drawer_pin'; // 2 | 5
 
 bool get _supportsUsbCups =>
     !kIsWeb &&
@@ -589,17 +590,36 @@ class PosPrintService {
     return mac;
   }
 
+  /// Pulse RJ11 laci kas — standar Epson ESC/POS (`ESC p m t1 t2`).
+  /// Pin 2 (m=0) default untuk kabel RJ11 6-pin ke printer POS Epson/POS-80.
+  @visibleForTesting
+  static List<int> epsonCashDrawerPulse({PosDrawer pin = PosDrawer.pin2}) {
+    final m = pin == PosDrawer.pin5 ? 0x01 : 0x00;
+    // t1=0x19 (50ms), t2=0xFA (500ms) — default Epson TM series.
+    return [0x1B, 0x70, m, 0x19, 0xFA];
+  }
+
+  static Future<PosDrawer> _cashDrawerPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pin = prefs.getInt(_prefCashDrawerPin);
+    return pin == 5 ? PosDrawer.pin5 : PosDrawer.pin2;
+  }
+
   /// Layout thermal khusus (ESC/POS) — info lengkap dari nota,
   /// **tanpa** mengubah layout nota digital UI/PDF.
   static Future<List<int>> buildEscPos(
     InvoiceDocumentModel doc, {
     PaperSize paper = PaperSize.mm80,
+    bool? openCashDrawer,
+    PosDrawer? cashDrawerPin,
   }) async {
     final profile = await CapabilityProfile.load();
     final g = Generator(paper, profile);
     final bytes = <int>[];
     final s = doc.settings;
     final m = doc.meta;
+    final kickDrawer = openCashDrawer ?? true;
+    final drawerPin = cashDrawerPin ?? await _cashDrawerPin();
     String a(String? raw) => _escPosAscii(raw ?? '');
 
     void hr() => bytes.addAll(g.hr(ch: '-'));
@@ -638,6 +658,9 @@ class PosPrintService {
 
     // ----- HEADER TOKO -----
     bytes.addAll(g.reset());
+    if (kickDrawer) {
+      bytes.addAll(epsonCashDrawerPulse(pin: drawerPin));
+    }
     center(s.shopName.toUpperCase(), bold: true, height: PosTextSize.size2);
     if (s.address.trim().isNotEmpty) center(s.address);
     if (s.phone.trim().isNotEmpty) center('Telp ${s.phone}');

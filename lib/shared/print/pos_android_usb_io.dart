@@ -133,8 +133,26 @@ class PosAndroidUsbPrint {
 
   static Future<void> _sendBytes(int vid, int pid, List<int> bytes) async {
     await _usb.open(vendorId: vid, productId: pid);
+
+    // Reset + pulse RJ11 dikirim dulu terpisah — printer Epson/POS-80 lebih andal
+    // daripada pulse di tengah buffer bulk besar.
+    var payload = bytes;
+    if (payload.length >= 7 &&
+        payload[0] == 0x1B &&
+        payload[1] == 0x40 &&
+        payload[2] == 0x1B &&
+        payload[3] == 0x70) {
+      final head = Uint8List.fromList(payload.sublist(0, 7));
+      final okHead = await _usb.write(head);
+      if (okHead != true) {
+        throw 'Gagal kirim pulse laci kas / init printer.';
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      payload = payload.sublist(7);
+    }
+
     const chunk = 512;
-    final data = Uint8List.fromList(bytes);
+    final data = Uint8List.fromList(payload);
     for (var i = 0; i < data.length; i += chunk) {
       final end = (i + chunk < data.length) ? i + chunk : data.length;
       final ok = await _usb.write(Uint8List.sublistView(data, i, end));

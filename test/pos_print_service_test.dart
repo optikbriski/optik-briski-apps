@@ -102,6 +102,21 @@ void main() {
     });
   });
 
+  group('epsonCashDrawerPulse', () {
+    test('pin2 uses Epson ESC p 0 25 250', () {
+      expect(
+        PosPrintService.epsonCashDrawerPulse(pin: PosDrawer.pin2),
+        [0x1B, 0x70, 0x00, 0x19, 0xFA],
+      );
+    });
+    test('pin5 uses m=1', () {
+      expect(
+        PosPrintService.epsonCashDrawerPulse(pin: PosDrawer.pin5),
+        [0x1B, 0x70, 0x01, 0x19, 0xFA],
+      );
+    });
+  });
+
   group('buildEscPos', () {
     test('produces cut command and non-empty payload', () async {
       final doc = InvoiceDocumentModel(
@@ -148,10 +163,125 @@ void main() {
         showQr: false,
       );
 
-      final bytes = await PosPrintService.buildEscPos(doc, paper: PaperSize.mm80);
+      final bytes = await PosPrintService.buildEscPos(
+        doc,
+        paper: PaperSize.mm80,
+        cashDrawerPin: PosDrawer.pin2,
+      );
       expect(bytes, isNotEmpty);
       expect(bytes.contains(0x1D), isTrue);
       expect(bytes.contains(0x56), isTrue);
+    });
+
+    test('includes cash drawer pulse for tunai', () async {
+      final doc = InvoiceDocumentModel(
+        settings: const InvoiceSettings(
+          tokoId: 'TEST',
+          shopName: 'Optik B. Riski',
+          address: '',
+          phone: '',
+          logoUrl: '',
+          statusFooters: InvoiceStatusFooters(
+            dp: 'DP',
+            pending: 'Pending',
+            ready: 'Ready',
+            clear: 'Clear',
+          ),
+          googleReviewUrl: '',
+          headerAlignment: 'CENTER',
+          fontSizeHeader: 14,
+          fontSizeBody: 11,
+          showQrInvoice: false,
+        ),
+        meta: const InvoiceDocMeta(
+          noInvoice: 'INV-DRAWER',
+          customerName: 'Pelanggan',
+          status: 'LUNAS',
+          method: 'Tunai',
+        ),
+        lines: const [
+          InvoiceDocLine(label: 'Frame A', amount: 'Rp100.000'),
+        ],
+        footerText: 'Terima kasih',
+        footerTextPdf: '',
+        totalFormatted: 'Rp100.000',
+        paidLabel: 'Dibayar',
+        paidFormatted: 'Rp100.000',
+        remainingFormatted: 'Rp0',
+        hasRemainingDebt: false,
+        totalHarga: 100000,
+        dibayarkan: 100000,
+        sisaTagihan: 0,
+        hasLensa: false,
+        detailResep: '',
+        qrPayload: '',
+        showQr: false,
+      );
+
+      final bytes = await PosPrintService.buildEscPos(
+        doc,
+        paper: PaperSize.mm80,
+        cashDrawerPin: PosDrawer.pin2,
+      );
+      final pulse = PosPrintService.epsonCashDrawerPulse(pin: PosDrawer.pin2);
+      // reset (ESC @) lalu pulse drawer — sesuai manual Epson saat cetak nota.
+      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+      expect(bytes.sublist(2, 2 + pulse.length), pulse);
+    });
+
+    test('skips drawer pulse when disabled', () async {
+      final doc = InvoiceDocumentModel(
+        settings: const InvoiceSettings(
+          tokoId: 'TEST',
+          shopName: 'Optik B. Riski',
+          address: '',
+          phone: '',
+          logoUrl: '',
+          statusFooters: InvoiceStatusFooters(
+            dp: 'DP',
+            pending: 'Pending',
+            ready: 'Ready',
+            clear: 'Clear',
+          ),
+          googleReviewUrl: '',
+          headerAlignment: 'CENTER',
+          fontSizeHeader: 14,
+          fontSizeBody: 11,
+          showQrInvoice: false,
+        ),
+        meta: const InvoiceDocMeta(
+          noInvoice: 'INV-NO-DRAWER',
+          customerName: 'Pelanggan',
+          status: 'LUNAS',
+          method: 'QRIS',
+        ),
+        lines: const [
+          InvoiceDocLine(label: 'Frame A', amount: 'Rp100.000'),
+        ],
+        footerText: 'Terima kasih',
+        footerTextPdf: '',
+        totalFormatted: 'Rp100.000',
+        paidLabel: 'Dibayar',
+        paidFormatted: 'Rp100.000',
+        remainingFormatted: 'Rp0',
+        hasRemainingDebt: false,
+        totalHarga: 100000,
+        dibayarkan: 100000,
+        sisaTagihan: 0,
+        hasLensa: false,
+        detailResep: '',
+        qrPayload: '',
+        showQr: false,
+      );
+
+      final bytes = await PosPrintService.buildEscPos(
+        doc,
+        paper: PaperSize.mm80,
+        openCashDrawer: false,
+        cashDrawerPin: PosDrawer.pin2,
+      );
+      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+      expect(bytes[2], isNot(0x70));
     });
   });
 }
