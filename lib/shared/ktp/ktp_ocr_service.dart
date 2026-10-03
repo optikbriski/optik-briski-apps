@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class KtpOcrResult {
@@ -175,8 +177,16 @@ class KtpOcrResult {
 
 /// OCR lokal KTP Indonesia — field lengkap + alamat RT/RW/kel/kec.
 /// KTP/IKD tidak dikirim ke Cloud Vision (PII).
+/// ML Kit hanya ada di Android/iOS. Web tidak membuka channel-nya.
 class KtpOcrService {
-  final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  TextRecognizer? _recognizer;
+
+  TextRecognizer _engine() {
+    if (kIsWeb) {
+      throw UnsupportedError('ocr-ktp-web');
+    }
+    return _recognizer ??= TextRecognizer(script: TextRecognitionScript.latin);
+  }
 
   Future<KtpOcrResult> scanFile(File file) async {
     final input = InputImage.fromFile(file);
@@ -184,7 +194,7 @@ class KtpOcrService {
   }
 
   Future<KtpOcrResult> scanInputImage(InputImage input) async {
-    final recognized = await _recognizer.processImage(input);
+    final recognized = await _engine().processImage(input);
     return parseRecognized(recognized);
   }
 
@@ -587,5 +597,14 @@ class KtpOcrService {
         .toUpperCase();
   }
 
-  Future<void> dispose() => _recognizer.close();
+  Future<void> dispose() async {
+    final engine = _recognizer;
+    _recognizer = null;
+    if (engine == null) return;
+    try {
+      await engine.close();
+    } on MissingPluginException {
+      // Tidak ada di web / desktop. Jangan jatuhkan layar admin.
+    }
+  }
 }

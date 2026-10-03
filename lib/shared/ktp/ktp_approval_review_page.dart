@@ -7,9 +7,12 @@ import '../karyawan/gaji_pokok.dart';
 import '../karyawan/shift_auto_assign.dart';
 import '../theme.dart';
 import '../widgets/admin/admin_premium.dart';
+import 'ktp_pending_status.dart';
+
+export 'ktp_pending_status.dart';
 
 /// Hasil review dari halaman detail verifikasi.
-enum KtpReviewResult { approved, rejected, cancelled }
+enum KtpReviewResult { approved, rejected, cancelled, stale }
 
 /// Halaman penuh: lihat KTP + bandingkan OCR vs edit + Tolak/Approve.
 class KtpApprovalReviewPage extends StatefulWidget {

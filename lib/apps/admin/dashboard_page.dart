@@ -354,7 +354,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
               canPop: _activeItemId == null ||
                   _activeItemId == 'rangkuman_kerja',
               onPopInvokedWithResult: (didPop, _) {
-                if (!didPop) _goHome();
+                if (didPop) return;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _goHome();
+                });
               },
               child: PremiumScaffold(
                 scaffoldKey: _scaffoldKey,
@@ -529,7 +532,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                         key: _paneNavKey,
                         onDidRemovePage: (page) {
                           if (page.name != _activeItemId) return;
-                          setState(() => _activeItemId = null);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted || _activeItemId != page.name) return;
+                            setState(() => _activeItemId = null);
+                          });
                         },
                         pages: [
                           MaterialPage<void>(

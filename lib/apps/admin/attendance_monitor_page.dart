@@ -223,7 +223,11 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       _loadTokoCounts();
       return;
     }
-    Navigator.pop(context);
+    // Dibuka dari kartu Riwayat, bukan dari menu. Tutup rute ini saja.
+    final routeName = ModalRoute.of(context)?.settings.name;
+    if (routeName != 'monitor_absensi' && Navigator.of(context).canPop()) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _markValid() async {
@@ -436,12 +440,16 @@ class _AttendanceMonitorPageState extends State<AttendanceMonitorPage> {
       builder: (context, _) {
         final pendingBadge =
             AdminNavBadgeService.instance.displayCount('monitor_absensi');
+        final canDrillBack = _level != _MonitorLevel.tokoList;
+        final openedFromCard =
+            ModalRoute.of(context)?.settings.name != 'monitor_absensi' &&
+                Navigator.of(context).canPop();
         return PremiumScaffold(
       appBar: PremiumAppBar(
         title: _title,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_rounded, color: OptikAdminTokens.navy),
-          onPressed: _back,
+          onPressed: (canDrillBack || openedFromCard) ? _back : null,
         ),
         actions: [
           if (pendingBadge > 0)

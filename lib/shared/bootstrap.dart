@@ -14,6 +14,31 @@ import 'training/training_http_client.dart';
 
 final supabase = Supabase.instance.client;
 
+/// Chrome CanvasKit kadang melempar ini saat tombol back menutup permukaan
+/// gambar, sebelum field internalnya siap. Aplikasi masih hidup; jangan
+/// ganti seluruh layar dengan halaman error.
+void _keepWebAliveOnCanvasContextLost() {
+  if (!kIsWeb) return;
+  bool ignored(Object error) =>
+      error.toString().contains('_handledContextLostEvent');
+
+  final previous = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (ignored(details.exception)) return;
+    if (previous != null) {
+      previous(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+  final previousZone = PlatformDispatcher.instance.onError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (ignored(error)) return true;
+    if (previousZone != null) return previousZone(error, stack);
+    return false;
+  };
+}
+
 /// Shared startup for Admin / Karyawan / Member entry points.
 ///
 /// Injects [TrainingHttpClient] so Admin Training Mode (entered mid-session)
@@ -24,6 +49,7 @@ Future<void> bootstrapApp({
   bool quietLocalizationLogs = false,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
+  _keepWebAliveOnCanvasContextLost();
   await EasyLocalization.ensureInitialized();
 
   if (quietLocalizationLogs) {

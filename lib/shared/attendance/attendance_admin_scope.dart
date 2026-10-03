@@ -34,6 +34,21 @@ class AttendanceAdminScope {
   static bool canViewAllStores(Map<String, dynamic> profile) =>
       isPusatOperator(profile);
 
+  /// Label chip / picker: alias HQ tampil PUSAT, bukan CABANG-PUSAT.
+  /// Cabang lain: buang prefiks CABANG- (CABANG-ARCAMANIK → ARCAMANIK).
+  static String workSummaryTokoLabel(String? tokoId) {
+    final t = (tokoId ?? '').trim();
+    if (t.isEmpty) return t;
+    if (isPusatTokoId(t)) return 'PUSAT';
+    const prefix = 'CABANG-';
+    if (t.length > prefix.length &&
+        t.toUpperCase().startsWith(prefix)) {
+      final rest = t.substring(prefix.length).trim();
+      if (rest.isNotEmpty) return rest;
+    }
+    return t;
+  }
+
   /// Meta / operasional toko pusat.
   static bool isPusatTokoId(String? tokoId) {
     final t = (tokoId ?? '').trim();
